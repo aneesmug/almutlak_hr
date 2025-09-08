@@ -60,9 +60,6 @@ if(isset($_POST['submit'])){
 	if($_POST['iqama_exp']){
 		$iqama_exp_gup = $DateConv->HijriToGregorian($_POST['iqama_exp'], $format);
 		$iqama_exp_g_up = date("Y/m/d", strtotime($iqama_exp_gup));
-		/*$u = "UPDATE `employees` SET `iqama_exp`='".$_POST['iqama_exp']."', `iqama_exp_g`='".$iqama_exp_g_up."' WHERE `id`='".$_POST['iid']."' ";
-		print_r($u);
-		exit();*/
 		mysqli_query($conDB, "UPDATE `employees` SET `iqama_exp`='".$_POST['iqama_exp']."', `iqama_exp_g`='".$iqama_exp_g_up."' WHERE `id`='".$_POST['iid']."' ") or die();
 		$message = "<div class='alert alert-success bg-success text-white border-0'><strong>Successfully!</strong> Your car details will be successfully edit!</div>";
 		header( "refresh:1 ; url= ./dashboard.php" );
