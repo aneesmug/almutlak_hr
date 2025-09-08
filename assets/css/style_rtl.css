@@ -1,0 +1,743 @@
+/*
+File: style_rtl.css
+Purpose: Contains all CSS overrides for Right-to-Left (RTL) languages like Arabic.
+*/
+
+/**************************************************************************************************
+ * MODIFICATION SUMMARY
+ *
+ * This file reverses the default LTR (Left-to-Right) layout to support RTL (Right-to-Left) for Arabic.
+ *
+ * 1.  **Global Direction**: Sets the base direction for the entire page to `rtl` and text alignment to `right`.
+ * 2.  **Typography**: Applies an Arabic-friendly font ('Amiri') for better readability, with 'Roboto' as a fallback.
+ * 3.  **Main Layout**:
+ * - The sidebar menu is moved from the left to the right.
+ * - The main content area's margin is adjusted to accommodate the repositioned sidebar.
+ * 4.  **Sidebar Menu**:
+ * - All alignment, padding, and margins for the main sidebar and its submenus are flipped.
+ * - Icons are moved to the right of the menu text.
+ * - Menu dropdown arrows are repositioned and rotated correctly for RTL.
+ * 5.  **Topbar**:
+ * - Reverses the alignment of all topbar elements. The user menu and notifications now appear on the far left.
+ * - The page title and breadcrumbs are aligned to the right.
+ * - The search bar is realigned.
+ * 6.  **Dropdowns & Buttons**:
+ * - Dropdowns that previously opened to the right now open to the left.
+ * - Icon positions within dropdown items and buttons are swapped to be on the right side of the text.
+ * 7.  **Helper Classes**:
+ * - Overrides utility classes like `.float-left`, `.text-right`, `.ml-*`, `.mr-*` to work correctly in an RTL context.
+ * 8.  **Forms & Tables**:
+ * - Adjusts alignment for form elements, labels, checkboxes, and radios.
+ * - Realigns DataTables controls (search, pagination) to the left.
+ *
+ **************************************************************************************************/
+
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url("https://fonts.googleapis.com/css?family=Roboto:400,700");
+
+
+body {
+    direction: rtl;
+    text-align: right;
+    /* font-family: "Amiri", "Roboto", sans-serif; */
+}
+
+/* h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+a,
+span,
+div,
+label,
+input,
+button,
+select,
+textarea {
+    font-family: "Amiri", "Roboto", sans-serif;
+} */
+
+
+/* =============
+  Main Layout
+============= */
+
+.content-page {
+    margin-left: 0;
+    margin-right: 240px;
+}
+
+.enlarged #wrapper .content-page {
+    margin-right: 70px;
+    margin-left: 0;
+}
+
+
+/* =============
+  Sidebar Menu
+============= */
+
+.side-menu {
+    left: auto;
+    right: 0;
+}
+
+.side-menu .topbar-left {
+    padding-left: 0;
+    padding-right: 25px;
+}
+
+#sidebar-menu>ul>li>a {
+    text-align: right;
+}
+
+#sidebar-menu ul li a i {
+    margin: 0 3px 0 10px;
+}
+
+#sidebar-menu .menu-arrow {
+    right: auto;
+    left: 20px;
+    transform: rotate(180deg);
+}
+
+#sidebar-menu li.active .menu-arrow {
+    transform: rotate(270deg);
+}
+
+.nav-second-level>li>a {
+    padding-left: 0;
+    padding-right: 58px;
+}
+
+.nav-third-level>li>a {
+    padding-left: 0;
+    padding-right: 68px;
+}
+
+/* Enlarged (Collapsed) Menu */
+.enlarged #wrapper .left.side-menu {
+    right: 0;
+    left: auto;
+}
+
+.enlarged #wrapper .topbar-left {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.enlarged #wrapper .left.side-menu #sidebar-menu ul>li:hover>ul {
+    left: auto;
+    right: 70px;
+}
+
+.enlarged #wrapper .left.side-menu #sidebar-menu ul ul li:hover>ul {
+    left: auto;
+    right: 190px;
+}
+
+.enlarged #wrapper .left.side-menu #sidebar-menu ul>li>a span {
+    padding-left: 0;
+    padding-right: 10px;
+}
+
+.enlarged #wrapper .left.side-menu #sidebar-menu>ul>li>a i {
+    margin-right: 0;
+    margin-left: 20px;
+}
+
+
+/* =============
+  Topbar
+============= */
+
+.navbar-custom .list-unstyled.topbar-right-menu {
+    float: left !important;
+}
+
+.navbar-custom .list-unstyled.topbar-right-menu li {
+    float: right;
+}
+
+.navbar-custom .menu-left {
+    float: right !important;
+}
+
+.navbar-custom .menu-left .page-title-box {
+    text-align: right;
+}
+
+.page-title-box .breadcrumb {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.breadcrumb-item+.breadcrumb-item::before {
+    float: right;
+    padding-left: .5rem;
+    padding-right: 0;
+}
+
+.app-search {
+    padding-right: 0;
+    padding-left: 20px;
+}
+
+.app-search .form-control {
+    padding-left: 40px;
+    padding-right: 20px;
+}
+
+.app-search button {
+    left: auto;
+    right: 20px;
+}
+
+.nav-user img {
+    margin-left: 0.5rem;
+    margin-right: 0;
+}
+
+.show > .dropdown-menu {
+    right: auto !important;
+    left: 0 !important;
+    text-align: right !important;
+}
+
+.dropdown-menu a i {
+  margin-right: 0; 
+  margin-left: 10px; /* You can adjust this value as needed */
+}
+
+.profile-dropdown i {
+    margin-right: 0;
+    margin-left: 5px;
+}
+
+.dropdown-item i {
+    float: right;
+    margin-left: .5rem;
+    margin-right: 0;
+}
+
+
+/* =============
+  Footer
+============= */
+
+.footer {
+    left: 0;
+    right: 240px;
+    text-align: right !important;
+}
+
+.enlarged #wrapper .footer {
+    right: 70px;
+    left: 0;
+}
+
+
+/* =============
+  Forms
+============= */
+.checkbox label {
+    padding-left: 0;
+    padding-right: 8px;
+}
+
+.checkbox label::before {
+    left: auto;
+    right: 0;
+    margin-left: 0;
+    margin-right: -18px;
+}
+
+.checkbox label::after {
+    left: auto;
+    right: 0;
+    margin-left: 0;
+    margin-right: -18px;
+    padding-left: 0;
+    padding-right: 3px;
+}
+
+.checkbox input[type="checkbox"]:checked+label::after {
+    left: auto;
+    right: 7px;
+}
+
+.radio b {
+    padding-left: 0;
+    padding-right: 8px;
+}
+
+.radio b::before {
+    left: auto;
+    right: 0;
+    margin-left: 0;
+    margin-right: -18px;
+}
+
+.radio b::after {
+    left: auto;
+    right: 6px;
+    margin-left: 0;
+    margin-right: -20px;
+}
+
+/* =============
+  Misc Fixes
+============= */
+
+.list-inline {
+    padding-right: 0;
+}
+
+.list-inline-item:not(:last-child) {
+    margin-right: 0;
+    margin-left: .5rem;
+}
+
+.float-right {
+    float: left !important;
+}
+
+.float-left {
+    float: right !important;
+}
+
+.text-right {
+    text-align: left !important;
+}
+
+.text-left {
+    text-align: right !important;
+}
+
+.ml-1 {
+    margin-left: 0 !important;
+    margin-right: .25rem !important;
+}
+
+.mr-1 {
+    margin-right: 0 !important;
+    margin-left: .25rem !important;
+}
+
+.ml-2 {
+    margin-left: 0 !important;
+    margin-right: .5rem !important;
+}
+
+.mr-2 {
+    margin-right: 0 !important;
+    margin-left: .5rem !important;
+}
+
+.ml-3 {
+    margin-left: 0 !important;
+    margin-right: 1rem !important;
+}
+
+.mr-3 {
+    margin-right: 0 !important;
+    margin-left: 1rem !important;
+}
+
+.ml-4 {
+    margin-left: 0 !important;
+    margin-right: 1.5rem !important;
+}
+
+.mr-4 {
+    margin-right: 0 !important;
+    margin-left: 1.5rem !important;
+}
+
+.ml-5 {
+    margin-left: 0 !important;
+    margin-right: 3rem !important;
+}
+
+.mr-5 {
+    margin-right: 0 !important;
+    margin-left: 3rem !important;
+}
+
+.pl-1 {
+    padding-left: 0 !important;
+    padding-right: .25rem !important;
+}
+
+.pr-1 {
+    padding-right: 0 !important;
+    padding-left: .25rem !important;
+}
+
+.pl-2 {
+    padding-left: 0 !important;
+    padding-right: .5rem !important;
+}
+
+.pr-2 {
+    padding-right: 0 !important;
+    padding-left: .5rem !important;
+}
+
+.pl-3 {
+    padding-left: 0 !important;
+    padding-right: 1rem !important;
+}
+
+.pr-3 {
+    padding-right: 0 !important;
+    padding-left: 1rem !important;
+}
+
+.pl-4 {
+    padding-left: 0 !important;
+    padding-right: 1.5rem !important;
+}
+
+.pr-4 {
+    padding-right: 0 !important;
+    padding-left: 1.5rem !important;
+}
+
+.pl-5 {
+    padding-left: 0 !important;
+    padding-right: 3rem !important;
+}
+
+.pr-5 {
+    padding-right: 0 !important;
+    padding-left: 3rem !important;
+}
+
+/* DataTables */
+div.dataTables_wrapper div.dataTables_length {
+    text-align: right;
+}
+
+div.dataTables_wrapper div.dataTables_filter {
+    text-align: left;
+}
+
+div.dataTables_wrapper div.dataTables_info {
+    text-align: right;
+}
+
+div.dataTables_wrapper div.dataTables_paginate {
+    text-align: left;
+}
+
+/* SweetAlert */
+.swal2-html-container {
+    text-align: right !important;
+}
+
+.date-batch-g::before,
+.date-batch-h::before {
+  margin-right: 0;
+  margin-left: 5px;
+}
+
+.date-batch-h,
+.date-batch-g {
+  padding: 0 0 0 8px;
+}
+
+/* .show > .dropdown-menu {
+  width: 270px !important;
+} */
+
+input[type="file"]::file-selector-button {
+  /* Flip margin from right to left */
+  margin-right: 0;
+  margin-left: 20px;
+  /* Flip border from right to left */
+  border-right: 0;
+  border-left: 1px solid #e5e5e5;
+}
+
+input[type="file"]::file-selector-button:hover {
+  /* Flip border on hover state as well */
+  border-right: 0;
+  border-left: 1px solid #e5e5e5;
+}
+
+/* Global RTL for all SweetAlert2 modals */
+.swal2-popup {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+/* Or target specific elements */
+.swal2-title {
+  direction: rtl;
+  text-align: right;
+}
+
+.swal2-content {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Adjust button positions for RTL */
+.swal2-actions {
+  direction: ltr; /* Keep buttons LTR within RTL modal */
+}
+
+.swal2-html-container {
+  direction: ltr !important;
+  text-align: left;
+}
+
+/* Flip padding from right to left */
+.app-search {
+  padding-right: 0;
+  padding-left: 20px;
+}
+
+/* Flip position from left to right */
+.app-search button {
+  left: auto;
+  right: 160px;
+}
+
+/* Flip padding on the input field */
+.app-search .form-control,
+.app-search .form-control:focus {
+  padding-left: 40px;
+  padding-right: 20px;
+}
+
+.btn-group > .btn:first-child:not(:last-child) {
+  border-radius: 0 20px 20px 0 !important;
+}
+
+.btn-group > .btn:last-child:not(:first-child) {
+  border-radius: 20px 0 0 20px !important;
+}
+
+/* Target the container for the search/length controls */
+.dataTables_wrapper .row:first-child {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Ensure the button group (left side in LTR) is on the right in RTL */
+.dataTables_wrapper .dt-buttons {
+  text-align: right;
+}
+
+/* Ensure the search and length menu are on the left in RTL */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter {
+  text-align: left;
+}
+
+/*
+=================================================================
+  RTL Modifications for Custom Table Controls
+=================================================================
+*/
+
+/**
+ * This section corrects the alignment of the custom search and
+ * select inputs that use the .pull-right helper class.
+ */
+
+/* In RTL, make elements with .pull-right float to the left */
+.pull-right {
+  float: left !important;
+}
+
+/*
+=================================================================
+  RTL Modifications for Select2 Plugin
+=================================================================
+*/
+
+/**
+ * This section provides RTL overrides for the Select2 jQuery plugin.
+ */
+
+/* Ensure text inside Select2 elements is right-aligned */
+.select2-container .select2-selection--single .select2-selection__rendered,
+.select2-results__option {
+  text-align: right;
+}
+
+/* Move the dropdown arrow to the left */
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+  right: auto;
+  left: 1px;
+}
+
+/* Adjust padding to make space for the arrow on the left */
+.select2-container .select2-selection--single .select2-selection__rendered {
+    padding-right: 12px;
+    padding-left: 20px;
+}
+
+/* Flip the clear button position */
+.select2-container--default .select2-selection--single .select2-selection__clear {
+    float: left;
+}
+
+/* Adjustments for multi-select */
+.select2-container--default .select2-selection--multiple .select2-selection__choice {
+    float: right;
+    margin-right: 0;
+    margin-left: 5px;
+}
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    margin-right: 0;
+    margin-left: 5px;
+    border-right: none;
+    border-left: 1px solid #aaa;
+}
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+    border: solid black 1px;
+    outline: 0;
+}
+
+
+/*
+=================================================================
+  RTL Modifications for License Plate (NEW Method)
+=================================================================
+*/
+
+/**
+ * This section provides a more robust, class-based approach for the license plate.
+ * IMPORTANT: You MUST use the new license plate HTML provided in the chat
+ * for this CSS to work.
+ *
+ * This block contains ALL styles for the new license plate.
+ * You can move the base styles to your main style.css if you wish.
+ */
+
+/* --- Base LTR Styles --- */
+.plate-content-new {
+  display: flex;
+  flex-direction: row; /* LTR is the default direction */
+  width: 100%;
+  height: 100%;
+  align-items: stretch; /* Make columns full height */
+}
+
+.plate-section-new {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex-basis: 33.33%;
+  position: relative;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 5px;
+  box-sizing: border-box;
+}
+
+.plate-logo {
+  border-left: 2px solid #000;
+  border-right: 2px solid #000;
+}
+
+.plate-text-top,
+.plate-text-bottom {
+    height: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.plate-divider-h {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #000;
+    transform: translateY(-50%);
+}
+
+.plateNumberDigAr {
+    width: auto !important; /* Override previous inline style if it exists */
+}
+
+/* --- RTL Override --- */
+[dir="rtl"] .plate-content-new {
+  /* This single line reverses the order of the columns for RTL */
+  flex-direction: row-reverse;
+}
+
+/*
+=================================================================
+  RTL Modifications for SweetAlert2
+=================================================================
+*/
+
+/**
+ * This section provides RTL overrides for the SweetAlert2 plugin
+ * to ensure all text content within the popup is right-aligned.
+ */
+
+/*
+ * Targets the main popup container when the document direction is RTL
+ * and forces the text alignment to the right for the title and content.
+ * The !important flag is used to ensure it overrides any inline styles
+ * from the plugin.
+ */
+[dir="rtl"] .swal2-popup .swal2-title,
+[dir="rtl"] .swal2-popup .swal2-html-container {
+  text-align: right !important;
+}
+
+/**
+ * Optional: Reverse the order of the action buttons (e.g., "Confirm", "Cancel")
+ * to follow the standard RTL pattern where the primary action is on the left.
+ */
+[dir="rtl"] .swal2-popup .swal2-actions {
+  flex-direction: row-reverse !;
+}
+
+.form-row.customSweetAlertMLR, 
+.row.customSweetAlertMLR{
+  text-align: right !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.customSweetAlertMLR > .form-group > .form-control::placeholder{
+    text-align: right !important;
+}
+
+/*
+=================================================================
+  RTL Modifications for Input Fields
+=================================================================
+*/
+
+/**
+ * This section ensures that text and cursors in input fields
+ * are aligned to the right for RTL layouts.
+ */
+[dir="rtl"] input[type="text"],
+[dir="rtl"] input[type="password"],
+[dir="rtl"] input[type="email"],
+[dir="rtl"] input[type="search"],
+[dir="rtl"] input[type="tel"],
+[dir="rtl"] input[type="url"],
+[dir="rtl"] input[type="number"],
+[dir="rtl"] textarea,
+[dir="rtl"] .form-control {
+  text-align: right;
+}

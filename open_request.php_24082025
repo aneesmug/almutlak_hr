@@ -1,0 +1,1050 @@
+<?php
+
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/session_check.php';
+include("./includes/convertNumbersToWords.php");
+
+require './includes/vendor/autoload.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
+if (mysqli_num_rows($query) == 1) {
+    include("./includes/avatar_select.php");
+}
+
+$getquery = mysqli_query($conDB, "SELECT 
+            `smt`.*, 
+            SUM(`smt`.`total_cost`) as `subtotal`, 
+            SUM(`smt`.`vat_val`) as `vat_val`,
+            `dpt`.`dep_nme`
+            FROM `smart_request` `smt`
+            LEFT JOIN `department` `dpt` ON `dpt`.`id` = `smt`.`department`
+            WHERE `smt`.`inv_no`='" . $_GET['id'] . "' ");
+
+while ($row = mysqli_fetch_assoc($getquery)) {
+    $idno = $row["id"];
+    $invnoget = $row["inv_no"];
+    $tally_id_get = $row["tally_id"];
+    $injazat_id_get = $row["injazat_id"];
+    $total_costget = $row['subtotal'];
+    $vat_get = $row['vat_val'];
+    $discount_get = $row["discount"];
+    $location_get = $row["location"];
+    $sub_type_get = $row["sub_type"];
+    $sub_title_get = $row["sub_title"];
+    $approv_by_get = $row["approv_by"];
+    $prep_by_get = (explode(" ", $row["prep_by"])[0]) . " " . (explode(" ", $row["prep_by"])[1]);
+    $department_get = $row["department"];
+    $dep_nme_get = $row["dep_nme"];
+    $remarks_get = $row["remarks"];
+    $emp_id_get = $row["emp_id"];
+    $created_at_get = $row["created_at"];
+    // $vat_get = $total_costget * 15 / 100;
+    $total_cost_get = $total_costget - $vat_get;
+    $total = $total_cost_get + $vat_get;
+    $gtotal = $total - $discount_get;
+}
+
+if (isset($_POST['submit'])) {
+
+    $querycheck = mysqli_query($conDB, "SELECT *, 
+        `smt_request_status`.`status` AS `smtstatus` , 
+        `smt_request_status`.`note` AS `smtnote`
+            FROM `smt_request_status`
+            LEFT JOIN `employees` ON `smt_request_status`.`emp_id` = `employees`.`emp_id`
+            WHERE `inv_no` = '$_GET[id]'
+            AND `smt_request_status`.`status` = '$_POST[status]'
+            ORDER BY `smt_request_status`.`id` DESC
+            LIMIT 1 
+        ");
+    if (mysqli_num_rows($querycheck) > 0) { //check if there is already an entry for that appointment
+        $msg = "
+                <div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Sorry this request <strong>" . $_GET['id'] . "</strong> you already submited.</div>
+                ";
+    } else {
+        // Get multiple input field's value 
+        if (!empty($_POST['approv_by'])) {
+
+            $inv_no_po = $_POST['inv_no'];
+            $tally_id_po = $_POST['tally_id'];
+            $injazat_id_po = $_POST['injazat_id'];
+            $location_po = $_POST['location'];
+            $sub_type_po = $_POST['sub_type'];
+            $item_name_array = $_POST['item_name'];
+            $quantity_array = $_POST['quantity'];
+            $product_price_array = $_POST['product_price'];
+            $itmvalue_array = $_POST['itmvalue'];
+            $vat_rate_array = $_POST['vat_rate'];
+            $vat_val_array = $_POST['vat_val'];
+            $amount_array = $_POST['amount'];
+            $idiscount_array = $_POST['idiscount'];
+            $total_cost_array = $_POST['total_cost'];
+            $discount_po = $_POST['discount'];
+            $approv_by_po = $_POST['approv_by'];
+            $note_po = mysqli_real_escape_string($conDB, $_POST['note']);
+
+            $qappby = mysqli_query($conDB, "SELECT `employees`.`dept`,`employees`.`name`,`admin_login`.`email` FROM `employees` LEFT JOIN `admin_login` ON `employees`.`emp_id` = `admin_login`.`emp_id` WHERE `employees`.`emp_id`='" . $approv_by_po . "' LIMIT 1");
+            while ($row = mysqli_fetch_assoc($qappby)) {
+                // $appname = $row["name"];
+                $app_name = (explode(" ", $row["name"])[0]) . " " . (explode(" ", $row["name"])[1]);
+                $app_email = $row["email"];
+                $app_emp_dept = $row["dept"];
+            }
+            if ($emptypeget == "Manager" and $_SESSION['user_dept'] == 2 ||  $emptypeget == "Manager" and $_SESSION['user_dept'] == 5) {
+                // $status_po = "not_approved";
+                mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES ('" . $empid . "', '" . $inv_no_po . "', '" . $userwel . "', '" . $_POST['status'] . "', '" . $note_po . "' )");
+                $qappbyfn = mysqli_query($conDB, "SELECT `employees`.`dept`,`employees`.`name`,`admin_login`.`email` FROM `employees` LEFT JOIN `admin_login` ON `employees`.`emp_id` = `admin_login`.`emp_id` WHERE `employees`.`dept`='2' LIMIT 1; ");
+                while ($row = mysqli_fetch_assoc($qappbyfn)) {
+                    $app_name_fn = (explode(" ", $row["name"])[0]) . " " . (explode(" ", $row["name"])[1]);;
+                    $app_email_fn = $row["email"];
+                }
+                salert("Success!", "This record has been submited successfully.", "success", "all_requests.php");
+            } elseif ($_SESSION['user_type'] == "gm") {
+                mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note` ) VALUES ('" . $empid . "', '" . $inv_no_po . "', '" . $userwel . "', '" . $_POST['status'] . "', '" . $note_po . "' )");
+                $qappbygm = mysqli_query($conDB, "SELECT `employees`.`dept`,`employees`.`name`,`admin_login`.`email` FROM `employees` LEFT JOIN `admin_login` ON `employees`.`emp_id` = `admin_login`.`emp_id` WHERE `employees`.`emp_id`='" . $emp_id_get . "' LIMIT 1");
+                while ($row = mysqli_fetch_assoc($qappbygm)) {
+                    $app_name_gm = (explode(" ", $row["name"])[0]) . " " . (explode(" ", $row["name"])[1]);;
+                    $app_email_gm = $row["email"];
+                }
+                salert("Success!", "This record has been submited successfully.", "success", "all_requests.php");
+            } else {
+                // $status_po = "Manager";
+                mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status` ) VALUES ('" . $empid . "', '" . $inv_no_po . "', '" . $userwel . "', '" . $_POST['status'] . "' )");
+                mysqli_query($conDB, "UPDATE `smart_request` SET `discount`='" . $discount_po . "' WHERE `inv_no`='" . $_GET['id'] . "' ") or die();
+                salert("Success!", "This record has been submited successfully.", "success", "all_requests.php");
+            }
+
+            /*-------------------------------------------------------------------------*/
+            // Send OTP email
+            $mail = new PHPMailer(true);
+            try {
+                // Server settings
+                $mail->isSMTP();
+                $mail->Host = 'smtp.office365.com';
+                $mail->SMTPAuth = true;
+                $mail->Username = 'noreply@almutlak.com';
+                $mail->Password = 'HO@66887';
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                $mail->Port = 587;
+                $mail->CharSet = 'UTF-8';
+                // Recipients
+                $mail->setFrom("noreply@almutlak.com", "Al Mutlak System");
+                if ($emptypeget == "Manager" AND $_SESSION['user_dept'] == 2 ) {
+                ($_POST['status'] == 'reject') ? $mail->addAddress($app_email_fn, $app_name_fn) : $mail->addAddress($app_email, $app_name);
+                } elseif ($_SESSION['user_type'] == "gm") {
+                    $mail->addAddress($app_email_gm, $app_name_gm);
+                } else {
+                    $mail->addAddress($app_email, $app_name);
+                }
+                // Content
+                $mail->isHTML(true);
+                $mail->Subject = 'Smart Request from '.$userwelext." - ". $invnoget;
+                $bodycus = $mail->msgHTML(file_get_contents('./includes/PHPMailerMaster/email_contant_body.php'), dirname(__FILE__));
+                $bodycus = preg_replace('/\\\\/','', $bodycus);
+                $bodycus = str_replace('$userwelext', $userwelext, $bodycus);
+                $bodycus = str_replace('$sub_title_get', $sub_title_get, $bodycus);
+                $bodycus = str_replace('$invnoget', $invnoget, $bodycus);
+                $bodycus = str_replace('$dept', $usrdeptnme, $bodycus);
+                // $bodycus = str_replace('$date_up', $date_up, $bodycus);
+                $mail->Body=$bodycus;
+                $mail->send();
+                $resp['status'] = 'success';
+                $resp['message'] = 'OTP sent successfully';
+            } catch (Exception $e) {
+                error_log("Mailer Error: " . $e->getMessage());
+                throw new Exception('Failed to send OTP email');
+            }
+            /*-------------------------------------------------------------------------*/
+        } else {
+            $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Please fill out the form!</div>";
+        }
+    }
+}
+
+if (isset($_POST['submit_edit'])) {
+    $item_name_up = mysqli_real_escape_string($conDB, $_POST['item_name']);
+    $location_up = $_POST['location'];
+    $quantity_up = $_POST['quantity'];
+    $product_price_up = $_POST['product_price'];
+    $itmvalue_up = $_POST['itmvalue'];
+    $vat_rate_up = $_POST['vat_rate'];
+    $vat_val_up = $_POST['vat_val'];
+    $amount_up = $_POST['amount'];
+    $idiscount_up = $_POST['idiscount'];
+    $total_cost_up = $_POST['total_cost'];
+    $remarks_po = mysqli_real_escape_string($conDB, $_POST['remarks']);
+    if ($item_name_up) {
+        mysqli_query($conDB, "UPDATE `smart_request` SET `item_name`='" . $item_name_up . "', `location`='" . $location_up . "', `quantity`='" . $quantity_up . "', `product_price`='" . $product_price_up . "',`itmvalue`='" . $itmvalue_up . "', `vat_rate`='" . $vat_rate_up . "', `vat_val`='" . $vat_val_up . "', `amount`='" . $amount_up . "', `idiscount`='" . $idiscount_up . "', `total_cost`='" . $total_cost_up . "' WHERE `id`='" . $_POST['itemid'] . "' ") or die();
+        $msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Item Modified Seccssfully!</div>
+        ";
+        salert("Success!", "This record has been update successfully.", "success", "open_request.php?id=$_GET[id]");
+    } else {
+        $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Please fill out edit value in the form!</div>";
+    }
+}
+
+
+
+if (isset($_POST['req_edit_submit'])) {
+    $sub_type_up = $_POST['sub_type'];
+    $sub_title_up = mysqli_real_escape_string($conDB, $_POST['sub_title']);
+    $tally_id_up = $_POST['tally_id'];
+    $injazat_id_up = $_POST['injazat_id'];
+    $remarks_up = mysqli_real_escape_string($conDB, $_POST['remarks']);
+    if ($sub_type_up) {
+        mysqli_query($conDB, "UPDATE `smart_request` SET `sub_type`='" . $sub_type_up . "', `sub_title`='" . $sub_title_up . "', `tally_id`='" . $tally_id_up . "', `injazat_id`='" . $injazat_id_up . "',`remarks`='" . $remarks_up . "' WHERE `inv_no`='" . $_POST['reqid'] . "' ") or die();
+        $msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Request Modified Seccssfully!</div>
+        ";
+        salert("Success!", "This record has been update successfully.", "success", "open_request.php?id=$_GET[id]");
+    } else {
+        $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Please enter required in the form!</div>";
+    }
+}
+
+$getstatushr = mysqli_query($conDB, "SELECT 
+        `admin_login`.`user_type`
+        FROM `smt_request_status`
+        LEFT JOIN `employees` ON `smt_request_status`.`emp_id` = `employees`.`emp_id`
+        LEFT JOIN `admin_login` ON `admin_login`.`emp_id` = `employees`.`emp_id`
+        WHERE `inv_no` = '$_GET[id]' AND `admin_login`.`dept` = 5
+        ORDER BY `smt_request_status`.`id` DESC
+        LIMIT 1 
+    ");
+while ($row = mysqli_fetch_assoc($getstatushr)) {
+    $user_type_hr = $row["user_type"];
+}
+
+// Prepare common variables
+$isManager = ($emptypeget == "Manager");
+$userDept = $_SESSION['user_dept'];
+$isSpecialDept = ($userDept == 2 || ($userDept == 5 and $user_type == $user_type_hr));
+if ($isManager) {
+    if (!$isSpecialDept) { // Manager from other departments
+        $query_apprv = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `dept`=2 AND `status`=1 AND  `emp_id` IN ('4120', '3061') ");
+    } else { // Manager from dept 2 or 5
+        $query_apprv = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `emp_id`='3928'");
+    }
+} elseif ($user_type == "gm") { // Handle GM case
+    $query_apprv = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `emp_id`='3928'");
+} else { // Default case
+    $query_apprv = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `dept`='$user_dept'  AND `status`=1 AND `emptype`='Manager'");
+}
+
+$getstatus = mysqli_query($conDB, "SELECT *, 
+        `smt_request_status`.`status` AS `smtstatus`, 
+        `department`.`dep_nme` AS `deptnme`,
+        `smt_request_status`.`note` AS `smtnote`
+        FROM `smt_request_status`
+        LEFT JOIN `employees` ON `smt_request_status`.`emp_id` = `employees`.`emp_id`
+        LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
+        WHERE `inv_no` = '$_GET[id]'
+        ORDER BY `smt_request_status`.`id` DESC
+        LIMIT 1 
+    ");
+while ($row = mysqli_fetch_assoc($getstatus)) {
+    $statusget = $row["smtstatus"];
+    $invnoget = $row["inv_no"];
+    $deptget = $row["dept"];
+    $deptnmeget = $row["deptnme"];
+    $noteget = $row["smtnote"];
+}
+
+while ($rec = mysqli_fetch_array($query_apprv)) {
+    $applst[] = "<option value=\"" . $rec['emp_id'] . "\">" . $rec['name'] . "</option>";
+}
+$applist = implode(",", $applst);
+
+$lstapp =
+    <<<HTML
+<div class="input-group-prepend">
+    <div class="input-group-text">Approved by *</div>
+</div>
+<select class="form-control" name="approv_by" required>
+<option value="">Select</option>
+    $applist
+</select>
+HTML;
+
+
+if ($statusget == "draft") {
+    $status_get = "<input class='form-control bg-secondary border-secondary text-white' type='text' value='Not Submitted' readonly />";
+} elseif ($statusget == "Manager") {
+    $status_get = "<input class='form-control bg-custom border-custom text-white' type='text' value='Waiting from " . $deptnmeget . " Manager' readonly />";
+} elseif ($statusget == 2) {
+    $status_get = "<input class='form-control bg-warning border-warning text-white' type='text' value='Waiting from Finance' readonly />";
+} elseif ($statusget == "Management") {
+    $status_get = "<input class='form-control bg-primary border-primary text-white' type='text' value='Waiting from Management' readonly />";
+} elseif ($statusget == "approve") {
+    $status_get = "<input class='form-control bg-success border-success text-white' type='text' value='Approved by Management' readonly />";
+} elseif ($statusget == "reject") {
+    if ($deptget == "Management") {
+        $status_get = "<input class='form-control bg-danger border-danger text-white' type='text' value='Rejected by Management' readonly />";
+        $statusrej = "rejected by Management";
+    } else { // Assuming Finance is the only other possibility
+        $status_get = "<input class='form-control bg-danger border-danger text-white' type='text' value='Rejected by Finance' readonly />";
+        $statusrej = "rejected by Finance";
+    }
+} elseif ($statusget == "Paid") {
+    $status_get = "<div class='input-group'>
+            <input class='form-control bg-success border-success text-white' type='text' value='Payment Paid' readonly />
+            <span class='input-group-text bg-success border-success text-white'><i class='mdi mdi-approval'></i></span>
+        </div>";
+} else {
+    // Consider if this default case is appropriate for application
+    $status_get = "<input class='form-control bg-danger border-danger text-white' type='text' value='Unknown Status' readonly />";
+}
+
+$query_notes = mysqli_query($conDB, "SELECT * FROM `smt_notes` WHERE `inv_no`='" . $invnoget . "' ORDER BY `id` DESC LIMIT 1 ");
+while ($row = mysqli_fetch_assoc($query_notes)) {
+    $notesget = $row["note"];
+    $notesemp_name_get = $row["emp_name"];
+}
+
+?>
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title><?= $site_title ?> - <?= $sub_title_get ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
+    <meta content="Anees Afzal" name="author" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="assets/images/favicon.ico">
+
+    <link href="./plugins/bootstrap-tagsinput/css/bootstrap-tagsinput.css" rel="stylesheet" />
+    <link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="./plugins/switchery/switchery.min.css" />
+
+    <!-- App css -->
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <!-- Dropzone css -->
+    <link href="./plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css" />
+    <script src="assets/js/modernizr.min.js"></script>
+    <style type="text/css">
+        .noneDIV {
+            display: none;
+        }
+
+        .showDIV {
+            display: block;
+        }
+
+        .swal-wide {
+            width: 850px !important;
+        }
+
+        .currencyicon {
+            border: 1px solid #d9e3e9 !important;
+            border-radius: 0 0.25rem 0.25rem 0 !important;
+            border-left: 0px !important;
+        }
+
+        .grandtotal,
+        .discount,
+        .total,
+        .vat,
+        .subtotal {
+            border-right: 0px !important;
+        }
+
+        .input-group-text {
+            border: 1px solid #d9e3e9 !important;
+        }
+    </style>
+</head>
+
+<body class="enlarged" data-keep-enlarged="true">
+
+    <!-- Begin page -->
+    <div id="wrapper">
+
+        <!-- ========== Left Sidebar Start ========== -->
+        <div class="left side-menu">
+
+            <div class="slimscroll-menu" id="remove-scroll">
+
+                <!-- LOGO -->
+                <div class="topbar-left">
+                    <a href="dashboard.php" class="logo">
+                        <span>
+                            <img src="assets/images/logo.png" alt="" height="22">
+                        </span>
+                        <i>
+                            <img src="assets/images/logo_sm.png" alt="" height="28">
+                        </i>
+                    </a>
+                </div>
+
+                <!-- User box -->
+
+                <!--- Sidemenu -->
+                <?php include("./includes/main_menu.php"); ?>
+                <!-- Sidebar -->
+
+                <div class="clearfix"></div>
+
+            </div>
+            <!-- Sidebar -left -->
+
+        </div>
+        <!-- Left Sidebar End -->
+
+        <!-- ============================================================== -->
+        <!-- Start right Content here -->
+        <!-- ============================================================== -->
+
+        <div class="content-page">
+
+            <!-- Top Bar Start -->
+            <?php include("./includes/topbar.php"); ?>
+            <!-- Top Bar End -->
+
+
+            <!-- Start Page content -->
+            <div class="content">
+                <div class="container-fluid">
+                    <div class="row">
+                        <div class="col-md-12" id="DataContact">
+                            <form action="open_request.php?id=<?= $_GET['id'] ?>" method="post">
+                                <div class="row">
+                                    <div class="col-md-12" id="main-content">
+                                        <div class="card-box">
+                                            <?= $msg ?>
+
+                                            <?php if ($noteget): ?>
+                                                <div class="alert alert-danger bg-danger text-white border-0" role="alert" id="attachmentsSmt">
+                                                    This is a request <b><?= $statusrej ?></b> due to <strong> "<?= $noteget ?>" </strong>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div class="row">
+                                                <div class="col-4 ">
+                                                    <div class="mt-3 float-left">
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Invoice Date:</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' value="<?= date("d F Y", strtotime($created_at_get)) ?>" readonly />
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Sub. Type</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' value="<?= $sub_type_get ?>" readonly />
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Sub-Title</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' value="<?= $sub_title_get ?>" readonly />
+                                                        </div>
+                                                        <?php if ($remarks_get): ?>
+                                                            <div class="input-group mb-2">
+                                                                <div class="input-group-prepend">
+                                                                    <div class="input-group-text">Remarks</div>
+                                                                </div>
+                                                                <input class="form-control" type='text' value="<?= $remarks_get ?>" readonly />
+                                                            </div>
+                                                        <?php endif; ?>
+                                                        <div class="input-group mb-2">
+                                                            <!-- Check Suppoter Employee submited to Manager -->
+                                                            <?php
+
+                                                            // debug($_SESSION['user_dept']);
+
+                                                            if ($statusget == "draft" and $emptypeget == "Supporter") {
+                                                                echo $lstapp;
+                                                            } elseif ($statusget == "draft" and $_SESSION['user_dept'] == $deptget) {
+                                                                echo $lstapp;
+                                                            } elseif ($statusget == "Manager" and $emptypeget == "Manager" and $_SESSION['user_dept'] == $deptget) {
+                                                                echo $lstapp;
+                                                            } elseif ($statusget == 2 and $emptypeget == "Manager" and $_SESSION['user_dept'] == 2) {
+                                                            ?>
+                                                                <div class="input-group-prepend">
+                                                                    <div class="input-group-text">Select for*</div>
+                                                                </div>
+                                                                <select class="form-control" name="status" id="statlist" required>
+                                                                    <option value="">Select</option>
+                                                                    <option value="Management">Approve</option>
+                                                                    <option value="reject">Reject</option>
+                                                                </select>
+                                                                <input type="hidden" name="approv_by" value="<?= $fname ?>" />
+                                                            <?php } elseif ($statusget == "Management" and $_SESSION['user_type'] == "gm") { ?>
+                                                                <div class="input-group-prepend">
+                                                                    <div class="input-group-text">Forwarded to*</div>
+                                                                </div>
+                                                                <select class="form-control" name="status" id="statlist" required>
+                                                                    <option value="">Select</option>
+                                                                    <option value="approve">Approve</option>
+                                                                    <option value="reject">Reject</option>
+                                                                </select>
+                                                                <input type="hidden" name="approv_by" value="<?= $fname ?>" />
+
+                                                            <?php } else { ?>
+                                                                <div class="input-group-prepend">
+                                                                    <div class="input-group-text">Status</div>
+                                                                </div>
+                                                                <?= $status_get; ?>
+                                                            <?php } ?>
+                                                        </div>
+
+                                                        <?php if ($notesget): ?>
+                                                            <div class="mt-3">
+                                                                <h4>
+                                                                    <strong>Finance Notes: </strong><span class="badge badge-primary" data-toggle="tooltip" data-placement="right" data-original-title="<?= $notesemp_name_get ?>"><?= $notesget ?></span>
+                                                                </h4>
+                                                            </div>
+                                                        <?php endif; ?>
+
+                                                        <div class="input-group mb-2" id="RejectDIV" style="display: none;">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Rejection Note*</div>
+                                                            </div>
+                                                            <input type='text' class="form-control" name="note" id="RejectInput" />
+                                                        </div>
+
+                                                        <div class="input-group mb-2" id="ApproveDIV" style="display: none;">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Approve from*</div>
+                                                            </div>
+                                                            <select class="form-control" id="ApproveInput">
+                                                                <option value="">Select</option>
+                                                                <?= $applist ?>
+                                                            </select>
+                                                        </div>
+
+
+                                                        <?php
+                                                        if ($statusget == "draft" or $statusget == "Manager"):
+                                                            $query_chkattach = mysqli_query($conDB, "SELECT * FROM `smt_attachment` WHERE `inv_no`='" . $_GET['id'] . "' ");
+                                                            if (mysqli_num_rows($query_chkattach) <= 5) { ?>
+
+                                                                <div class="input-group mb-2">
+                                                                    <label for="inlineRadio3" class="col-form-label radioalign">Attachment<span class="text-danger">*</span></label>
+
+                                                                    <div class="radio radio-info form-check-inline">
+                                                                        <input type="radio" id="inlineRadio3" value="yes" name="attach" onclick="showAttachment()" required>
+                                                                        <label for="inlineRadio3" class="atch"><i class="mdi mdi-paperclip"></i> Have Attachments</label>
+                                                                    </div>
+                                                                    <div class="radio radio-info form-check-inline">
+                                                                        <input type="radio" id="inlineRadio2" value="no" name="attach" onclick="hideAttachment()" required>
+                                                                        <label for="inlineRadio2" class="atch"><i class="mdi mdi-clippy"></i> No Attachment</label>
+                                                                    </div>
+
+                                                                    <a href="javascript:void(0);" class="btn btn-sm btn-custom waves-effect waves-light noneDIV checkattach attachmentDIV smt_attachment" data-attach="ok" data-inv_no="<?= $invnoget ?>">
+                                                                        <i class="mdi mdi-cloud-upload "></i> Upload Documents</a>
+                                                                    <input type="text" id="checkatt" class="noneDIV checkatt">
+                                                                </div>
+                                                        <?php };
+                                                        endif; ?>
+
+                                                        <?php if ($noteget): ?>
+                                                            <div class="input-group mb-2">
+                                                                <div class="input-group-prepend">
+                                                                    <div class="input-group-text">Reject Note*</div>
+                                                                </div>
+                                                                <input class="form-control" type='text' value="<?= split_words($noteget, 25, "..."); ?>" readonly />
+                                                            </div>
+                                                        <?php endif ?>
+
+                                                    </div>
+                                                </div><!-- end col -->
+                                                <div class="col-4">
+                                                    <div class="noneDIV attachmentDIV mt-3" id="">
+                                                        <img src="qrconfig_smartrequest.php?id=<?= $_GET['id'] ?>" />
+                                                        <p>Scan QR from mobile Attachments</p>
+                                                    </div>
+                                                </div><!-- end col -->
+                                                <div class="col-4 ">
+                                                    <div class="mt-3 float-right">
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Invoice No.:</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' name='inv_no' value="<?= $invnoget ?>" readonly />
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Department:</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' name='department' value="<?= $dep_nme_get ?>" readonly />
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Prepared by:</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' value="<?= $prep_by_get ?>" readonly />
+                                                        </div>
+
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Tally ID.</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' id='tally_id' value="<?= $tally_id_get ?>" <?= ($statusget == "Manager" and $emptypeget == "Manager" and $_SESSION['user_dept'] == $deptget) ? "" : "readonly"; ?> />
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Injazat ID.</div>
+                                                            </div>
+                                                            <input class="form-control" type='text' id='injazat_id' value="<?= $injazat_id_get ?>" <?= ($statusget == "Manager" and $emptypeget == "Manager" and $_SESSION['user_dept'] == $deptget) ? "" : "readonly"; ?> />
+                                                        </div>
+
+                                                    </div>
+                                                </div><!-- end col -->
+                                            </div>
+                                            <!-- end row -->
+
+                                            <div class="row">
+                                                <div class="col-md-12">
+                                                    <div class="table-responsive">
+                                                        <table class="table mt-4">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th width="70">#</th>
+                                                                    <th>Description/Item Name/Invoice Num.</th>
+                                                                    <th width="160">Location</th>
+                                                                    <th width="80">Quantity</th>
+                                                                    <th width="120">Unit Cost <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
+                                                                    <th width="130">Item Value <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
+                                                                    <th width="70">Vat%</th>
+                                                                    <th width="100">Vat Val <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
+                                                                    <th width="130">Amount <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
+                                                                    <th width="100">Discount <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
+                                                                    <th width="150" class="text-right">Total <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
+                                                                    <?php if ($statusget <> "approve" && $statusget <> "reject"): ?>
+                                                                        <th width="60" class="text-right"></th>
+                                                                    <?php endif ?>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php
+                                                                $x = 1;
+                                                                if ($_SESSION['user_type'] == 'administrator' or ($emptypeget == "Manager" and $_SESSION['user_dept'] == 2) or ($emptypeget == "Manager" and $_SESSION['user_dept'] == "Management")) {
+                                                                    $getdataloop = mysqli_query($conDB, "SELECT * FROM `smart_request` WHERE `inv_no`='" . $_GET['id'] . "' ");
+                                                                } else {
+                                                                    $getdataloop = mysqli_query($conDB, "SELECT * FROM `smart_request` WHERE `inv_no`='" . $_GET['id'] . "' ");
+                                                                }
+
+                                                                while ($rec = mysqli_fetch_assoc($getdataloop)) {
+                                                                ?>
+                                                                    <tr class="set">
+                                                                        <td><input type="text" class="form-control" readonly value="<?= $x++ ?>" id="row"></td>
+                                                                        <td>
+                                                                            <input type="text" name="item_name[]" readonly class="form-control" value="<?= $rec["item_name"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input type="text" name="location[]" readonly class="form-control" value="<?= $rec["location"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="form-control" readonly type='text' name='quantity[]' for="1" onkeypress="return isNumberKey(event,this)" value="<?= $rec["quantity"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="form-control" type='text' data-type="product_price" name='product_price[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?= $rec["product_price"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="form-control" type='text' data-type="itmvalue" name='itmvalue[]' for="1" readonly value="<?= $rec["itmvalue"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="form-control" type='text' data-type="vat_rate" name='vat_rate[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?= $rec["vat_rate"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="form-control" type='text' data-type="vat_val" name='vat_val[]' for="1" readonly value="<?= $rec["vat_val"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="form-control" type='text' data-type="amount" name='amount[]' for="1" readonly value="<?= $rec["amount"]; ?>" />
+                                                                        </td>
+                                                                        <td>
+                                                                            <input class="form-control" type='text' data-type="idiscount" name='idiscount[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?= $rec["idiscount"]; ?>" />
+                                                                        </td>
+                                                                        <td class="text-right">
+                                                                            <input class="form-control" type='text' name='total_cost[]' for='1' readonly value="<?= $rec["total_cost"]; ?>" />
+                                                                        </td>
+
+                                                                        <?php if ($statusget <> "approve" && $statusget <> "reject"): ?>
+                                                                            <td class="text-right">
+                                                                                <div class="btn-group" role="group" aria-label="Edit Button">
+                                                                                    <?php if ($statusget == "draft" or $statusget == "Manager" or ($statusget == "Management" and $_SESSION['user_type'] == "gm")): ?>
+                                                                                        <a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect editItemLineAttr bbtn" data-id="<?= $rec['id'] ?>" data-i_item_name="<?= $rec['item_name'] ?>" data-i_quantity="<?= $rec['quantity'] ?>" data-i_product_price="<?= $rec['product_price'] ?>" data-i_vat_rate="<?= $rec['vat_rate'] ?>" data-i_idiscount="<?= $rec['idiscount'] ?>" data-i_itmvalue="<?= $rec['itmvalue'] ?>" data-i_vat_val="<?= $rec['vat_val'] ?>" data-i_amount="<?= $rec['amount'] ?>" data-i_total_cost="<?= $rec['total_cost'] ?>" data-i_location="<?= $rec['location'] ?>">
+                                                                                            <i class="mdi mdi-table-edit"></i>
+                                                                                        </a>
+                                                                                    <?php endif;
+                                                                                    if ($statusget !== "Paid"): ?>
+                                                                                        <a href="javascript:void(0);" class="btn_remove btn btn-danger btn-sm bbtn deleteAjax" data-id="<?= $rec["id"] ?>" data-tbl="smart_request" data-file="0">
+                                                                                            <i class="mdi mdi-database-minus"></i>
+                                                                                        </a>
+                                                                                    <?php endif; ?>
+                                                                                </div>
+                                                                            </td>
+                                                                        <?php endif ?>
+                                                                    </tr>
+                                                                <?php } ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-9">
+
+                                                    <div class="row">
+                                                        <?php
+                                                        $queryempdocu = mysqli_query($conDB, "SELECT * FROM `smt_attachment` WHERE `inv_no`='" . $_GET['id'] . "' ");
+                                                        while ($recempdoc = mysqli_fetch_assoc($queryempdocu)) {
+                                                            $id_empdoc_get = $recempdoc["id"];
+                                                            $attachment_get = $recempdoc["attachment"];
+                                                            $docu_ext_get = $recempdoc["docu_ext"];
+                                                            $doc_date_reg_get = $recempdoc["created_at"];
+                                                            $times_reg = strtotime("$doc_date_reg_get");
+                                                            $doc_date_reg_get = date('d, M Y h:ia', $times_reg);
+                                                            $fileIcon = ($docu_ext_get == "pdf" ? "pdf" : ($docu_ext_get == "xls" ? "excel" : ($docu_ext_get == "tif" ? "tif" : "")));
+                                                        ?>
+                                                            <div class="col-lg-2 col-xl-2">
+                                                                <div class="file-man-box">
+
+                                                                    <?php if ($_SESSION['user_dept'] == $deptget or $_SESSION['user_type'] == $access1): ?>
+                                                                        <a href="javascript:void(0);" class="file-close deleteAjax" data-id="<?= $id_empdoc_get ?>" data-tbl="smt_attachment" data-file="1" data-column="attachment"><i class="mdi mdi-close-circle"></i></a>
+                                                                    <?php endif ?>
+                                                                    <div class="file-img-box showAttach" style="cursor: pointer;" data-target="#ShowModal" data-id="<?= $id_empdoc_get ?>" data-i_attachment="<?= $attachment_get ?>">
+                                                                        <?php if ($docu_ext_get == "pdf" or $docu_ext_get == "xls" or $docu_ext_get == "tif"): ?>
+                                                                            <img src="assets/images/file_icons/<?= $fileIcon ?>.svg" />
+                                                                        <?php else: ?>
+                                                                            <img src="./assets/smt_attachment/<?= $attachment_get ?>" />
+                                                                        <?php endif ?>
+                                                                    </div>
+
+                                                                    <a href="./downloadFile.php?file=./assets/smt_attachment/<?= $attachment_get ?>" class="file-download"><i class="mdi mdi-download"></i></a>
+                                                                    <div class="file-man-title">
+                                                                        <p class="mb-0"><small><?= $doc_date_reg_get ?></small></p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        <?php } ?>
+                                                    </div>
+                                                </div>
+                                                <div class="col-3" id="gtotal">
+                                                    <div class="float-right">
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Net-Total <small>(without VAT)</small></div>
+                                                            </div>
+                                                            <input class="form-control subtotal" type='text' id='subtotal' name='subtotal' readonly value="<?= round($total_cost_get, 2); ?>" />
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text currencyicon">
+                                                                    <i class="icon-saudi_riyal" style="font-size: 15px !important;"></i>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">VAT 15%</div>
+                                                            </div>
+                                                            <input class="form-control vat" type='text' id='vat' name='vat' readonly value="<?= round($vat_get, 2); ?>" />
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text currencyicon">
+                                                                    <i class="icon-saudi_riyal" style="font-size: 15px !important;"></i>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Total <small>(Before Disc.)</small></div>
+                                                            </div>
+                                                            <input class="form-control total" type='text' id='total' name='total' readonly value="<?= round($total, 2); ?>" />
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text currencyicon">
+                                                                    <i class="icon-saudi_riyal" style="font-size: 15px !important;"></i>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Discount</div>
+                                                            </div>
+                                                            <input class="form-control discount" type='text' data-type="discount" id='discount' name='discount' onkeypress="return isNumberKey(event,this)" value="<?= round($discount_get, 2); ?>" <?= ($statusget == "Manager" and $emptypeget == "Manager" and $_SESSION['user_dept'] == $deptget) ? "" : "readonly"; ?> />
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text currencyicon">
+                                                                    <i class="icon-saudi_riyal" style="font-size: 15px !important;"></i>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="input-group mb-2">
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text">Grand Total</div>
+                                                            </div>
+                                                            <input class="form-control grandtotal" type='text' id='grandtotal' name='grandtotal' readonly value="<?= round($gtotal, 2); ?>" />
+                                                            <div class="input-group-prepend">
+                                                                <div class="input-group-text currencyicon">
+                                                                    <i class="icon-saudi_riyal" style="font-size: 15px !important;"></i>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="clearfix"></div>
+                                                </div>
+                                            </div>
+
+                                            <div class="hidden-print mt-4 mb-4">
+                                                <div class="text-right">
+                                                    <!-- <a href="javascript:window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print m-r-5"></i> Print</a> -->
+
+                                                    <?php
+                                                    // Pre-compute conditions for cleaner IF statements
+                                                    $user = $_SESSION;
+                                                    $isSameDept = ($user['user_dept'] == $deptget);
+                                                    $isSameDepartment = ($user['user_dept'] == $department_get);
+                                                    $isManager = ($emptypeget == "Manager");
+                                                    $isSupporter = ($emptypeget == "Supporter");
+                                                    $isHrSupporter = ($user_type_hr == "assistant" && $user['user_dept'] == 5);
+                                                    $isGM = ($user['user_type'] == 'gm');
+                                                    $isFinance = ($user['user_dept'] == 2); // Finance Dept
+                                                    $isHR = ($user['user_dept'] == 5);      // HR Dept
+                                                    $isAssistant = ($user['user_type'] == 'assistant');
+                                                    $isDraft = ($statusget == "draft");
+                                                    $isRejected = ($statusget == "reject");
+                                                    $isApproved = ($statusget == "approve");
+                                                    $isPaid = ($statusget == "Paid");
+                                                    ?>
+                                                    <!-- ===== ACTION BUTTONS ===== -->
+                                                    <?php if (($isDraft && $isSameDept) || ($statusget == "Manager" && $isManager && $isSameDept)) { ?>
+                                                        <a href="add_line_request.php?id=<?= htmlspecialchars($_GET['id']) ?>" class="btn btn-success btn-sm bbtn" title="Add field">
+                                                            Add Line <i class="mdi mdi-database-plus"></i>
+                                                        </a>
+                                                        <button type="submit" name="submit" class="btn btn-info waves-effect waves-light">Submit</button>
+                                                    <?php } elseif (($statusget == 2 && $isManager && $isFinance) || ($statusget == "Management" && $isGM)) { ?>
+                                                        <button type="submit" name="submit" class="btn btn-info waves-effect waves-light">Submit</button>
+                                                    <?php } else { ?>
+                                                        <a href="./all_requests.php" class="btn btn-dark waves-effect waves-light">
+                                                            <i class="fa fa-angle-double-left"></i> Back
+                                                        </a>
+                                                        <a href="smt_print.php?id=<?= htmlspecialchars($invnoget) ?>" class="btn btn-primary waves-effect waves-light" target="_blank">
+                                                            <i class="fa fa-print m-r-5"></i> Print
+                                                        </a>
+                                                    <?php } ?>
+                                                    <!-- ===== ADDITIONAL BUTTONS (Reopen, Edit, Paid) ===== -->
+                                                    <?php if ($isRejected && $isManager && $isSameDepartment) { ?>
+                                                        <a href="reopen_request.php?id=<?= htmlspecialchars($_GET['id']) ?>&nid=<?= htmlspecialchars($newinvnr) ?>" class="btn btn-warning waves-effect waves-light">Reopen</a>
+                                                    <?php } ?>
+                                                    <?php if ($isSameDepartment) { ?>
+                                                        <a href="javascript:void(0);" class="btn btn-warning waves-effect waves-light editReqAttr"
+                                                            data-sub_type="<?= htmlspecialchars($sub_type_get) ?>"
+                                                            data-sub_title="<?= htmlspecialchars($sub_title_get) ?>"
+                                                            data-tally_id="<?= htmlspecialchars($tally_id_get) ?>"
+                                                            data-injazat_id="<?= htmlspecialchars($injazat_id_get) ?>"
+                                                            data-remarks="<?= htmlspecialchars($remarks_get) ?>"
+                                                            data-id="<?= htmlspecialchars($invnoget) ?>">
+                                                            <i class="fa fa-pencil m-r-5"></i> Edit
+                                                        </a>
+                                                    <?php } ?>
+                                                    <?php if ($isApproved && $isFinance && !$isPaid) { ?>
+                                                        <a href="./includes/update_stus_smt.php?id=<?= htmlspecialchars($_GET['id']) ?>&emp_id=<?= htmlspecialchars($empid) ?>&emp_name=<?= htmlspecialchars($userwel) ?>"
+                                                            class="btn btn-danger waves-effect waves-light">
+                                                            <i class="fa fa-money m-r-5"></i> Paid
+                                                        </a>
+                                                    <?php } ?>
+                                                    <!-- ===== STATUS HIDDEN INPUTS ===== -->
+                                                    <?php if (!$isFinance && !$isHR && $isManager && !$isGM) { ?>
+                                                        <input type='hidden' name="status" value='2' readonly />
+                                                    <?php } elseif (($isHR and !$isHrSupporter) && $isManager) { ?>
+                                                        <input type='hidden' name="status" value='Management' readonly />
+                                                    <?php } elseif ($isFinance && $isSupporter) { ?>
+                                                        <input type='hidden' name="status" value='2' readonly />
+                                                    <?php } elseif ($isAssistant && $isSupporter) { ?>
+                                                        <input type='hidden' name="status" value="Manager" readonly />
+                                                    <?php } elseif ($isHrSupporter) { ?>
+                                                        <input type='hidden' name="status" value='2' readonly />
+                                                    <?php } ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Hide preview div -->
+                                    <div class="col-md-4 preview" id="ShowModal" style="display: none;">
+                                        <div class="card-box project-box" style="height: 97% !important;">
+                                            <a class='btn btn-primary btn-sm zoomFile'><i class='fa fa-paperclip'></i> Make it Zoom</a>
+                                            <div class="dropdown float-right">
+                                                <a href="javascript:void(0);" class="" id="closeTab">
+                                                    <h3 class="m-0 text-muted"><i class="mdi mdi-close"></i></h3>
+                                                </a>
+                                            </div>
+                                            <hr>
+                                            <div class="previewImg"></div>
+                                        </div>
+                                    </div>
+                                    <!-- Hide preview div -->
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div> <!-- container -->
+
+            </div> <!-- content -->
+
+            <footer class="footer">
+                <?= $site_footer ?>
+            </footer>
+
+        </div>
+
+        <!-- ============================================================== -->
+        <!-- End Right content here -->
+        <!-- ============================================================== -->
+    </div>
+    <!-- END wrapper -->
+
+    <!-- jQuery  -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/metisMenu.min.js"></script>
+    <script src="assets/js/waves.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
+
+
+    <!-- Modal-Effect -->
+    <script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
+    <!--        <script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script>-->
+    <script src="./plugins/bootstrap-inputmask/jquery.inputmask.min.js" type="text/javascript"></script>
+    <!--        <script src="https://cdn.jsdelivr.net/gh/RobinHerbots/jquery.inputmask@5.0.0-beta.87/dist/jquery.inputmask.min.js" type="text/javascript"></script>-->
+
+
+    <script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
+
+    <script src="./plugins/switchery/switchery.min.js"></script>
+    <script src="./plugins/bootstrap-tagsinput/js/bootstrap-tagsinput.min.js"></script>
+    <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
+    <script src="./plugins/bootstrap-select/js/bootstrap-select.js" type="text/javascript"></script>
+    <script src="./plugins/bootstrap-filestyle/js/bootstrap-filestyle.min.js" type="text/javascript"></script>
+    <script src="./plugins/bootstrap-maxlength/bootstrap-maxlength.js" type="text/javascript"></script>
+
+
+    <script type="text/javascript" src="./plugins/autocomplete/jquery.mockjax.js"></script>
+    <script type="text/javascript" src="./plugins/autocomplete/jquery.autocomplete.min.js"></script>
+    <script type="text/javascript" src="./plugins/autocomplete/countries.js"></script>
+    <!--        <script type="text/javascript" src="assets/pages/jquery.autocomplete.init.js"></script>-->
+
+    <!-- App js -->
+
+    <!-- App js -->
+    <script src="assets/js/jquery.core.js"></script>
+    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/num-word.js"></script>
+
+
+    <!-- Dropzone js -->
+    <script src="./plugins/dropzone/dropzone.js"></script>
+
+    <script>
+        /***************************/
+        jQuery('.showAttach').on('click', function(event) {
+            var id = $(this).data('id');
+            var img = $(this).data('i_attachment');
+            $(".previewImg").empty().append("<iframe src=" + "./assets/smt_attachment/" + img + " frameborder='0' scrolling='no' id='iFramePreview'></iframe");
+            $(".zoomFile").attr("href", "javascript:displayPopup('" + "./assets/smt_attachment/" + img + "')");
+            jQuery('.preview').show('slow');
+            $("#main-content").addClass('col-md-8');
+            $("#main-content").removeClass('col-md-12');
+        });
+        jQuery('#closeTab').on('click', function(event) {
+            jQuery('.preview').hide('slow');
+            $("#main-content").removeClass('col-md-8');
+            $("#main-content").addClass('col-md-12');
+        });
+        /****************************/
+
+        function showAttachment() {
+            $(".attachmentDIV").removeClass("noneDIV");
+            // $("#checkatt").removeClass("noneDIV");
+            $("#checkatt").prop('required', true);
+        }
+
+        function hideAttachment() {
+            $(".attachmentDIV").addClass("noneDIV");
+            // $("#checkatt").addClass("noneDIV");
+            $("#checkatt").prop('required', null);
+        }
+
+        $('.checkattach').click(function() {
+            $('#checkatt').val($(this).data('attach'));
+        });
+
+
+        $(document).ready(function() {
+            $("#statlist").change(function() {
+                $("#statlist option:selected").each(function() {
+                    if ($(this).attr("value") == "reject") {
+                        $("#RejectDIV").show();
+                        $("#ApproveDIV").hide();
+                        $("#RejectInput").prop('required', true);
+                        $("#ApproveInput").prop('required', null);
+                        $("input#RejectInput:text").attr('name', 'note');
+                        $("select#ApproveInput").removeAttr('name');
+                    }
+
+                    if ($(this).attr("value") == "approve") {
+                        $("#ApproveDIV").hide();
+                        $("#RejectDIV").hide();
+                        $("#ApproveInput").prop('required', null);
+                        $("#RejectInput").prop('required', null);
+                        $("input#RejectInput:text").removeAttr('name');
+                        $("select#ApproveInput").removeAttr('name');
+                    }
+
+                    if ($(this).attr("value") == "Management") {
+                        $("#ApproveDIV").show();
+                        $("#RejectDIV").hide();
+                        $("#ApproveInput").prop('required', true);
+                        $("#RejectInput").prop('required', null);
+                        $("input#RejectInput:text").removeAttr('name');
+                        $("select#ApproveInput").attr('name', 'approv_by');
+                    }
+
+                    if ($(this).attr("value") == "") {
+                        $("#RejectDIV").hide();
+                        $("#ApproveDIV").hide();
+                        $("#RejectInput").prop('required', null);
+                        $("#ApproveInput").prop('required', null);
+                        $("input#RejectInput:text").removeAttr('name');
+                        $("select#ApproveInput").removeAttr('name');
+                    }
+                });
+            }).change();
+        });
+    </script>
+
+
+    <script type="text/javascript">
+        /*only allow numeric input*/
+        function isNumberKey(evt, obj) {
+
+            var charCode = (evt.which) ? evt.which : event.keyCode
+            var value = obj.value;
+            var dotcontains = value.indexOf(".") != -1;
+            if (dotcontains)
+                if (charCode == 46) return false;
+            if (charCode == 46) return true;
+            if (charCode > 31 && (charCode < 48 || charCode > 57))
+                return false;
+            return true;
+        }
+        /*only allow numeric input*/
+    </script>
+    <script type="text/javascript">
+        $(document).ready(function() {
+            $('form').parsley();
+        });
+    </script>
+
+</body>
+
+</html>

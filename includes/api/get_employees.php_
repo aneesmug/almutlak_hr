@@ -1,0 +1,25 @@
+<?php
+// get_employees.php
+header('Content-Type: application/json');
+// require_once ("./../system/includes/db.php"); // Include your database connection file
+require_once("./../../../includes/db.php");
+$pdo = getDbConnection();
+
+try {
+    // Select employees and their salary details, ordered by department and name
+    $stmt = $pdo->query("SELECT
+            e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept,
+            es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard
+        FROM employees e
+        LEFT JOIN emp_salary es ON e.emp_id = es.emp_id
+        ORDER BY e.dept, e.name
+    ");
+    $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    echo json_encode(['status' => 'success', 'employees' => $employees]);
+
+} catch (PDOException $e) {
+    error_log('Error fetching employees: ' . $e->getMessage());
+    echo json_encode(['status' => 'error', 'message' => 'Failed to load employee data.']);
+}
+?>

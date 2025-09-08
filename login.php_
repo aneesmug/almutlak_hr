@@ -1,0 +1,66 @@
+<?php
+
+require_once __DIR__ . '/includes/db.php';
+
+$username = $_POST['username'];
+$password = $_POST['password'];
+$remember = $_POST['remember'];
+
+	$password = md5($password);
+	$password = sha1($password);
+
+$con = mysqli_connect($localhost,$db_user,$db_pass,$db_name) or Die();
+//$query = "SELECT * FROM `admin_login` WHERE `id_iqama`='$username' AND `password`='$password'";
+$query = "SELECT * FROM `admin_login` WHERE `id_iqama`='$username' AND `password`='$password' ";
+$result = mysqli_fetch_assoc(mysqli_query($con, $query));
+
+if(mysqli_num_rows(mysqli_query($con, $query)) == 1){
+if ($result['status'] == true) {
+
+$id = $result['username'];
+$user_type_dept = $result['user_type'];
+
+$cookie_name = "user";
+$cookie_value = $id;
+//expiriry time. 86400 = 1 day (86400*30 = 1 month)
+$expiry = time() + (86400 * 30);
+
+if($remember == 'true'){
+	//setting cookie variable
+	setcookie($cookie_name, $cookie_value, $expiry);
+	/************log************/
+	mysqli_query($conDB,"INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_POST['username']."','".$pgname."','login','".date("c")."')") or die (mysqli_error());
+	/************log************/
+}
+	else{
+	//if your server requires to set session path
+	session_start();
+	$_SESSION['user'] = $id;
+}
+unset($_SESSION['error']);
+//redirecting to home page
+
+if($user_type_dept == 'administrator' || $user_type_dept == 'hr' || $user_type_dept == 'dept_user'){
+	header("Location: ./dashboard.php");
+} elseif($user_type_dept == 'employee'){
+	header("Location: ./all_requests.php");
+} elseif($user_type_dept == 'gm'){
+	header("Location: ./dashboardgm.php");
+} else {
+	echo "<h1>Error</h1>";
+}
+
+}else{
+	session_start();
+	header("Location: ./index.php");
+	$_SESSION['error'] = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">This user not active. Plese contact with administrator.</div>";
+}
+	
+} else {
+	session_start();
+	header("Location: ./index.php");
+	//$_SESSION['error'] = "<div id='error_fill' class='error_fill'>Please check your username or password!</div>";
+	$_SESSION['error'] = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Please check your username or password!</div>";
+}
+
+?>

@@ -1,0 +1,99 @@
+<?php
+    require_once __DIR__ . '/includes/db.php';
+    require './includes/vendor/autoload.php';
+    use PHPMailer\PHPMailer\PHPMailer;
+    use PHPMailer\PHPMailer\Exception;
+    // Initialize response array
+    $resp = ['status' => 'error', 'message' => ''];
+    try {
+        session_start();
+        // Validate inputs
+        $iqama = $clean = filter_var($_POST['id_iqama'], FILTER_SANITIZE_NUMBER_INT);
+        if (empty($iqama) ) {
+            throw new Exception('ID or Iqama are required');
+        }
+        $id_number = mysqli_real_escape_string($conDB, $iqama);
+        $password = $_POST['password'];
+        $remember = $_POST['remember'] ?? 'false';
+        $password = sha1(md5($password));
+        $query = "SELECT * FROM `admin_login` WHERE `id_iqama`=?";
+        $stmt = mysqli_prepare($conDB, $query);
+        mysqli_stmt_bind_param($stmt, "s", $id_number);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
+        if(mysqli_num_rows($result) != 1) {
+            throw new Exception('Invalid credentials');
+        }
+        $user = mysqli_fetch_assoc($result);
+        $emailget = $user['email'];
+        $id_iqamaget = $user['id_iqama'];
+        if(empty($emailget)) {
+            throw new Exception('Email not registered');
+        }
+        // Generate OTP
+        $otp = sprintf("%'.06d", mt_rand(0, 999999));
+        $pass = password_hash($otp, PASSWORD_DEFAULT);
+        // Store OTP in database
+        $update_sql = "UPDATE `admin_login` SET `password`=?, `bk_otp`=? WHERE `id_iqama`=?";
+        $update_stmt = mysqli_prepare($conDB, $update_sql);
+        mysqli_stmt_bind_param($update_stmt, "sss", $pass, $otp, $id_iqamaget);
+        if(!mysqli_stmt_execute($update_stmt)) {
+            throw new Exception('Failed to update OTP in database');
+        }
+        // Send OTP email
+        $mail = new PHPMailer(true);
+        try {
+            // Server settings
+            $mail->isSMTP();
+            $mail->Host = 'smtp.office365.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'noreply@almutlak.com';
+            $mail->Password = 'HO@66887';
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
+            $mail->CharSet = 'UTF-8';
+            // Recipients
+            $mail->setFrom("noreply@almutlak.com", "Al Mutlak System");
+            $mail->addAddress($emailget, $emailget);
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = "Your Login OTP Code";
+            $mail->Body = sprintf(
+                "<h2>Login Verification</h2>
+                <h3>You're try to access Al Mutlak System.</h3>
+                <p>Your OTP code is: <strong>%s</strong></p>
+                <p>This code expires in 2 minutes.</p>",
+                $otp
+            );
+            $mail->AltBody = "Your OTP code is: $otp (expires in 2 minutes)";
+            $mail->send();
+            // Set verification session (not logged in session yet)
+            $_SESSION['otp_verification'] = [
+                'user_id' => $id_iqamaget,
+                'expires' => time() + 120, // 2 minutes expiration
+                'attempts' => 0
+            ];
+            // Set cookie if remember is true
+            if($remember == 'true') {
+                setcookie("otp_verification_cookie", $id_iqamaget, time() + 300, "/"); // 5 min cookie
+            }
+            $resp['status'] = 'success';
+            $resp['message'] = 'OTP sent successfully';
+        } catch (Exception $e) {
+            error_log("Mailer Error: " . $e->getMessage());
+            throw new Exception('Failed to send OTP email');
+        }
+    } catch (Exception $e) {
+        $_SESSION['error'] = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">".$e->getMessage()."</div>";
+        $resp['status'] = 'error';
+        $resp['message'] = $e->getMessage();
+    }
+
+    // Return JSON response for AJAX or redirect
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        echo json_encode($resp);
+    } else {
+        header("Location: ".($resp['status'] == 'success' ? "./login_verification.php" : "./index.php"));
+    }
+    exit();

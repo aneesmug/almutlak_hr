@@ -1,0 +1,651 @@
+<?php
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/session_check.php';
+$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
+if (mysqli_num_rows($query) == 1) {
+    include("./includes/avatar_select.php");
+
+    // if($emp_type == "Manager" AND $user_dept != 5){
+    //    $user_role = 'DPT_Manager'; 
+    // } elseif($emp_type == "assistant" OR $user_dept == 5){
+    // }
+    
+    // $user_role = $_SESSION['user_role'] ?? 'guest';
+    if ($emp_type == "Manager" && $user_dept != 5 && $user_dept != 10) {
+        $user_role = 'DPT_Manager';
+    } elseif ($user_type == "assistant" && $user_dept == 5) {
+        $user_role = 'HR_Assistant';
+    } elseif ($user_type == "hr" &&  $user_dept == 5) {
+        $user_role = 'HR_Manager';
+    } elseif ($user_type == "gm" && $emp_type == "Manager" && $user_dept == 10) {
+        $user_role = 'GM';
+    } else {
+        $user_role = 'Employee';
+    }
+
+//    echo $user_role."<br>";
+//    echo ($user_type == "hr" &&  $user_dept == 5)."<br>";
+//    echo ($user_type == "gm" && $emp_type == "Manager");
+
+// exit;
+
+    // --- Search, Pagination & Filtering Logic ---
+    // $user_role = 'DPT_Manager';
+    // $user_role = $_SESSION['user_role'] ?? 'guest';
+    // $user_role = 'HR_Manager';
+    // $user_role = 'GM';
+
+    $all_statuses = [
+        'apply' => 'New Request',
+        'pending' => 'Assistant Pending',
+        'hr_assistant_approved' => 'HR Assistant Approved',
+        'hr_manager_approved' => 'HR Manager Approved',
+        'gm_approved' => 'GM Approved',
+        'rejected' => 'Rejected'
+    ];
+
+    // 1. Set up variables
+    $search_term = $_GET['search'] ?? '';
+    $limit_options = [8, 12, 16]; 
+    $perpage = 8;
+    $items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $perpage; // Default
+    $show_all = isset($_GET['limit']) && $_GET['limit'] == 'all';
+    if ($show_all) {
+        $items_per_page = -1;
+    }
+
+    $current_page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
+    if ($current_page < 1) {
+        $current_page = 1;
+    }
+
+    $current_filter = $_GET['status'] ?? null;
+    if ($current_filter === null) {
+        switch ($user_role) {
+            case 'DPT_Manager':
+                $current_filter = 'apply';
+                break;
+            case 'HR_Assistant':
+                $current_filter = 'pending';
+                break;
+            case 'HR_Manager':
+                $current_filter = 'hr_assistant_approved';
+                break;
+            case 'GM':
+                $current_filter = 'hr_manager_approved';
+                break;
+            default:
+                $current_filter = 'none';
+                break;
+        }
+    }
+
+    $page_title = isset($all_statuses[$current_filter]) ? $all_statuses[$current_filter] : 'All Requests';
+
+    // 2. Build the dynamic WHERE clause
+    $where_clauses = [];
+    $params = [];
+    $types = "";
+
+    // Status filter
+    if ($current_filter && $current_filter !== 'all' && $current_filter !== 'none') {
+        if (array_key_exists($current_filter, $all_statuses)) {
+            $where_clauses[] = "v.approval_status = ?";
+            $params[] = $current_filter;
+            $types .= "s";
+        }
+    }
+
+    // Search filter
+    if (!empty($search_term)) {
+        $where_clauses[] = "(e.name LIKE ? OR v.emp_id LIKE ?)";
+        $search_param = "%{$search_term}%";
+        $params[] = $search_param;
+        $params[] = $search_param;
+        $types .= "ss";
+    }
+
+    $where_sql = "";
+    if (!empty($where_clauses)) {
+        $where_sql = " WHERE " . implode(" AND ", $where_clauses);
+    }
+
+    // 3. Get total item count
+    // The LEFT JOIN here won't change the count of vacation requests.
+    $count_sql = "SELECT COUNT(v.id) as total 
+                  FROM emp_vacation v 
+                  JOIN employees e ON v.emp_id = e.emp_id" . $where_sql;
+    $total_items = 0;
+    if ($current_filter !== 'none' || !empty($search_term)) {
+        $stmt_count = $conDB->prepare($count_sql);
+        if (!empty($params)) {
+            $stmt_count->bind_param($types, ...$params);
+        }
+        $stmt_count->execute();
+        $total_items = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
+        $stmt_count->close();
+    }
+    $total_pages = $show_all ? 1 : ceil($total_items / $items_per_page);
+    if ($current_page > $total_pages && $total_pages > 0) {
+        $current_page = $total_pages;
+    }
+
+    // 4. Fetch requests for the current page
+    $requests = [];
+    if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
+        // MODIFIED: Added a LEFT JOIN to emp_vacation_balance to fetch balance details for approved requests.
+        $sql = "SELECT 
+			v.*, 
+			e.name as employee_name,
+            b.remaining_balance,
+            b.available_balance,
+			CASE 
+				WHEN `v`.`fly_type` = 'annual' THEN 'Annual Vacation' 
+				WHEN `v`.`fly_type` = 'emergency' THEN 'Emergency Vacation'
+				ELSE ''
+			END AS `fly_type`
+			FROM emp_vacation v 
+			JOIN employees e ON v.emp_id = e.emp_id
+            LEFT JOIN emp_vacation_balance b ON v.id = b.vac_id" . $where_sql;
+        $sql .= " ORDER BY v.created_at DESC";
+
+        if (!$show_all) {
+            $offset = ($current_page - 1) * $items_per_page;
+            $sql .= " LIMIT ?, ?";
+            // We need to create a new params array for the main query, as the count query modifies it.
+            $main_params = $params;
+            $main_params[] = $offset;
+            $main_params[] = $items_per_page;
+            $types .= "ii";
+        } else {
+            $main_params = $params;
+        }
+
+        $stmt = $conDB->prepare($sql);
+        if (!empty($main_params)) {
+            $stmt->bind_param($types, ...$main_params);
+        }
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
+                $requests[] = $row;
+            }
+        }
+        $stmt->close();
+    }
+?>
+    <!doctype html>
+    <html lang="en">
+
+    <head>
+        <meta charset="utf-8" />
+        <title><?= $site_title ?> - All Vacation Requests</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta content="Anees Afzal" name="author" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+        <!-- App favicon -->
+        <link rel="shortcut icon" href="assets/images/favicon.ico">
+
+        <!-- Modal -->
+        <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
+
+        <!-- App css -->
+        <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <script src="assets/js/modernizr.min.js"></script>
+        <style>
+            .filter-controls {
+                max-width: 800px;
+            }
+
+            .request-card {
+                border-radius: 15px;
+                border: none;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }
+
+            .request-card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+            }
+
+            .request-card .card-header {
+                background-color: #fff;
+                border-bottom: 1px solid #eef;
+                font-weight: 600;
+                font-size: 1.1em;
+            }
+
+            .request-card .card-header span {
+                font-size: 0.9em;
+                color: #8a94a6;
+            }
+
+            .request-card .card-body {
+                padding: 1.5rem;
+            }
+
+            .detail-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 1rem;
+                font-size: 1.09em;
+            }
+
+            .detail-item i {
+                color: #4a90e2;
+                margin-right: 15px;
+                width: 20px;
+                text-align: center;
+            }
+
+            .detail-item strong {
+                color: #8a94a6;
+                min-width: 100px;
+                display: inline-block;
+            }
+
+            .request-card .card-footer {
+                background-color: #fafbff;
+                border-top: 1px solid #eef;
+            }
+            .no-requests {
+                padding: 3rem;
+                background: #fff;
+                border-radius: 15px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
+            }
+
+			.btn-block + .btn-block{
+				margin-top: 0rem !important;
+			}
+
+        </style>
+
+    </head>
+
+    <body class="enlarged" data-keep-enlarged="true">
+
+        <!-- Begin page -->
+        <div id="wrapper">
+
+            <!-- ========== Left Sidebar Start ========== -->
+            <div class="left side-menu">
+                <div class="slimscroll-menu" id="remove-scroll">
+                    <div class="topbar-left">
+                        <a href="dashboard.php" class="logo">
+                            <span>
+                                <img src="assets/images/logo.png" alt="" height="22">
+                            </span>
+                            <i>
+                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                            </i>
+                        </a>
+                    </div>
+                    <?php include("./includes/main_menu.php"); ?>
+                    <div class="clearfix"></div>
+                </div>
+            </div>
+            <!-- Left Sidebar End -->
+
+            <!-- ============================================================== -->
+            <!-- Start right Content here -->
+            <!-- ============================================================== -->
+            <div class="content-page">
+                <!-- Top Bar Start -->
+                <?php include("./includes/topbar.php"); ?>
+                <!-- Top Bar End -->
+
+                <!-- Start Page content -->
+                <div class="content">
+                    <div class="container-fluid">
+                        <div class="row">
+                            <div class="col-xl-12">
+                                <div class="card-box">
+                                    <h4 class="header-title m-t-0 m-b-30">Vacation Approval Center</h4>
+
+                                    <!-- Filter Controls -->
+                                    <div class="row filter-controls mx-auto mb-5">
+                                        <div class="col-md-6 mb-3 mb-md-0">
+                                            <div class="form-group">
+                                                <label for="statusFilter" class="font-weight-bold">Filter by Status</label>
+                                                <select class="form-control" id="statusFilter" onchange="applyFilters()">
+                                                    <option value="all" <?php if ($current_filter == 'all') echo 'selected'; ?>>All Requests</option>
+                                                    <?php foreach ($all_statuses as $status_key => $status_value): ?>
+                                                        <option value="<?=$status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
+                                                            <?=htmlspecialchars($status_value); ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label for="searchFilter" class="font-weight-bold">Search by Name / ID</label>
+                                                <div class="input-group">
+                                                    <input type="search" class="form-control" id="searchFilter" placeholder="Enter search term..." value="<?=htmlspecialchars($search_term); ?>">
+                                                    <div class="input-group-append">
+                                                        <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between align-items-center mb-4">
+                                        <h4 class="mb-0 text-muted">Showing: <?=htmlspecialchars($page_title); ?> Requests</h4>
+                                        <span class="badge badge-light p-2">Total Found: <?=$total_items; ?></span>
+                                    </div>
+
+                                    <?php if (!empty($requests)): ?>
+                                        <div class="row">
+                                            <?php foreach ($requests as $req): ?>
+												<div class="col-lg-3 col-md-6 mb-3">
+													<div class="card request-card h-100">
+														<div class="card-header">
+															<?=parseName($req['employee_name']); ?>
+															<span class="float-right">Emp. ID: <?=htmlspecialchars($req['emp_id']); ?></span>
+														</div>
+														<div class="card-body">
+															<div class="detail-item">
+																<i class="fad fa-paper-plane duotone-info"></i>
+																<strong>Applied:</strong> <?=htmlspecialchars(date('d M Y', strtotime($req['created_at']))); ?>
+															</div>
+															<div class="detail-item">
+																<i class="fad fa-suitcase-rolling duotone-info"></i>
+																<strong>Type:</strong> <?=htmlspecialchars(parseName($req['vac_type'], 'FIRST')." | ".$req['fly_type']); ?>
+															</div>
+															<div class="detail-item">
+																<i class="fad fa-calendar-alt duotone-info"></i>
+																<strong>Start:</strong> <?=htmlspecialchars($req['start_date'] ?? 'N/A'); ?>
+															</div>
+															<div class="detail-item">
+																<i class="fad fa-calendar-check duotone-info"></i>
+																<strong>Return:</strong> <?=htmlspecialchars($req['return_date'] ?? 'N/A'); ?>
+															</div>
+															<div class="detail-item">
+																<i class="fad fa-sun duotone-info"></i>
+																<strong>Days:</strong> <?=htmlspecialchars($req['vacdays']); ?>
+															</div>
+															<div class="detail-item">
+																
+                                                                <?php 
+																	$status_text = $all_statuses[$req['approval_status']] ?? 'Unknown';
+																	$badge_class = 'secondary';
+																	switch ($req['approval_status']) {
+																		case 'apply': $badge_class = 'info'; break;
+																		case 'pending': $badge_class = 'warning'; break;
+																		case 'gm_approved': $badge_class = 'success'; break;
+																		case 'rejected': $badge_class = 'danger'; break;
+																		default: $badge_class = 'primary'; break;
+																	}
+																?>
+																<i class="fad fa-info-circle duotone-info"></i>
+																<strong>Status:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=htmlspecialchars($status_text); ?></span>
+															
+                                                            </div>
+                                                            
+                                                            <!-- NEW: Display balance info if request is GM Approved and balance exists -->
+                                                            <?php if ($req['approval_status'] == 'gm_approved' && isset($req['remaining_balance'])): ?>
+                                                                <hr>
+                                                                <div class="detail-item">
+                                                                    <i class="fad fa-wallet duotone-success"></i>
+                                                                    <strong>Remaining:</strong> <?=htmlspecialchars(number_format($req['remaining_balance'], 2)); ?> Days
+                                                                </div>
+                                                                <!-- <div class="detail-item">
+                                                                    <i class="fad fa-money-check-edit-alt duotone-success"></i>
+                                                                    <strong>Available:</strong> <?//=htmlspecialchars(number_format($req['available_balance'], 2)); ?> Days
+                                                                </div> -->
+                                                            <?php endif; ?>
+
+														</div>
+														<div class="card-footer d-flex justify-content-between align-items-center btn-group">
+															<button class="btn btn-info btn-block waves-effect" onclick="window.open('vacation_report_details.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>')">
+																<i class="fa fa-eye"></i> View
+															</button>
+															<?php if (
+																($req['approval_status'] == 'apply' && $user_role == 'DPT_Manager') ||
+																($req['approval_status'] == 'pending' && $user_role == 'HR_Assistant') ||
+																($req['approval_status'] == 'hr_assistant_approved' && $user_role == 'HR_Manager') ||
+																($req['approval_status'] == 'hr_manager_approved' && $user_role == 'GM')
+															): 
+															// Prepare data for JS functions
+															$employee_name_js = htmlspecialchars(addslashes($req['employee_name']), ENT_QUOTES);
+															$vac_type_js = htmlspecialchars($req['vac_type']);
+															$start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
+															$end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
+															$days_js = htmlspecialchars($req['vacdays']);
+															?>
+																<button class="btn btn-danger btn-block waves-effect" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$user_role; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')">
+																	<i class="fa fa-times"></i> Reject
+																</button>
+																<button class="btn btn-success btn-block waves-effect" onclick="approveRequest(<?=$req['id']; ?>, '<?=$user_role; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')">
+																	<i class="fa fa-check"></i> Approve
+																</button>
+															<?php endif; ?>
+														</div>
+													</div>
+												</div>
+											<?php endforeach; ?>
+
+
+                                        </div>
+
+                                        <!-- Pagination Controls -->
+                                        <?php
+                                        $pagination_params = ['status' => $current_filter, 'limit' => $show_all ? 'all' : $items_per_page, 'search' => $search_term];
+                                        echo generate_pagination_controls($current_page, $total_pages, $items_per_page, $limit_options, $show_all, $pagination_params);
+                                        ?>
+
+                                    <?php else: ?>
+                                        <div class="row justify-content-center">
+                                            <div class="col-md-8">
+                                                <div class="text-center no-requests">
+                                                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                                    <h2>No Requests Found</h2>
+                                                    <?php if ($current_filter && $current_filter !== 'all' && $current_filter !== 'none' || !empty($search_term)): ?>
+                                                        <p class="text-muted">There are no requests matching your current filters.</p>
+                                                    <?php else: ?>
+                                                        <p class="text-muted">There are no requests to display at this time.</p>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <?= $site_footer ?>
+        </footer>
+    </div>
+    <!-- END wrapper -->
+
+    <!-- jQuery  -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/metisMenu.min.js"></script>
+    <script src="assets/js/waves.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- App js -->
+    <script src="assets/js/jquery.core.js"></script>
+    <script src="assets/js/jquery.app.js"></script>
+
+    <script>
+		// Function to handle filtering via JavaScript redirection
+		function applyFilters() {
+			const status = document.getElementById('statusFilter').value;
+			const limitElement = document.getElementById('limitFilter');
+			const limit = limitElement ? limitElement.value : <?= $perpage ?>; // Default if it doesn't exist
+			const search = document.getElementById('searchFilter').value;
+			const baseUrl = window.location.href.split('?')[0];
+			// Always reset to page 1 when a filter is changed
+			window.location.href = `${baseUrl}?status=${status}&limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
+		}
+
+		// Add event listener to search on Enter key press
+		document.getElementById('searchFilter').addEventListener('keypress', function (e) {
+			if (e.key === 'Enter') {
+				applyFilters();
+			}
+		});
+
+		// Function to handle the approval action.
+		function approveRequest(vacationId, role, employeeName, vacType, startDate, endDate, totalDays) {
+			let infoHtml = `
+				<div class="swal-vacation-details">
+					<div class="swal-details-header"><i class="fas fa-info-circle"></i> Request Details</div>
+					<div class="swal-details-body">
+						<div class="swal-detail-item"><span class="swal-detail-label">Employee</span> <span class="swal-detail-value"><i class="fas fa-user"></i> ${employeeName}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Type</span> <span class="swal-detail-value"><i class="fas fa-suitcase-rolling"></i> ${vacType}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Start Date</span> <span class="swal-detail-value"><i class="fas fa-calendar-alt"></i> ${startDate}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Return Date</span> <span class="swal-detail-value"><i class="fas fa-calendar-check"></i> ${endDate}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Total Days</span> <span class="swal-detail-value"><i class="fas fa-sun"></i> ${totalDays}</span></div>
+					</div>
+				</div>
+			`;
+
+			if (role === 'HR_Assistant') {
+				Swal.fire({
+					title: 'Confirm Approval',
+					html: `
+						${infoHtml}
+						<p class="mt-3"><strong>Enter Approval Details:</strong></p>
+						<input type="number" id="ticket_pay" class="swal2-input" placeholder="Ticket Payment (optional)">
+						<input type="number" id="permit_fee" class="swal2-input" placeholder="Permit Fee (optional)">
+					`,
+					confirmButtonText: 'Submit Approval',
+					showCancelButton: true,
+                    allowOutsideClick: false,
+					preConfirm: () => {
+						return {
+							ticket_pay: document.getElementById('ticket_pay').value,
+							permit_fee: document.getElementById('permit_fee').value
+						}
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						sendApproval(vacationId, role, result.value.ticket_pay, result.value.permit_fee);
+					}
+				});
+			} else {
+				Swal.fire({
+					title: 'Confirm Approval',
+					html: infoHtml,
+					icon: 'warning',
+					showCancelButton: true,
+					confirmButtonColor: '#28a745',
+					cancelButtonColor: '#dc3545',
+					confirmButtonText: 'Yes, approve it!',
+                    allowOutsideClick: false,
+				}).then((result) => {
+					if (result.isConfirmed) {
+						sendApproval(vacationId, role);
+					}
+				})
+			}
+		}
+
+		// AJAX call for sending the approval
+		function sendApproval(vacationId, role, ticketPay = null, permitFee = null) {
+			$.ajax({
+				url: './includes/ajaxFile/ajaxVacation.php',
+				type: 'POST',
+				dataType: 'JSON',
+				data: {
+					ajaxType: 'approveVacation',
+					vacation_id: vacationId,
+					approver_role: role,
+					ticket_pay: ticketPay,
+					permit_fee: permitFee
+				},
+			})
+			.done(function(response){
+				Swal.fire({
+					title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
+				}).then(function(isConfirm){(isConfirm)?location.reload():""});
+			})
+			.fail(function(jqXHR, textStatus, errorThrown) {
+				reject(handleAjaxFailure(jqXHR, textStatus).message);
+			});
+		}
+
+		/**
+		 * Function to handle vacation rejection.
+		 */
+		function rejectVacationRequest(vacationId, role, employeeName, vacType, startDate, endDate, totalDays) {
+			let infoHtml = `
+				<div class="swal-vacation-details">
+					<div class="swal-details-header"><i class="fas fa-info-circle"></i> Request Details</div>
+					<div class="swal-details-body">
+						<div class="swal-detail-item"><span class="swal-detail-label">Employee</span> <span class="swal-detail-value"><i class="fas fa-user"></i> ${employeeName}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Type</span> <span class="swal-detail-value"><i class="fas fa-suitcase-rolling"></i> ${vacType}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Start Date</span> <span class="swal-detail-value"><i class="fas fa-calendar-alt"></i> ${startDate}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Return Date</span> <span class="swal-detail-value"><i class="fas fa-calendar-check"></i> ${endDate}</span></div>
+						<div class="swal-detail-item"><span class="swal-detail-label">Total Days</span> <span class="swal-detail-value"><i class="fas fa-sun"></i> ${totalDays}</span></div>
+					</div>
+				</div>
+			`;
+
+			Swal.fire({
+				title: 'Confirm Rejection',
+				html: infoHtml,
+				input: 'textarea',
+				inputLabel: 'Please provide a reason for rejection:',
+				inputPlaceholder: 'Enter the reason here...',
+				showCancelButton: true,
+				confirmButtonText: 'Submit Rejection',
+				confirmButtonColor: '#dc3545',
+				showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                // allowOutsideClick: () => !Swal.isLoading(),
+				inputValidator: (value) => {
+					if (!value) {
+						return 'You must provide a reason for rejection!'
+					}
+				},
+				preConfirm: (reason) => {
+					$.ajax({
+						url: './includes/ajaxFile/ajaxVacation.php',
+						type: 'POST',
+						dataType: 'JSON',
+						data: {
+							ajaxType: 'rejectVacation',
+							vacation_id: vacationId,
+							rejection_note: reason,
+							approver_role: role
+						}
+					})
+					.done(function(response){
+						Swal.fire({
+							title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
+						}).then(function(isConfirm){(isConfirm)?location.reload():""});
+					})
+					.fail(function(jqXHR, textStatus, errorThrown) {
+						reject(handleAjaxFailure(jqXHR, textStatus).message);
+					});
+				}
+			})
+		}
+	</script>
+
+    </body>
+    </html>
+<?php
+    $conDB->close();
+}
+?>

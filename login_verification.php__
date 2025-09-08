@@ -1,0 +1,311 @@
+<?php
+
+require_once __DIR__ . '/includes/db.php';
+include("./includes/custom_functions.php");
+
+// Start session only once at the beginning
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Check if OTP verification is required
+if (isset($_POST['password'])) {
+    $user_entered_otp = $_POST['password'];
+    $user_id = $_SESSION['otp_verify_user_id'] ?? null;
+
+    if (!$user_id) {
+        $_SESSION['error'] = "Session expired. Please login again.";
+        header("Location: ./index.php");
+        exit();
+    }
+
+    // Get stored OTP from database
+    $query = "SELECT `otp`, `otp_expiration`, `user_type` FROM `admin_login` WHERE id = ?";
+    $stmt = $conDB->prepare($query);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows === 0) {
+        $_SESSION['error'] = "User not found. Please login again.";
+        header("Location: ./index.php");
+        exit();
+    }
+
+    $user = $result->fetch_assoc();
+
+    // Hash the user-entered OTP for comparison
+    $otp_hash = sha1(md5($user_entered_otp));
+
+    // Verify OTP
+    if ($user && $user['otp'] == $otp_hash) {
+        // Check OTP expiration
+        if (strtotime($user['otp_expiration']) >= time()) {
+            // OTP is valid - proceed with login
+            $_SESSION['user'] = $user_id;
+            $_SESSION['user_type'] = $user['user_type'];
+            
+            // Clear OTP from database
+            $update_query = "UPDATE `admin_login` SET `otp` = NULL, `otp_expiration` = NULL WHERE `id` = ?";
+            $update_stmt = $conDB->prepare($update_query);
+            $update_stmt->bind_param("i", $user_id);
+            $update_stmt->execute();
+
+            // Redirect based on user type
+            if ($user['user_type'] == 'administrator' || $user['user_type'] == 'hr') {
+                header("Location: ./dashboard.php");
+            } else {
+                header("Location: ./profile.php");
+            }
+            exit();
+        } else {
+            $_SESSION['error'] = "OTP has expired. Please request a new one.";
+            header("Location: ./login_verification.php");
+            exit();
+        }
+    } else {
+        $_SESSION['error'] = "Invalid OTP. Please try again.";
+        header("Location: ./login_verification.php");
+        exit();
+    }
+}
+
+// Get user email for display (if available)
+$email = '';
+if (isset($_SESSION['otp_verify_user_id'])) {
+    $query = "SELECT email FROM admin_login WHERE id = ?";
+    $stmt = $conDB->prepare($query);
+    $stmt->bind_param("i", $_SESSION['otp_verify_user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        $email = $user['email'];
+    }
+}
+?>
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title><?= $site_title ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta content="Anees Afzal" name="author" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="assets/images/favicon.ico">
+
+    <!-- App css -->
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+
+    <script src="assets/js/modernizr.min.js"></script>
+
+    <style>
+        .otp-container {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .otp-digit {
+            width: 40px;
+            height: 50px;
+            text-align: center;
+            font-size: 24px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .otp-resend {
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+
+</head>
+
+<body class="account-pages">
+
+    <!-- Begin page -->
+    <div class="accountbg" style="background: url('assets/images/login-background.jpg');background-size: cover;background-position: center;"></div>
+
+    <div class="wrapper-page account-page-full">
+
+        <div class="card">
+            <div class="card-block">
+
+                <div class="account-box">
+
+                    <div class="card-box p-5">
+                        <div class="text-center">
+                            <div class="mb-3">
+                                <img src="assets/images/logo_sm.png" class="rounded-circle img-thumbnail thumb-lg" alt="thumbnail">
+                            </div>
+                            <p class="text-muted m-b-0 font-14">Enter your OTP to access the system.</p>
+                        </div>
+
+                        <form action="./login_verification.php" id="otpForm" method="POST">
+                            <input type="hidden" name="id" value="<?= isset($_SESSION['otp_verify_user_id']) ? $_SESSION['otp_verify_user_id'] : '' ?>">
+                            <?php if (isset($_SESSION['error'])): ?>
+                                <div class="dynamic_alert alert alert-danger my-2 rounded-0">
+                                    <div class="d-flex align-items-center">
+                                        <div class="col-11"><?= $_SESSION['error'] ?></div>
+                                        <div class="col-1 text-end">
+                                            <div class="float-end"><a href="javascript:void(0)" class="text-dark text-decoration-none" onclick="$(this).closest('.dynamic_alert').hide('slow').remove()">x</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php unset($_SESSION['error']) ?>
+                            <?php endif; ?>
+                            <div class="form-group">
+                                <p class="">We have sent an one time password in your Email [<?= !empty($email) ? $class->obfuscate_email($email) : '' ?>]</p>
+                            </div>
+                            <div class="otp-container">
+                                <input type="text" maxlength="1" class="otp-digit" data-index="1" autofocus>
+                                <input type="text" maxlength="1" class="otp-digit" data-index="2">
+                                <input type="text" maxlength="1" class="otp-digit" data-index="3">
+                                <input type="text" maxlength="1" class="otp-digit" data-index="4">
+                                <input type="text" maxlength="1" class="otp-digit" data-index="5">
+                                <input type="text" maxlength="1" class="otp-digit" data-index="6">
+                            </div>
+                            <input type="hidden" id="fullOtp" name="password">
+                        </form>
+                        <div class="otp-container">
+                            <div class="otp-resend form-group text-end">
+                                <p id="countdown-text">Resend OTP in <span id="countdown">120</span> seconds</p>
+                                <button id="resend-btn" class="btn btn-primary btn-block" disabled style="display: none;">Resend OTP</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="m-t-40 text-center">
+            <p class="account-copyright"><?= $site_footer ?></p>
+        </div>
+
+    </div>
+
+    <!-- jQuery  -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/metisMenu.min.js"></script>
+    <script src="assets/js/waves.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
+
+    <!-- App js -->
+    <script src="assets/js/jquery.core.js"></script>
+    <script src="assets/js/jquery.app.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const otpDigits = document.querySelectorAll('.otp-digit');
+            const otpForm = document.getElementById('otpForm');
+            const fullOtpInput = document.getElementById('fullOtp');
+
+            otpDigits.forEach(digit => {
+                digit.addEventListener('input', function() {
+                    const currentIndex = parseInt(this.getAttribute('data-index'));
+
+                    // Move to next input if a digit was entered
+                    if (this.value.length === 1 && currentIndex < 6) {
+                        otpDigits[currentIndex].focus();
+                    }
+
+                    // Collect all OTP digits
+                    let otpCode = '';
+                    otpDigits.forEach(d => {
+                        otpCode += d.value;
+                    });
+
+                    // Update hidden input
+                    fullOtpInput.value = otpCode;
+
+                    // Submit form when all 6 digits are entered
+                    if (otpCode.length === 6) {
+                        otpForm.submit();
+                    }
+                });
+
+                // Handle backspace to move to previous input
+                digit.addEventListener('keydown', function(e) {
+                    const currentIndex = parseInt(this.getAttribute('data-index'));
+
+                    if (e.key === 'Backspace' && this.value.length === 0 && currentIndex > 1) {
+                        otpDigits[currentIndex - 2].focus();
+                    }
+                });
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const countdownElement = document.getElementById('countdown');
+            const countdownText = document.getElementById('countdown-text');
+            const resendBtn = document.getElementById('resend-btn');
+            let timeLeft = 120;
+
+            // Start countdown
+            const countdown = setInterval(function() {
+                timeLeft--;
+                countdownElement.textContent = timeLeft;
+
+                if (timeLeft <= 0) {
+                    clearInterval(countdown);
+                    countdownText.style.display = 'none';
+                    resendBtn.disabled = false;
+                    resendBtn.style.display = 'inline-block';
+                }
+            }, 1000);
+
+            // Resend OTP button handler
+            resendBtn.addEventListener('click', function() {
+                fetch('./resend_otp.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ user_id: <?= $_SESSION['otp_verify_user_id'] ?? 0 ?> })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('New OTP has been sent!');
+                        // Reset the countdown
+                        timeLeft = 120;
+                        countdownElement.textContent = timeLeft;
+                        countdownText.style.display = 'block';
+                        resendBtn.disabled = true;
+                        resendBtn.style.display = 'none';
+                        // Restart countdown
+                        const newCountdown = setInterval(function() {
+                            timeLeft--;
+                            countdownElement.textContent = timeLeft;
+                            if (timeLeft <= 0) {
+                                clearInterval(newCountdown);
+                                countdownText.style.display = 'none';
+                                resendBtn.disabled = false;
+                                resendBtn.style.display = 'inline-block';
+                            }
+                        }, 1000);
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to resend OTP');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

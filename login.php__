@@ -1,0 +1,114 @@
+<?php
+
+require_once __DIR__ . '/includes/db.php';
+
+// Database connection and PHPMailer includes
+require './includes/vendor/autoload.php';
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+// Initialize response array
+$resp = ['status' => 'failed', 'message' => ''];
+try {
+    // Validate input - now only username is required
+    if (empty($_POST['username'])) {
+        throw new Exception('Username is required');
+    }
+    // Database query with prepared statement
+    $sql = "SELECT * FROM `admin_login` WHERE `id_iqama` = ? AND `status` = 1";
+    $username = $_POST['username'];
+    $stmt = $conDB->prepare($sql);
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $data = $result->fetch_assoc();
+        $_SESSION['verify_user_type'] = $data['user_type'];
+        $_SESSION['check_user_data'] = $data['id'];
+        
+        if ($data['user_type'] == 'employee') {
+            $resp['status'] = 'employee_success';
+            $_SESSION['otp_verify_user_id'] = $data['id'];
+            $_SESSION['verify_user_type'] = 'employee';
+            echo json_encode($resp);
+            exit();
+        }
+        
+        // Generate OTP
+        $otp = sprintf("%06d", mt_rand(0, 999999));
+        $otpHash = sha1(md5($otp)); // Hashing the OTP
+        $expiration = date("Y-m-d H:i:s", strtotime("+1 minute"));
+        $remember = isset($_POST['remember']) && $_POST['remember'] == "true" ? "true" : "false";
+        
+        $update_sql = "UPDATE `admin_login` SET `otp_expiration`=?, `otp`=?, `remember`=? WHERE `id`=?";
+        $stmt = $conDB->prepare($update_sql);
+        $stmt->bind_param("sssi", $expiration, $otpHash, $remember, $data['id']);
+        
+        if (!$stmt->execute()) {
+            throw new Exception('Failed to update OTP');
+        }
+        
+        // Send OTP email
+        $mail = new PHPMailer(true);
+        try {
+            // Server settings
+            $mail->isSMTP();
+            $mail->Host = 'smtp.office365.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'a.afzal@almutlak.com';
+            $mail->Password = '@DmiN56539306@';
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port = 587;
+            $mail->CharSet = 'UTF-8';
+            
+            // Recipients
+            $mail->setFrom("a.afzal@almutlak.com", "Al Mutlak System");
+            $mail->addAddress($data['email'], $data['email']);
+            
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = "Your Login OTP Code";
+            $mail->Body = sprintf(
+                '<h2>Login Verification</h2>
+                <p>Your OTP code is: <strong>%s</strong></p>
+                <p>This code expires in 1 minute.</p>',
+                $otp
+            );
+            $mail->AltBody = "Your OTP code is: $otp (expires in 1 minute)";
+            $mail->send();
+            
+            $_SESSION['otp_verify_user_id'] = $data['id'];
+            $resp['status'] = 'success';
+            $resp['message'] = 'OTP sent successfully';
+            
+            // For AJAX requests, return JSON. For form submissions, redirect.
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+                echo json_encode($resp);
+            } else {
+                header("Location: ./login_verification.php");
+            }
+            exit();
+        } catch (Exception $e) {
+            error_log("Mailer Error: " . $e->getMessage());
+            throw new Exception('Failed to send OTP email');
+        }
+    } else {
+        throw new Exception('Invalid username');
+    }
+} catch (Exception $e) {
+    $_SESSION['flashdata'] = [
+        'type' => 'danger',
+        'msg' => $e->getMessage()
+    ];
+    $resp['message'] = $e->getMessage();
+}
+
+// Return JSON response if request is AJAX, otherwise redirect
+if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+    header('Content-Type: application/json');
+    echo json_encode($resp);
+} else {
+    header("Location: ".$_SERVER['HTTP_REFERER']);
+}
+exit();

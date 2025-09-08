@@ -1,0 +1,62 @@
+@media print{
+	*{
+		color-adjust: exact !important;
+		-webkit-print-color-adjust: exact !important;
+		print-color-adjust: exact !important;
+		box-sizing: border-box !important;
+	}
+	@page{
+		margin : 0 !important;
+		size:85.60mm 53.98mm !important;
+	}
+	a[href]:after{
+		content : none !important;
+	}
+	button.printbtn{
+		display: none !important;
+	}
+	body{
+		margin: 0 !important;
+	}
+	table.card{
+		margin-left: 19mm !important;
+		margin-top: 33mm !important;
+		/*border: solid 1px #000;*/
+	}
+	table.cardbody tr td{
+		/*border: solid 1px #000;*/
+		font-family: sans-serif;
+		font-size: 14px !important;
+		/*font-weight: bold !important;*/
+	}
+	td.exp{
+		padding-left: 18mm !important;
+	}
+}
+	/**{
+		color-adjust: exact !important;
+		-webkit-print-color-adjust: exact !important;
+		print-color-adjust: exact !important;
+		box-sizing: border-box !important;
+	}
+	@page{
+		margin : 0 !important;
+		size:85.60mm 53.98mm !important;
+	}
+	a[href]:after{
+		content : none !important;
+	}*/
+	body{
+		margin: 0 !important;
+	}
+	table.card{
+		margin-left: 19mm !important;
+		margin-top: 33mm !important;
+	}
+	table.cardbody tr td{
+		font-family: sans-serif;
+		/*font-weight: bold !important;*/
+	}
+	td.exp{
+		padding-left: 18mm !important;
+	}

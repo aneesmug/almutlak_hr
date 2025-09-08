@@ -1,0 +1,918 @@
+<?php
+	require_once __DIR__ . '/includes/db.php';
+	require_once __DIR__ . '/includes/session_check.php';
+	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
+	if(mysqli_num_rows($query) == 1){
+	include("./includes/avatar_select.php");
+
+	include("./includes/Hijri_GregorianConvert.php");
+	$DateConv=new Hijri_GregorianConvert;
+	$format="DD/MM/YYYY";
+
+$getquery = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' ");
+
+	if(mysqli_num_rows($getquery) !== 0){
+		while($rec = mysqli_fetch_assoc($getquery)){
+			$id_get = $rec["id"]; 
+			$name_get = $rec["name"];
+			$emp_id_get = $rec["emp_id"];
+			$iqama_get = $rec["iqama"];
+			$mobile_get = $rec["mobile"];
+			$dial_code_get = $rec["dial_code"];
+			$emg_mobile_get = $rec["emg_mobile"];
+			$salary_get = $rec["salary"];
+			$vacation_days_get = $rec["vacation_days"];
+			$joining_date_get = $rec["joining_date"];
+			$date_reg_get = $rec["date_reg"];
+			$emp_avatar_get = $rec["avatar"];
+			$emp_status_get = $rec["status"];
+			$emp_ter_date_get = $rec["ter_date"];
+			$note_get = $rec["note"];
+			$dept_get = $rec["dept"];
+			$fly_get = $rec["fly"];
+			$emptype_get = $rec["emptype"];
+			$sectin_nme_get = $rec["sectin_nme"];
+			$country_get = $rec["country"];
+			$bank_name_get = $rec["bank_name"];
+			$iban_get = $rec["iban"];
+			$dob_get = $rec["dob"];
+			$vac_period_get = $rec["vac_period"];
+			$sex_get = $rec["sex"];
+			$mar_status_get = $rec["mar_status"];
+			$emp_sup_type_get = $rec["emp_sup_type"];
+
+			$iqama_exp_get = $rec['iqama_exp'];
+			$passport_number_get = $rec['passport_number'];
+			$passport_exp_get = $rec['passport_exp'];
+			$emg_mobile_get = $rec['emg_mobile'];
+			$emg_name_get = $rec['emg_name'];
+			$blood_type_get = $rec['blood_type'];
+			$t_shirt_size_get = $rec['t_shirt_size'];
+			$address_get = $rec['address'];
+			$emp_email_get = $rec['email'];
+
+			$insurance_no_get = $rec['insurance_no'];
+			$insurance_exp_get = $rec['insurance_exp'];
+
+			$salary_get = str_replace(',', '', $salary_get);
+
+
+			$birth_date = date('Y-m-d', strtotime(str_replace('/', '-', $dob_get)));
+			$hours_in_day   = 24;
+			$minutes_in_hour= 60;
+			$seconds_in_mins= 60;
+			$birth_date     = new DateTime($birth_date);
+			$current_date   = new DateTime();
+			$diff           = $birth_date->diff($current_date);
+			$years	   = $diff->y . " Years";
+
+			$vacyear_get = preg_replace("/[^0-9]/","",$vac_period_get);
+
+	}
+
+	//check employee department
+	if($user_dept != $dept_get && $user_type !== "administrator" && $user_type !== "hr" ){header("Location: ./dashboard.php");}
+	//check employee department
+
+	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flystus`, `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `note`='Fly' ");
+		while($rec = mysqli_fetch_assoc($sql_count_fly)){$cont_fly = $rec["flystus"];}
+	$sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) AS `encashstus`, `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `note`='Encashed' ");
+		while($rec = mysqli_fetch_assoc($sql_count_encashed)){$cont_encashed = $rec["encashstus"];}
+	$sql_count_doc = mysqli_query($conDB, "SELECT COUNT(*) AS `docu`, `emp_id` FROM `emp_docu` WHERE `emp_id`='".$emp_id_get."' ");
+		while($rec = mysqli_fetch_assoc($sql_count_doc)){$cont_docu = $rec["docu"];}
+	$sql_count_supemp = mysqli_query($conDB, "SELECT COUNT(*) AS `supemp`, `emp_id` FROM `employees` WHERE `dept` = '".$dept_get."' AND `emp_id`<>'".$emp_id_get."' AND `status`=1 ");
+		while($rec = mysqli_fetch_assoc($sql_count_supemp)){$cont_supemp = $rec["supemp"];}
+
+
+	if($emp_status_get == "no" && $note_get == "expired"){
+		$note_get = "Expired";
+	} elseif($emp_status_get == "no" && $note_get == "terminat"){
+		$note_get = "Terminated";
+	}
+
+	$getqueryaply = mysqli_query($conDB, "SELECT * FROM `apply_vac_dep` WHERE `emp_id`='".$emp_id_get."' AND `review`='A' ORDER BY `id` DESC ");
+		while($recaply = mysqli_fetch_assoc($getqueryaply)){
+			$id_vac_get = $recaply["id"];
+			$emp_id_vac_get = $recaply["emp_id"];
+			$status_vac_get = $recaply["status"];
+			$review_vac_get = $recaply["review"];
+			$fly_type_get = $recaply["fly_type"];
+		}
+	$getquerylgn = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `emp_id`='".$emp_id_get."' ");
+		while($recaply = mysqli_fetch_assoc($getquerylgn)){
+			$emp_id_lgn_get = $recaply["emp_id"];
+			$dept_lgn_get = $recaply["dept"];
+		}
+	$getqueryempvac = mysqli_query($conDB, "SELECT * FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' AND `review`='A' ORDER BY `id` DESC ");
+		while($recempvac = mysqli_fetch_assoc($getqueryempvac)){
+			$id_empvac_get = $recempvac["id"];
+			$emp_id_empvac_get = $recempvac["emp_id"];
+		}
+	$getqueryslry = mysqli_query($conDB, "SELECT * FROM `salary_emp` WHERE `emp_id`='".$emp_id_get."' ORDER BY `id` DESC LIMIT 1 ");
+		while($recslry = mysqli_fetch_assoc($getqueryslry)){
+			$emp_id_slry_get = $recslry["emp_id"];
+			$basic_slry_get = $recslry["basic"];
+			$housing_slry_get = $recslry["housing"];
+			$transport_slry_get = $recslry["transport"];
+			$other_slry_get = $recslry["other_pay"];
+		}
+	$getquerygosi = mysqli_query($conDB, "SELECT * FROM `gosi_emp` WHERE `emp_id`='".$emp_id_get."' ORDER BY `id` DESC LIMIT 1 ");
+		while($recgosi = mysqli_fetch_assoc($getquerygosi)){
+			$gosi_no_get = $recgosi["gosi_no"];
+			$amount_gosi_get = $recgosi["amount"];
+			$date_greg_get = $recgosi["date_greg"];
+			$date_hijri_get = $recgosi["date_hijri"];
+		}
+//	$getqueryempvac_bal = mysqli_query($conDB, "SELECT * FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' ");
+//		$vacyear_get;
+//		$vacyear_get1 = "1";
+
+		
+		$getqueryempvac_bal = mysqli_query($conDB, "SELECT *, SUM(`vacdays`) AS SUMDAYS FROM `emp_vacation` WHERE `date_reg` BETWEEN CURDATE() and DATE_ADD(CURDATE(), INTERVAL '".$vacyear_get."' YEAR) AND `emp_id`='".$emp_id_get."' ");
+		while($recempvac_bal = mysqli_fetch_assoc($getqueryempvac_bal)){
+//			$emp_vacdays_get = $recempvac_bal["vacdays"];
+			$emp_vacdays_get = $recempvac_bal["SUMDAYS"];
+			$emp_vacdate_get = date('Y', strtotime(str_replace('/', '-', $recempvac_bal["date"])));
+		}
+		
+
+} else {
+		//when the id not equals id show database
+		header("Location: ./reg_employee.php");
+	}
+
+
+
+	$date = $DateConv->HijriToGregorian($iqama_exp_get, $format);
+	$exprydte = date('m-',strtotime($date));//
+	$today = date('m');
+//		if($exprydte == $today){
+//			$thismonthexp = "<div class='alert alert-danger bg-danger text-white border-0' role='alert'>Upcomming Iqama Expiry <strong>".date('d-m',strtotime($date))."</strong> alert—check it out!</div>";
+//		}
+
+//		$startdate = "05-05-2020";
+//		$expire = strtotime($startdate. ' + 30 days');
+//		$today = strtotime("today midnight");
+//
+//		if($today <= $expire){
+//			echo "expired";
+//		}
+
+		$basicslryget = ($basic_slry_get != "0") ? count((array)$basic_slry_get) : "0" ;
+		$housingslryget = ($housing_slry_get != "0") ? count((array)$housing_slry_get) : "0" ;
+		$transportslryget = ($transport_slry_get != "0") ? count((array)$transport_slry_get) : "0" ;
+		$otherslryget = ($other_slry_get != "0") ? count((array)$other_slry_get) : "0" ;
+		$tolslry = $basicslryget + $housingslryget + $transportslryget + $otherslryget;
+		// $a ? $b : ( $c ? $d : ( $e ? $f : $g ) );
+		// $tolslry==2 ? 'col-sm-4' : ($tolslry==4 ? 'col-sm-2' : ($tolslry==3 ? : 'col-sm-3'));
+		// $tolslry==2 ? 'col-sm-4' : ($tolslry==3 ? 'col-sm-3' : ($tolslry==4 ? 'col-sm-2' : 'col-sm-3' ));
+		switch ($tolslry) {
+		  case 1:
+		    $colsm = "col-sm-8";
+		    break;
+		  case 2:
+		    $colsm = "col-sm-4";
+		    break;
+		  case 3:
+		    $colsm = "col-sm-3";
+		    break;
+		  case 4:
+		    $colsm = "col-sm-2";
+		    break;
+		}
+
+
+
+?>
+<!doctype html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8" />
+        <title><?php echo $site_title ?> - All Employees</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
+        <meta content="Anees Afzal" name="author" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <!-- App favicon -->
+        <link rel="shortcut icon" href="assets/images/favicon.ico">
+
+        <!-- Modal -->
+        <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
+
+		<!-- Plugins css -->
+        <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
+        <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
+        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
+        <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
+        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
+		<!-- DataTables -->
+        <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+        <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+        <!-- Responsive datatable examples -->
+        <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+
+        <!-- Multi Item Selection examples -->
+        <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+
+        <!-- App css -->
+        <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+				<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+
+        <script src="assets/js/modernizr.min.js"></script>
+
+    </head>
+    <body class="enlarged" data-keep-enlarged="true">
+
+        <!-- Begin page -->
+        <div id="wrapper">
+
+            <!-- ========== Left Sidebar Start ========== -->
+            <div class="left side-menu">
+
+                <div class="slimscroll-menu" id="remove-scroll">
+
+                    <!-- LOGO -->
+                    <div class="topbar-left">
+                        <a href="dashboard.php" class="logo">
+                            <span>
+                                <img src="assets/images/logo.png" alt="" height="22">
+                            </span>
+                            <i>
+                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                            </i>
+                        </a>
+                    </div>
+
+                    <!-- User box -->
+
+                    <!--- Sidemenu -->
+                    <?php include("./includes/main_menu.php"); ?>
+                    <!-- Sidebar -->
+
+                    <div class="clearfix"></div>
+
+                </div>
+                <!-- Sidebar -left -->
+
+            </div>
+            <!-- Left Sidebar End -->
+
+
+
+            <!-- ============================================================== -->
+            <!-- Start right Content here -->
+            <!-- ============================================================== -->
+
+            <div class="content-page">
+
+                <!-- Top Bar Start -->
+                <?php include("./includes/topbar.php"); ?>
+                <!-- Top Bar End -->
+
+                <!-- Start Page content -->
+                <div class="content">
+                    <div class="container-fluid">
+						<?php //echo $thismonthexp ?>
+                        <?php include("./includes/emp_top_info.php"); ?>
+					<div class="row">
+						<div class="col-xl-12">
+							<div class="row">
+                                    <div class="<?php echo $colsm ?>" >
+                                        <div class="card-box tilebox-one">
+                                           	<i class="fa fa-money float-right text-muted"></i>
+                                            <h6 class="text-muted text-uppercase mt-0">Basic Salary</h6>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $basic_slry_get ?></h2>
+                                        </div>
+                                    </div><!-- end col -->
+                                    <?php if($housing_slry_get != "0"){ ?>
+                                    <div class="<?php echo $colsm ?>" >
+                                        <div class="card-box tilebox-one">
+											<i class="fa fa-money float-right text-muted"></i>
+                                            <h6 class="text-muted text-uppercase mt-0">Housing</h6>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $housing_slry_get ?></h2>
+                                        </div>
+                                    </div><!-- end col -->
+                                    <?php } ?>
+                                    <?php if($transport_slry_get != "0"){?>
+                                    <div class="<?php echo $colsm ?>">
+                                        <div class="card-box tilebox-one">
+											<i class="fa fa-money float-right text-muted"></i>
+                                            <h6 class="text-muted text-uppercase mt-0">Transport</h6>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $transport_slry_get ?></h2>
+                                        </div>
+                                    </div><!-- end col -->
+                                    <?php } ?>
+                                    <?php if($other_slry_get != "0"){?>
+                                    <div class="<?php echo $colsm ?>">
+                                        <div class="card-box tilebox-one">
+											<i class="fa fa-money float-right text-muted"></i>
+                                            <h6 class="text-muted text-uppercase mt-0">Others</h6>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $other_slry_get ?></h2>
+                                        </div>
+                                    </div><!-- end col -->
+                                    <?php } ?>
+                                    <div class="<?php echo ($tolslry==3) ? 'col-sm-3' : 'col-sm-4' ; ?>" >
+                                        <div class="card-box tilebox-one">
+											<i class="fa fa-money float-right text-muted"></i>
+                                            <h6 class="text-muted text-uppercase mt-0">Total Salary</h6>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $salary_get ?></h2>
+                                        </div>
+                                    </div><!-- end col -->
+							</div>
+
+<?php if($emp_sup_type_get <> "man_power"){ ?>
+<div class="row">
+	<div class="col-sm-6">
+		<div class="card-box tilebox-one">
+			<i class="fa fa-plane float-right text-muted"></i>
+			<h6 class="text-uppercase mt-0 text-muted">
+			<?php if($country_get == "Saudi Arabia" OR $country_get == "Myanmar"){?>
+				Local Vacation
+			<?php }else{ ?>
+				Flys
+			<?php } ?>
+			</h6>
+			<h2 class="m-b-20" data-plugin="counterup"><?php echo $cont_fly ?></h2>
+		</div>
+	</div><!-- end col -->
+	<div class="col-sm-6">
+		<div class="card-box tilebox-one">
+			<i class="mdi mdi-square-inc-cash float-right text-muted"></i>
+			<h6 class="text-uppercase mt-0 text-muted">Encashed</h6>
+			<h2 class="m-b-20"><span data-plugin="counterup"><?php echo $cont_encashed ?></span></h2>
+		</div>
+	</div><!-- end col -->
+</div><!-- end col -->
+<?php } ?>
+
+
+						</div>
+					</div>
+
+
+<div class="row">
+	<div class="col-12">
+	<div class="card-box">
+	<h4 class="header-title m-t-0 m-b-30">About <?php echo $name_get ?></h4>
+
+	<ul class="nav nav-pills navtab-bg nav-justified pull-in ">
+
+	<li class="nav-item">
+		<a href="#profile1" data-toggle="tab" aria-expanded="true" class="nav-link active show">
+			<i class="fi-head mr-2"></i>Profile
+		</a>
+	</li>
+<?php if($user_type <> "dept_user"){?>
+	<li class="nav-item">
+		<a href="#messages1" data-toggle="tab" aria-expanded="false" class="nav-link">
+			<i class="mdi mdi-bank mr-2"></i> Bank & Gosi Details
+		</a>
+	</li>
+	<li class="nav-item">
+		<a href="#home1" data-toggle="tab" aria-expanded="false" class="nav-link">
+			<i class="mdi mdi-buffer mr-2"></i> Vacation Details
+		</a>
+	</li>
+	<li class="nav-item">
+		<a href="#documents" data-toggle="tab" aria-expanded="false" class="nav-link">
+			<i class="mdi mdi-book-open-page-variant mr-2"></i> Documents <?php if($cont_docu > 0){echo "($cont_docu)";} ?>
+		</a>
+	</li>
+<?php } ?>
+<?php if($emptype_get <> "Supporter"){ ?>
+	<li class="nav-item">
+		<a href="#employees" data-toggle="tab" aria-expanded="false" class="nav-link">
+			<i class="mdi mdi-account-switch"></i> Empoyee's <?php if($cont_supemp > 0){echo "($cont_supemp)";} ?>
+		</a>
+	</li>
+<?php } ?>
+	</ul>
+	<div class="tab-content">
+	<div class="tab-pane active show" id="profile1">
+		<table class="table table-hover mb-0">
+			<tbody>
+			<tr>
+				<th>Name of Employee:</th>
+				<td><?php echo $name_get; ?></td>
+				<th>Emali Address:</th>
+				<td><?php echo $emp_email_get; ?></td>
+			</tr>
+			<tr>
+				<th>Iqama / ID:</th>
+				<td><?php echo $iqama_get; ?></td>
+				<th>Iqama / ID Expiry:</th>
+				<td><?php echo $iqama_exp_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->HijriToGregorian($iqama_exp_get, $format); ?></span></td>
+			</tr>
+			<tr>
+				<th>Passport No.:</th>
+				<td><?php echo $passport_number_get; ?></td>
+				<th>Passport Expiry:</th>
+				<td><?php echo $passport_exp_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($passport_exp_get, $format); ?></span></td>
+			</tr>
+				<tr>
+				<th>Date of Birth:</th>
+				<td><?php echo $dob_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($dob_get, $format); ?></span></td>
+				<th>Age:</th>
+				<td><?php if($dob_get <> ""){echo $years; } ?></td>
+			</tr>
+			<tr>
+				<th>Gender:</th>
+				<td><?php echo ucfirst($sex_get); ?></td>
+				<th>Marital Status:</th>
+				<td><?php echo ucfirst($mar_status_get); ?></td>
+			</tr>
+			<tr>
+				<th>T-Shirt Size:</th>
+				<td><?php echo ucfirst($t_shirt_size_get); ?></td>
+				<th>Contract Period:</th>
+				<td><?php echo $vac_period_get; ?></td>
+			</tr>
+			<tr>
+				<th>Mobile No.:</th>
+				<td><?php echo $mobile_get; ?></td>
+				<th>Country:</th>
+				<td><?php echo $country_get; ?></td>
+			</tr>
+			<tr>
+				<th>Date Hired:</th>
+				<td><?php echo $joining_date_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($joining_date_get, $format); ?></span></td>
+				<th>Department:</th>
+				<td><?php echo $dept_get; ?></td>
+			</tr>
+			<tr>
+				<th>Section Area:</th>
+				<td><?php echo $sectin_nme_get; ?></td>
+				<th>Current Total Salary:</th>
+				<td><?php echo $salary_get; ?></td>
+			</tr>
+			<tr>
+				<th>Insurance No:</th>
+				<td><?php echo $insurance_no_get; ?></td>
+				<th>Insurance Expiry:</th>
+				<td><?php echo $insurance_exp_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($insurance_exp_get, $format); ?></span></td>
+			</tr>
+			<tr>
+				<th>Emergency Contact:</th>
+				<td><?php echo $emg_mobile_get." - ".$emg_name_get ?></td>
+				<th>Address:</th>
+				<td><?php echo ucfirst($address_get) ?></td>
+			</tr>
+			</tbody>
+		</table>
+		
+
+		<div class="text-right">
+			<div class="btn-group" role="group" aria-label="Edit Button">
+				<a href="./employee_profile.php?emp_id=<?php echo $emp_id_get; ?>" class="btn btn-sm waves-effect btn-primary" target="_blank"><i class="fi-printer "></i> Print Profile</a>
+			</div>
+		</div>
+
+	</div>
+
+
+<?php if($emptype_get <> "Supporter"){ ?>
+	<div class="tab-pane" id="employees">
+		<?php include("./includes/sup_emp_view.php"); ?>
+	</div>
+<?php } ?>
+
+
+<?php if($user_type <> "dept_user"){ ?>
+<div class="tab-pane" id="home1">
+		<div class="table-responsive">
+
+			<h4 class="m-t-0 header-title"></h4>
+<table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+	<thead>
+		<tr>
+			<th>Remarks</th>
+			<th>Fly Date</th>
+			<th>Return Date</th>
+			<th>Permit No</th>
+			<th>Notes</th>
+			<th>Days</th>
+			<th>Arrived</th>
+			<th>Reg. Date</th>
+			<th>ID</th>
+			<?php if($user_type <> "dept_user"){ ?>
+			<th>Action</th>
+			<?php } ?>
+
+		</tr>
+	</thead>
+	<tbody>
+<?php
+	$sql_emp_vac = "SELECT * FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' ";
+	$query_emp_vac = mysqli_query($conDB, $sql_emp_vac);
+
+while ($rec = mysqli_fetch_array($query_emp_vac)) {
+	$id_emp_reg = $rec["id"];
+	$date_emp = $rec["date"];
+	$note_emp = $rec["note"];
+	$user_update = $rec["user_update"];
+	$date_reg_emp = $rec["date_reg"];
+	$return_date_emp = $rec["return_date"];
+	$vacdays_emp = $rec["vacdays"];
+	$permit_no_emp = $rec["permit_no"];
+	$emp_id_emp = $rec["emp_id"];
+	$remarks_get = $rec["remarks"];
+	$arrived_date_get = $rec["arrived_date"];
+
+//	$times_reg = strtotime("$date_emp");
+//	$datevac = date('d, M Y', $times_reg);
+
+	$timestamp_reg = strtotime("$date_reg_emp");
+	$new_date_format = date('d, M Y', $timestamp_reg);
+
+?>
+											<tr>
+												<th><?php echo $note_emp; ?></th>
+												<th><?php echo $date_emp; ?></th>
+												<th><?php echo $return_date_emp; ?></th>
+												<th><?php echo $permit_no_emp; ?></th>
+												<th><?php echo $remarks_get; ?></th>
+												<th><?php echo $vacdays_emp; ?></th>
+												<th>
+													<?php
+														if($arrived_date_get == ""){
+															echo "Not Yet";
+														}else{
+															echo $arrived_date_get;
+														}
+
+													?>
+												</th>
+												<th><?php echo $new_date_format; ?></th>
+												<th><?php echo $id_emp_reg; ?></th>
+												<?php if($user_type <> "dept_user"){ ?>
+												<th>
+												<a href="./edit_vac.php?id=<?php echo $id_emp_reg ?>&emp_id=<?php echo "".$_GET['id']."" ?>" class="btn btn-sm btn-primary waves-effect">
+                                                    <i class="fa fa-edit"></i>
+												</a>
+												<?php if($user_type == $access1){ ?>
+												<a href="./includes/delete_vac.php?id=<?php echo $id_emp_reg ?>" class="btn btn-sm btn-danger waves-effect">
+                                                    <i class="dripicons-tag-delete"></i>
+												</a>
+												<?php } ?>
+												</th>
+												<?php } ?>
+
+											</tr>
+<?php } ?>
+										</tbody>
+                                    </table>
+                                </div>
+                                        </div>
+										<div class="tab-pane" id="messages1">
+											<table class="table table-hover mb-0">
+												<tbody>
+												<thead class="thead-dark">
+													<tr>
+														<th colspan="4"><center>Bank Account Information</center></th>
+													</tr>
+												</thead>
+												<tr>
+													<th>Bank Name:</th>
+													<td><?php echo $bank_name_get; ?></td>
+													<th>IBAN Number:</th>
+													<td><?php echo $iban_get; ?></td>
+												</tr>
+												<?php
+													if($gosi_no_get <> ""){
+												?>
+												<thead class="thead-dark">
+													<tr>
+														<th colspan="4"><center>GOSI Information</center></th>
+													</tr>
+												</thead>
+												<tr>
+													<th>Gosi No:</th>
+													<td><?php echo $gosi_no_get; ?></td>
+													<th>Gosi Payment:</th>
+													<td><?php echo $amount_gosi_get; ?></td>
+												</tr>
+												<tr>
+													<th>Gregorian Date:</th>
+													<td><?php echo $date_greg_get; ?></td>
+													<th>تاريخ الهجري :</th>
+													<td><?php echo $date_hijri_get; ?></td>
+												</tr>
+												<?php }else{ ?>
+												<tr>
+													<td colspan="4">
+														<a href="./add_gosi.php?id=<?php echo "".$_GET['id']."" ?>" class="btn btn-sm btn-primary waves-effect">
+															<i class="mdi mdi-database-plus"></i> Add Gosi Details
+														</a>
+													</td>
+												</tr>
+												<?php } ?>
+												</tbody>
+											</table>
+										</div>
+
+<div class="tab-pane" id="documents">
+								<div class="card-box">
+                                    <a href="add_emp_docs.php?id=<?php echo $_GET['id'] ?>" class="btn btn-primary btn-rounded w-md waves-effect waves-light float-left"><i class="mdi mdi-upload"></i> Upload Files</a><br><br>
+                                    <h4 class="header-title m-b-30">My Files</h4>
+<div class="row">
+<?php
+	$queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='".$emp_id_get."' ORDER BY `id` DESC ");
+		while($recempdoc = mysqli_fetch_assoc($queryempdocu)){
+			$id_empdoc_get = $recempdoc["id"];
+			$docu_typ_get = $recempdoc["docu_typ"];
+			$attachment_get = $recempdoc["attachment"];
+			$docu_ext_get = $recempdoc["docu_ext"];
+			$doc_date_reg_get = $recempdoc["date_reg"];
+
+			$times_reg = strtotime("$doc_date_reg_get");
+			$doc_date_reg_get = date('d, M Y h:ia', $times_reg);
+
+
+?>
+	<div class="col-lg-3 col-xl-2">
+	<div class="file-man-box">
+	   <?php if($user_type == "administrator" OR $user_type == "hr"){ ?>
+		<a href="./includes/del_docu.php?id=<?php echo $id_empdoc_get ?>&emp_id=<?php echo $emp_id_get ?>" class="file-close"><i class="mdi mdi-close-circle"></i></a>
+		<?php } ?>
+		<div class="file-img-box">
+			<img src="assets/images/file_icons/<?php if($docu_ext_get == "jpg"){echo"jpg";}elseif($docu_ext_get == "jpeg"){echo"jpg";}elseif($docu_ext_get == "pdf"){echo"pdf";}?>.svg" alt="icon">
+		</div>
+		<a href="./downloadFile.php?file=<?php echo $attachment_get ?>" class="file-download"><i class="mdi mdi-download"></i></a>
+		<div class="file-man-title">
+			<h5 class="mb-0 text-overflow"><?php echo $docu_typ_get ?></h5>
+			<p class="mb-0"><small><?php echo $doc_date_reg_get ?></small></p>
+		</div>
+	</div>
+
+
+	</div>
+<?php } ?>
+
+</div>
+
+                                </div>
+</div>
+                                        <?php } ?>
+
+
+
+                                    </div>
+                                </div>
+
+	</div>
+</div>
+
+
+                    </div> <!-- container -->
+
+                </div> <!-- content -->
+
+                <footer class="footer">
+                    <?php echo $site_footer ?>
+                </footer>
+
+            </div>
+
+            <!-- ============================================================== -->
+            <!-- End Right content here -->
+            <!-- ============================================================== -->
+        </div>
+        <!-- END wrapper -->
+<div class="modal fade terminat" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
+<form action="./includes/apply_vac_emp.php" method="get">
+	<div class="modal-dialog modal-dialog-centered">
+		<div class="modal-content">
+			<div class="modal-header" style="background-color: #02C0CE !important; color: #fff !important;">
+				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+				<h4 class="modal-title" id="mySmallModalLabel">
+					<i class="mdi mdi-format-rotate-90"></i>
+					Are you sure!
+				</h4>
+			</div>
+			<div class="modal-body">
+				<h5>Please select Replacement Person!</h5>
+<div class="form-row">
+<div class="form-group col-md-6">
+<!--	<a href="" class="btn btn-da nger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
+<input type="hidden" name="id" value="<?php echo $_GET['id'] ?>" >
+<input type="hidden" name="emp_id" value="<?php echo $emp_id_get ?>" >
+<input type="hidden" name="emp_name" value="<?php echo $name_get ?>" >
+<input type="hidden" name="dept" value="<?php echo $dept_get ?>" >
+
+	<div class="input-group">
+		<select class="form-control" name="replacement_per" required>
+			<option value="">Select</option>
+		<?php
+			$query_emp_apl_nme = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `dept`='".$dept_get."' AND `dept`<>'' AND `status`=1 ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, name");
+			while($rec = mysqli_fetch_assoc($query_emp_apl_nme)){
+				$emp_apl_nme = $rec["name"];
+		?>
+			<option value="<?php echo $emp_apl_nme ?>"><?php echo $emp_apl_nme ?></option>
+		<?php } ?>
+		</select>
+	</div>
+</div>
+<div class="form-group col-md-6">
+	<div class="custom-control custom-radio">
+		<input type="radio" id="customRadio1" name="vac_type" value="annual" class="custom-control-input" required>
+		<label class="custom-control-label" for="customRadio1">Annual Vacation</label>
+	</div>
+	<div class="custom-control custom-radio">
+		<input type="radio" id="customRadio2" name="vac_type" value="emergency" class="custom-control-input" required>
+		<label class="custom-control-label" for="customRadio2">Emergency Vacation</label>
+	</div>
+</div>
+
+
+			<div class="form-group col-md-6">
+				<label for="date_select" class="col-form-label">Vacation Date<span class="text-danger">*</span></label>
+				<input type="text" name="date" parsley-trigger="change" required
+				   placeholder="dd/mm/yyyy" class="form-control" id="date_select" autocomplete="off">
+			</div>
+			<div class="form-group col-md-6">
+				<label for="return_dated" class="col-form-label">Return Date<span class="text-danger">*</span></label>
+				<input type="text" name="return_date" parsley-trigger="change"
+				   placeholder="dd/mm/yyyy" class="form-control" id="return_dated" autocomplete="off" required>
+			</div>
+
+		<div class="input-group-append">
+		<button type="submit" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-format-rotate-90"></i> Apply Now</button>
+		</div>
+</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
+
+
+			</div>
+		</div><!-- /.modal-content -->
+	</div><!-- /.modal-dialog -->
+</form>
+</div>
+
+<div class="modal fade arrived" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
+<form action="./includes/arrived_emp.php" method="get">
+	<div class="modal-dialog modal-dialog-centered">
+		<div class="modal-content">
+			<div class="modal-header" style="background-color: #02C0CE !important; color: #fff !important;">
+				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+				<h4 class="modal-title" id="mySmallModalLabel">
+					<i class="mdi mdi-format-rotate-90"></i>
+					Are you sure!
+				</h4>
+			</div>
+			<div class="modal-body">
+				<h5>Please select Date for Arrival!</h5>
+<div class="form-row">
+<!--	<a href="" class="btn btn-da nger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
+<input type="text" placeholder="employee page id" name="id" value="<?php echo $_GET['id'] ?>" required>
+<input type="text" placeholder="apply_vac_dep emp id" name="appid" value="<?php echo $id_vac_get ?>" required>
+<input type="text" placeholder="emp_vacation vac. id" name="arvid" value="<?php echo $id_empvac_get ?>" required readonly >
+<input type="text" placeholder="employee emp_id" name="emp_id" value="<?php echo $emp_id_empvac_get ?>" required readonly >
+
+	<div class="form-group col-md-12">
+		<label for="arrived_date" class="col-form-label">Return Date<span class="text-danger">*</span></label>
+		<input type="text" name="arrived_date" parsley-trigger="change"
+		   placeholder="dd/mm/yyyy" class="form-control" id="arrived_date" autocomplete="off" required>
+	</div>
+
+		<div class="input-group-append">
+		<button type="submit" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-airplane-landing"></i> Arrived</button>
+		</div>
+</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
+			</div>
+		</div><!-- /.modal-content -->
+	</div><!-- /.modal-dialog -->
+</form>
+</div>
+
+        <!-- jQuery  -->
+        <script src="assets/js/jquery.min.js"></script>
+<!--        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>-->
+        <script src="assets/js/bootstrap.bundle.min.js"></script>
+        <script src="assets/js/metisMenu.min.js"></script>
+        <script src="assets/js/waves.js"></script>
+        <script src="assets/js/jquery.slimscroll.js"></script>
+
+
+        <!-- Modal-Effect -->
+		<script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
+		<script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script>
+        <script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
+
+
+		<script src="./plugins/moment/moment.js"></script>
+
+        <script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
+        <script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
+        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
+
+        <!-- App js -->
+		<script src="assets/pages/jquery.form-pickers.init.js"></script>
+
+		<!-- Required datatable js -->
+        <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
+        <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
+        <!-- Buttons examples -->
+        <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
+        <script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
+        <script src="./plugins/datatables/jszip.min.js"></script>
+        <script src="./plugins/datatables/pdfmake.min.js"></script>
+        <script src="./plugins/datatables/vfs_fonts.js"></script>
+        <script src="./plugins/datatables/buttons.html5.min.js"></script>
+        <script src="./plugins/datatables/buttons.print.min.js"></script>
+
+        <!-- Key Tables -->
+        <script src="./plugins/datatables/dataTables.keyTable.min.js"></script>
+
+        <!-- Responsive examples -->
+        <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
+        <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
+
+        <!-- Selection table -->
+        <script src="./plugins/datatables/dataTables.select.min.js"></script>
+
+
+        <!-- App js -->
+        <script src="assets/js/jquery.core.js"></script>
+        <script src="assets/js/jquery.app.js"></script>
+
+		<!--/***************************************/-->
+		<script type="text/javascript">
+            $(document).ready(function() {
+
+        var buttonConfig = [];
+        var exportTitle = "Name: <?php echo $name_get ?>"
+        buttonConfig.push({extend:'excel',exportOptions: {columns: [ 0, 1, 2, 3, 4, 5, 6, 7 ]} ,title: exportTitle,className: 'btn-success'});
+        buttonConfig.push({extend:'pdf',exportOptions: {columns: [ 0, 1, 2, 3, 4, 5, 6, 7 ]} ,title: exportTitle,className: 'btn-danger'});
+        buttonConfig.push({extend:'print' ,exportOptions: {columns: [ 0, 1, 2, 3, 4, 5, 6, 7 ]} ,title: exportTitle,className: 'btn-dark'});
+        // buttonConfig.push({text: '<i class="fa fa-plus"></i> Add Machine', action: function ( e, dt, button, config ) {window.location = './add_machine.php' } ,className: 'btn-info'});
+                $('form').parsley();
+
+				//Buttons examples
+                var table = $('#employee_vac').DataTable({
+                    lengthChange: false,
+                    buttons: buttonConfig,
+					order: [[ 8, "desc" ]],
+					"columnDefs": [
+									{
+									targets: [ 8 ],
+									visible: false,
+									searchable: false
+									},
+								],
+					});
+
+					table.buttons().container()
+					.appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
+
+            });
+			jQuery(function($) {
+                $('.autonumber').autoNumeric('init');
+            });
+            jQuery.browser = {};
+            (function () {
+                jQuery.browser.msie = false;
+                jQuery.browser.version = 0;
+                if (navigator.userAgent.match(/MSIE ([0-9]+)\./)) {
+                    jQuery.browser.msie = true;
+                    jQuery.browser.version = RegExp.$1;
+                }
+            })();
+
+$(document).ready(function(){
+  $("input[name$='note']").click(function(){
+  var value = $(this).val();
+  if(value=='Encashed') {
+    $("#return_date").show();
+    $("#note").hide();
+	$("#return_date").removeAttr('required');
+	$("#permit_no").removeAttr('required');
+  }
+  else if(value=='Fly') {
+	//document.getElementById("pet_id").required = true;
+	$("#return_date").attr('required', '');
+	$("#permit_no").attr('required', '');
+   	$("#note").show();
+//    $("#pet_id_box").hide();
+   }
+  });
+  	$("#return_date").removeAttr('required');
+//  	$("#pet_id_box").show();
+  	$("#note").hide();
+});
+/*********************************/
+        </script>
+
+    </body>
+</html>
+<?php } ?>

@@ -1,0 +1,201 @@
+<?php
+header('Content-Type: application/json');
+require_once("./../../includes/db.php");
+
+$input = json_decode(file_get_contents('php://input'), true);
+
+$employeeIds = $input['employee_ids'] ?? [];
+$monthYear = $input['month'] ?? '';
+
+if (empty($employeeIds) || empty($monthYear)) {
+    echo json_encode(['status' => 'error', 'message' => 'Missing employee IDs or month.']);
+    exit();
+}
+
+$pdo = getDbConnection();
+
+try {
+    // Extract previous month in YYYY-MM format
+    $monthDate = DateTime::createFromFormat('Y-m', $monthYear);
+    $monthDate->modify('-1 month');
+    $prevMonth = $monthDate->format('Y-m');
+
+    $placeholders = implode(',', array_fill(0, count($employeeIds), '?'));
+
+    // Step 1: Get employees with current month already generated
+    $stmtCurrent = $pdo->prepare("SELECT emp_id FROM generated_payrolls 
+        WHERE month_year = ? AND status = 'generated' AND emp_id IN ($placeholders)");
+    $stmtCurrent->execute(array_merge([$monthYear], $employeeIds));
+    $alreadyGenerated = $stmtCurrent->fetchAll(PDO::FETCH_COLUMN);
+
+    // Step 2: Get employees whose previous month is not marked as 'paid'
+    $stmtPrev = $pdo->prepare("SELECT emp_id FROM generated_payrolls 
+        WHERE month_year = ? AND status != 'paid' AND emp_id IN ($placeholders)");
+    $stmtPrev->execute(array_merge([$prevMonth], $employeeIds));
+    $notPaidPrevMonth = $stmtPrev->fetchAll(PDO::FETCH_COLUMN);
+
+    // Merge all employees to exclude
+    $excluded = array_unique(array_merge($alreadyGenerated, $notPaidPrevMonth));
+    $employeeIdsToProcess = array_diff($employeeIds, $excluded);
+
+    if (empty($employeeIdsToProcess)) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Payroll already generated or previous month not paid for selected employees.'
+        ]);
+        exit();
+    }
+
+    $pdo->beginTransaction();
+    $processedCount = 0;
+
+    foreach ($employeeIdsToProcess as $empId) {
+        // Fetch employee salary + country
+        $stmtEmployeeData = $pdo->prepare("SELECT es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard, e.country, e.gosi
+            FROM emp_salary es
+            JOIN employees e ON es.emp_id = e.emp_id
+            WHERE es.emp_id = :emp_id
+        ");
+        $stmtEmployeeData->execute([':emp_id' => $empId]);
+        $employeeData = $stmtEmployeeData->fetch(PDO::FETCH_ASSOC);
+        if (!$employeeData) continue;
+
+        $salaryComponents = [
+            'basic' => $employeeData['basic'], 'housing' => $employeeData['housing'],
+            'transport' => $employeeData['transport'], 'food' => $employeeData['food'],
+            'misc' => $employeeData['misc'], 'cashier' => $employeeData['cashier'],
+            'fuel' => $employeeData['fuel'], 'tel' => $employeeData['tel'],
+            'other' => $employeeData['other'], 'guard' => $employeeData['guard']
+        ];
+
+        $totalGrossSalary = array_sum(array_map('floatval', $salaryComponents));
+
+        // --- GOSI Deduction Logic ---
+        if ($employeeData['country'] === '191') {
+            $basicPlusHousing = floatval($salaryComponents['basic']) + floatval($salaryComponents['housing']);
+            $gosiAmount = round($basicPlusHousing * ($employeeData['gosi'] / 100), 2);
+
+            $stmtCheckGosi = $pdo->prepare("SELECT id, note FROM payroll_deductions 
+                WHERE emp_id = :emp_id AND deduction = 'GOSI' AND month = :month_year LIMIT 1
+            ");
+            $stmtCheckGosi->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+            $existingGosi = $stmtCheckGosi->fetch(PDO::FETCH_ASSOC);
+
+            if ($existingGosi) {
+                $storedAmount = floatval($existingGosi['note']);
+                if (abs($storedAmount - $gosiAmount) < 0.01) {
+                    $stmtUpdateGosi = $pdo->prepare("UPDATE payroll_deductions SET note = :gosi_amount WHERE id = :id");
+                    $stmtUpdateGosi->execute([
+                        ':gosi_amount' => number_format($gosiAmount, 2, '.', ''),
+                        ':id' => $existingGosi['id']
+                    ]);
+                }
+            } else {
+                $stmtGosi = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status)
+                    VALUES (:emp_id, 'GOSI', :gosi_amount, :month_year, 1)");
+                $stmtGosi->execute([
+                    ':emp_id' => $empId,
+                    ':gosi_amount' => number_format($gosiAmount, 2, '.', ''),
+                    ':month_year' => $monthYear
+                ]);
+            }
+        }
+
+        // --- Benefits ---
+        $stmtBenefits = $pdo->prepare("SELECT pb.*, bt.calculation_type 
+            FROM payroll_benefits pb
+            LEFT JOIN benefit_types bt ON pb.type_id = bt.id
+            WHERE pb.emp_id = :emp_id AND pb.month = :month_year AND pb.status = 1
+        ");
+        $stmtBenefits->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        $benefits = $stmtBenefits->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalBenefits = 0;
+        foreach ($benefits as $benefit) {
+            $amount = 0;
+            if ($benefit['calculation_type'] === 'overtime_basic') {
+                $hours = floatval($benefit['hours'] ?? 0);
+                $basicSalary = floatval($salaryComponents['basic']);
+                $hourlyRate = ($basicSalary / 210 / 2) + ($totalGrossSalary / 210);
+                $amount = $hourlyRate * $hours;
+            } elseif ($benefit['calculation_type'] === 'overtime_total') {
+                $hours = floatval($benefit['hours'] ?? 0);
+                $amount = ($totalGrossSalary / 210) * $hours;
+            } else {
+                $amount = floatval($benefit['note']);
+            }
+            $totalBenefits += $amount;
+        }
+
+        // --- Deductions ---
+        $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(note AS DECIMAL(10,2))), 0)
+            FROM payroll_deductions
+            WHERE emp_id = :emp_id AND month = :month_year AND status = 1");
+        $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        $totalDeductions = (float)$stmtDeductionsSum->fetchColumn();
+
+        $netSalary = $totalGrossSalary + $totalBenefits - $totalDeductions;
+
+        // Insert final payroll
+        $stmt = $pdo->prepare("INSERT INTO generated_payrolls (
+                emp_id, month_year, basic_salary, housing_allowance, transport_allowance,
+                food_allowance, miscellaneous_allowance, cashier_allowance, fuel_allowance,
+                telephone_allowance, other_allowance, guard_allowance, total_gross_salary,
+                total_benefits, total_deductions, net_salary, status
+            ) VALUES (
+                :emp_id, :month_year, :basic, :housing, :transport,
+                :food, :misc, :cashier, :fuel,
+                :tel, :other, :guard, :total_gross_salary,
+                :total_benefits, :total_deductions, :net_salary, 'generated'
+            ) ON DUPLICATE KEY UPDATE
+                basic_salary = VALUES(basic_salary),
+                housing_allowance = VALUES(housing_allowance),
+                transport_allowance = VALUES(transport_allowance),
+                food_allowance = VALUES(food_allowance),
+                miscellaneous_allowance = VALUES(miscellaneous_allowance),
+                cashier_allowance = VALUES(cashier_allowance),
+                fuel_allowance = VALUES(fuel_allowance),
+                telephone_allowance = VALUES(telephone_allowance),
+                other_allowance = VALUES(other_allowance),
+                guard_allowance = VALUES(guard_allowance),
+                total_gross_salary = VALUES(total_gross_salary),
+                total_benefits = VALUES(total_benefits),
+                total_deductions = VALUES(total_deductions),
+                net_salary = VALUES(net_salary),
+                status = VALUES(status)");
+
+        $stmt->execute([
+            ':emp_id' => $empId,
+            ':month_year' => $monthYear,
+            ':basic' => number_format($salaryComponents['basic'], 2, '.', ''),
+            ':housing' => number_format($salaryComponents['housing'], 2, '.', ''),
+            ':transport' => number_format($salaryComponents['transport'], 2, '.', ''),
+            ':food' => number_format($salaryComponents['food'], 2, '.', ''),
+            ':misc' => number_format($salaryComponents['misc'], 2, '.', ''),
+            ':cashier' => number_format($salaryComponents['cashier'], 2, '.', ''),
+            ':fuel' => number_format($salaryComponents['fuel'], 2, '.', ''),
+            ':tel' => number_format($salaryComponents['tel'], 2, '.', ''),
+            ':other' => number_format($salaryComponents['other'], 2, '.', ''),
+            ':guard' => number_format($salaryComponents['guard'], 2, '.', ''),
+            ':total_gross_salary' => number_format($totalGrossSalary, 2, '.', ''),
+            ':total_benefits' => number_format($totalBenefits, 2, '.', ''),
+            ':total_deductions' => number_format($totalDeductions, 2, '.', ''),
+            ':net_salary' => number_format($netSalary, 2, '.', '')
+        ]);
+
+        $processedCount++;
+    }
+
+    $pdo->commit();
+    echo json_encode([
+        'status' => 'success',
+        'message' => "Payroll processed for $processedCount employees.",
+        'processed_count' => $processedCount,
+        'skipped' => $excluded
+    ]);
+
+} catch (Exception $e) {
+    $pdo->rollBack();
+    error_log('Payroll processing error: ' . $e->getMessage());
+    echo json_encode(['status' => 'error', 'message' => 'Processing failed: ' . $e->getMessage()]);
+}

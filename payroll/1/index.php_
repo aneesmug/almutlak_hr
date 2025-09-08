@@ -1,0 +1,156 @@
+<?php
+
+include("./../includes/db.php");
+if (isset($_POST["submit"])) {
+	$counter = $_POST["idk"]; /* COUNT THE PASSED ON NAME */
+	for ($x = 0; $x < count($counter); $x++) {
+		if (!empty($_POST["idk"])) {
+			$chk_id = $_POST["idk"][$x];
+			$query = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='$chk_id' ") or die(mysqli_error($conDBect));
+			while ($row = mysqli_fetch_array($query)) {
+				$name = $row['name'];
+				$salary = $row['salary'];
+				$emp_id = $row['emp_id'];
+			}
+			$querysal = mysqli_query($conDB, "SELECT * FROM `salary_emp` WHERE `emp_id`='$emp_id' ORDER BY `emp_id` DESC ") or die(mysqli_error($conDBect));
+			while ($row = mysqli_fetch_array($querysal)) {
+				$basic = $row['basic'];
+				$housing = $row['housing'];
+				$transport = $row['transport'];
+				$other_pay = $row['other_pay'];
+			}
+			$querychk = mysqli_query($conDB, "SELECT * FROM `payroll` WHERE `month`='" . date('m') . "' AND `emp_id`='" . $emp_id . "' ") or die(mysqli_error($conDBect));
+			if (mysqli_num_rows($querychk) > 0) {
+				echo "<h2>Payroll Already Genrated</h2>";
+				header( "refresh:3; ./ ");
+				exit;
+			} else {
+				$qry = "INSERT INTO payroll (`chk_id`, `name`, `basic`,`housing`,`transport`,`other_pay`, `emp_id`, `month`, `created_at`) VALUES ('$chk_id','$name','$basic','$housing','$transport','$other_pay','$emp_id','" . date('m') . "','" . date('c') . "')";
+				if(mysqli_query($conDB, $qry)){
+					header( "Location: ./" );
+				}
+
+			}
+		} /* END OF CHECKING THE CHECKBOX IF SELECTED */
+	} /* END OF FOR LOOP */
+}
+$datechk = date('m');
+?>
+
+<form action="" method="post" id="ambil_matkul">
+	<table class="tabel table-bordered table-stripped table-responsive" border="1">
+		<tr>
+			<th width="5%">Check All<br><input type="checkbox" name="sample" class="selectall" /></th>
+			<th>Name</th>
+			<th>Basic</th>
+			<th>Housing</th>
+			<th>Transport</th>
+			<th>Others</th>
+			<th>Deduction</th>
+			<th>Emp_ID</th>
+			<th>Salary</th>
+			<th>Status</th>
+		</tr>
+		<?php
+		$sql = "SELECT * FROM `employees` WHERE `status`=1 ORDER BY `sectin_nme` ASC, name ASC";
+		$result = $conDB->query($sql);
+		if ($result->num_rows > 0) {
+			$previous_category = "";   // To keep track of the last printed category
+			while ($row = $result->fetch_assoc()) {
+				$category = $row['sectin_nme'];
+				$name = $row['name'];
+				$emp_id = $row['emp_id'];
+
+				$sqlhk = "SELECT * FROM `payroll` WHERE `emp_id`='" . $emp_id . "' AND `month`='" . date('m') . "' ";
+				$resulthk = $conDB->query($sqlhk);
+				while ($rowhk = $resulthk->fetch_assoc()) {
+					$chkid = $rowhk["emp_id"];
+					$basic = $rowhk["basic"];
+					$housing = $rowhk["housing"];
+					$transport = $rowhk["transport"];
+					$other_pay = $rowhk["other_pay"];
+					$deduction = $rowhk["deduction"];
+				}
+
+				if ($previous_category !== $category) { // If this category has never been printed, we print it
+		?>
+					<th style="background: #D1D0D0;">
+					<?php if($chkid != $row["emp_id"]){ ?>
+						<input type="checkbox" class="cb-selector" id="<?= str_replace(' ', '', $category) ?>" />
+					<?php } ?>
+					</th>
+					<th style="background: #D1D0D0;" colspan='9'><?= $category ?> </th>
+
+				<?php
+					$previous_category = $category;
+				}
+				?>
+				<tr>
+					<th>
+						<?php if($chkid != $row["emp_id"]){ ?>
+						<input type="checkbox" class="justone" name="idk[]" value="<?= $row['id']; ?>" id="<?= str_replace(' ', '', $category) ?>" />
+						<?php } ?>
+						
+						<input type="hidden" name="chk_id[]" value="<?= $row["id"]; ?>" />
+						<input type="hidden" name="name[]" value="<?= $row["name"]; ?>">
+						<input type="hidden" name="salary[]" value="<?= $row["salary"]; ?>">
+						<input type="hidden" name="emp_id[]" value="<?= $row["emp_id"]; ?>">
+					</th>
+					<td><?= $row['name']; ?></td>
+					<td><?= $basic ?></td>
+					<td><?= $housing ?></td>
+					<td><?= $transport; ?></td>
+					<td><?= $other_pay; ?></td>
+					<td><?= $deduction ?></td>
+					<td><?= $row['emp_id']; ?></td>
+					<td><?= ($basic+$housing+$transport+$other_pay); ?></td>
+					<th width="70	">
+						<?php
+							if ($chkid == $row["emp_id"]) {
+								echo "Generated";
+							}
+						?>
+					</th>
+				</tr>
+		<?php
+			}
+		}
+		?>
+	</table>
+	<hr />
+	<div class="btn-group">
+	<?php //if($chkid != $row["emp_id"]){ ?>
+		<button class="btn btn-sm btn-success" type="submit" name="submit"><i class="fa fa-plus"></i> Submit</button>
+	<?php //} ?>
+	</div>
+</form>
+<!--<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>-->
+<script src="http://code.jquery.com/jquery-2.0.2.js"></script>
+<script src="./../assets/js/jquery.app.js"></script>
+<script type="text/javascript">
+	$('input[type=checkbox][class=cb-selector]').click(function() {
+		var cb = $(this),
+			name = cb.attr('id');
+		if (name == null)
+			return false;
+		$('input[type=checkbox][id^=' + name + ']').prop('checked', cb.prop('checked')).click(function() {
+				if (!$(this).prop('checked'))
+					cb.prop('checked', false);
+			});
+	});
+	$('.selectall').click(function() {
+		if ($(this).is(':checked')) {
+			$('input:checkbox').prop('checked', true);
+		} else {
+			$('input:checkbox').prop('checked', false);
+		}
+	});
+	$("input[type='checkbox'].justone").change(function() {
+		var a = $("input[type='checkbox'].justone");
+		if (a.length == a.filter(":checked").length) {
+			$('.selectall').prop('checked', true);
+		} else {
+			$('.selectall').prop('checked', false);
+		}
+	});
+</script>

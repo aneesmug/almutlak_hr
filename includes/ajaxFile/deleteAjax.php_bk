@@ -1,0 +1,79 @@
+<?php 
+	require_once __DIR__ . '/../../includes/db.php';
+    if (isset($_POST['column'])) {
+        $path = ($_POST['tbl'] == 'menu_item' ? './../../QR_MENU/images/item_img/' : 
+                    ($_POST['tbl'] == 'gallery' ? './../../assets/gallery/' :
+                        ($_POST['tbl'] == 'cars_docu' ? './../../assets/cars_documents/' :
+                            ($_POST['tbl'] == 'emp_docu' ? './../../assets/emp_documents/' :
+                                ($_POST['tbl'] == 'location_docu' ? './../../assets/location_content/' :
+                                    ($_POST['tbl'] == 'vouchers' ? './../../assets/voucher_documents/' :
+                                        ($_POST['tbl'] == 'emp_inv_attachment' ? './../../assets/invo_attach_emp/' :
+                                            '' 
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    ) 
+                );
+        $sql = "SELECT * FROM `$_POST[tbl]` WHERE `id`= '$_POST[id]' ";
+        $query = mysqli_query($conDB, $sql);
+        while ($row = mysqli_fetch_assoc($query)) {
+            $file = $row[$_POST['column']];
+            unlink($path.$file);
+        }
+    }
+    if ($_POST['ajaxType'] == 'deleteInv') {
+        $sql="UPDATE `$_POST[tbl]` SET `deleted`='1' WHERE `id` = '$_POST[id]' ";
+        if(mysqli_query($conDB, $sql)){
+            $data = [
+                'title'   => "Deleted!",
+                'message' => "Record Deleted Successfully ...",
+                'type'    => 'success',
+            ];
+            echo json_encode($data);
+        }else{
+            $data = [
+                'title'   => "Error!",
+                'message' => "Unable to delete this record ...",
+                'type'    => 'error',
+            ];
+            echo json_encode($data);
+        }
+    } elseif($_POST['ajaxType'] == 'isDelete'){
+        $stmt = $pdo->prepare("UPDATE `$_POST[tbl]`
+            SET `is_deleted` = :deleted
+            WHERE `id` = :id
+        ");
+        $postData = [
+            ':deleted' => 1,
+            ':id' => $_POST['id']
+        ];
+        if($stmt->execute($postData)){
+            $data = [
+                'title'   => "Deleted!",
+                'message' => "Record Deleted Successfully ...",
+                'type'    => 'success',
+            ];
+            echo json_encode($data);
+        }
+    } else {
+        $sql="DELETE FROM `$_POST[tbl]` WHERE `id` = '$_POST[id]' ";
+        if(mysqli_query($conDB, $sql)){
+            $data = [
+                'title'   => "Deleted!",
+                'message' => "Record Deleted Successfully ...",
+                'type'    => 'success',
+            ];
+            echo json_encode($data);
+        }else{
+            $data = [
+                'title'   => "Error!",
+                'message' => "Unable to delete this record ...",
+                'type'    => 'error',
+            ];
+            echo json_encode($data);
+        }
+    }
+    mysqli_close($conDB);
+?>

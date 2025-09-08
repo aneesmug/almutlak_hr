@@ -1,0 +1,149 @@
+<?php
+session_start();
+// Security headers
+header("X-Frame-Options: DENY");
+header("X-Content-Type-Options: nosniff");
+header("X-XSS-Protection: 1; mode=block");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+
+require_once __DIR__ . '/includes/db.php';
+require_once 'includes/auth_functions.php';
+
+//if either cookie or session is set, redirect to home page
+if((isset($_COOKIE['user']) && $_COOKIE['user'] != '') || (isset($_SESSION['user']) && $_SESSION['user'] !='')){
+	header("Location: ./dashboard.php");
+}else{
+?>
+<!doctype html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8" />
+        <title><?php echo $site_title ?></title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta content="A fully featured system which can be used to build CRM, CMS, etc." name="description" />
+        <meta content="Anees Afzal" name="author" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+        <!-- App favicon -->
+        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="icon" href="assets/images/LogoColorApp.png" sizes="32x32" />
+        <link rel="icon" href="assets/images/LogoColorApp.png" sizes="192x192" />
+        <link rel="apple-touch-icon" href="assets/images/LogoColorApp.png" />
+        <meta name="msapplication-TileImage" content="assets/images/LogoColorApp.png" />
+
+        <!-- App css -->
+        <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+
+        <script src="assets/js/modernizr.min.js"></script>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Zain:ital,wght@0,200;0,300;0,400;0,700;0,800;0,900;1,300;1,400&display=swap');
+            h3{
+                font-family: "Zain", sans-serif;
+                font-optical-sizing: auto;
+                font-style: normal;
+                font-size: 32px;
+            }
+        </style>
+
+    </head>
+
+
+    <body class="account-pages">
+
+        <!-- Begin page -->
+        <div class="accountbg" style="background: url('assets/images/login-background.jpg');background-size: cover;background-position: center;"></div>
+
+        <div class="wrapper-page account-page-full">
+
+            <div class="card">
+                <div class="card-block">
+
+                    <div class="account-box">
+
+                        <div class="card-box p-5">
+                            <h2 class="text-uppercase text-center pb-4">
+                                <a href="index.html" class="text-success">
+                                    <span><img src="assets/images/logo.png" alt="" height="120"></span>
+                                </a>
+                            </h2>
+
+                            <form class="" action="./login.php" method="post">
+
+                                <div class="form-group m-b-20 row">
+                                    <div class="col-12">
+                                        <label for="id_iqama">رقم الهوية</label>
+                                        <input class="form-control" type="text" name="id_iqama" id="id_iqama" required="" placeholder="أدخل رقم هويتك الوطنية">
+                                    </div>
+                                </div>
+
+                                <!-- <div class="form-group row m-b-20">
+                                    <div class="col-12">
+                                        <label for="password">Password</label>
+                                        <input class="form-control" type="password" name="password" required="" id="password" placeholder="Enter your password">
+                                    </div>
+                                </div> -->
+
+                                <div class="form-group row m-b-20">
+                                    <div class="col-12">
+
+                                        <div class="checkbox checkbox-custom">
+                                            <input id="remember" type="checkbox" name="remember" checked value="true" >
+                                            <label for="remember">
+                                                Remember me
+                                            </label>
+                                        </div>
+
+                                    </div>
+                                </div>
+								<?php echo $_SESSION['error']; ?>
+                                <div class="form-group row text-center m-t-10">
+                                    <div class="col-12">
+                                        <button class="btn btn-block btn-primary waves-effect waves-light" name="submit" type="submit">تسجيل الدخول</button>
+                                    </div>
+                                </div>
+
+                            </form>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="m-t-40 text-center">
+                <p class="account-copyright"><?php echo $site_footer ?></p>
+            </div>
+
+        </div>
+
+        <!-- jQuery  -->
+        <script src="assets/js/jquery.min.js"></script>
+        <script src="assets/js/bootstrap.bundle.min.js"></script>
+        <script src="assets/js/metisMenu.min.js"></script>
+        <script src="assets/js/waves.js"></script>
+        <script src="assets/js/jquery.slimscroll.js"></script>
+
+        <script src="./plugins/bootstrap-inputmask/5.0.8/jquery.inputmask.min.js" ></script>
+
+        <!-- App js -->
+        <script src="assets/js/jquery.core.js"></script>
+        <script src="assets/js/jquery.app.js?v=<?=time()?>"></script>
+
+        <script>
+            restrictToNumbers(document.getElementById('id_iqama'), {
+                allowDecimal: true,
+                maxDigits: 10,
+                // allowNegative: false,
+                // minValue: 0,
+                // maxValue: 1000000
+            });
+        </script>
+
+    </body>
+</html>
+<?php } ?>

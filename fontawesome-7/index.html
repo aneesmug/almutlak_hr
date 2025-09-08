@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Icon Browser (Font Awesome JSON)</title>
+    <!-- IMPORTANT: place all.css and brands.css next to this HTML, and ensure webfonts are in ./webfonts -->
+    <!-- Link to your uploaded CSS files -->
+    <!-- Make sure these files are in the same directory as this HTML file -->
+    <link rel="stylesheet" href="./css/fontawesome.css">
+    <link rel="stylesheet" href="./css/all.css">
+    <link rel="stylesheet" href="./css/brands.css">
+    <link rel="stylesheet" href="./css/regular.css">
+    <link rel="stylesheet" href="./css/solid.css">
+
+    <!-- Duotone -->
+    <link rel="stylesheet" href="./css/duotone-light.css">
+    <link rel="stylesheet" href="./css/duotone-regular.css">
+    <link rel="stylesheet" href="./css/duotone-thin.css">
+
+    <!-- Sharp -->
+    <link rel="stylesheet" href="./css/sharp-light.css">
+    <link rel="stylesheet" href="./css/sharp-regular.css">
+    <link rel="stylesheet" href="./css/sharp-solid.css">
+    <link rel="stylesheet" href="./css/sharp-thin.css">
+
+    <!-- Sharp Duotone -->
+    <link rel="stylesheet" href="./css/sharp-duotone-light.css">
+    <link rel="stylesheet" href="./css/sharp-duotone-regular.css">
+    <link rel="stylesheet" href="./css/sharp-duotone-solid.css">
+    <link rel="stylesheet" href="./css/sharp-duotone-thin.css">
+
+    <!-- Tailwind CSS for styling the viewer UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --gap: 12px;
+            --tile-bg: #111;
+            --tile-border: #222;
+            --text: #e8e8e8;
+            --muted: #9aa0a6;
+            --accent: #4f46e5;
+            --chip: #1f2937;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            background: #0b0f14;
+            color: var(--text);
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: linear-gradient(180deg, #0b0f14 85%, transparent);
+            padding: 16px clamp(12px, 3vw, 28px) 8px;
+            border-bottom: 1px solid #0e131a;
+            backdrop-filter: blur(6px);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr repeat(6, max-content);
+            gap: 10px;
+            align-items: center;
+        }
+
+        .controls .group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        input[type="search"],
+        select,
+        input[type="number"] {
+            background: #0f1520;
+            color: var(--text);
+            border: 1px solid #1b2431;
+            border-radius: 10px;
+            padding: 10px 12px;
+            outline: none;
+        }
+
+        input[type="color"] {
+            width: 42px;
+            height: 36px;
+            border: 0;
+            background: transparent;
+            padding: 0;
+        }
+
+        .btn {
+            background: #111827;
+            color: var(--text);
+            border: 1px solid #1f2937;
+            padding: 10px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            border-color: #334155;
+        }
+
+        .pill {
+            padding: 6px 10px;
+            background: var(--chip);
+            border: 1px solid #2b3545;
+            color: #cbd5e1;
+            border-radius: 999px;
+            font-size: 12px;
+        }
+
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: var(--gap);
+            padding: 10px clamp(12px, 3vw, 28px) 40px;
+        }
+
+        .tile {
+            background: var(--tile-bg);
+            border: 1px solid var(--tile-border);
+            border-radius: 14px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 140px;
+        }
+
+        .tile .glyph {
+            font-size: var(--icon-size, 28px);
+            color: var(--icon-color, currentColor);
+        }
+
+        .tile .meta {
+            text-align: center;
+            display: grid;
+            gap: 6px;
+        }
+
+        .name {
+            font-size: 13px;
+            color: #d1d5db;
+        }
+
+        .sub {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .footerbar {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            align-items: center;
+            padding: 14px 20px 30px;
+            position: sticky;
+            bottom: 0;
+            background: linear-gradient(0deg, #0b0f14 85%, transparent);
+            border-top: 1px solid #0e131a;
+        }
+
+        .link {
+            color: #93c5fd;
+            text-decoration: none;
+        }
+
+        .kbd {
+            border: 1px solid #2b3545;
+            background: #0f1520;
+            border-bottom-width: 3px;
+            padding: 2px 6px;
+            border-radius: 7px;
+            font-size: 12px;
+            color: #cbd5e1;
+        }
+
+        .notch {
+            height: 8px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .style-chip {
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: .07em;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #2563eb;
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: opacity .3s, transform .3s;
+            transform: translateY(20px);
+            z-index: 50;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="controls">
+            <input id="search" type="search" placeholder="Search icon name (e.g., arrow, facebook, user) …" />
+            <div class="group">
+                <label>Color</label><input id="color" type="color" value="#60a5fa">
+            </div>
+            <div class="group">
+                <label>Size</label><input id="size" type="number" min="10" max="256" step="2" value="28">
+            </div>
+            <div class="group">
+                <label>Per page</label>
+                <select id="perPage">
+                    <option>48</option>
+                    <option selected>96</option>
+                    <option>144</option>
+                    <option>240</option>
+                </select>
+            </div>
+            <div class="group">
+                <label>Style</label>
+                <select id="styleFilter">
+                    <option value="">All</option>
+                    <option value="brands">Brands</option>
+                    <option value="solid">Solid</option>
+                    <option value="regular">Regular</option>
+                    <option value="light">Light</option>
+                    <option value="thin">Thin</option>
+                    <option value="duotone">Duotone</option>
+                    <option value="sharp">Sharp</option>
+                    <option value="sharp-solid">Sharp Solid</option>
+                </select>
+            </div>
+            <button id="export" class="btn">Export current page (CSV)</button>
+        </div>
+        <div class="notch"></div>
+        <div style="padding-inline: 2px; font-size: 12px; color: var(--muted);">
+            Place <span class="kbd">icons_full.json</span>, <span class="kbd">all.css</span>, and <span
+                class="kbd">brands.css</span> next to this HTML. Ensure <span class="kbd">webfonts/</span> exists for
+            Font Awesome to render.
+        </div>
+    </header>
+
+    <main id="grid" aria-live="polite"></main>
+
+    <nav class="footerbar">
+        <button id="prev" class="btn">&larr; Prev</button>
+        <div class="pill"><span id="pageInfo">Page 1/1</span></div>
+        <button id="next" class="btn">Next &rarr;</button>
+    </nav>
+    <div id="toast" class="toast"></div>
+
+    <template id="tile-tpl">
+        <div class="tile">
+            <div class="glyph"></div>
+            <div class="meta">
+                <div class="name"></div>
+                <div class="row">
+                    <span class="sub unicode"></span>
+                    <span class="pill style-chip"></span>
+                </div>
+                <div class="row">
+                    <button class="btn copy-class">Copy class</button>
+                    <button class="btn copy-name">Copy name</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        const grid = document.getElementById('grid');
+        const search = document.getElementById('search');
+        const color = document.getElementById('color');
+        const size = document.getElementById('size');
+        const perPageSelect = document.getElementById('perPage');
+        const styleFilter = document.getElementById('styleFilter');
+        const prevBtn = document.getElementById('prev');
+        const nextBtn = document.getElementById('next');
+        const pageInfo = document.getElementById('pageInfo');
+        const exportBtn = document.getElementById('export');
+        const tileTpl = document.getElementById('tile-tpl');
+        const toast = document.getElementById('toast');
+
+        let data = [];
+        let filtered = [];
+        let page = 1;
+        let perPage = parseInt(perPageSelect.value, 10);
+
+        const styleToClass = (styles) => {
+            if (!styles || !styles.length) return 'fa-solid';
+            const sty = [...styles].map(s => s.toLowerCase());
+
+            if (sty.includes('brands')) return 'fa-brands';
+            if (sty.includes('regular')) return 'fa-regular';
+            if (sty.includes('light')) return 'fa-light';
+            if (sty.includes('thin')) return 'fa-thin';
+
+            // Duotone
+            if (sty.includes('duotone')) return 'fa-duotone';
+            if (sty.includes('duotone-light')) return 'fa-duotone fadl';
+            if (sty.includes('duotone-regular')) return 'fa-duotone fadr';
+            if (sty.includes('duotone-thin')) return 'fa-duotone fadt';
+
+            // Sharp Duotone
+            if (sty.includes('sharp-duotone')) return 'fa-sharp-duotone';
+            if (sty.includes('sharp-duotone-light')) return 'fa-sharp-duotone fasdl';
+            if (sty.includes('sharp-duotone-regular')) return 'fa-sharp-duotone fasdr';
+            if (sty.includes('sharp-duotone-solid')) return 'fa-sharp-duotone fasds';
+            if (sty.includes('sharp-duotone-thin')) return 'fa-sharp-duotone fasdt';
+
+            // Sharp
+            if (sty.includes('sharp')) return 'fa-sharp';
+            if (sty.includes('sharp-solid')) return 'fa-sharp fa-sharp-solid';
+
+            // Fallback
+            return 'fa-solid';
+        };
+
+
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 1500);
+        }
+
+        function copyText(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast("Copied: " + text));
+            } else {
+                const temp = document.createElement("textarea");
+                temp.value = text; document.body.appendChild(temp);
+                temp.select();
+                try { document.execCommand("copy"); showToast("Copied: " + text); } catch (e) { }
+                document.body.removeChild(temp);
+            }
+        }
+
+        const normalize = (s) => (s || '').toLowerCase();
+
+        function applyControls() {
+            document.documentElement.style.setProperty('--icon-color', color.value);
+            document.documentElement.style.setProperty('--icon-size', size.value + 'px');
+        }
+
+        function paginate(arr) {
+            const start = (page - 1) * perPage;
+            return arr.slice(start, start + perPage);
+        }
+
+        function render() {
+            grid.innerHTML = '';
+            const pageItems = paginate(filtered);
+            const frag = document.createDocumentFragment();
+            for (const item of pageItems) {
+                const el = tileTpl.content.firstElementChild.cloneNode(true);
+                const glyph = el.querySelector('.glyph');
+                const label = item.label || item.name || item.key;
+                const styles = item.styles || [];
+                const kls = styleToClass(styles);
+                glyph.className = 'glyph fa ' + kls + ' fa-' + item.key;
+                el.querySelector('.name').textContent = item.key;
+                el.querySelector('.unicode').textContent = item.unicode ? 'U+' + item.unicode.toUpperCase() : '';
+                el.querySelector('.style-chip').textContent = (styles && styles.length ? styles[0] : 'solid');
+                const clsStr = 'fa ' + kls + ' fa-' + item.key;
+                el.querySelector('.copy-class').addEventListener('click', () => {
+                    copyText(clsStr);
+                });
+                el.querySelector('.copy-name').addEventListener('click', () => {
+                    copyText(item.key);
+                });
+                frag.appendChild(el);
+            }
+            grid.appendChild(frag);
+            const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+            pageInfo.textContent = `Page ${page}/${totalPages} • ${filtered.length} icons`;
+            prevBtn.disabled = page <= 1;
+            nextBtn.disabled = page >= totalPages;
+        }
+
+        function filterData() {
+            const q = normalize(search.value);
+            const sty = normalize(styleFilter.value);
+            filtered = data.filter(it => {
+                const nameMatch = it.key.includes(q);
+                const styleMatch = !sty || (it.styles || []).map(s => s.toLowerCase()).includes(sty);
+                return nameMatch && styleMatch;
+            });
+            page = 1;
+            render();
+        }
+
+        async function init() {
+            applyControls();
+            try {
+                const res = await fetch('./icons.json', { cache: 'no-store' });
+                const json = await res.json();
+                const src = json.icons || {};
+                data = Object.keys(src).sort().map(k => ({
+                    key: k,
+                    label: src[k].label,
+                    styles: src[k].styles,
+                    unicode: src[k].unicode
+                }));
+                filtered = data;
+                render();
+            } catch (e) {
+                grid.innerHTML = `<div style="padding: 24px;">Failed to load <b>icons_full.json</b>. Make sure it is next to this HTML file. <pre>${e}</pre></div>`;
+            }
+        }
+
+        // events
+        color.addEventListener('input', () => applyControls());
+        size.addEventListener('change', () => applyControls());
+        search.addEventListener('input', () => filterData());
+        styleFilter.addEventListener('change', () => filterData());
+        perPageSelect.addEventListener('change', () => {
+            perPage = parseInt(perPageSelect.value, 10);
+            page = 1;
+            render();
+        });
+        prevBtn.addEventListener('click', () => { if (page > 1) { page -= 1; render(); } });
+        nextBtn.addEventListener('click', () => { page += 1; render(); });
+
+        exportBtn.addEventListener('click', () => {
+            const rows = paginate(filtered).map(it => [it.key, (it.styles || []).join('|'), it.unicode || '']);
+            const csv = 'name,styles,unicode\n' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'icons_page.csv';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') nextBtn.click();
+            if (e.key === 'ArrowLeft') prevBtn.click();
+            if (e.key.toLowerCase() === 'f' && (e.ctrlKey || e.metaKey)) {
+                search.focus(); search.select();
+                e.preventDefault();
+            }
+        });
+
+        init();
+
+    </script>
+</body>
+
+</html>

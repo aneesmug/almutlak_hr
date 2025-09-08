@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Payroll Management</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- SweetAlert2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .shadow-custom {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .table-fixed-header {
+            max-height: 70vh; /* Adjust as needed */
+            overflow-y: auto;
+        }
+        /* Custom scrollbar for better aesthetics */
+        .table-fixed-header::-webkit-scrollbar {
+            width: 8px;
+        }
+        .table-fixed-header::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .table-fixed-header::-webkit-scrollbar-thumb {
+            background: #cbd5e1; /* Gray-300 */
+            border-radius: 10px;
+        }
+        .table-fixed-header::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; /* Gray-400 */
+        }
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0; /* Gray-200 */
+        }
+        th {
+            background-color: #f8fafc; /* Gray-50 */
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        tr:hover {
+            background-color: #f0f4f8; /* Light blue-gray for hover */
+        }
+        .btn-primary {
+            background-image: linear-gradient(to right, #6366f1, #8b5cf6); /* Indigo-500 to Violet-500 */
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-image: linear-gradient(to right, #4f46e5, #7c3aed); /* Darker shades on hover */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+        }
+        .btn-secondary {
+            background-color: #e2e8f0; /* Gray-200 */
+            color: #475569; /* Slate-600 */
+            transition: all 0.3s ease;
+        }
+        .btn-secondary:hover {
+            background-color: #cbd5e1; /* Gray-300 */
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(160, 174, 192, 0.3);
+        }
+        .btn-edit {
+            background-color: #34d399; /* Emerald-500 */
+            transition: all 0.3s ease;
+        }
+        .btn-edit:hover {
+            background-color: #10b981; /* Emerald-600 */
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(52, 211, 153, 0.3);
+        }
+        .department-header {
+            background-color: #e0f2fe; /* Light blue-100 */
+            color: #1e40af; /* Blue-800 */
+            font-weight: bold;
+        }
+        /* Style for the benefit/deduction amount input inside SweetAlert2 */
+        .swal2-html-container .amount-input {
+            width: 100px; /* Smaller width for amount */
+            padding: 0.5rem;
+            border: 1px solid #d1d5db; /* Gray-300 */
+            border-radius: 0.375rem; /* rounded-md */
+            text-align: right; /* Align numbers to the right */
+        }
+        .swal2-html-container .name-input {
+             flex-grow: 1; /* Allow name to take more space */
+             padding: 0.5rem;
+             border: 1px solid #d1d5db;
+             border-radius: 0.375rem;
+        }
+        .swal2-html-container .item-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px; /* Space between inputs */
+        }
+    </style>
+</head>
+<body class="p-6">
+    <div class="container mx-auto bg-white rounded-lg shadow-xl p-8">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-8">Employee Payroll Management</h1>
+
+        <div class="flex flex-col md:flex-row items-center justify-between mb-6 space-y-4 md:space-y-0 md:space-x-4">
+            <div class="flex items-center space-x-3">
+                <label for="payrollMonth" class="text-lg font-medium text-gray-700">Select Month:</label>
+                <input type="month" id="payrollMonth" class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="flex items-center space-x-3">
+                <label for="departmentFilter" class="text-lg font-medium text-gray-700">Filter by Department:</label>
+                <select id="departmentFilter" class="p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="all">All Departments</option>
+                    <!-- Department options will be populated here by JavaScript -->
+                </select>
+            </div>
+            <div class="flex space-x-4">
+                <button id="generatePayrollBtn" class="btn-primary text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    Generate Payroll for Selected
+                </button>
+                <button id="refreshDataBtn" class="btn-secondary text-gray-800 font-semibold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2">
+                    Refresh Data
+                </button>
+            </div>
+        </div>
+
+        <div id="employeeList" class="table-fixed-header rounded-lg border border-gray-200 overflow-hidden shadow-custom">
+            <!-- Employee data will be loaded here by JavaScript -->
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="py-3 px-6 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <input type="checkbox" id="selectAllEmployees">
+                        </th>
+                        <th class="py-3 px-6 text-xs font-medium text-gray-500 uppercase tracking-wider">Employee ID</th>
+                        <th class="py-3 px-6 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th class="py-3 px-6 text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                        <th class="py-3 px-6 text-xs font-medium text-gray-500 uppercase tracking-wider">Salary</th>
+                        <th class="py-3 px-6 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="employeeTableBody" class="bg-white divide-y divide-gray-200">
+                    <!-- Dynamic content will be inserted here -->
+                </tbody>
+            </table>
+            <div id="loadingIndicator" class="hidden text-center py-8 text-gray-500">Loading employees...</div>
+            <div id="noDataMessage" class="hidden text-center py-8 text-gray-500">No employee data available.</div>
+        </div>
+    </div>
+
+    <script>
+        let allEmployeesData = []; // Store all fetched employee data
+
+        // Set default month to current month and fetch employees on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = (today.getMonth() + 1).toString().padStart(2, '0');
+            document.getElementById('payrollMonth').value = `${year}-${month}`;
+            fetchEmployees(); // Fetch all employees on page load
+        });
+
+        // Function to fetch employee data from the backend
+        async function fetchEmployees() {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const noDataMessage = document.getElementById('noDataMessage');
+
+            loadingIndicator.classList.remove('hidden');
+            noDataMessage.classList.add('hidden');
+            document.getElementById('employeeTableBody').innerHTML = ''; // Clear current display
+
+            try {
+                const response = await fetch('api/get_employees.php');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    allEmployeesData = data.employees; // Store all fetched data
+                    populateDepartmentFilter(allEmployeesData); // Populate filter dropdown
+                    filterAndRenderEmployees(); // Render initial filtered view (all departments)
+                } else {
+                    console.error('Error fetching employees:', data.message);
+                    noDataMessage.classList.remove('hidden');
+                    noDataMessage.textContent = data.message || 'Failed to load employee data.';
+                }
+            } catch (error) {
+                console.error('Network or parsing error:', error);
+                noDataMessage.classList.remove('hidden');
+                noDataMessage.textContent = 'Error connecting to the server. Please check network and server status.';
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                if (allEmployeesData.length === 0 && noDataMessage.classList.contains('hidden')) {
+                    noDataMessage.classList.remove('hidden');
+                    noDataMessage.textContent = 'No employee data available.';
+                }
+            }
+        }
+
+        // Populates the department filter dropdown
+        function populateDepartmentFilter(employees) {
+            const departmentFilter = document.getElementById('departmentFilter');
+            departmentFilter.innerHTML = '<option value="all">All Departments</option>'; // Reset to default
+
+            const departments = new Set();
+            employees.forEach(emp => {
+                if (emp.dept) {
+                    departments.add(emp.dept);
+                }
+            });
+
+            Array.from(departments).sort().forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                departmentFilter.appendChild(option);
+            });
+
+            // Add event listener for department filter
+            departmentFilter.removeEventListener('change', filterAndRenderEmployees); // Prevent duplicates
+            departmentFilter.addEventListener('change', filterAndRenderEmployees);
+        }
+
+        // Filters and renders employees based on the selected department
+        function filterAndRenderEmployees() {
+            const selectedDepartment = document.getElementById('departmentFilter').value;
+            let filteredEmployees = allEmployeesData;
+
+            if (selectedDepartment !== 'all') {
+                filteredEmployees = allEmployeesData.filter(emp => emp.dept === selectedDepartment);
+            }
+
+            renderEmployeeTable(filteredEmployees);
+        }
+
+        // Function to render employees grouped by department (now takes filtered list)
+        function renderEmployeeTable(employeesToRender) {
+            const employeeTableBody = document.getElementById('employeeTableBody');
+            employeeTableBody.innerHTML = ''; // Clear existing rows
+            document.getElementById('selectAllEmployees').checked = false; // Reset main checkbox
+            document.getElementById('selectAllEmployees').indeterminate = false; // Reset indeterminate
+
+            if (!employeesToRender || employeesToRender.length === 0) {
+                document.getElementById('noDataMessage').classList.remove('hidden');
+                document.getElementById('noDataMessage').textContent = 'No employee data available for the selected department.';
+                return;
+            } else {
+                document.getElementById('noDataMessage').classList.add('hidden');
+            }
+
+            const groupedEmployees = employeesToRender.reduce((acc, emp) => {
+                const dept = emp.dept || 'Unassigned';
+                if (!acc[dept]) {
+                    acc[dept] = [];
+                }
+                acc[dept].push(emp);
+                return acc;
+            }, {});
+
+            for (const deptName in groupedEmployees) {
+                // Department header row
+                const deptHeaderRow = document.createElement('tr');
+                deptHeaderRow.classList.add('department-header');
+                deptHeaderRow.innerHTML = `
+                    <td colspan="6" class="py-4 px-6 text-lg font-semibold rounded-md">
+                        <input type="checkbox" class="select-all-dept mr-2" data-department="${deptName}">
+                        ${deptName} (${groupedEmployees[deptName].length} Employees)
+                    </td>
+                `;
+                employeeTableBody.appendChild(deptHeaderRow);
+
+                // Employee rows for the department
+                groupedEmployees[deptName].forEach(emp => {
+                    const row = document.createElement('tr');
+                    row.classList.add('hover:bg-gray-50');
+                    row.innerHTML = `
+                        <td class="py-3 px-6 whitespace-nowrap">
+                            <input type="checkbox" class="employee-checkbox" data-emp-id="${emp.emp_id}" data-department="${deptName}">
+                        </td>
+                        <td class="py-3 px-6 whitespace-nowrap text-sm text-gray-900">${emp.emp_id}</td>
+                        <td class="py-3 px-6 whitespace-nowrap text-sm font-medium text-gray-900">${emp.name}</td>
+                        <td class="py-3 px-6 whitespace-nowrap text-sm text-gray-700">${emp.dept || 'N/A'}</td>
+                        <td class="py-3 px-6 whitespace-nowrap text-sm text-gray-700">SAR ${parseFloat(emp.salary).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td class="py-3 px-6 whitespace-nowrap">
+                            <button class="btn-edit text-white py-2 px-4 rounded-md text-sm shadow-sm hover:shadow-md view-edit-btn" data-emp-id="${emp.emp_id}" data-emp-name="${emp.name}">
+                                View/Edit Payroll
+                            </button>
+                        </td>
+                    `;
+                    employeeTableBody.appendChild(row);
+                });
+            }
+
+            attachEventListeners(); // Re-attach event listeners after rendering
+        }
+
+        // Attach event listeners for checkboxes and buttons
+        function attachEventListeners() {
+            // Remove existing listeners to prevent duplicates (important when re-rendering)
+            document.getElementById('selectAllEmployees').removeEventListener('change', handleSelectAllEmployees);
+            document.querySelectorAll('.select-all-dept').forEach(checkbox => {
+                checkbox.removeEventListener('change', handleSelectAllDept);
+            });
+            document.querySelectorAll('.employee-checkbox').forEach(checkbox => {
+                checkbox.removeEventListener('change', updateMainSelectAllCheckbox);
+            });
+            document.getElementById('generatePayrollBtn').removeEventListener('click', generatePayroll);
+            document.getElementById('refreshDataBtn').removeEventListener('click', fetchEmployees);
+            document.querySelectorAll('.view-edit-btn').forEach(button => {
+                button.removeEventListener('click', handleViewEditClick);
+            });
+
+
+            // Add new listeners
+            document.getElementById('selectAllEmployees').addEventListener('change', handleSelectAllEmployees);
+            document.querySelectorAll('.select-all-dept').forEach(checkbox => {
+                checkbox.addEventListener('change', handleSelectAllDept);
+            });
+            document.querySelectorAll('.employee-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', updateMainSelectAllCheckbox);
+            });
+            document.getElementById('generatePayrollBtn').addEventListener('click', generatePayroll);
+            document.getElementById('refreshDataBtn').addEventListener('click', fetchEmployees);
+            document.querySelectorAll('.view-edit-btn').forEach(button => {
+                button.addEventListener('click', handleViewEditClick);
+            });
+        }
+
+        function handleSelectAllEmployees(e) {
+            const isChecked = e.target.checked;
+            document.querySelectorAll('.employee-checkbox').forEach(checkbox => {
+                checkbox.checked = isChecked;
+            });
+            document.querySelectorAll('.select-all-dept').forEach(checkbox => {
+                checkbox.checked = isChecked;
+                checkbox.indeterminate = false; // Reset indeterminate state
+            });
+        }
+
+        function handleSelectAllDept(e) {
+            const department = e.target.dataset.department;
+            const isChecked = e.target.checked;
+            document.querySelectorAll(`.employee-checkbox[data-department="${department}"]`).forEach(empCheckbox => {
+                empCheckbox.checked = isChecked;
+            });
+            updateMainSelectAllCheckbox();
+        }
+
+        function handleViewEditClick(e) {
+            const empId = e.target.dataset.empId;
+            const empName = e.target.dataset.empName;
+            const month = document.getElementById('payrollMonth').value;
+            showPayrollDetails(empId, empName, month);
+        }
+
+        // Updates the main "Select All" checkbox based on individual employee checkboxes
+        function updateMainSelectAllCheckbox() {
+            const allEmployeeCheckboxes = document.querySelectorAll('.employee-checkbox');
+            const checkedEmployeeCheckboxes = document.querySelectorAll('.employee-checkbox:checked');
+            const selectAllMain = document.getElementById('selectAllEmployees');
+
+            if (allEmployeeCheckboxes.length === 0) { // No employees to select
+                selectAllMain.checked = false;
+                selectAllMain.indeterminate = false;
+            } else if (checkedEmployeeCheckboxes.length === allEmployeeCheckboxes.length) {
+                selectAllMain.checked = true;
+                selectAllMain.indeterminate = false;
+            } else if (checkedEmployeeCheckboxes.length > 0) {
+                selectAllMain.checked = false;
+                selectAllMain.indeterminate = true;
+            } else {
+                selectAllMain.checked = false;
+                selectAllMain.indeterminate = false;
+            }
+
+            // Update department select-all checkboxes as well
+            document.querySelectorAll('.select-all-dept').forEach(deptCheckbox => {
+                const department = deptCheckbox.dataset.department;
+                const deptEmployeeCheckboxes = document.querySelectorAll(`.employee-checkbox[data-department="${department}"]`);
+                const checkedDeptEmployeeCheckboxes = document.querySelectorAll(`.employee-checkbox[data-department="${department}"]:checked`);
+
+                if (deptEmployeeCheckboxes.length === 0) {
+                    deptCheckbox.checked = false;
+                    deptCheckbox.indeterminate = false;
+                } else if (checkedDeptEmployeeCheckboxes.length === deptEmployeeCheckboxes.length) {
+                    deptCheckbox.checked = true;
+                    deptCheckbox.indeterminate = false;
+                } else if (checkedDeptEmployeeCheckboxes.length > 0) {
+                    deptCheckbox.checked = false;
+                    deptCheckbox.indeterminate = true;
+                } else {
+                    deptCheckbox.checked = false;
+                    deptCheckbox.indeterminate = false;
+                }
+            });
+        }
+
+
+        // Function to handle payroll generation
+        async function generatePayroll() {
+            const selectedEmployees = Array.from(document.querySelectorAll('.employee-checkbox:checked'))
+                                           .map(checkbox => checkbox.dataset.empId);
+            const payrollMonth = document.getElementById('payrollMonth').value;
+
+            if (selectedEmployees.length === 0) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No Employees Selected',
+                    text: 'Please select at least one employee to generate payroll.',
+                    confirmButtonColor: '#6366f1'
+                });
+                return;
+            }
+
+            if (!payrollMonth) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Month Not Selected',
+                    text: 'Please select a payroll month.',
+                    confirmButtonColor: '#6366f1'
+                });
+                return;
+            }
+
+            Swal.fire({
+                title: 'Generating Payroll...',
+                html: 'Please wait, this might take a moment.',
+                didOpen: () => {
+                    Swal.showLoading();
+                },
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
+
+            try {
+                const response = await fetch('api/process_payroll.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        employee_ids: selectedEmployees,
+                        month: payrollMonth
+                    }),
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Payroll Generated!',
+                        text: result.message,
+                        confirmButtonColor: '#6366f1'
+                    });
+                    fetchEmployees(); // Refresh employee list (if status changes are reflected in get_employees)
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error Generating Payroll',
+                        text: result.message || 'An unexpected error occurred.',
+                        confirmButtonColor: '#6366f1'
+                    });
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Network Error',
+                    text: 'Could not connect to the server. Please try again.',
+                    confirmButtonColor: '#6366f1'
+                });
+            }
+        }
+
+        // Function to show payroll details in a SweetAlert2 modal
+        async function showPayrollDetails(empId, empName, month) {
+            Swal.fire({
+                title: `Loading Payroll for ${empName} (${empId})...`,
+                html: 'Please wait.',
+                didOpen: () => {
+                    Swal.showLoading();
+                },
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
+
+            try {
+                const response = await fetch(`api/get_payroll_details.php?emp_id=${empId}&month=${month}`);
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    const payroll = data.payroll;
+                    const employee = data.employee;
+                    const benefits = data.benefits;
+                    const deductions = data.deductions;
+
+                    // Note: 'note' field from DB is used for the amount
+                    let benefitsHtml = benefits.length > 0 ? benefits.map(b => `
+                        <div class="item-row">
+                            <input type="text" class="name-input p-1 border rounded-md text-sm benefit-name" data-benefit-id="${b.id}" value="${b.benefit || ''}" placeholder="Benefit Name">
+                            <input type="number" step="0.01" class="amount-input p-1 border rounded-md text-sm benefit-amount" data-benefit-id="${b.id}" value="${parseFloat(b.note || 0).toFixed(2)}" placeholder="Amount">
+                        </div>
+                    `).join('') : '<p class="text-sm text-gray-500">No benefits recorded for this month.</p>';
+
+                    let deductionsHtml = deductions.length > 0 ? deductions.map(d => `
+                        <div class="item-row">
+                            <input type="text" class="name-input p-1 border rounded-md text-sm deduction-name" data-deduction-id="${d.id}" value="${d.deduction || ''}" placeholder="Deduction Name">
+                            <input type="number" step="0.01" class="amount-input p-1 border rounded-md text-sm deduction-amount" data-deduction-id="${d.id}" value="${parseFloat(d.note || 0).toFixed(2)}" placeholder="Amount">
+                        </div>
+                    `).join('') : '<p class="text-sm text-gray-500">No deductions recorded for this month.</p>';
+
+
+                    Swal.fire({
+                        title: `Payroll Details for ${employee.name}`,
+                        html: `
+                            <div class="text-left p-4 bg-gray-50 rounded-lg shadow-inner">
+                                <h3 class="text-lg font-bold text-gray-800 mb-2">Basic Salary Components:</h3>
+                                <div class="grid grid-cols-2 gap-2 text-sm text-gray-700 mb-4">
+                                    <p><strong>Basic:</strong> SAR ${parseFloat(payroll.basic_salary).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Housing:</strong> SAR ${parseFloat(payroll.housing_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Transport:</strong> SAR ${parseFloat(payroll.transport_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Food:</strong> SAR ${parseFloat(payroll.food_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Miscellaneous:</strong> SAR ${parseFloat(payroll.miscellaneous_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Cashier:</strong> SAR ${parseFloat(payroll.cashier_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Fuel:</strong> SAR ${parseFloat(payroll.fuel_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Telephone:</strong> SAR ${parseFloat(payroll.telephone_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Other:</strong> SAR ${parseFloat(payroll.other_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                    <p><strong>Guard:</strong> SAR ${parseFloat(payroll.guard_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                                </div>
+
+                                <h3 class="text-lg font-bold text-gray-800 mb-2">Calculated Totals:</h3>
+                                <p class="text-md text-gray-800 mb-2"><strong>Gross Salary:</strong> SAR ${parseFloat(payroll.total_gross_salary).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+
+                                <h3 class="text-lg font-bold text-gray-800 mb-2 mt-4">Benefits:</h3>
+                                <div id="benefits-list" class="space-y-2 mb-4">${benefitsHtml}</div>
+                                <button id="addBenefitBtn" class="btn-secondary text-gray-800 py-1 px-3 rounded-md text-xs">Add New Benefit</button>
+
+                                <h3 class="text-lg font-bold text-gray-800 mb-2 mt-4">Deductions:</h3>
+                                <div id="deductions-list" class="space-y-2 mb-4">${deductionsHtml}</div>
+                                <button id="addDeductionBtn" class="btn-secondary text-gray-800 py-1 px-3 rounded-md text-xs">Add New Deduction</button>
+
+                                <p class="text-md font-bold text-gray-900 mt-4">Total Benefits: <span id="totalBenefitsDisplay">SAR ${parseFloat(payroll.total_benefits).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></p>
+                                <p class="text-md font-bold text-gray-900">Total Deductions: <span id="totalDeductionsDisplay">SAR ${parseFloat(payroll.total_deductions).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></p>
+                                <p class="text-xl font-extrabold text-blue-700 mt-4">Net Salary: <span id="netSalaryDisplay">SAR ${parseFloat(payroll.net_salary).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></p>
+                            </div>
+                        `,
+                        width: 700,
+                        showCancelButton: true,
+                        confirmButtonText: 'Save Changes',
+                        confirmButtonColor: '#6366f1',
+                        cancelButtonText: 'Close',
+                        didOpen: () => {
+                            // Add event listeners for adding new benefits/deductions
+                            document.getElementById('addBenefitBtn').addEventListener('click', () => {
+                                const benefitsList = document.getElementById('benefits-list');
+                                const newBenefitDiv = document.createElement('div');
+                                newBenefitDiv.classList.add('item-row');
+                                newBenefitDiv.innerHTML = `
+                                    <input type="text" class="name-input p-1 border rounded-md text-sm new-benefit-name" placeholder="Benefit Name">
+                                    <input type="number" step="0.01" class="amount-input p-1 border rounded-md text-sm new-benefit-amount" value="0.00" placeholder="Amount">
+                                `;
+                                benefitsList.appendChild(newBenefitDiv);
+                                updateNetSalaryDisplay(payroll.total_gross_salary); // Recalculate if new inputs added
+                            });
+
+                            document.getElementById('addDeductionBtn').addEventListener('click', () => {
+                                const deductionsList = document.getElementById('deductions-list');
+                                const newDeductionDiv = document.createElement('div');
+                                newDeductionDiv.classList.add('item-row');
+                                newDeductionDiv.innerHTML = `
+                                    <input type="text" class="name-input p-1 border rounded-md text-sm new-deduction-name" placeholder="Deduction Name">
+                                    <input type="number" step="0.01" class="amount-input p-1 border rounded-md text-sm new-deduction-amount" value="0.00" placeholder="Amount">
+                                `;
+                                deductionsList.appendChild(newDeductionDiv);
+                                updateNetSalaryDisplay(payroll.total_gross_salary); // Recalculate if new inputs added
+                            });
+
+                            // Add input event listeners to recalculate totals dynamically
+                            document.querySelectorAll('.benefit-amount, .deduction-amount, .new-benefit-amount, .new-deduction-amount').forEach(input => {
+                                input.addEventListener('input', () => updateNetSalaryDisplay(payroll.total_gross_salary));
+                            });
+                        },
+                        preConfirm: () => {
+                            // Collect updated benefits
+                            const updatedBenefits = Array.from(document.querySelectorAll('#benefits-list > .item-row')).map(div => {
+                                const benefitAmountInput = div.querySelector('.benefit-amount') || div.querySelector('.new-benefit-amount');
+                                const benefitNameInput = div.querySelector('.benefit-name') || div.querySelector('.new-benefit-name');
+
+                                return {
+                                    id: benefitAmountInput ? benefitAmountInput.dataset.benefitId : null, // Existing benefit ID
+                                    name: benefitNameInput ? benefitNameInput.value : '',
+                                    amount: parseFloat(benefitAmountInput.value || 0)
+                                };
+                            }).filter(b => b.name !== '' || b.amount > 0); // Only send if name or amount is present
+
+                            // Collect updated deductions
+                            const updatedDeductions = Array.from(document.querySelectorAll('#deductions-list > .item-row')).map(div => {
+                                const deductionAmountInput = div.querySelector('.deduction-amount') || div.querySelector('.new-deduction-amount');
+                                const deductionNameInput = div.querySelector('.deduction-name') || div.querySelector('.new-deduction-name');
+
+                                return {
+                                    id: deductionAmountInput ? deductionAmountInput.dataset.deductionId : null, // Existing deduction ID
+                                    name: deductionNameInput ? deductionNameInput.value : '',
+                                    amount: parseFloat(deductionAmountInput.value || 0)
+                                };
+                            }).filter(d => d.name !== '' || d.amount > 0); // Only send if name or amount is present
+
+                            return { updatedBenefits, updatedDeductions };
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            savePayrollChanges(empId, month, result.value.updatedBenefits, result.value.updatedDeductions);
+                        }
+                    });
+
+                    // Initial calculation for display
+                    updateNetSalaryDisplay(payroll.total_gross_salary);
+
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error Loading Payroll',
+                        text: data.message || 'An unexpected error occurred while loading payroll details.',
+                        confirmButtonColor: '#6366f1'
+                    });
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Network Error',
+                    text: 'Could not connect to the server to load payroll details. Please try again.',
+                    confirmButtonColor: '#6366f1'
+                });
+            }
+        }
+
+        // Helper to update net salary display in the modal
+        function updateNetSalaryDisplay(grossSalary) {
+            let totalBenefits = 0;
+            document.querySelectorAll('.benefit-amount, .new-benefit-amount').forEach(input => {
+                totalBenefits += parseFloat(input.value || 0);
+            });
+
+            let totalDeductions = 0;
+            document.querySelectorAll('.deduction-amount, .new-deduction-amount').forEach(input => {
+                totalDeductions += parseFloat(input.value || 0);
+            });
+
+            const netSalary = grossSalary + totalBenefits - totalDeductions;
+
+            document.getElementById('totalBenefitsDisplay').textContent = `SAR ${totalBenefits.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+            document.getElementById('totalDeductionsDisplay').textContent = `SAR ${totalDeductions.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+            document.getElementById('netSalaryDisplay').textContent = `SAR ${netSalary.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+        }
+
+
+        // Function to save payroll changes via AJAX
+        async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductions) {
+            Swal.fire({
+                title: 'Saving Changes...',
+                html: 'Please wait.',
+                didOpen: () => {
+                    Swal.showLoading();
+                },
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
+
+            try {
+                const response = await fetch('api/update_payroll.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        emp_id: empId,
+                        month: month,
+                        benefits: updatedBenefits,
+                        deductions: updatedDeductions
+                    }),
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Changes Saved!',
+                        text: result.message,
+                        confirmButtonColor: '#6366f1'
+                    });
+                    // Re-fetch employee data or update specific row if needed
+                    // fetchEmployees(); // Optionally refresh the main list if needed
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error Saving Changes',
+                        text: result.message || 'An unexpected error occurred.',
+                        confirmButtonColor: '#6366f1'
+                    });
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Network Error',
+                    text: 'Could not connect to the server to save changes. Please try again.',
+                    confirmButtonColor: '#6366f1'
+                });
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,539 @@
+<?php
+	require_once __DIR__ . '/includes/db.php';
+	require_once __DIR__ . '/includes/session_check.php';
+	$query = mysql_query("SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
+	if(mysql_num_rows($query) == 1){
+	include("./includes/avatar_select.php");
+	
+	$getquery = mysql_query("SELECT * FROM `employees` WHERE `emp_id`='".$_GET['emp_id']."' ");
+
+	if(mysql_num_rows($getquery) !== 0){
+		while($rec = mysql_fetch_assoc($getquery)){
+			$id_get = $rec["id"];
+			$name_get = $rec["name"];
+			$emp_id_get = $rec["emp_id"];
+			$iqama_get = $rec["iqama"];
+			$mobile_get = $rec["mobile"];
+			$salary_get = $rec["salary"];
+			$vacation_days_get = $rec["vacation_days"];
+			$joining_date_get = $rec["joining_date"];
+			$date_reg_get = $rec["date_reg"];
+			$emp_avatar_get = $rec["avatar"];
+			$emp_status_get = $rec["status"];
+			$emp_ter_date_get = $rec["ter_date"];
+			$note_get = $rec["note"];
+			$fly_get = $rec["fly"];
+			$dept_get = $rec["dept"];
+			
+			$salary_get = str_replace(',', '', $salary_get);
+	}	
+	$sql_count_fly = mysql_query("SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `note`='Fly' ");
+	$cont_fly = ceil(mysql_result($sql_count_fly,0));
+
+	$sql_count_encashed = mysql_query("SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `note`='Encashed' ");
+	$cont_encashed = ceil(mysql_result($sql_count_encashed,0));
+		
+	if($emp_status_get == "no" && $note_get == "expired"){
+		$note_get = "Expired";
+	} elseif($emp_status_get == "no" && $note_get == "terminat"){
+		$note_get = "Terminated";
+	}
+		
+		$getqueryaply = mysql_query("SELECT * FROM `apply_vac_dep` WHERE `emp_id`='".$emp_id_get."' ");
+			while($recaply = mysql_fetch_assoc($getqueryaply)){
+				$emp_id_vac_get = $recaply["emp_id"];
+				$status_vac_get = $recaply["status"];
+				$review_vac_get = $recaply["review"];
+				$date_reg_vac_get = $recaply["date_reg"];
+				$note_vac_get = $recaply["note"];
+				
+				$timestamp_reg = strtotime($date_reg_vac_get);
+				$date_reg_vac_get = date('d, M Y', $timestamp_reg);
+			}
+		$getquerylgn = mysql_query("SELECT * FROM `admin_login` WHERE `emp_id`='".$emp_id_get."' ");
+			while($recaply = mysql_fetch_assoc($getquerylgn)){
+				$emp_id_lgn_get = $recaply["emp_id"];
+				$dept_lgn_get = $recaply["dept"];;
+			}
+		
+} else {
+		//when the id not equals id show database
+		header("Location: ./reg_employee.php");
+	}
+
+?>
+<!doctype html> 
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8" />
+        <title><?php echo $site_title ?> - All Employees</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
+        <meta content="Anees Afzal" name="author" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+        <!-- App favicon -->
+        <link rel="shortcut icon" href="assets/images/favicon.ico">
+
+        <!-- Modal -->
+        <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
+
+		<!-- Plugins css -->
+        <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
+        <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
+        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
+        <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
+        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
+		<!-- DataTables -->
+        <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+        <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+        <!-- Responsive datatable examples -->
+        <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+
+        <!-- Multi Item Selection examples -->
+        <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+
+        <!-- App css -->
+        <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+
+        <script src="assets/js/modernizr.min.js"></script>
+
+    </head>
+    <body>
+
+        <!-- Begin page -->
+        <div id="wrapper">
+
+            <!-- ========== Left Sidebar Start ========== -->
+            <div class="left side-menu">
+
+                <div class="slimscroll-menu" id="remove-scroll">
+
+                    <!-- LOGO -->
+                    <div class="topbar-left">
+                        <a href="index.html" class="logo">
+                            <span>
+                                <img src="assets/images/logo.png" alt="" height="22">
+                            </span>
+                            <i>
+                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                            </i>
+                        </a>
+                    </div>
+
+                    <!-- User box -->
+                    
+                    <!--- Sidemenu -->
+                    <div class="user-box">
+	<div class="user-img">
+		<img src="assets/images/users/avatar-1.jpg" alt="user-img" title="Mat Helme" class="rounded-circle img-fluid">
+	</div>
+	<h5><a href="javascript:voif(0);"><?php echo $userwel ?></a> </h5>
+	<p class="text-muted"><?php echo $usracc ?></p>
+</div>
+
+<div id="sidebar-menu">
+
+	<ul class="metismenu" id="side-menu">
+		<li class="menu-title">Navigation</li>
+		<li>
+			<a href="dashboardgm.php" class="<?php echo dashboard($current_page) ?>" >
+				<i class="fi-air-play"></i>
+				<span>Dashboard</span>
+			</a>
+		</li>
+	</ul>
+
+</div>
+                    <!-- Sidebar -->
+
+                    <div class="clearfix"></div>
+
+                </div>
+                <!-- Sidebar -left -->
+
+            </div>
+            <!-- Left Sidebar End -->
+
+
+
+            <!-- ============================================================== -->
+            <!-- Start right Content here -->
+            <!-- ============================================================== -->
+
+            <div class="content-page">
+
+                <!-- Top Bar Start -->
+                <?php include("./includes/topbar.php"); ?>
+                <!-- Top Bar End -->
+
+
+
+                <!-- Start Page content -->
+                <div class="content">
+                    <div class="container-fluid">
+
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="card-box">
+                                    <div class="clearfix">
+                                        <div class="float-left mb-3">
+                                            <img src="assets/images/logo.png" alt="" height="28">
+                                        </div>
+                                        <div class="float-right">
+                                            <h4 class="m-0">Vacation for <?php echo $name_get ?></h4>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-6">
+                                        </div><!-- end col -->
+                                        <div class="col-4 offset-2">
+                                            <div class="mt-3 float-right">
+                                                <p class="m-b-13 font-18"><strong>Request Date: </strong> <?php echo $date_reg_vac_get ?></p>
+												
+												<?php
+													if($status_vac_get == "app_hr"){
+												?>
+												<p class="m-b-13 font-18"><strong>Request Status: </strong>
+												<a href="javascript:void(0);" class="btn btn-sm btn-dark waves-effect" data-toggle="modal" data-target=".terminat" >
+                                                    <i class="mdi mdi-account-off"></i> Not Yet Approved
+                                                </a>
+												</p>
+                                                <!--<p class="m-b-13 font-18"><strong>Request Status: </strong> <span class="badge badge-dark">Not Yet Approved
+												</span></p>-->
+												<?php }elseif($status_vac_get == "approve"){ ?>
+												<p class="m-b-13 font-18"><strong>Request Status: </strong> <span class="badge badge-success">Approved
+												</span></p>
+												<?php }elseif($status_vac_get == "not_approve"){ ?>
+												<p class="m-b-13 font-18"><strong>Request Status: </strong> <span class="badge badge-danger">Vacation Not Approved
+												</span></p>
+												<?php } ?>
+                                                <p class="m-b-10"><strong>Request ID: </strong> #<?php echo $_GET['id'] ?></p>
+                                            </div>
+                                        </div><!-- end col -->
+                                    </div>
+                                    <!-- end row -->
+									<div class="row">
+										<?php if($status_vac_get == "not_approve"){?>
+										<div class="col-12">
+										<center><h3 class="mt-0 m-b-20" style="color: #F1556C;">Rejection Note: <?php echo ucwords($note_vac_get); ?></h3></center>
+										</div>
+										<?php } ?>
+										<div class="col-6">
+											<div class="card-box">
+                                    
+                                    <h3 class="mt-0 m-b-20">Personal Information</h3>
+                                    <div class="panel-body">
+                                        <hr>
+
+                                        <div class="text-left">
+                                            <p class="font-15"><strong>Full Name :</strong> <span class="m-l-15"><?php echo $name_get ?></span></p>
+
+                                            <p class="font-15"><strong>Mobile :</strong><span class="m-l-15"><?php echo $mobile_get ?></span></p>
+
+                                            <p class="text-muted font-13"><strong>Location :</strong> <span class="m-l-15">USA</span></p>
+
+                                            <p class="text-muted font-13"><strong>Languages :</strong>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-us m-r-5 m-t-0" title="us"></span>
+                                                    <span>English</span>
+                                                </span>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-de m-r-5" title="de"></span>
+                                                    <span>German</span>
+                                                </span>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-es m-r-5" title="es"></span>
+                                                    <span>Spanish</span>
+                                                </span>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-fr m-r-5" title="fr"></span>
+                                                    <span>French</span>
+                                                </span>
+                                            </p>
+
+                                        </div>
+
+                                        <ul class="social-links list-inline m-t-20 m-b-0">
+                                            <li class="list-inline-item">
+                                                <a title="" data-placement="top" data-toggle="tooltip" class="tooltips" href="" data-original-title="Facebook"><i class="fa fa-facebook"></i></a>
+                                            </li>
+                                            <li class="list-inline-item">
+                                                <a title="" data-placement="top" data-toggle="tooltip" class="tooltips" href="" data-original-title="Twitter"><i class="fa fa-twitter"></i></a>
+                                            </li>
+                                            <li class="list-inline-item">
+                                                <a title="" data-placement="top" data-toggle="tooltip" class="tooltips" href="" data-original-title="Skype"><i class="fa fa-skype"></i></a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+										</div>
+										<div class="col-6">
+											<div class="card-box">
+                                    <h4 class="header-title mt-0 m-b-20">Personal Information</h4>
+                                    <div class="panel-body">
+                                        <p class="text-muted font-13">
+                                            Hye, I’m Johnathan Doe residing in this beautiful world. I create websites and mobile apps with great UX and UI design. I have done work with big companies like Nokia, Google and Yahoo. Meet me or Contact me for any queries. One Extra line for filling space. Fill as many you want.
+                                        </p>
+
+                                        <hr>
+
+                                        <div class="text-left">
+                                            <p class="text-muted font-13"><strong>Full Name :</strong> <span class="m-l-15">Johnathan Deo</span></p>
+
+                                            <p class="text-muted font-13"><strong>Mobile :</strong><span class="m-l-15">(+12) 123 1234 567</span></p>
+
+                                            <p class="text-muted font-13"><strong>Email :</strong> <span class="m-l-15">coderthemes@gmail.com</span></p>
+
+                                            <p class="text-muted font-13"><strong>Location :</strong> <span class="m-l-15">USA</span></p>
+
+                                            <p class="text-muted font-13"><strong>Languages :</strong>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-us m-r-5 m-t-0" title="us"></span>
+                                                    <span>English</span>
+                                                </span>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-de m-r-5" title="de"></span>
+                                                    <span>German</span>
+                                                </span>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-es m-r-5" title="es"></span>
+                                                    <span>Spanish</span>
+                                                </span>
+                                                <span class="m-l-5">
+                                                    <span class="flag-icon flag-icon-fr m-r-5" title="fr"></span>
+                                                    <span>French</span>
+                                                </span>
+                                            </p>
+
+                                        </div>
+
+                                        <ul class="social-links list-inline m-t-20 m-b-0">
+                                            <li class="list-inline-item">
+                                                <a title="" data-placement="top" data-toggle="tooltip" class="tooltips" href="" data-original-title="Facebook"><i class="fa fa-facebook"></i></a>
+                                            </li>
+                                            <li class="list-inline-item">
+                                                <a title="" data-placement="top" data-toggle="tooltip" class="tooltips" href="" data-original-title="Twitter"><i class="fa fa-twitter"></i></a>
+                                            </li>
+                                            <li class="list-inline-item">
+                                                <a title="" data-placement="top" data-toggle="tooltip" class="tooltips" href="" data-original-title="Skype"><i class="fa fa-skype"></i></a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+										</div>
+									</div>
+                                    
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <div class="clearfix pt-5">
+                                                <h6 class="text-muted">Notes:</h6>
+
+                                                <small>
+                                                    All accounts are to be paid within 7 days from receipt of
+                                                    invoice. To be paid by cheque or credit card or direct payment
+                                                    online. If account is not paid within 7 days the credits details
+                                                    supplied as confirmation of work undertaken will be charged the
+                                                    agreed quoted fee noted above.
+                                                </small>
+                                            </div>
+
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="float-right">
+                                                <p><b>Sub-total:</b> $4120.00</p>
+                                                <p><b>VAT (12.5):</b> $515</p>
+                                                <h3>$4635.00 USD</h3>
+                                            </div>
+                                            <div class="clearfix"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="hidden-print mt-4 mb-4">
+                                        <div class="text-right">
+                                            <a href="javascript:window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print m-r-5"></i> Print</a>
+                                            <a href="#" class="btn btn-info waves-effect waves-light">Submit</a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                        </div>
+                        <!-- end row -->
+
+                    </div> <!-- container -->
+
+                </div> <!-- content -->
+
+                <footer class="footer">
+                    2018 © Highdmin. - Coderthemes.com
+                </footer>
+
+            </div>
+
+            <!-- ============================================================== -->
+            <!-- End Right content here -->
+            <!-- ============================================================== -->
+        </div>
+        <!-- END wrapper -->
+<div class="modal fade terminat" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
+	<div class="modal-dialog modal-dialog-centered">
+		<div class="modal-content">
+			<div class="modal-header" style="background-color: #02C0CE !important; color: #fff !important;">
+				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+				<h4 class="modal-title" id="mySmallModalLabel">
+					<i class="mdi mdi-delete-circle"></i> 
+					Are you sure!
+				</h4>
+			</div>
+			<div class="modal-body">
+				<h3>You need to Approve!</h3>
+				<h4><strong style="font-size: 30px; "><?php echo $name_get ?></strong></h4>
+<div class="form-row" id="content" style="display:none;">
+<form action="./includes/vac_app_emp.php" method="get">
+<!--	<a href="" class="btn btn-danger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
+<input type="hidden" name="id" value="<?php echo $_GET['id'] ?>" >
+<input type="hidden" name="status" value="not_approve" >
+	<div class="input-group">
+		<input type="text" id="ter_note" name="note" class="form-control" aria-describedby="basic-addon2">
+		<div class="input-group-append">
+		<button type="submit" class="btn btn-danger waves-effect waves-light"><i class="mdi mdi-account-off"></i> Note Submit</button>
+		</div>
+	</div>
+</form>
+</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
+				<button type="button" id="terminat_emp" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-off"></i> Not Approve</button>
+				<a href="./includes/vac_app_emp.php?id=<?php echo $_GET['id'] ?>&status=approve" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-account-star"></i> Approved</a>			
+				
+			</div>
+		</div><!-- /.modal-content -->
+	</div><!-- /.modal-dialog -->
+</div>
+
+        <!-- jQuery  -->
+        <script src="assets/js/jquery.min.js"></script>
+        <script src="assets/js/bootstrap.bundle.min.js"></script>
+        <script src="assets/js/metisMenu.min.js"></script>
+        <script src="assets/js/waves.js"></script>
+        <script src="assets/js/jquery.slimscroll.js"></script>
+
+
+        <!-- Modal-Effect -->
+		<script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
+		<script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script>
+        <script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
+
+
+		<script src="./plugins/moment/moment.js"></script>
+        <script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
+        <script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
+        <script src="./plugins/clockpicker/js/bootstrap-clockpicker.min.js"></script>
+        <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
+        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
+
+        <!-- App js -->
+		<script src="assets/pages/jquery.form-pickers.init.js"></script>
+		
+		<!-- Required datatable js -->
+        <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
+        <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
+        <!-- Buttons examples -->
+        <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
+        <script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
+        <script src="./plugins/datatables/jszip.min.js"></script>
+        <script src="./plugins/datatables/pdfmake.min.js"></script>
+        <script src="./plugins/datatables/vfs_fonts.js"></script>
+        <script src="./plugins/datatables/buttons.html5.min.js"></script>
+        <script src="./plugins/datatables/buttons.print.min.js"></script>
+
+        <!-- Key Tables -->
+        <script src="./plugins/datatables/dataTables.keyTable.min.js"></script>
+
+        <!-- Responsive examples -->
+        <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
+        <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
+
+        <!-- Selection table -->
+        <script src="./plugins/datatables/dataTables.select.min.js"></script>
+		
+
+        <!-- App js -->
+        <script src="assets/js/jquery.core.js"></script>
+        <script src="assets/js/jquery.app.js"></script>
+
+		<script type="text/javascript">
+            $(document).ready(function() {
+                $('form').parsley();
+				
+				//Buttons examples
+                var table = $('#employee_vac').DataTable({
+                    lengthChange: false,
+                    buttons: ['copy', 'excel', 'pdf', 'print'],
+					order: [[ 4, "desc" ]],
+					"columnDefs": [
+									{
+									targets: [ 4 ],
+									visible: false,
+									searchable: false
+									},
+								],
+					});
+				
+					table.buttons().container()
+					.appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
+				
+            });
+			jQuery(function($) {
+                $('.autonumber').autoNumeric('init');
+            });
+            jQuery.browser = {};
+            (function () {
+                jQuery.browser.msie = false;
+                jQuery.browser.version = 0;
+                if (navigator.userAgent.match(/MSIE ([0-9]+)\./)) {
+                    jQuery.browser.msie = true;
+                    jQuery.browser.version = RegExp.$1;
+                }
+            })();
+	
+$(document).ready(function(){
+  $("input[name$='note']").click(function(){	  
+  var value = $(this).val();
+  if(value=='Encashed') {
+    $("#return_date").show();
+    $("#note").hide();
+	$("#return_date").removeAttr('required');
+	$("#permit_no").removeAttr('required');
+  }
+  else if(value=='Fly') {
+	//document.getElementById("pet_id").required = true;
+	$("#return_date").attr('required', '');
+	$("#permit_no").attr('required', '');
+   	$("#note").show();
+//    $("#pet_id_box").hide();
+   }
+  });
+  	$("#return_date").removeAttr('required');
+//  	$("#pet_id_box").show();
+  	$("#note").hide();
+});
+	/***************************/
+
+	jQuery('#terminat_emp').on('click', function(event) {  
+	   $("#ter_note").attr('required', '');
+		jQuery('#content').toggle('show');
+	});
+</script>
+
+    </body>
+</html>
+<?php } ?>

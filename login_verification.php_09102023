@@ -1,0 +1,151 @@
+<?php
+require_once('./includes/auth.php');
+require_once('./includes/MainClass.php');
+$user_data = json_decode($class->get_user_data($_SESSION['otp_verify_user_id']));
+if($user_data->status){
+    foreach($user_data->data as $k => $v){
+        $$k = $v;
+    }
+}
+if(isset($_GET['resend']) && $_GET['resend'] == 'true'){
+    $resend = json_decode($class->resend_otp($_SESSION['otp_verify_user_id']));
+    if($resend->status == 'success'){
+        echo "<script>location.replace('./login_verification.php')</script>";
+    }else{
+        $_SESSION['flashdata']['type']='danger';
+        $_SESSION['flashdata']['msg']=' Resending OTP has failed.';
+        echo "<script>console.error(".$resend.")</script>";
+    }
+}
+if($_SERVER['REQUEST_METHOD'] == 'POST'){
+    $verify = json_decode($class->otp_verify());
+    if($verify->status == 'success'){
+        echo "<script>location.replace('./dashboard.php');</script>";
+    }
+}
+
+/*$data = json_decode($class->get_user_data(isset($_SESSION['check_user_data'])));
+if ($data->data->id && $data->data->otp !== "" && date("Y-m-d",strtotime($data->data->otp_expiration)) !== date("Y-m-d")){
+    echo "<script>location.replace('./index.php');</script>";
+}
+*/
+?>
+<!doctype html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8" />
+        <title><?=$site_title?></title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
+        <meta content="Anees Afzal" name="author" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+        <!-- App favicon -->
+        <link rel="shortcut icon" href="assets/images/favicon.ico">
+
+        <!-- App css -->
+        <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+
+        <script src="assets/js/modernizr.min.js"></script>
+
+    </head>
+
+
+    <body class="account-pages">
+
+        <!-- Begin page -->
+        <div class="accountbg" style="background: url('assets/images/login-background.jpg');background-size: cover;background-position: center;"></div>
+
+        <div class="wrapper-page account-page-full">
+
+            <div class="card">
+                <div class="card-block">
+
+                    <div class="account-box">
+
+                        <div class="card-box p-5">
+                            <div class="text-center">
+                                <div class="mb-3">
+                                    <img src="assets/images/logo_sm.png" class="rounded-circle img-thumbnail thumb-lg" alt="thumbnail">
+                                </div>
+                                <p class="text-muted m-b-0 font-14">Enter your OTP to access the system.</p>
+                            </div>
+
+                            <form action="./login_verification.php" method="POST">
+                               <input type="hidden" name="id" value="<?= isset($id) ? $id : '' ?>">
+                            <?php 
+                                    if(isset($_SESSION['flashdata'])):
+                                ?>
+                                <div class="dynamic_alert alert alert-<?php echo $_SESSION['flashdata']['type'] ?> my-2 rounded-0">
+                                    <div class="d-flex align-items-center">
+                                        <div class="col-11"><?=$_SESSION['flashdata']['msg'] ?></div>
+                                        <div class="col-1 text-end">
+                                            <div class="float-end"><a href="javascript:void(0)" class="text-dark text-decoration-none" onclick="$(this).closest('.dynamic_alert').hide('slow').remove()">x</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php unset($_SESSION['flashdata']) ?>
+                                <?php endif; ?>
+                                <div class="form-group">
+                                    <p class="">We have sent an one time password in your Email [<?= isset($email) ? $class->obfuscate_email($email) : '' ?>]</p>
+                                </div>
+                                <div class="form-group">
+                                   <label for="otp" class="label-control">Please Enter the OTP</label>
+                                   <input type="otp" name="otp" id="otp" class="form-control rounded-0" value="" maxlength="6" pattern="{0-9}+" autofocus required>
+                                </div>
+                                <div class="clear-fix mb-4"></div>
+                                <div class="form-group text-end">
+                                    <a class="btn btn-dark bg-gradient rounded-0  <?= time() < strtotime($otp_expiration) ? 'disabled' : '' ?>" data-stat="<?= time() < strtotime($otp_expiration) ? 'countdown' : '' ?>" href="./login_verification.php?resend=true" id="resend"><?= time() < strtotime($otp_expiration) ? 'Resend in '.(strtotime($otp_expiration) - time()).'s' : 'Resend OTP' ?></a>
+                                    <button class="btn btn-primary bg-gradient rounded-0">Confirm</button>
+                                </div>
+                           </form>
+
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="m-t-40 text-center">
+                <p class="account-copyright"><?=$site_footer?></p>
+            </div>
+
+        </div>
+
+        <!-- jQuery  -->
+        <script src="assets/js/jquery.min.js"></script>
+        <script src="assets/js/bootstrap.bundle.min.js"></script>
+        <script src="assets/js/metisMenu.min.js"></script>
+        <script src="assets/js/waves.js"></script>
+        <script src="assets/js/jquery.slimscroll.js"></script>
+
+        <!-- App js -->
+        <script src="assets/js/jquery.core.js"></script>
+        <script src="assets/js/jquery.app.js"></script>
+
+        <script>
+            $(function(){
+                var is_countdown_resend = $('#resend').attr('data-stat') == 'countdown';
+                if(is_countdown_resend){
+                    var sec = '<?= time() < strtotime($otp_expiration) ? (strtotime($otp_expiration) - time()) : 0 ?>';
+                    var countdown = setInterval(() => {
+                        if(sec > 0){
+                            sec--;
+                            $('#resend').text("Resend in "+(sec)+'s')
+                        }else{
+                            $('#resend').attr('data-stat','')
+                                        .removeClass('disabled').text('Resend OTP')
+                            clearInterval(countdown)
+                        }
+                    }, 1000);
+                }
+            })
+        </script>
+
+    </body>
+</html>
