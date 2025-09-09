@@ -197,6 +197,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`comp_no`, 
                                                     `companies`.`comp_name`, 
+                                                    `companies`.`comp_name_ar`, 
                                                     `companies`.`comp_id`
                                                     FROM `employees` 
                                                     LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
@@ -208,6 +209,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`comp_no`, 
                                                     `companies`.`comp_name`, 
+                                                    `companies`.`comp_name_ar`, 
                                                     `companies`.`comp_id`
                                                     FROM `employees` 
                                                     LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`

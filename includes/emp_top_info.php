@@ -94,41 +94,33 @@ if ($emprow['user_type'] !== 'employee') {
 										<?= __('more') ?> <i class="fa fa-chart-simple-horizontal font-18 vertical-middle"></i>
 									</button>
 									<div class="dropdown-menu">
-										<a href="javascript:void(0);" class="text-primary dropdown-item addEmpDocuAtter" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>">
-											<?= __('add_documents') ?> <i class="fa fa-cloud-upload"></i>
+										<a href="javascript:void(0);" class="text-primary dropdown-item addEmpDocuAtter d-flex align-items-center" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>">
+											<i class="fa fa-solid fa-upload mr-2"></i> <?= __('add_documents') ?>
 										</a>
-										<a href="javascript:void(0);" class="text-dark dropdown-item" onclick="assignAsset('<?= $emprow['empid'] ?>')">
-											<?= __('assign_asset') ?> <i class="fa fa-computer-classic"></i>
+										<a href="javascript:void(0);" class="text-dark dropdown-item d-flex align-items-center" onclick="assignAsset('<?= $emprow['empid'] ?>')">
+											<i class="fa fa-solid fa-project-diagram mr-2"></i> <?= __('assign_asset') ?>
 										</a>
 										<?php if (empty($emprow['has_active_regular_loan'])) : ?>
-											<a href="javascript:void(0);" class="text-warning dropdown-item applyLoan" data-emp_id="<?= $emprow['empid'] ?>">
-												<?= __('apply_loan') ?> <i class="fa fa-money-bill-trend-up"></i>
+											<a href="javascript:void(0);" class="text-warning dropdown-item applyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
+												<i class="fa fa-money-bill-trend-up mr-2"></i> <?= __('apply_loan') ?>
 											</a>
 										<?php endif; ?>
 										<?php if (empty($emprow['has_active_emergency_loan'])) : ?>
-											<a href="javascript:void(0);" class="text-info dropdown-item applyEmergencyLoan" data-emp_id="<?= $emprow['empid'] ?>">
-												<?= __('emergency_loan') ?> <i class="fa fa-money-bill-wheat"></i>
+											<a href="javascript:void(0);" class="text-info dropdown-item applyEmergencyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
+												<i class="fa fa-money-bill-wheat mr-2"></i> <?= __('emergency_loan') ?>
 											</a>
 										<?php endif; ?>
-
 										<?php if ($user_type == 'administrator' && $emprow['c_email']) : ?>
-											<a class="text-info dropdown-item" href="./qrsend.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>">
-												<?= __('send_qr') ?> <i class="fa fa-send"></i>
+											<a class="text-info dropdown-item d-flex align-items-center" href="./qrsend.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>">
+												<i class="fa fa-solid fa-qrcode-read mr-2"></i> <?= __('send_qr') ?>
 											</a>
 										<?php endif; ?>
-
-										<?php if ($is_system_admin || $isDeptHr || $isHR) : ?>
-											<a href="emp_end_of_service.php?emp_id=<?= $emprow['empid'] ?>" target="_blank" class="text-danger dropdown-item">
-												<?= __('create_end_of_service') ?> <i class="fa fa-calendar-lines-pen"></i>
-											</a>
-										<?php endif; ?>
-
 										<?php if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) : ?>
 
 											<?php if ($emprow['emp_sup_type'] != "man_power") : ?>
 												<?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
-													<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter">
-														<?= __('apply_annual_vacation') ?> <i class="fa fa-user-chart"></i>
+													<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter d-flex align-items-center">
+														<i class="fa fa-user-chart mr-2"></i> <?= __('apply_annual_vacation') ?>
 													</a>
 												<?php endif; ?>
 												<?php if ($emprow['apd_review'] == "A" && $emprow['apd_status'] == "apply") : ?>
@@ -153,31 +145,31 @@ if ($emprow['user_type'] !== 'employee') {
 															break;
 													}
 													?>
-													<a class="text-warning dropdown-item">
-														<?= htmlspecialchars($status_text) ?> <i class="fa fa-user-check"></i>
+													<a class="text-warning dropdown-item d-flex align-items-center">
+														<i class="fa fa-user-check mr-2"></i> <?= htmlspecialchars($status_text) ?>
 													</a>
 												<?php endif; ?>
-												<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" class="text-info dropdown-item applyLeaveRequest">
-													<?= __('apply_leave') ?> <i class="fa fa-user-clock"></i>
+												<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" class="text-info dropdown-item applyLeaveRequest d-flex align-items-center">
+													<i class="fa fa-solid fa-house-person-leave mr-2"></i> <?= __('apply_leave') ?>
 												</a>
 											<?php endif; ?>
 
 											<?php if ($user_type == "administrator" && empty($emprow['av_dept'])) : ?>
-												<a href="javascript:void(0);" data-emp_id=<?= $emprow['empid'] ?> class="text-dark dropdown-item createUserDeptAjax">
-													<?= __('create_login') ?> <i class="fa fa-user-shield"></i>
+												<a href="javascript:void(0);" data-emp_id=<?= $emprow['empid'] ?> class="text-dark dropdown-item createUserDeptAjax d-flex align-items-center">
+													<i class="fa fa-user-shield mr-2"></i> <?= __('create_login') ?>
 												</a>
 											<?php endif; ?>
 
 											<?php if ($emprow["fly"] == 1) : ?>
 												<?php if ($user_type != "dept_user") : ?>
-													<a href="javascript:void(0);" class="text-dark dropdown-item" onclick="returnVacationRequest(<?= lastVacIdGet($emprow['empid'])['vacid'] ?>, '<?= lastVacIdGet($emprow['empid'])['returndate'] ?>')">
-														<?= __('arrived') ?> <i class="fa fa-plane-arrival"></i>
+													<a href="javascript:void(0);" class="text-dark dropdown-item d-flex align-items-center" onclick="returnVacationRequest(<?= lastVacIdGet($emprow['empid'])['vacid'] ?>, '<?= lastVacIdGet($emprow['empid'])['returndate'] ?>')">
+														<i class="fa fa-plane-arrival mr-2"></i> <?= __('arrived') ?>
 													</a>
 												<?php endif; ?>
 											<?php else : ?>
 												<?php if ($emprow['apd_status'] == 'approve' && $user_type != "dept_user") : ?>
-													<a href="add_vac_emp.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item">
-														<?= __('add_vacation') ?> <i class="fa fa-plane-departure"></i>
+													<a href="add_vac_emp.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item d-flex align-items-center">
+														<i class="fa fa-plane-departure mr-2"></i> <?= __('add_vacation') ?>
 													</a>
 												<?php endif; ?>
 											<?php endif; ?>
@@ -185,26 +177,32 @@ if ($emprow['user_type'] !== 'employee') {
 
 										<?php if ($is_system_admin || $isDeptHr || $isHR) : ?>
 											<?php if ($user_type != "dept_user" && $current_page_name == "edit_employee.php") : ?>
-												<a href="javascript:void(0);" class="text-danger dropdown-item" data-toggle="modal" data-target=".terminat">
-													<?= __('terminat') ?> <i class="fa fa-user-large-slash"></i>
+												<a href="javascript:void(0);" class="text-danger dropdown-item d-flex align-items-center" data-toggle="modal" data-target=".terminat">
+													<i class="fa fa-user-large-slash mr-2"></i> <?= __('terminat') ?>
 												</a>
 											<?php endif; ?>
 
 											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR or $is_system_admin or $isDeptHr) : ?>
-												<a href="edit_employee.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item">
-													<?= __('edit') ?> <i class="fa fa-user-pen"></i>
+												<a href="edit_employee.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item d-flex align-items-center">
+													<i class="fa fa-user-pen mr-2"></i> <?= __('edit') ?>
 												</a>
 											<?php endif; ?>
 
 											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR or $is_system_admin or $isDeptHr) : ?>
-												<a href="javascript:void(0);" class="text-info dropdown-item addnote" data-emp_id="<?= $emprow['empid'] ?>">
-													<?= __('note') ?> <i class="fa fa-book-user"></i>
+												<a href="javascript:void(0);" class="text-info dropdown-item addnote d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
+													<i class="fa fa-book-user mr-2"></i> <?= __('note') ?>
 												</a>
 											<?php endif; ?>
 
 											<?php if ($isEmployee) : ?>
-												<a href="javascript:void(0);" class="text-primary dropdown-item">
-													<?= __('edit_information') ?> <i class="fa fa-user-pen"></i>
+												<a href="javascript:void(0);" class="text-primary dropdown-item d-flex align-items-center">
+													<i class="fa fa-user-pen mr-2"></i> <?= __('edit_information') ?>
+												</a>
+											<?php endif; ?>
+
+											<?php if ($is_system_admin || $isDeptHr || $isHR) : ?>
+												<a href="emp_end_of_service.php?emp_id=<?= $emprow['empid'] ?>" target="_blank" class="text-danger dropdown-item d-flex align-items-center">
+													<i class="fa fa-solid fa-user-slash mr-2"></i> <?= __('create_end_of_service') ?>
 												</a>
 											<?php endif; ?>
 
@@ -213,6 +211,7 @@ if ($emprow['user_type'] !== 'employee') {
 								</div>
 							<?php endif; ?>
 						</div>
+
 					<?php endif; ?>
 				</div>
 			</div>

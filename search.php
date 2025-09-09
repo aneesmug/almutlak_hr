@@ -245,7 +245,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                                         <h4 class="m-b-5"><?= parseName($name, 'FIRST_LAST') ?></h4>
                                                                     </div>
                                                                     <div class="btn-group" role="group" aria-label="Edit Button">
-                                                                        <a href="view_employee.php?emp_id=<?= $rec["emp_id"] ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><?= __('view_details') ?></a>
+                                                                        <a href="view_employee.php?emp_id=<?= $rec["emp_id"] ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="fa fa-solid fa-eye mr-2"></i><?= __('view_details') ?></a>
                                                                     </div>
                                                                     <div class="mt-4">
                                                                         <div class="row">
@@ -258,7 +258,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                                             <div class="col-4">
                                                                                 <div class="mt-3">
                                                                                     <?php if ($emptype == "Manager") { ?>
-                                                                                        <button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-user-circle-o"></i> <?= __(strtolower($emptype)) ?></button>
+                                                                                        <button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-solid fa-user-chef mr-2"></i><?= __(strtolower($emptype)) ?></button>
                                                                                     <?php } ?>
                                                                                 </div>
                                                                             </div>

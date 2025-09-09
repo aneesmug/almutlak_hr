@@ -229,12 +229,12 @@ if ($total_items > 0) {
                                                 <div class="btn-group" role="group" aria-label="Edit Button">
                                                     <?php if ($emp_status == 1 && ($user_type ?? '') != "dept_user"): ?>
                                                         <a href="edit_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-custom btn-rounded waves-effect waves-light btn-sm">
-                                                            <i class="mdi mdi-account-edit"></i> <?=__('edit') ?>
+                                                            <i class="fa fa-solid fa-user-pen"></i> <?=__('edit') ?>
                                                         </a>
                                                     <?php endif; ?>
                                                     <?php if (isset($is_system_admin) && $is_system_admin): ?>
                                                         <a href="javascript:void(0);" class="btn btn-danger btn-rounded waves-effect waves-light btn-sm deleteAjax" data-id="<?= $id ?>" data-tbl="employee" data-file='0'>
-                                                            <i class="mdi mdi-account-remove"></i>
+                                                            <i class="fa fa-solid fa-remove"></i>
                                                         </a>
                                                     <?php endif; ?>
                                                 </div>
@@ -247,7 +247,7 @@ if ($total_items > 0) {
                                                     <h4 class="m-b-5"><?=parseName($name) ?></h4>
                                                 </div>
                                                 <div class="btn-group" role="group" aria-label="View Details Button">
-                                                    <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="mdi mdi-account-search"></i> <?=__('view_details') ?></a>
+                                                    <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="fa fa-solid fa-eye mr-2"></i> <?=__('view_details') ?></a>
                                                 </div><br>
                                                 <span class="badge badge-dark badge-pill"><?=__('fly') ?>: <?= $cont_fly ?> | <?=__('encashed') ?>: <?= $cont_encashed ?></span>
                                                 <div class="mt-4">
@@ -261,7 +261,7 @@ if ($total_items > 0) {
                                                         <div class="col-4">
                                                             <div class="mt-3">
                                                                 <?php if ($emptype == "Manager"): ?>
-                                                                    <button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-user-circle-o"></i> <?= __(strtolower($emptype)); ?></button>
+                                                                    <button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-solid fa-user-chef mr-2"></i><?= __(strtolower($emptype)); ?></button>
                                                                 <?php endif; ?>
                                                             </div>
                                                         </div>
@@ -285,7 +285,7 @@ if ($total_items > 0) {
                         <div class="row mt-4">
                             <div class="col-12">
                                 <?php
-                                $pagination_params = ['dept' => $department_id]; // Department is always a param
+                                $pagination_params = ['comp' => $department_id]; // Department is always a param
                                 if (!empty($search_term)) $pagination_params['search'] = $search_term;
                                 if (!empty($status_filter) && $status_filter != 'all') $pagination_params['status'] = $status_filter;
                                 
