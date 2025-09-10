@@ -45,9 +45,9 @@ header('Content-Type: text/html; charset=utf-8');
 
 
 
-// error_reporting(E_ALL ^ E_NOTICE);
-// ini_set('display_errors', 0);
-// ini_set('display_startup_errors', 0);
+error_reporting(E_ALL ^ E_NOTICE);
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 
 
 $pgname = basename($_SERVER['REQUEST_URI'], '?' . $_SERVER['QUERY_STRING']);
