@@ -227,35 +227,54 @@ if (mysqli_num_rows($query) == 1) {
                 border-radius: .5rem;
                 padding: 1rem;
             }
+            
+            /* --- PRINT STYLES --- */
             @media print {
                 @page {
-                    margin: 0.5in;
+                    size: A4;
+                    margin: 1cm;
                 }
-                body, html {
-                    background: #fff !important;
-                    padding-top: 0.5in !important;
+
+                body {
+                    background-color: #fff !important;
                 }
-                .no-print, .left.side-menu, .footer, .topbar {
+                
+                /* Hide everything that is not the report */
+                .no-print,
+                .left.side-menu,
+                .footer,
+                .topbar,
+                #wrapper > .content-page > .content > .container-fluid > .row > .col-xl-12 > .card-box > .text-right {
                     display: none !important;
                 }
-                #wrapper, .content-page, .content, .container-fluid, .card-box {
+                
+                /* Ensure the report container and its parents are visible and take up full space */
+                body, #wrapper, .content-page, .content, .container-fluid, .row, .col-xl-12, .card-box {
                     padding: 0 !important;
                     margin: 0 !important;
                     box-shadow: none !important;
                     border: none !important;
+                    background: transparent !important;
                 }
+
                 .report-main-card {
                     box-shadow: none !important;
                     border: 1px solid #dee2e6 !important;
                     page-break-inside: avoid;
+                }
+
+                .report-container {
+                    display: block !important;
                 }
             }
         </style>
     </head>
 
     <body class="enlarged" data-keep-enlarged="true">
-        <div id="wrapper" class="no-print">
-            <div class="left side-menu">
+        <!-- Begin page -->
+        <div id="wrapper">
+            <!-- ========== Left Sidebar Start ========== -->
+            <div class="left side-menu no-print">
                 <div class="slimscroll-menu" id="remove-scroll">
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
@@ -267,9 +286,17 @@ if (mysqli_num_rows($query) == 1) {
                     <div class="clearfix"></div>
                 </div>
             </div>
+            <!-- Left Sidebar End -->
 
+            <!-- ============================================================== -->
+            <!-- Start right Content here -->
+            <!-- ============================================================== -->
             <div class="content-page">
+                <!-- Top Bar Start -->
                 <?php include("./includes/topbar.php"); ?>
+                <!-- Top Bar End -->
+
+                <!-- Start Page content -->
                 <div class="content">
                     <div class="container-fluid">
                         <div class="row">
@@ -279,6 +306,7 @@ if (mysqli_num_rows($query) == 1) {
                                         <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print mr-1"></i> Print Report</a>
                                     </div>
 
+                                    <!-- THIS IS THE PRINTABLE CONTENT -->
                                     <div class="report-container" id="report-content">
                                         <div class="report-header">
                                             <img src="assets/images/logo.png" alt="Company Logo">
@@ -327,7 +355,7 @@ if (mysqli_num_rows($query) == 1) {
                                                                 <li>
                                                                     <span class="label">Attachment</span> 
                                                                     <span class="value">
-                                                                        <a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank" class="btn btn-sm btn-info">
+                                                                        <a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank" class="btn btn-sm btn-info no-print">
                                                                             <i class="fa fa-paperclip mr-1"></i> View Document
                                                                         </a>
                                                                     </span>
@@ -381,16 +409,23 @@ if (mysqli_num_rows($query) == 1) {
                                             </div>
                                         </div>
                                     </div>
+                                    <!-- END PRINTABLE CONTENT -->
+
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </div> <!-- container -->
+                </div> <!-- content -->
                 <footer class="footer no-print">
                     <?= $site_footer ?>
                 </footer>
             </div>
+            <!-- ============================================================== -->
+            <!-- End Right content here -->
+            <!-- ============================================================== -->
         </div>
+        <!-- END wrapper -->
+
         <script src="assets/js/jquery.min.js"></script>
         <script src="assets/js/bootstrap.bundle.min.js"></script>
         <script src="assets/js/metisMenu.min.js"></script>

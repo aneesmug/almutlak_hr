@@ -6735,7 +6735,7 @@ js.onload = function () {
 };
 firstScript.parentNode.insertBefore(js, firstScript);*/
 
-
+/*
 // Function to detect system scaling and apply compensation
 function adjustForSystemScaling() {
     // Standard ratios (may vary slightly by OS/browser)
@@ -6764,6 +6764,8 @@ function adjustForSystemScaling() {
 // Run when page loads and when orientation changes
 window.addEventListener('load', adjustForSystemScaling);
 window.addEventListener('resize', adjustForSystemScaling);
+
+*/
 
 
 /**

@@ -9,7 +9,7 @@
                 <?php endif; ?>
                 <?php if (isset($is_system_admin) && $is_system_admin): ?>
                     <a href="javascript:void(0);" class="btn btn-danger btn-sm deleteAjax" data-id="<?= $id ?>" data-tbl="employee" data-file='0' title="<?= __('delete') ?>">
-                        <i class="fa fa-solid fa-trash-alt"></i>
+                        <i class="fa fa-solid fa-remove"></i>
                     </a>
                 <?php endif; ?>
             </div>
@@ -18,10 +18,10 @@
             <img src="<?= htmlspecialchars($emp_avatar) ?>" class="rounded-circle mx-auto mb-3 emp-avatar" alt="Profile Image">
 
             <h5 class="mb-0 font-weight-bold"><?= parseName($name) ?></h5>
-            <p class="text-muted small"><?= $emptype ?></p>
-
-            <span class="badge badge-dark badge-pill mx-auto my-3"><?= __('fly') ?>: <?= $cont_fly ?> | <?= __('encashed') ?>: <?= $cont_encashed ?></span>
-
+            <p class="text-muted small"><?= (strtolower($emptype) == "manager") ? "<span class=\"badge badge-info\">".__(strtolower($emptype))."</span>" : __(strtolower($emptype)) ?></p>
+            <?php if($emp_status == 1): ?>
+                <span class="badge badge-dark badge-pill mx-auto my-3"><?= __('fly') ?>: <?= $cont_fly ?> | <?= __('encashed') ?>: <?= $cont_encashed ?></span>
+            <?php endif;?>
             <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary btn-block mt-auto waves-effect waves-light"><i class="fa fa-solid fa-eye mr-2"></i><?= __('view_details') ?></a>
 
             <div class="mt-4 pt-3 border-top">

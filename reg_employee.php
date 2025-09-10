@@ -151,7 +151,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                     <div class="row">
                         <div class="col-xl-12">
                             <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?=__('find_employees')?></h4>
+                                <h4 class="header-title m-t-0 m-b-30"><?=__('all_employees')?></h4>
                                 <div class="row" style="max-width: 800px; margin: auto;">
                                     <div class="col-md-12">
                                         <div class="form-group">

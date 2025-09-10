@@ -344,14 +344,14 @@
                                 <div class="card-box">
                                     <div class="text-center">
                                         <img src="assets/images/logo.png" alt="" height="60">
-                                        <h3 class="mt-2"><?=__('FINAL SETTLEMENT');?></h3>
-                                        <h4><?=__('Final Settlement Subheading');?></h4>
+                                        <h3 class="mt-2"><?=__('final_settlement');?></h3>
+                                        <h4><?=__('final_settlement_subheading');?></h4>
                                     </div>
                                     <hr>
                                     <?php if($eos_id){ ?>
                                         <div class="alert alert-danger text-center">
-                                            <strong><?=__('Terminated on:');?></strong> <?= date('d M, Y', strtotime($terminationDate)); ?> | 
-                                            <strong><?=__('Reason:');?></strong> <?= htmlspecialchars($eos_reason); ?>
+                                            <strong><?=__('terminated_date');?>:</strong> <?= date('d M, Y', strtotime($terminationDate)); ?> | 
+                                            <strong><?=__('reason_notes');?>:</strong> <?= htmlspecialchars($eos_reason); ?>
                                         </div>
                                     <?php } ?>
 
@@ -359,7 +359,7 @@
                                         <div class="col-12">
                                             <div class="card">
                                                 <div class="card-header bg-light">
-                                                    <h4 class="m-0"><?=__('Employee Information');?></h4>
+                                                    <h4 class="m-0"><?=__('employee_information');?></h4>
                                                 </div>
                                                 <div class="card-body">
                                                     <div class="row">
@@ -368,12 +368,12 @@
                                                         </div>
                                                         <div class="col-md-10">
                                                             <div class="row">
-                                                                <div class="col-md-4"><p><strong><?=__('Name');?>:</strong><br><?= htmlspecialchars($emprow['name']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Employee ID');?>:</strong><br><?= htmlspecialchars($emprow['empid']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Iqama / ID');?>:</strong><br><?= htmlspecialchars($emprow['iqama']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Department');?>:</strong><br><?= htmlspecialchars($emprow['deptnme']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Job Title');?>:</strong><br><?= htmlspecialchars($emprow['jobname']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Joining Date');?>:</strong><br><?= date('d M, Y', strtotime($emprow['joining_date'])); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('name');?>:</strong><br><?= htmlspecialchars($emprow['name']); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('employee_no');?>:</strong><br><?= htmlspecialchars($emprow['empid']); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('iqama_id');?>:</strong><br><?= htmlspecialchars($emprow['iqama']); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('department');?>:</strong><br><?= htmlspecialchars(($is_rtl ?? false ? $emprow['deptnme_ar']:$emprow['deptnme'])); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('actual_job');?>:</strong><br><?= htmlspecialchars(($is_rtl ?? false ? $emprow['jobname_ar']:$emprow['jobname'])); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('joining_date');?>:</strong><br><?= date('d M, Y', strtotime($emprow['joining_date'])); ?></p></div>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -384,14 +384,14 @@
 
                                     <!-- Financial Summary Section -->
                                     <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Financial Summary');?></h5></div>
+                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('financial_summary');?></h5></div>
                                         <div class="card-body">
                                             <div class="row">
                                                 <div class="col-md-6">
-                                                    <p><strong><?=__('Total Remaining Vacation Days');?>:</strong><br><?= htmlspecialchars(number_format($prorated_vacation_balance, 2)); ?> <?=__('days');?></p>
+                                                    <p><strong><?=__('total_remaining_vacation_days');?>:</strong><br><?= htmlspecialchars(number_format($prorated_vacation_balance, 2)); ?> <?=__('days');?></p>
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <p><strong><?=__('Outstanding Loan Balance');?>:</strong><br><span class="text-danger"><?= htmlspecialchars(number_format($outstanding_loan, 2)); ?> <?=__('SAR');?></span></p>
+                                                    <p><strong><?=__('outstanding_loan_balance');?>:</strong><br><span class="text-danger"><?= htmlspecialchars(number_format($outstanding_loan, 2)); ?> <?=__('sar');?></span></p>
                                                 </div>
                                             </div>
                                         </div>
@@ -399,11 +399,11 @@
 
                                     <!-- Assigned Assets Section -->
                                     <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Assigned Assets for Clearance');?></h5></div>
+                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('assigned_assets_for_clearance');?></h5></div>
                                         <div class="card-body">
                                             <table class="table table-sm table-bordered">
                                                 <thead>
-                                                    <tr><th><?=__('Asset Type');?></th><th><?=__('Serial Number');?></th><th><?=__('Description');?></th><th><?=__('Assigned Date');?></th></tr>
+                                                    <tr><th><?=__('asset_type');?></th><th><?=__('serial_number_identifier');?></th><th><?=__('description');?></th><th><?=__('Assigned Date');?></th></tr>
                                                 </thead>
                                                 <tbody>
                                                 <?php
@@ -421,7 +421,7 @@
                                                         endwhile;
                                                     else:
                                                 ?>
-                                                    <tr><td colspan="4" class="text-center"><?=__('No assets are currently assigned to this employee.');?></td></tr>
+                                                    <tr><td colspan="4" class="text-center"><?=__('no_assets_are_currently_assigned_to_this_employee');?></td></tr>
                                                 <?php endif; ?>
                                                 </tbody>
                                             </table>
@@ -430,11 +430,11 @@
 
                                     <!-- EOS Calculation Section -->
                                     <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('End of Service Calculation');?></h5></div>
+                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('end_of_service_calculation');?></h5></div>
                                         <div class="card-body">
                                             <?php if ($assigned_assets_count > 0): ?>
                                                 <div class="alert alert-danger text-center">
-                                                    <strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_assets_count, __('This employee has {count} outstanding asset(s). Please ensure all assets are returned before proceeding with termination.')) ?>
+                                                    <strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_assets_count, __('this_employee_has_outstanding_assets_please_ensure_all_assets_are_returned_before_proceeding_with_termination')) ?>
                                                 </div>
                                             <?php endif; ?>
 
@@ -447,23 +447,23 @@
                                                         <?php if (!empty($errors['assets'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['assets']); ?></div><?php endif; ?>
                                                         <div class="form-row align-items-end">
                                                             <div class="form-group col-lg-6">
-                                                                <label><strong><?=__('Type of Contract');?>:</strong></label>
+                                                                <label><strong><?=__('type_of_contract');?>:</strong></label>
                                                                 <div>
                                                                     <div class="custom-control custom-radio custom-control-inline">
                                                                         <input type="radio" id="contract-limited" name="contract_type" value="1" class="custom-control-input" <?=($contractType == "1") ? "checked" : ""; ?>>
-                                                                        <label class="custom-control-label" for="contract-limited"><?=__('Limited Period');?></label>
+                                                                        <label class="custom-control-label" for="contract-limited"><?=__('limited_period');?></label>
                                                                     </div>
                                                                     <div class="custom-control custom-radio custom-control-inline">
                                                                         <input type="radio" id="contract-unlimited" name="contract_type" value="2" class="custom-control-input" <?=($contractType == "2") ? "checked" : ""; ?>>
-                                                                        <label class="custom-control-label" for="contract-unlimited"><?=__('Unlimited Period');?></label>
+                                                                        <label class="custom-control-label" for="contract-unlimited"><?=__('unlimited_period');?></label>
                                                                     </div>
                                                                 </div>
                                                                 <?php if (!empty($errors['contract_type'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['contract_type']); ?></small></div><?php endif; ?>
                                                             </div>
                                                             <div class="form-group col-lg-6">
-                                                                <label for="eos_reason"><strong><?=__('End of Service Reason');?>:</strong><span class="text-danger">*</span></label>
+                                                                <label for="eos_reason"><strong><?=__('end_of_service_reason');?>:</strong><span class="text-danger">*</span></label>
                                                                 <select id="eos_reason" required class="form-control calc-trigger" name="eos_reason" <?php if(empty($filteredReasons) && empty($general_error_message)) echo 'disabled';?>>
-                                                                    <option value=""><?=__('Choose a reason');?></option>
+                                                                    <option value=""><?=__('select_reason');?></option>
                                                                     <?php if (!empty($filteredReasons)): ?>
                                                                         <?php foreach ($filteredReasons as $reason): ?>
                                                                             <option value="<?=htmlspecialchars($reason['ContractEndReasonCode']); ?>" <?=($selectedReasonCode == $reason['ContractEndReasonCode']) ? "selected" : ""; ?>>
@@ -475,51 +475,51 @@
                                                                 <?php if (!empty($errors['eos_reason'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['eos_reason']); ?></small></div><?php endif; ?>
                                                             </div>
                                                             <div class="form-group col-lg-6">
-                                                                <label for="joining_date"><?=__('Joining Date');?>:</label>
+                                                                <label for="joining_date"><?=__('joining_date');?>:</label>
                                                                 <input type="text" name="joining_date" class="form-control" id="joining_date" value="<?=htmlspecialchars($emprow['joining_date']);?>" readonly>
                                                             </div>
                                                             <div class="form-group col-lg-6">
-                                                                <label for="end_date"><?=__('End of Service Date');?>:<span class="text-danger">*</span></label>
+                                                                <label for="end_date"><?=__('end_of_service_date');?>:<span class="text-danger">*</span></label>
                                                                 <input type="text" name="end_date" class="form-control datepicker calc-trigger" id="end_date" value="<?=htmlspecialchars($endDateStr); ?>" required autocomplete="off">
                                                                 <?php if (!empty($errors['end_date'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['end_date']); ?></small></div><?php endif; ?>
                                                             </div>
                                                             <div class="form-group col-lg-3">
-                                                                <label for="anul_vac_days"><?=__('Annual vacation days');?></label>
-                                                                <input type="number" class="form-control calc-trigger" value="<?= htmlspecialchars(number_format($prorated_vacation_balance, 2)); ?>" id="anul_vac_days" name="anul_vac_days" step="any" placeholder="Calculated from End Date">
+                                                                <label for="anul_vac_days"><?=__('annual_vacation_days');?></label>
+                                                                <input type="number" class="form-control calc-trigger" value="<?= htmlspecialchars(number_format($prorated_vacation_balance, 2)); ?>" id="anul_vac_days" name="anul_vac_days" step="any" placeholder="calculated_from_end_date">
                                                             </div>
                                                             <div class="form-group col-lg-2">
-                                                                <label for="curt_month_days_display"><?=__('Working Days');?></label>
+                                                                <label for="curt_month_days_display"><?=__('working_days');?></label>
                                                                 <input type="number" class="form-control" id="curt_month_days_display" name="curt_month_days">
                                                             </div>
                                                             <div class="form-group col-lg-3">
-                                                                <label for="curt_month_salry"><?=__('Resignation Month Salary');?></label>
+                                                                <label for="curt_month_salry"><?=__('resignation_month_salary');?></label>
                                                                 <input type="text" class="form-control calc-trigger" value="<?= htmlspecialchars($_POST['curt_month_salry'] ?? '0.00'); ?>" id="curt_month_salry" name="curt_month_salry" readonly>
                                                             </div>
                                                             <div class="form-group col-lg-4">
-                                                                <label for="deduct" class="text-danger"><?=__('Deduct (Loan, etc.)');?></label>
+                                                                <label for="deduct" class="text-danger"><?=__('deduct_loan_etc');?></label>
                                                                 <input type="number" class="form-control text-danger calc-trigger" value="<?= htmlspecialchars($_POST['deduct'] ?? $outstanding_loan); ?>" id="deduct" name="deduct" step="any">
                                                             </div>
                                                             <div class="col-12"><hr/></div>
                                                             <div class="form-group col-lg-4">
-                                                                <label><?=__('EOS Amount (from API)');?></label>
+                                                                <label><?=__('eos_amount_from_api');?></label>
                                                                 <input type="text" class="form-control" id="eos_amount_display" readonly style="background-color: #e9ecef;">
                                                             </div>
                                                             <div class="form-group col-lg-4">
-                                                                <label><?=__('Vacation Salary');?></label>
+                                                                <label><?=__('vacation_salary');?></label>
                                                                 <input type="text" class="form-control" id="vacation_salary_display" readonly style="background-color: #e9ecef;">
                                                             </div>
                                                             <div class="form-group col-lg-4">
-                                                                <label class="font-weight-bold"><?=__('Total Net Payment');?></label>
+                                                                <label class="font-weight-bold"><?=__('total_net_payment');?></label>
                                                                 <input type="text" class="form-control font-weight-bold" id="net_payment_display" readonly style="background-color: #dff0d8;">
                                                             </div>
                                                             <div class="col-12"><hr/></div>
                                                             <div class="form-group col-lg-8">
-                                                                <label for="notes"><?=__('Notes');?>:<span class="text-danger">*</span></label>
+                                                                <label for="notes"><?=__('notes');?>:<span class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control" id="notes" name="notes" value="<?= htmlspecialchars($_POST['notes'] ?? ''); ?>" required />
                                                                 <?php if (!empty($errors['notes'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['notes']); ?></small></div><?php endif; ?>
                                                             </div>
                                                             <div class="form-group col-lg-4">
-                                                                <button type="submit" name="submit" class="btn btn-danger btn-block"><i class="mdi mdi-settings"></i> <?=__('Register EOS');?></button>
+                                                                <button type="submit" name="submit" class="btn btn-danger btn-block"><i class="mdi mdi-settings"></i> <?=__('register_eos');?></button>
                                                             </div>
                                                         </div>
                                                         <input type="hidden" name="eos_amount" id="eos_amount_hidden">
@@ -558,6 +558,8 @@
         </script>
 		<script type="text/javascript">
             $(document).ready(function(){
+                
+                $("#eos_reason").select2();
                 
                 function isSalaryPaidForMonth(endDateStr) {
                     if (!endDateStr || !window.paidPayrolls || !window.paidPayrolls.length) {
@@ -700,7 +702,7 @@
                         return; 
                     }
 
-                    $('#net_payment_display').val('Calculating...');
+                    $('#net_payment_display').val(__('calculating'));
 
                     $.ajax({
                         type: 'POST',
@@ -721,11 +723,11 @@
                                 $('#anul_vac_salry_hidden').val(response.vacation_salary);
                                 $('#net_payment_hidden').val(final_net_payment.toFixed(2));
                             } else {
-                                $('#net_payment_display').val('Error');
+                                $('#net_payment_display').val(__('error_title'));
                             }
                         },
                         error: function() {
-                            $('#net_payment_display').val('Error');
+                            $('#net_payment_display').val(__('error_title'));
                         }
                     });
                 }

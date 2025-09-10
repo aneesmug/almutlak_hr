@@ -115,7 +115,7 @@ if ($emprow['user_type'] !== 'employee') {
 												<i class="fa fa-money-bill-wheat mr-2"></i> <?= __('emergency_loan') ?>
 											</a>
 										<?php endif; ?>
-										<?php if ($user_type == 'administrator' && $emprow['c_email']) : ?>
+										<?php if ($is_system_admin && $emprow['c_email']) : ?>
 											<a class="text-info dropdown-item d-flex align-items-center" href="./qrsend.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>">
 												<i class="fa fa-solid fa-qrcode-read mr-2"></i> <?= __('send_qr') ?>
 											</a>
@@ -159,7 +159,7 @@ if ($emprow['user_type'] !== 'employee') {
 												</a>
 											<?php endif; ?>
 
-											<?php if ($user_type == "administrator" && empty($emprow['av_dept'])) : ?>
+											<?php if ($is_system_admin && empty($emprow['av_dept'])) : ?>
 												<a href="javascript:void(0);" data-emp_id=<?= $emprow['empid'] ?> class="text-dark dropdown-item createUserDeptAjax d-flex align-items-center">
 													<i class="fa fa-user-shield mr-2"></i> <?= __('create_login') ?>
 												</a>
