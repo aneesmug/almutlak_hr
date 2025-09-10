@@ -11,4 +11,4 @@ echo Pushing to origin main...
 git push origin main
 
 echo Git update completed!
-pause
+#pause
