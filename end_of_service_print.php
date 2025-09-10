@@ -2,16 +2,17 @@
 /*********************************************************************************
  * MODIFICATION SUMMARY (010-end_of_service_print.php):
  *
- * 1. ADDED FOOTER SECTION: The signature block has been moved into a dedicated
- * footer section.
- * 2. FOOTER POSITIONING: The print CSS has been updated to use a flexbox layout,
- * which positions the main content at the top and fixes the signature section
- * to the bottom of the printed page.
- * 3. SINGLE-PAGE OPTIMIZATION: The layout is now structured with a main content
- * area and a footer, ensuring all elements are contained within a single A4 page
- * without compromising readability.
- * 4. RETAINED FUNCTIONALITY: All previous features, including the single-line
- * layout, bilingual text, and automatic printing, are preserved.
+ * 1. ADDED SALARY & BENEFITS SECTION: A new section has been added to display
+ * a detailed breakdown of the employee's salary and allowances.
+ * 2. NEW DATABASE QUERY: The script now queries the `emp_salary` table to fetch
+ * the detailed financial information for the report.
+ * 3. TOTAL SALARY CALCULATION: A total salary is calculated and displayed by
+ * summing the basic salary and all allowances.
+ * 4. SINGLE-PAGE OPTIMIZATION: The new section is integrated into the existing
+ * flexbox layout to ensure the entire report remains on a single A4 page.
+ * 5. DYNAMIC BENEFIT DISPLAY: The Salary & Benefits section now only shows
+ * benefits with a value greater than 0 and displays them in a single row
+ * with the title above the amount.
  *********************************************************************************/
 
 	require_once __DIR__ . '/includes/db.php';
@@ -50,6 +51,13 @@
     $eosrow = mysqli_fetch_assoc($get_eos_data);
     if (!$eosrow) {
         $eosrow = []; // Initialize as empty array if no EOS record found to prevent errors.
+    }
+
+    // Query for salary benefits
+    $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='".$_GET['emp_id']."'");
+    $salaryrow = mysqli_fetch_assoc($get_salary_data);
+    if (!$salaryrow) {
+        $salaryrow = []; // Initialize to prevent errors if no record is found
     }
 
     // Age Calculation
@@ -165,7 +173,48 @@
                                                     <p class="detail-line"><span><strong>Months:</strong> <?=isset($eosrow['t_months']) ? $eosrow['t_months'] : 'N/A'?></span><span class="arabic-label"><strong>أشهر</strong></span></p>
                                                     <p class="detail-line"><span><strong>Days:</strong> <?=isset($eosrow['t_days']) ? $eosrow['t_days'] : 'N/A'?></span><span class="arabic-label"><strong>أيام</strong></span></p>
                                                 </div>
-                                                <p class="service-reason detail-line"><span><strong>End of Service Reason:</strong> <?=isset($eosrow['details']) ? $eosrow['details'] : 'N/A'?></span><span class="arabic-label"><strong>سبب نهاية الخدمة</strong></span></p>
+                                                <p class="service-reason detail-line"><span><strong>End of Service Reason:</strong> <?=isset($eosrow['leaving_reason']) ? $eosrow['leaving_reason'] : 'N/A'?></span><span class="arabic-label"> <?=isset($eosrow['leaving_reason_ar']) ? $eosrow['leaving_reason_ar'] : 'N/A'?><strong>سبب نهاية الخدمة</strong></span></p>
+                                            </div>
+
+                                            <!-- Salary & Benefits Section -->
+                                            <div class="section">
+                                                <h4 class="section-title"><span>Salary & Benefits</span><span class="arabic-label">الراتب والمستحقات</span></h4>
+                                                <div>
+                                                    <?php
+                                                        $total_salary = 0;
+                                                        $benefits_map = [
+                                                            'basic'     => ['en' => 'Basic Salary', 'ar' => 'الراتب الأساسي'],
+                                                            'housing'   => ['en' => 'Housing Allowance', 'ar' => 'بدل سكن'],
+                                                            'transport' => ['en' => 'Transportation', 'ar' => 'بدل مواصلات'],
+                                                            'food'      => ['en' => 'Food Allowance', 'ar' => 'بدل طعام'],
+                                                            'misc'      => ['en' => 'Misc Allowance', 'ar' => 'بدل متنوع'],
+                                                            'cashier'   => ['en' => 'Cashier Allowance', 'ar' => 'بدل صراف'],
+                                                            'fuel'      => ['en' => 'Fuel Allowance', 'ar' => 'بدل وقود'],
+                                                            'tel'       => ['en' => 'Telephone Allowance', 'ar' => 'بدل هاتف'],
+                                                            'guard'     => ['en' => 'Guard Allowance', 'ar' => 'بدل حراسة'],
+                                                            'other'     => ['en' => 'Other Allowances', 'ar' => 'بدلات أخرى'],
+                                                        ];
+
+                                                        $active_benefits_en = [];
+                                                        $active_benefits_ar = [];
+
+                                                        if (!empty($salaryrow)) {
+                                                            foreach ($benefits_map as $key => $labels) {
+                                                                $value = (float)($salaryrow[$key] ?? 0);
+                                                                if ($value > 0) {
+                                                                    $active_benefits_en[] = '<div class="benefit-item"><div class="benefit-label">' . $labels['en'] . '</div><div class="benefit-value">' . number_format($value, 2) . '</div></div>';
+                                                                    $active_benefits_ar[] = '<div class="benefit-item"><div class="benefit-label">' . $labels['ar'] . '</div><div class="benefit-value">' . number_format($value, 2) . '</div></div>';
+                                                                }
+                                                                $total_salary += $value;
+                                                            }
+                                                        }
+                                                    ?>
+                                                    <div class="detail-line">
+                                                        <div class="benefits-row"><?= implode('', $active_benefits_en) ?></div>
+                                                        <div class="benefits-row arabic-label" style="justify-content: flex-end;"><?= implode('', array_reverse($active_benefits_ar)) ?></div>
+                                                    </div>
+                                                    <p class="label-pair"><span><strong>TOTAL SALARY:</strong> <?=number_format($total_salary, 2)?></span><span class="arabic-label"><strong>إجمالي الراتب</strong></span></p>
+                                                </div>
                                             </div>
 
                                             <!-- Financial Settlement Section -->
@@ -182,7 +231,7 @@
                                                             <td class="text-right"><?=number_format((float)(isset($eosrow['curt_month_salry']) ? $eosrow['curt_month_salry'] : 0), 2)?></td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="label-pair"><span>Vacation Balance (<?=isset($eosrow['anul_vac_days']) ? $eosrow['anul_vac_days'] : 'N/A'?> days)</span><span class="arabic-label">(أيام <?=isset($eosrow['anul_vac_days']) ? $eosrow['anul_vac_days'] : 'N/A'?>) رصيد الإجازات</span></span></td>
+                                                            <td><span class="label-pair"><span>Vacation Balance (<?=isset($eosrow['anul_vac_days']) ? number_format($eosrow['anul_vac_days'], 2) : 'N/A'?> days)</span><span class="arabic-label">(أيام <?=isset($eosrow['anul_vac_days']) ? number_format($eosrow['anul_vac_days'], 2) : 'N/A'?>) رصيد الإجازات</span></span></td>
                                                             <td class="text-right"><?=number_format((float)(isset($eosrow['anul_vac_salry']) ? $eosrow['anul_vac_salry'] : 0), 2)?></td>
                                                         </tr>
                                                         <tr>
@@ -281,7 +330,7 @@ function printDiv() {
                         justify-content: space-between;
                         align-items: center;
                         border-bottom: 3px solid #4a4a4a;
-                        padding-bottom: 10px;
+                        padding-bottom: 5px;
                     }
                     .logo {
                         height: 60px;
@@ -300,7 +349,7 @@ function printDiv() {
                         text-align: right;
                     }
                     .section {
-                        margin-top: 20px;
+                        margin-top: 5px;
                     }
                     .section-title {
                         display: flex;
@@ -308,10 +357,10 @@ function printDiv() {
                         align-items: baseline;
                         background-color: #343a40 !important;
                         color: #fff !important;
-                        padding: 8px 15px;
+                        padding: 6px 6px;
                         border-radius: 5px;
                         font-weight: bold;
-                        font-size: 15px;
+                        font-size: 13px;
                     }
                     .arabic-label {
                         direction: rtl;
@@ -320,7 +369,7 @@ function printDiv() {
                     .details-grid, .details-grid-3 {
                         display: grid;
                         gap: 5px 20px;
-                        margin-top: 10px;
+                        margin-top: 5px;
                         font-size: 13px;
                     }
                     .details-grid {
@@ -337,15 +386,15 @@ function printDiv() {
                         justify-content: space-between;
                         align-items: baseline;
                         border-bottom: 1px dotted #ccc;
-                        padding-bottom: 3px;
+                        padding-bottom: 1px;
                     }
                     .service-reason {
-                        margin-top: 10px;
+                        margin-top: 5px;
                         font-size: 13px;
                     }
                     .financial-table {
                         width: 100%;
-                        margin-top: 10px;
+                        margin-top: 5px;
                         border-collapse: collapse;
                         font-size: 13px;
                     }
@@ -370,7 +419,7 @@ function printDiv() {
                     .text-right { text-align: right; }
                     .text-danger { color: #dc3545 !important; }
                     .acknowledgment-section {
-                        margin-top: 20px;
+                        margin-top: 10px;
                         border-top: 1px solid #dee2e6;
                         padding-top: 10px;
                         font-size: 12px;
@@ -395,6 +444,32 @@ function printDiv() {
                     }
                     .signature-line {
                         margin-bottom: 5px;
+                    }
+                    .benefits-row {
+                        display: flex;
+                        flex-wrap: nowrap;
+                        gap: 10px;
+                        align-items: stretch;
+                        width: 100%;
+                    }
+                    .benefit-item {
+                        text-align: center;
+                        padding: 2px 5px;
+                        font-size: 12px;
+                        line-height: 1.2;
+                        border: 1px solid #e9ecef !important;
+                        border-radius: 4px;
+                    }
+                    .benefit-label {
+                        font-weight: bold;
+                        font-size: 9px;
+                        color: #495057;
+                    }
+                    .benefit-value {
+                        font-weight: normal;
+                        border-top: 1px solid #e9ecef !important;
+                        margin-top: 2px;
+                        padding-top: 2px;
                     }
                     @page {
                         size: A4;

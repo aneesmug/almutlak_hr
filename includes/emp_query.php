@@ -70,6 +70,9 @@
 		`sponsorship`.`sponsor` AS `sponsor`,
 		`admin_login`.`dept` AS `av_dept`,
 		`admin_login`.`user_type`,
+		`emp_eos`.`leaving_reason`,
+		`emp_eos`.`leaving_reason_ar`,
+		`emp_eos`.`end_date`,
         (SELECT 1 FROM emp_loan WHERE emp_id = `employees`.`emp_id` AND loan_type = 'regular' AND status IN ('dept_manager_pending', 'hr_manager_pending', 'finance_manager_pending', 'gm_pending', 'finance_assistant_pending', 'approved') LIMIT 1) AS has_active_regular_loan,
         (SELECT 1 FROM emp_loan WHERE emp_id = `employees`.`emp_id` AND loan_type = 'emergency' AND status IN ('dept_manager_pending', 'hr_manager_pending', 'finance_manager_pending', 'gm_pending', 'finance_assistant_pending', 'approved') LIMIT 1) AS has_active_emergency_loan,
 		COALESCE(
@@ -89,6 +92,7 @@
 	LEFT JOIN `ac_jobs` ON `ac_jobs`.`id` = `employees`.`actual_job`
 	LEFT JOIN `admin_login` ON `admin_login`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `employees`.`emp_sup_type`
+	LEFT JOIN `emp_eos` ON `emp_eos`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `flystus` FROM `emp_vacation` WHERE `note`='Fly' GROUP BY `emp_id`) AS `fly_status` ON `fly_status`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `encashstus` FROM `emp_vacation` WHERE `note`='Encashed' GROUP BY `emp_id`) AS `encashed_status` ON `encashed_status`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `docu` FROM `emp_docu` GROUP BY `emp_id`) AS `doc_count` ON `doc_count`.`emp_id` = `employees`.`emp_id`

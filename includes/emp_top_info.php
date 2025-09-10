@@ -54,6 +54,11 @@ if ($emprow['user_type'] !== 'employee') {
 						<p class="text-light mb-0"><?= __('joining_date') ?>: <?= date('M d Y', strtotime(str_replace('/', '-', $emprow['joining_date']))) ?></p>
 						<p class="text-light mb-0"><?= __('mobile') ?>: <span class='copyToClipboard'><?= htmlspecialchars($emprow['mobile']) ?></span> <i class='fa fa-clipboard'></i></p>
 						<p class="text-light mb-0"><?= __('vacation_days') ?>: <?= htmlspecialchars($emprow['vacation_days']) ?></p>
+						<?php if ($emprow["status"] == 0) : ?>
+							<p class="text-light mb-0">
+								<?= __('terminated_reason') . ": " . ($is_rtl ?? false ? $emprow['leaving_reason_ar']:$emprow['leaving_reason']); ?>
+							</p>
+						<?php endif; ?>
 					</div>
 				</div>
 
@@ -81,7 +86,7 @@ if ($emprow['user_type'] !== 'employee') {
 						</p>
 						<?php if ($emprow["status"] == 0) : ?>
 							<p class="text-light mb-0">
-								<?= $note_get . __('date') . " " . date('d M Y', strtotime($emprow["ter_date"])); ?>
+								<?=  __('terminated_date'). ": " . date('d M Y', strtotime($emprow["end_date"])); ?>
 							</p>
 						<?php endif; ?>
 					</div>

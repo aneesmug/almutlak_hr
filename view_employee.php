@@ -444,8 +444,8 @@ if (mysqli_num_rows($query) == 1) {
 														<td><span class="copyToClipboard"><?= $emprow['iqama']; ?></span> <i class="fa fa-clipboard"></i></td>
 														<th><?= __('id_expiry') ?>:</th>
 														<td>
-															<span class="date-batch-h"><?= $emprow['iqama_exp']; ?></span>
-															<span class="date-batch-g float-right"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
+															<span class="date-batch-h" data-prefix="<?=__('hijri') ?>"><?= $emprow['iqama_exp']; ?></span>
+															<span class="date-batch-g float-right" data-prefix="<?=__('gregorian') ?>"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
 														</td>
 													</tr>
 													<tr>
@@ -456,20 +456,20 @@ if (mysqli_num_rows($query) == 1) {
 														<th><?= __('passport_expiry') ?>:</th>
 														<td>
 															<?php if ($emprow['passport_exp']): ?>
-																<span class="date-batch-g"><?= $emprow['passport_exp']; ?></span>
+																<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
 															<?php endif ?>
 															<!-- <span class="date-batch-h float-right"><? //=$DateConv->GregorianToHijri($emprow['passport_exp'], $format); 
 																										?></span> -->
 															<?php if ($emprow['passport_exp']): ?>
-																<span class="date-batch-h float-right"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
+																<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
 															<?php endif ?>
 														</td>
 													</tr>
 													<tr>
 														<th><?= __('date_of_birth') ?>:</th>
 														<td>
-															<span class="date-batch-g"><?= $emprow["dob"]; ?></span>
-															<span class="date-batch-h float-right"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
+															<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow["dob"]; ?></span>
+															<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
 														</td>
 														<th><?= __('age') ?>:</th>
 														<td><?= ($emprow["dob"] <> "") ? $years : "" ?></td>
@@ -495,8 +495,8 @@ if (mysqli_num_rows($query) == 1) {
 													<tr>
 														<th><?= __('joining_date') ?>:</th>
 														<td>
-															<span class="date-batch-g"><?= $emprow["joining_date"]; ?></span>
-															<span class="date-batch-h float-right"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
+															<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow["joining_date"]; ?></span>
+															<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
 														</td>
 														<th><?= __('department') ?>:</th>
 														<td><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></td>
@@ -549,10 +549,10 @@ if (mysqli_num_rows($query) == 1) {
 														<th><?= __('insurance_expiry') ?>:</th>
 														<td>
 															<?php if ($emprow['insurance_exp']): ?>
-																<span class="date-batch-g"><?= $emprow['insurance_exp']; ?></span>
+																<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
 															<?php endif ?>
 															<?php if ($emprow['insurance_exp']): ?>
-																<span class="date-batch-h float-right"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
+																<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
 															<?php endif ?>
 														</td>
 													</tr>

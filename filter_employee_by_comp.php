@@ -222,60 +222,18 @@ if ($total_items > 0) {
 
                                         $sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Encashed'");
                                         $cont_encashed = mysqli_fetch_array($sql_count_encashed)[0] ?? 0;
+
+                                        // Determine card status class
+                                        $status_class = '';
+                                        if ($emp_status == 1 && $emp_status_fly == 0) {
+                                            $status_class = 'status-active';
+                                        } elseif ($emp_status_fly == 1) {
+                                            $status_class = 'status-fly';
+                                        } else {
+                                            $status_class = 'status-inactive';
+                                        }
                                     ?>
-                                    <div class="col-lg-3">
-                                        <div class="text-center card-box <?php if ($emp_status == 1 && $emp_status_fly == 0) { echo "bg-light"; } elseif ($emp_status_fly == 1) { echo "bg-warning"; } else { echo "bg-danger"; } ?>">
-                                            <div class="text-right">
-                                                <div class="btn-group" role="group" aria-label="Edit Button">
-                                                    <?php if ($emp_status == 1 && ($user_type ?? '') != "dept_user"): ?>
-                                                        <a href="edit_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-custom btn-rounded waves-effect waves-light btn-sm">
-                                                            <i class="fa fa-solid fa-user-pen"></i> <?=__('edit') ?>
-                                                        </a>
-                                                    <?php endif; ?>
-                                                    <?php if (isset($is_system_admin) && $is_system_admin): ?>
-                                                        <a href="javascript:void(0);" class="btn btn-danger btn-rounded waves-effect waves-light btn-sm deleteAjax" data-id="<?= $id ?>" data-tbl="employee" data-file='0'>
-                                                            <i class="fa fa-solid fa-remove"></i>
-                                                        </a>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </div>
-                                            <div class="member-card pt-2 pb-2">
-                                                <div class="thumb-lg member-thumb m-b-10 mx-auto">
-                                                    <img src="<?= htmlspecialchars($emp_avatar) ?>" class="emp_avat_img empfil" alt="profile-image">
-                                                </div>
-                                                <div class=""><br>
-                                                    <h4 class="m-b-5"><?=parseName($name) ?></h4>
-                                                </div>
-                                                <div class="btn-group" role="group" aria-label="View Details Button">
-                                                    <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="fa fa-solid fa-eye mr-2"></i> <?=__('view_details') ?></a>
-                                                </div><br>
-                                                <span class="badge badge-dark badge-pill"><?=__('fly') ?>: <?= $cont_fly ?> | <?=__('encashed') ?>: <?= $cont_encashed ?></span>
-                                                <div class="mt-4">
-                                                    <div class="row">
-                                                        <div class="col-4 text-left">
-                                                            <div class="mt-3">
-                                                                <h4 class="m-b-5"><?= $emp_id ?></h4>
-                                                                <p class="mb-0"><?=__('employee_id') ?></p>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-4">
-                                                            <div class="mt-3">
-                                                                <?php if ($emptype == "Manager"): ?>
-                                                                    <button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-solid fa-user-chef mr-2"></i><?= __(strtolower($emptype)); ?></button>
-                                                                <?php endif; ?>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-4 text-right">
-                                                            <div class="mt-3">
-                                                                <h5 class="m-b-5"><span class='copyToClipboard'><?= $iqama ?></span></h5>
-                                                                <p class="mb-0"><?=__('iqama_id') ?></p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <?php include("./includes/employee_card.php"); ?>
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <div class="col-12"><div class='alert alert-warning text-center'><?=__('no_employees_found_matching_your_criteria_in_this_department') ?></div></div>

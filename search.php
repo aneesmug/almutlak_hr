@@ -234,45 +234,24 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                         $emp_status_fly = $rec["fly"];
                                                         $emp_avatar = (!empty($rec["avatar"]) && file_exists("./assets/emp_pics/" . basename($rec["avatar"]))) ? $rec["avatar"] : (($rec['sex'] == 'male') ? './assets/emp_pics/defult.png' : './assets/emp_pics/defultFemale.jpg');
                                                         $c0lor = ($emp_status == 1 && $emp_status_fly == 0 ? "bg-light" : ($emp_status_fly == 1 ? "bg-warning" : "bg-danger"));
+
+														$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Fly'");
+														$cont_fly = mysqli_fetch_array($sql_count_fly)[0] ?? 0;
+
+														$sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Encashed'");
+														$cont_encashed = mysqli_fetch_array($sql_count_encashed)[0] ?? 0;
+
+														// Determine card status class
+														$status_class = '';
+														if ($emp_status == 1 && $emp_status_fly == 0) {
+															$status_class = 'status-active';
+														} elseif ($emp_status_fly == 1) {
+															$status_class = 'status-fly';
+														} else {
+															$status_class = 'status-inactive';
+														}
                                                     ?>
-                                                        <div class="col-lg-3">
-                                                            <div class="text-center card-box <?= $c0lor ?> ">
-                                                                <div class="member-card pt-2 pb-2">
-                                                                    <div class="thumb-lg member-thumb m-b-10 mx-auto">
-                                                                        <img src="<?= htmlspecialchars($emp_avatar) ?>" class="emp_avat_img empfil" alt="profile-image">
-                                                                    </div>
-                                                                    <div class=""><br>
-                                                                        <h4 class="m-b-5"><?= parseName($name, 'FIRST_LAST') ?></h4>
-                                                                    </div>
-                                                                    <div class="btn-group" role="group" aria-label="Edit Button">
-                                                                        <a href="view_employee.php?emp_id=<?= $rec["emp_id"] ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="fa fa-solid fa-eye mr-2"></i><?= __('view_details') ?></a>
-                                                                    </div>
-                                                                    <div class="mt-4">
-                                                                        <div class="row">
-                                                                            <div class="col-4 text-left">
-                                                                                <div class="mt-3">
-                                                                                    <h4 class="m-b-5"><?= $emp_id ?></h4>
-                                                                                    <p class="mb-0"><?= __('employee_id') ?></p>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div class="col-4">
-                                                                                <div class="mt-3">
-                                                                                    <?php if ($emptype == "Manager") { ?>
-                                                                                        <button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-solid fa-user-chef mr-2"></i><?= __(strtolower($emptype)) ?></button>
-                                                                                    <?php } ?>
-                                                                                </div>
-                                                                            </div>
-                                                                            <div class="col-4 text-right">
-                                                                                <div class="mt-3">
-                                                                                    <h5 class="m-b-5"><span class='copyToClipboard'><?= $iqama ?></span></h5>
-                                                                                    <p class="mb-0"><?= __('iqama_id') ?></p>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+													<?php include("./includes/employee_card.php"); ?>
                                                     <?php endforeach; ?>
                                                     </div>
                                                 <?php endif; ?>

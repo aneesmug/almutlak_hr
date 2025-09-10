@@ -51,139 +51,11 @@ File: Main Css File
 44. Coming Soon
 45. Responsive
 */
-@import url("https://fonts.googleapis.com/css?family=Roboto:400,700");
-@import url("https://fonts.googleapis.com/css?family=Rubik:300,400,500,700");
-@import url('https://fonts.googleapis.com/css2?family=Kufam:ital,wght@0,400..900;1,400..900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Scheherazade+New:wght@400;500;600;700&family=Zain:ital,wght@0,200;0,300;0,400;0,700;0,800;0,900;1,300;1,400&display=swap');
-@import url("./../../plugins/sweet-alert/v11/sweetalert2.css");
-@import url("./../../plugins/sweet-alert/v11/sweetalert2.min.css");
-
-@import url("./../../plugins/bootstrap-daterangepicker/daterangepicker.css");
-
-
-/*@import url("./../../fontawesome-6.4.0/css/fontawesome.css");
-@import url("./../../fontawesome-6.4.0/css/brands.css");
-@import url("./../../fontawesome-6.4.0/css/all.css");
-@import url("./../../fontawesome-6.4.0/css/font-contant.css");
-@import url("./../../fontawesome-6.4.0/css/regular.css");
-@import url("./../../fontawesome-6.4.0/css/sharp-light.css");
-@import url("./../../fontawesome-6.4.0/css/sharp-regular.css");
-@import url("./../../fontawesome-6.4.0/css/sharp-solid.css");
-@import url("./../../fontawesome-6.4.0/css/solid.css");
-@import url("./../../fontawesome-6.4.0/css/svg-with-js.css");
-@import url("./../../fontawesome-6.4.0/css/v4-font-face.css");
-@import url("./../../fontawesome-6.4.0/css/v4-shims.css");
-@import url("./../../fontawesome-6.4.0/css/v5-font-face.css");*/
-
-@import url("./../../fontawesome-7/css/fontawesome.css");
-@import url("./../../fontawesome-7/css/all.css");
-@import url("./../../fontawesome-7/css/brands.css");
-@import url("./../../fontawesome-7/css/regular.css");
-@import url("./../../fontawesome-7/css/solid.css");
-@import url("./../../fontawesome-7/css/duotone-light.css");
-@import url("./../../fontawesome-7/css/duotone-regular.css");
-@import url("./../../fontawesome-7/css/duotone-thin.css");
-@import url("./../../fontawesome-7/css/sharp-light.css");
-@import url("./../../fontawesome-7/css/sharp-regular.css");
-@import url("./../../fontawesome-7/css/sharp-solid.css");
-@import url("./../../fontawesome-7/css/sharp-thin.css");
-@import url("./../../fontawesome-7/css/sharp-duotone-light.css");
-@import url("./../../fontawesome-7/css/sharp-duotone-regular.css");
-@import url("./../../fontawesome-7/css/sharp-duotone-solid.css");
-@import url("./../../fontawesome-7/css/sharp-duotone-thin.css");
-@import url("./../../fontawesome-7/css/svg-with-js.css");
-
-
-
-
-
-@font-face {
-  font-family: 'saudi_riyal';
-  src: url('./../../assets/fonts/saudi_riyal.woff2') format('woff2'),
-    url('./../../assets/fonts/saudi_riyal.woff') format('woff'),
-    url('./../../assets/fonts/saudi_riyal.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-}
-
-/* Ensure the icon class correctly loads the Riyal symbol */
-.icon-saudi_riyal::before {
-  content: "\e900";
-  font-family: 'saudi_riyal' !important;
-  font-size: inherit;
-  color: inherit;
-  /* font-size: 12px; */
-}
 
 /* =============
   Menu
 ============= */
 /* Metis Menu css */
-:root {
-  --bs-blue: #007bff;
-  --bs-indigo: #6610f2;
-  --bs-purple: #7367f0;
-  --bs-pink: #e83e8c;
-  --bs-red: #ea5455;
-  --bs-orange: #fd7e14;
-  --bs-yellow: #ff9f43;
-  --bs-green: #28c76f;
-  --bs-teal: #20c997;
-  --bs-cyan: #00cfe8;
-  --bs-black: #4b465c;
-  --bs-white: #fff;
-  --bs-gray: rgba(75, 70, 92, 0.6);
-  --bs-gray-dark: rgba(75, 70, 92, 0.8);
-  --bs-gray-25: rgba(75, 70, 92, 0.015);
-  --bs-gray-50: rgba(75, 70, 92, 0.03);
-  --bs-primary: #7367f0;
-  --bs-secondary: #a8aaae;
-  --bs-success: #28c76f;
-  --bs-info: #00cfe8;
-  --bs-warning: #ff9f43;
-  --bs-danger: #ea5455;
-  --bs-light: #dfdfe3;
-  --bs-dark: #4b4b4b;
-  --bs-gray: rgba(75, 70, 92, 0.05);
-  --bs-primary-rgb: 115, 103, 240;
-  --bs-secondary-rgb: 168, 170, 174;
-  --bs-success-rgb: 40, 199, 111;
-  --bs-info-rgb: 0, 207, 232;
-  --bs-warning-rgb: 255, 159, 67;
-  --bs-danger-rgb: 234, 84, 85;
-  --bs-light-rgb: 223, 223, 227;
-  --bs-dark-rgb: 75, 75, 75;
-  --bs-gray-rgb: 75, 70, 92;
-  --bs-white-rgb: 255, 255, 255;
-  --bs-black-rgb: 75, 70, 92;
-  --bs-body-color-rgb: 111, 107, 125;
-  --bs-body-bg-rgb: 248, 247, 250;
-  --bs-font-sans-serif: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-  --bs-font-monospace: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  --bs-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0));
-  --bs-root-font-size: 16px;
-  --bs-body-font-family: var(--bs-font-sans-serif);
-  --bs-body-font-size: 0.9375rem;
-  --bs-body-font-weight: 400;
-  --bs-body-line-height: 1.47;
-  --bs-body-color: #6f6b7d;
-  --bs-body-bg: #f8f7fa;
-  --bs-border-width: 1px;
-  --bs-border-style: solid;
-  --bs-border-color: #dbdade;
-  --bs-border-color-translucent: rgba(75, 70, 92, 0.175);
-  --bs-border-radius: 0.375rem;
-  --bs-border-radius-sm: 0.25rem;
-  --bs-border-radius-lg: 0.5rem;
-  --bs-border-radius-xl: 0.625rem;
-  --bs-border-radius-2xl: 2rem;
-  --bs-border-radius-pill: 50rem;
-  --bs-link-color: #7367f0;
-  --bs-link-hover-color: #685dd8;
-  --bs-code-color: #e83e8c;
-  --bs-highlight-bg: #ffecd9;
-}
-
 .metismenu {
   padding: 0;
 }
@@ -6912,3 +6784,112 @@ input[name^="idiscount"]:read-only {
     border-color: #3b82f6;
     color: #1e40af;
 }
+
+.card-employee {
+  border-top: 4px solid transparent;
+  transition: all 0.3s ease-in-out;
+  border-radius: .25rem;
+}
+.card-employee:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15)!important;
+}
+.card-employee.status-active { border-top-color: #28a745; }
+.card-employee.status-fly { border-top-color: #ffc107; }
+.card-employee.status-inactive { border-top-color: #dc3545; }
+
+.card-employee.status-inactive .card-body {
+  opacity: 0.75;
+}
+.card-employee.status-inactive .emp-avatar {
+  filter: grayscale(100%);
+}
+.card-actions {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+}
+.emp-avatar {
+    width: 90px;
+    height: 90px;
+    object-fit: cover;
+    border: 4px solid #e9ecef;
+}
+
+/* .card-employee {
+  border-radius: .5rem;
+  border: none;
+  transition: all 0.3s ease-in-out;
+}
+.card-employee:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15)!important;
+}
+.card-header-status {
+  padding: 1.5rem 1rem;
+  border-top-left-radius: .5rem;
+  border-top-right-radius: .5rem;
+  position: relative;
+  border-bottom: 1px solid rgba(0,0,0,.05);
+  height: 90px;
+}
+.card-header-status.status-active { background-color: var(--bs-blue); }
+.card-header-status.status-fly { background-color: #ffc107; }
+.card-header-status.status-inactive { background-color: var(--bs-danger); }
+.card-employee.status-inactive .card-body {
+  opacity: 0.7;
+}
+
+.emp-avatar {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 5px solid #fff;
+  position: absolute;
+  bottom: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 15px rgba(0,0,0,.2);
+}
+.card-employee.status-inactive .emp-avatar {
+  filter: grayscale(100%);
+}
+
+.card-employee .card-body {
+  padding-top: 65px;
+}
+
+.card-actions {
+  position: absolute;
+  top: .75rem;
+  right: .75rem;
+  z-index: 10;
+  display: flex;
+  gap: 0.5rem;
+}
+.card-actions .btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 14px;
+  color: #fff;
+  border: none;
+  background-color: rgba(255,255,255,0.2);
+  transition: background-color 0.2s ease;
+}
+.card-actions .btn:hover {
+  background-color: rgba(255,255,255,0.4);
+  color: #fff;
+}
+.card-actions .btn.btn-danger {
+  background-color: rgba(220,53,69,0.7);
+}
+.card-actions .btn.btn-danger:hover {
+  background-color: #dc3545;
+} */

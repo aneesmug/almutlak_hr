@@ -97,7 +97,7 @@ if ($total_items > 0) {
     $stmt->close();
 }
 
-// ** NEW ** Get the total unfiltered count of all employees.
+// Get the total unfiltered count of all employees.
 $unfiltered_sql = "SELECT COUNT(id) as total FROM employees";
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
@@ -120,27 +120,10 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 	<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 	<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
 	<script src="assets/js/modernizr.min.js"></script>
-	<style type="text/css">
-		.card-box.bg-light,
-		.card-box.bg-warning,
-		.card-box.bg-danger {
-			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-			transition: all 0.3s ease-in-out;
-			border-radius: 10px !important;
-		}
-
-		.card-box.bg-light:hover,
-		.card-box.bg-warning:hover,
-		.card-box.bg-danger:hover {
-			box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-			transform: scale(1.005);
-			cursor: pointer;
-		}
-	</style>
 	<?php if ($is_rtl): ?>
-            <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
-        <?php endif; ?>
-		<script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
+        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+    <?php endif; ?>
+	<script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
@@ -148,32 +131,23 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 	<div id="wrapper">
 
 		<div class="left side-menu">
-
 			<div class="slimscroll-menu" id="remove-scroll">
-
 				<div class="topbar-left">
 					<a href="dashboard.php" class="logo">
-						<span>
-							<img src="assets/images/logo.png" alt="" height="22">
-						</span>
-						<i>
-							<img src="assets/images/logo_sm.png" alt="" height="28">
-						</i>
+						<span><img src="assets/images/logo.png" alt="" height="22"></span>
+						<i><img src="assets/images/logo_sm.png" alt="" height="28"></i>
 					</a>
 				</div>
 				<?php include("./includes/main_menu.php"); ?>
 				<div class="clearfix"></div>
-
 			</div>
 		</div>
 
 		<div class="content-page">
-
 			<?php include("./includes/topbar.php"); ?>
 
 			<div class="content">
 				<div class="container-fluid">
-
                     <div class="row">
                         <div class="col-xl-12">
                             <div class="card-box">
@@ -204,18 +178,11 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 								$emp_id = $rec["emp_id"];
 								$iqama = $rec["iqama"];
 								$mobile = $rec["mobile"];
-								$salary = $rec["salary"];
-								$vacation_days = $rec["vacation_days"];
-								$joining_date = $rec["joining_date"];
-								$date_reg = $rec["created_at"];
 								$emp_avatar = $rec["avatar"];
 								$emp_status = $rec["status"];
 								$emp_status_fly = $rec["fly"];
 								$emptype = $rec["emptype"];
 								$sex_get = $rec["sex"];
-
-								$sql_count = mysqli_query($conDB, "SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='" . $emp_id . "' ");
-								$status_cont = mysqli_fetch_array($sql_count)[0];
 
 								$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='" . $emp_id . "' && `note`='Fly' ");
 								$cont_fly = mysqli_fetch_array($sql_count_fly)[0];
@@ -225,82 +192,18 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
 								$checkGander = ($sex_get == 'male') ? './assets/emp_pics/defult.png' : './assets/emp_pics/defultFemale.jpg';
 								$emp_avatar = (!empty($emp_avatar) && file_exists("./assets/emp_pics/" . basename($emp_avatar))) ? $emp_avatar : $checkGander;
+                                
+                                // Determine card status class
+                                $status_class = '';
+                                if ($emp_status == 1 && $emp_status_fly == 0) {
+                                    $status_class = 'status-active';
+                                } elseif ($emp_status_fly == 1) {
+                                    $status_class = 'status-fly';
+                                } else {
+                                    $status_class = 'status-inactive';
+                                }
 							?>
-								<div class="col-lg-3">
-									<div class="text-center card-box <?php if ($emp_status == 1 and $emp_status_fly == 0) {
-																			echo "bg-light";
-																		} elseif ($emp_status_fly == 1) {
-																			echo "bg-warning";
-																		} else {
-																			echo "bg-danger";
-																		} ?>">
-										<div class="text-right">
-											<div class="btn-group" role="group" aria-label="Edit Button">
-												<?php
-												if ($emp_status == 1) {
-													if ($user_type <> "dept_user") {
-												?>
-														<a href="edit_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-custom btn-rounded waves-effect waves-light btn-sm">
-															<i class="mdi mdi-account-edit"></i> <?=__('edit') ?>
-														</a>
-												<?php }
-												} ?>
-
-												<?php
-												if (isset($access1) && $user_type == $access1) {
-												?>
-													<a href="javascript:void(0);" class="btn btn-danger btn-rounded waves-effect waves-light btn-sm deleteAjax" data-id="<?= $id ?>" data-tbl="employee" data-file='0'>
-														<i class="mdi mdi-account-remove"></i>
-													</a>
-												<?php } ?>
-											</div>
-
-										</div>
-
-										<div class="member-card pt-2 pb-2">
-											<div class="thumb-lg member-thumb m-b-10 mx-auto">
-												<img src="<?= $emp_avatar ?>" class="emp_avat_img empfil" alt="profile-image">
-											</div>
-
-											<div class=""><br>
-												<h4 class="m-b-5"><?=parseName($name) ?></h4>
-											</div>
-											<div class="btn-group" role="group" aria-label="Edit Button">
-												<a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="mdi mdi-account-search"></i> <?=__('view_details') ?></a>
-											</div><br>
-											<span class="badge badge-dark badge-pill"><?=__('fly') ?>: <?= $cont_fly ?> | <?=__('encashed') ?>: <?= $cont_encashed ?></span>
-
-											<div class="mt-4">
-												<div class="row">
-													<div class="col-4 text-left">
-														<div class="mt-3">
-															<h4 class="m-b-5"><?= $emp_id ?></h4>
-															<p class="mb-0"><?=__('employee_id') ?></p>
-														</div>
-													</div>
-
-													<div class="col-4">
-														<div class="mt-3">
-															<?php if ($emptype == "Manager") { ?>
-																<button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-user-circle-o"></i> <?= __(strtolower($emptype)); ?></button>
-															<?php } ?>
-														</div>
-													</div>
-
-													<div class="col-4 text-right">
-														<div class="mt-3">
-															<h5 class="m-b-5"><span class='copyToClipboard'><?= $iqama ?></span></h5>
-															<p class="mb-0"><?=__('iqama_id') ?></p>
-														</div>
-													</div>
-												</div>
-											</div>
-
-										</div>
-
-									</div>
-
-								</div> <!-- end col -->
+							<?php include("./includes/employee_card.php"); ?>
 							<?php } ?>
 						<?php else: ?>
                             <div class="col-12">
@@ -313,28 +216,23 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 						<?php endif; ?>
 					</div>
 
-
 					<div class="row">
 						<div class="col-12">
                             <?php
                                 $pagination_params = [];
 								if (!empty($search_term)) $pagination_params['search'] = $search_term;
-								if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
 								echo generate_pagination_controls($current_page,$total_pages,$total_items,$items_per_page,$limit_options,$show_all,$pagination_params,$unfiltered_total_items);
                             ?>
 						</div>
 					</div>
 
 				</div>
-
 			</div>
 
 			<footer class="footer">
 				<?= $site_footer ?>
 			</footer>
-
 		</div>
-
 	</div>
 
 	<script src="assets/js/jquery.min.js"></script>

@@ -1,10 +1,13 @@
 <?php
 /****************************************************************
- * MODIFICATION SUMMARY (005-emp_end_of_service.php):
- * - Removed database sync for EOS reasons. The dropdown is now populated directly from the live API call every time.
- * - Updated the form submission logic to find the selected reason's English and Arabic text from the API response.
- * - The `leaving_reason` and a new `leaving_reason_ar` field in the `emp_eos` table are now correctly populated upon submission.
- * - The `eos_reason` field will continue to store the reason code from the API.
+ * MODIFICATION SUMMARY (009-emp_end_of_service.php):
+ * - Fixed vacation day calculation to be dependent on the selected End of Service Date, not the current date.
+ * - Corrected the translation function call for the asset warning message to properly handle dynamic content.
+ * - Made the 'days_served' calculation inclusive of the end date for better accuracy.
+ * - Made the 'Working Days' field editable to allow manual override of salary calculation.
+ * - Added a check against the 'payrolls' table to zero out working days and salary if already paid for the selected month.
+ * - Made the payroll check case-insensitive and robust against whitespace.
+ * - Replaced javascript .includes() with a more robust for-loop for checking paid months.
  ****************************************************************/
 
 	require_once __DIR__ . '/includes/init.php';
@@ -117,7 +120,8 @@
     
     $contractType = $_POST['contract_type'] ?? '1';
     $selectedReasonCode = $_POST['eos_reason'] ?? '';
-    $endDateStr = $_POST['end_date'] ?? '';
+    // MODIFICATION: Do not default to the current date. Only use the date provided by the user.
+    $endDateStr = $_POST['end_date'] ?? ''; 
     $allReasons = [];
     $errors = [];
     $general_error_message = '';
@@ -128,6 +132,56 @@
     } else {
         $allReasons = $reasonsResult['reasons'];
     }
+
+    // Fetch all paid payroll months for the employee to use in JavaScript validation
+    $paid_payrolls = [];
+    $payroll_query = mysqli_prepare($conDB, "SELECT `month_year` FROM `payrolls` WHERE `emp_id` = ? AND LOWER(TRIM(`status`)) = 'paid'");
+    if ($payroll_query) {
+        mysqli_stmt_bind_param($payroll_query, "s", $emprow['empid']);
+        mysqli_stmt_execute($payroll_query);
+        $result = mysqli_stmt_get_result($payroll_query);
+        while ($row = mysqli_fetch_assoc($result)) {
+            $paid_payrolls[] = trim($row['month_year']);
+        }
+        mysqli_stmt_close($payroll_query);
+    }
+
+	// --- START: Prorated Vacation Calculation ---
+    // This logic calculates the vacation days owed to an employee who is leaving before completing their full contract year.
+    // It is based on the actual number of days served from the user-selected End of Service Date.
+    $annual_vacation_entitlement = floatval($emprow['vacation_days']);
+    $prorated_vacation_balance = 0;
+
+    // This needs to be available for JS, so we calculate it regardless of whether an end date has been submitted yet.
+    $used_days_query = mysqli_query($conDB, "SELECT SUM(`vacdays`) as `total_used` FROM `emp_vacation` WHERE `emp_id` = '{$emprow['empid']}' AND `is_deductible` = 1");
+    $used_days_data = mysqli_fetch_assoc($used_days_query);
+    $total_used_days = floatval($used_days_data['total_used'] ?? 0);
+
+    // MODIFIED: Only perform the calculation if an End of Service Date has been provided.
+    if (!empty($endDateStr)) {
+        $joining_date_obj = new DateTime($emprow['joining_date']);
+        $end_date_obj = new DateTime($endDateStr);
+
+        // Ensure dates are valid and the employee has a vacation plan
+        if ($end_date_obj >= $joining_date_obj && $annual_vacation_entitlement > 0) {
+            // 1. Calculate the total number of days the employee has served.
+            $interval = $end_date_obj->diff($joining_date_obj);
+            // Add 1 to make the day count inclusive of the end date.
+            $days_served = $interval->days + 1;
+
+            // 2. Calculate the total vacation days accrued during the service period.
+            // Formula: (Days Served / 365) * Annual Vacation Days
+            $accrued_days = ($days_served / 365.0) * $annual_vacation_entitlement;
+
+            // 3. The final balance is the accrued days minus any days already used.
+            $prorated_vacation_balance = $accrued_days - $total_used_days;
+        }
+    }
+
+    // Ensure the balance is not negative.
+    $prorated_vacation_balance = max(0, $prorated_vacation_balance);
+    // --- END: Prorated Vacation Calculation ---
+
 
     if(isset($_POST['submit'])){
         if($assigned_assets_count > 0){
@@ -142,13 +196,31 @@
             $eos_amount = filter_input(INPUT_POST, 'eos_amount', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $vacation_salary = filter_input(INPUT_POST, 'anul_vac_salry', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $net_payment = filter_input(INPUT_POST, 'net_payment', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
-            $curt_month_salry = filter_input(INPUT_POST, 'curt_month_salry', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
-            $curt_month_days = 0;
+
+            // Check if salary is paid for the termination month
+            $salaryPaidForTerminationMonth = false;
             if (!empty($endDateStr)) {
-                $endDateTimeForDays = new DateTime($endDateStr);
-                $curt_month_days = (int)$endDateTimeForDays->format('d');
+                $endDateTime = new DateTime($endDateStr);
+                $month_year = $endDateTime->format('Y-m');
+                $payroll_check_stmt = $conDB->prepare("SELECT id FROM `payrolls` WHERE `emp_id` = ? AND `month_year` = ? AND LOWER(TRIM(`status`)) = 'paid' LIMIT 1");
+                $payroll_check_stmt->bind_param("ss", $emprow['empid'], $month_year);
+                $payroll_check_stmt->execute();
+                $payroll_check_stmt->store_result();
+                if ($payroll_check_stmt->num_rows > 0) {
+                    $salaryPaidForTerminationMonth = true;
+                }
+                $payroll_check_stmt->close();
             }
 
+            if ($salaryPaidForTerminationMonth) {
+                $curt_month_days = 0;
+                $curt_month_salry = 0.00; // Force salary to 0 if already paid
+            } else {
+                // Use manually entered working days, fallback to date calculation
+                $curt_month_days = filter_input(INPUT_POST, 'curt_month_days', FILTER_VALIDATE_INT, ['options' => ['default' => 0]]);
+                $curt_month_salry = filter_input(INPUT_POST, 'curt_month_salry', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
+            }
+            
             if (empty($contractType)) $errors['contract_type'] = 'This field is required.';
             if (empty($selectedReasonCode)) $errors['eos_reason'] = 'This field is required.';
             if (empty($endDateStr)) $errors['end_date'] = 'This field is required.';
@@ -221,6 +293,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 		<meta content="Anees Afzal" name="author" />
 		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<link rel="shortcut icon" href="assets/images/favicon.ico">
 		<link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
@@ -315,7 +388,7 @@
                                         <div class="card-body">
                                             <div class="row">
                                                 <div class="col-md-6">
-                                                    <p><strong><?=__('Total Remaining Vacation Days');?>:</strong><br><?= htmlspecialchars(number_format($emprow['total_remaining_leave'], 2)); ?> <?=__('days');?></p>
+                                                    <p><strong><?=__('Total Remaining Vacation Days');?>:</strong><br><?= htmlspecialchars(number_format($prorated_vacation_balance, 2)); ?> <?=__('days');?></p>
                                                 </div>
                                                 <div class="col-md-6">
                                                     <p><strong><?=__('Outstanding Loan Balance');?>:</strong><br><span class="text-danger"><?= htmlspecialchars(number_format($outstanding_loan, 2)); ?> <?=__('SAR');?></span></p>
@@ -361,7 +434,7 @@
                                         <div class="card-body">
                                             <?php if ($assigned_assets_count > 0): ?>
                                                 <div class="alert alert-danger text-center">
-                                                    <strong><?=__('Action Required:');?></strong> <?=__('This employee has ') . $assigned_assets_count . __(' outstanding asset(s). Please ensure all assets are returned before proceeding with termination.');?>
+                                                    <strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_assets_count, __('This employee has {count} outstanding asset(s). Please ensure all assets are returned before proceeding with termination.')) ?>
                                                 </div>
                                             <?php endif; ?>
 
@@ -412,11 +485,11 @@
                                                             </div>
                                                             <div class="form-group col-lg-3">
                                                                 <label for="anul_vac_days"><?=__('Annual vacation days');?></label>
-                                                                <input type="number" class="form-control calc-trigger" value="<?= htmlspecialchars($_POST['anul_vac_days'] ?? $emprow['total_remaining_leave']); ?>" id="anul_vac_days" name="anul_vac_days" step="any">
+                                                                <input type="number" class="form-control calc-trigger" value="<?= htmlspecialchars(number_format($prorated_vacation_balance, 2)); ?>" id="anul_vac_days" name="anul_vac_days" step="any" placeholder="Calculated from End Date">
                                                             </div>
                                                             <div class="form-group col-lg-2">
                                                                 <label for="curt_month_days_display"><?=__('Working Days');?></label>
-                                                                <input type="text" class="form-control" id="curt_month_days_display" readonly style="background-color: #e9ecef;">
+                                                                <input type="number" class="form-control" id="curt_month_days_display" name="curt_month_days">
                                                             </div>
                                                             <div class="form-group col-lg-3">
                                                                 <label for="curt_month_salry"><?=__('Resignation Month Salary');?></label>
@@ -453,6 +526,8 @@
                                                         <input type="hidden" name="anul_vac_salry" id="anul_vac_salry_hidden">
                                                         <input type="hidden" name="net_payment" id="net_payment_hidden">
                                                         <input type="hidden" id="salary" value="<?= htmlspecialchars($emprow['salary']); ?>">
+                                                        <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($annual_vacation_entitlement); ?>">
+                                                        <input type="hidden" id="total_used_vacation_days" value="<?= htmlspecialchars($total_used_days); ?>">
                                                     </fieldset>
                                                 </form>
                                             <?php else: ?>
@@ -478,37 +553,116 @@
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 		<script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 		<script src="assets/js/jquery.app.js"></script>
+        <script>
+            const paidPayrolls = <?= json_encode($paid_payrolls); ?>;
+        </script>
 		<script type="text/javascript">
             $(document).ready(function(){
-
-                $("#eos_reason").select2();
                 
-                function calculateProratedSalary() {
+                function isSalaryPaidForMonth(endDateStr) {
+                    if (!endDateStr || !window.paidPayrolls || !window.paidPayrolls.length) {
+                        return false;
+                    }
+                    const targetMonthYear = endDateStr.substring(0, 7);
+                    for (var i = 0; i < window.paidPayrolls.length; i++) {
+                        if (String(window.paidPayrolls[i]).trim() === targetMonthYear) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                function calculateProratedVacation() {
+                    const joiningDateStr = $('#joining_date').val();
+                    const endDateStr = $('#end_date').val();
+                    const annualVacationEntitlement = parseFloat($('#annual_vacation_entitlement').val()) || 0;
+                    const totalUsedDays = parseFloat($('#total_used_vacation_days').val()) || 0;
+
+                    if (!joiningDateStr || !endDateStr || annualVacationEntitlement <= 0) {
+                        $('#anul_vac_days').val('0.00');
+                        return;
+                    }
+
+                    const joiningDate = new Date(joiningDateStr);
+                    const endDate = new Date(endDateStr);
+
+                    if (endDate < joiningDate) {
+                        $('#anul_vac_days').val('0.00');
+                        return;
+                    }
+
+                    // Calculate the difference in time in milliseconds
+                    const timeDiff = endDate.getTime() - joiningDate.getTime();
+                    // Convert milliseconds to days and add 1 to make the count inclusive
+                    const daysServed = (timeDiff / (1000 * 3600 * 24)) + 1;
+
+                    const accruedDays = (daysServed / 365.0) * annualVacationEntitlement;
+                    let proratedBalance = accruedDays - totalUsedDays;
+                    proratedBalance = Math.max(0, proratedBalance);
+
+                    $('#anul_vac_days').val(proratedBalance.toFixed(2));
+                }
+
+                function updateResignationSalary() {
+                    const workedDays = parseInt($('#curt_month_days_display').val()) || 0;
                     const endDateStr = $('#end_date').val();
                     const basicSalary = parseFloat($('#salary').val()) || 0;
                     
+                    if (isSalaryPaidForMonth(endDateStr)) {
+                        $('#curt_month_salry').val('0.00');
+                        performCalculation();
+                        return;
+                    }
+
                     if (!endDateStr || basicSalary <= 0) {
                         $('#curt_month_salry').val('0.00');
-                        $('#curt_month_days_display').val('');
-                        return;
-                    };
+                    } else {
+                        const endDate = new Date(endDateStr);
+                        const year = endDate.getFullYear();
+                        const month = endDate.getMonth() + 1; // JS months are 0-indexed
 
-                    const parts = endDateStr.split('-');
-                    if (parts.length !== 3) return;
-                    const year = parseInt(parts[0], 10);
-                    const month = parseInt(parts[1], 10);
-                    const day = parseInt(parts[2], 10);
-
-                    if (isNaN(year) || isNaN(month) || isNaN(day)) return;
-
-                    const daysInMonth = new Date(year, month, 0).getDate();
-                    const workedDays = day;
-                    $('#curt_month_days_display').val(workedDays);
-
-                    if (daysInMonth > 0) {
-                        const proratedSalary = (basicSalary / daysInMonth) * workedDays;
-                        $('#curt_month_salry').val(proratedSalary.toFixed(2));
+                        const daysInMonth = new Date(year, month, 0).getDate();
+                        if (daysInMonth > 0) {
+                            const proratedSalary = (basicSalary / daysInMonth) * workedDays;
+                            $('#curt_month_salry').val(proratedSalary.toFixed(2));
+                        } else {
+                            $('#curt_month_salry').val('0.00');
+                        }
                     }
+                    performCalculation();
+                }
+
+                function updateWorkingDaysDisplay() {
+                    const endDateStr = $('#end_date').val();
+                    
+                    if (isSalaryPaidForMonth(endDateStr)) {
+                        $('#curt_month_days_display').val('0').prop('readonly', true);
+                        return;
+                    }
+                    
+                    $('#curt_month_days_display').prop('readonly', false);
+
+                    if (!endDateStr) {
+                        $('#curt_month_days_display').val('0');
+                        return;
+                    }
+
+                    const endDate = new Date(endDateStr);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    const year = endDate.getFullYear();
+                    const day = endDate.getDate();
+                    
+                    let displayWorkedDays;
+                    
+                    if (year > today.getFullYear() || (year === today.getFullYear() && endDate.getMonth() > today.getMonth())) {
+                        displayWorkedDays = 0;
+                    } else {
+                        displayWorkedDays = day;
+                    }
+                    
+                    $('#curt_month_days_display').val(displayWorkedDays);
                 }
 
                 $('.datepicker').datepicker({
@@ -516,12 +670,17 @@
                     todayHighlight: true,
                     autoclose: true
                 }).on('changeDate', function(e) {
-                    calculateProratedSalary();
-                    performCalculation();
+                    calculateProratedVacation();
+                    updateWorkingDaysDisplay();
+                    updateResignationSalary();
                 });
 
                 $('input[name="contract_type"]').on('change', function() {
                     $('#calculatorForm').submit();
+                });
+
+                $('#curt_month_days_display').on('change keyup', function() {
+                    updateResignationSalary();
                 });
 
                 function performCalculation() {
@@ -577,8 +736,8 @@
                 
                 // Trigger calculation on page load if date is already set
                 if($('#end_date').val()){
-                    calculateProratedSalary();
-                    performCalculation();
+                    updateWorkingDaysDisplay();
+                    updateResignationSalary();
                 }
             });
 		</script>

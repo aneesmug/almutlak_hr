@@ -51,8 +51,9 @@ File: Main Css File
 44. Coming Soon
 45. Responsive
 */
-@import url("https://fonts.googleapis.com/css?family=Roboto:400,700");
-@import url("https://fonts.googleapis.com/css?family=Rubik:300,400,500,700");
+
+@import url("./../css/colors_fonts.css");
+
 /* =============
   Menu
 ============= */
@@ -6369,10 +6370,12 @@ label.atch{
 }
 
 .date-batch-g::before {
-  content: "G";
+  /* content: "Gregorian"; */
+  content: attr(data-prefix);
 }
 .date-batch-h::before {
-  content: "H";
+  /* content: "Hjri"; */
+  content: attr(data-prefix);
 }
 .date-batch-g::before {
   color: #fff;
@@ -6387,7 +6390,7 @@ label.atch{
 .date-batch-h::before, .date-batch-g::before{
   display: inline-flex;
   font-size: 12px !important;
-  width: 24px;
+  width: 60px;
   height: 24px;
   align-items: center;
   justify-content: center;
