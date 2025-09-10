@@ -1,10 +1,12 @@
 <?php
 /****************************************************************
- * MODIFICATION SUMMARY (023-all_applied_vac.php):
- * 1. EXPANDED BUTTON VISIBILITY: The condition for showing the "Add/Edit Payments" button has been updated.
- * 2. OLD LOGIC: The button only appeared if the status was exactly 'hr_assistant_approved'.
- * 3. NEW LOGIC: The button now appears for the HR_Assistant if the vacation status is 'hr_assistant_approved', 'hr_manager_approved', OR 'gm_approved'.
- * 4. FLEXIBLE WORKFLOW: This change allows the HR Assistant to add or edit the Ticket Payment and Permit Fee at any point in the approval chain after their own approval, fulfilling the request to allow payment entry at any time.
+ * MODIFICATION SUMMARY:
+ * 1. DYNAMIC 'PENDING WITH' STATUS: The status display logic has been enhanced to show not just the status, but also who the request is pending with. It now dynamically identifies the next approver in the chain (e.g., "Pending with HR Assistant," "Pending with GM") to provide clearer, more actionable information to users.
+ * 2. ADDED HR MANAGER QUEUE: Created a special default filter, 'hr_manager_queue', for the HR Manager. This queue now correctly displays requests from their own department (dept 5) with an 'apply' status, in addition to requests from other departments that have been approved by the HR Assistant ('hr_assistant_approved').
+ * 3. RESTRUCTURED FILTER LOGIC: The logic for determining the default filter has been refactored to be more explicit. It now first determines the correct filter based on the user's role (defaulting to 'all' for System Admins) and then applies that filter to build the query.
+ * 4. FIXED ADMIN DEPARTMENT FILTER: Corrected the query logic to prevent the department filter from being applied to System Administrators who also have a 'DPT_Manager' role.
+ * 5. ROBUST BUTTON VISIBILITY: Modified the button display logic to handle a parallel-like approval state. The IT department's "Clearance" button will now correctly appear for requests awaiting their action.
+ * 6. SEQUENTIAL GM APPROVAL: The General Manager's and HR Manager's final "Approve" button is now hidden until the `it_approval_status` is no longer 'pending'.
  ****************************************************************/
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
@@ -17,6 +19,7 @@ $all_statuses = [
     'apply' => __('new_request'),
     'pending' => __('assistant_pending'),
     'hr_assistant_approved' => __('hr_assistant_approved'),
+    'it_pending' => __('it_clearance_pending'),
     'hr_manager_approved' => __('hr_manager_approved'),
     'gm_approved' => __('gm_approved'),
     'rejected' => __('rejected')
@@ -38,65 +41,58 @@ if ($current_page < 1) {
 }
 
 $current_filter = $_GET['status'] ?? null;
-$statuses_to_query = []; 
+$statuses_to_query = [];
 
-if ($current_filter && $current_filter !== 'all' && $current_filter !== 'none') {
-    if (array_key_exists($current_filter, $all_statuses)) {
-        $statuses_to_query = [$current_filter];
+// 2. Determine the effective filter: either from URL or a default based on role
+if ($current_filter === null) {
+    if ($is_system_admin) {
+        $current_filter = 'all'; 
+    } elseif ($user_dept == 6) {
+        $current_filter = 'it_pending';
+    } else {
+        switch ($user_role) {
+            case 'DPT_Manager': $current_filter = 'apply'; break;
+            case 'HR_Assistant': $current_filter = 'pending'; break;
+            case 'HR_Manager': $current_filter = 'hr_manager_queue'; break;
+            case 'GM': $current_filter = 'hr_manager_approved'; break;
+            default: $current_filter = 'none'; break;
+        }
     }
-} else if ($current_filter === null) {
-    switch ($user_role) {
-        case 'DPT_Manager':
-            $statuses_to_query = ['apply'];
-            $current_filter = 'apply';
-            break;
-        case 'HR_Assistant':
-            // HR Assistant should see their pending queue by default
-            $statuses_to_query = ['pending'];
-            $current_filter = 'pending';
-            break;
-        case 'HR_Manager':
-            $statuses_to_query = ['hr_assistant_approved', 'hr_manager_approved'];
-            $current_filter = 'hr_manager_combined_view';
-            break;
-        case 'GM':
-            $statuses_to_query = ['hr_manager_approved'];
-            $current_filter = 'hr_manager_approved';
-            break;
-        default:
-            $current_filter = 'none';
-            break;
-    }
-}
-
-if ($current_filter === 'hr_manager_combined_view') {
-    $page_title = __('approval_queue');
-} else {
-    $page_title = isset($all_statuses[$current_filter]) ? $all_statuses[$current_filter] : __('all_requests');
 }
 
 $where_clauses = [];
 $params = [];
 $types = "";
 
-if (!empty($statuses_to_query)) {
+// 3. Based on the effective filter, build the query
+if ($current_filter === 'hr_manager_queue') {
+    $where_clauses[] = "((v.approval_status = ? AND e.dept = ?) OR v.approval_status = ?)";
+    $params = ['apply', 5, 'hr_assistant_approved'];
+    $types = "sis";
+    $page_title = __('approval_queue');
+} elseif ($current_filter !== 'all' && $current_filter !== 'none' && array_key_exists($current_filter, $all_statuses)) {
+    $statuses_to_query = [$current_filter];
     $placeholders = implode(',', array_fill(0, count($statuses_to_query), '?'));
     $where_clauses[] = "v.approval_status IN ($placeholders)";
     foreach ($statuses_to_query as $status) {
         $params[] = $status;
         $types .= "s";
     }
+    $page_title = $all_statuses[$current_filter];
+} else {
+    $page_title = __('all_requests');
 }
+
 
 if (!empty($search_term)) {
     $where_clauses[] = "(e.name LIKE ? OR v.emp_id LIKE ?)";
     $search_param = "%{$search_term}%";
-    $params[] = $search_param;
-    $params[] = $search_param;
+    array_push($params, $search_param, $search_param);
     $types .= "ss";
 }
 
-if ($user_role === 'DPT_Manager') {
+// MODIFIED: Ensure the department filter does NOT apply to system admins.
+if ($user_role === 'DPT_Manager' && !$is_system_admin) {
     $where_clauses[] = "e.dept = ?";
     $params[] = $user_dept;
     $types .= "i";
@@ -132,6 +128,7 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
         v.*, 
         v.attachment_path,
         e.name as employee_name,
+        e.dept,
         b.remaining_balance,
         b.available_balance,
         CASE 
@@ -150,8 +147,7 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
     if (!$show_all) {
         $offset = ($current_page - 1) * $items_per_page;
         $sql .= " LIMIT ?, ?";
-        $main_params[] = $offset;
-        $main_params[] = $items_per_page;
+        array_push($main_params, $offset, $items_per_page);
         $main_types .= "ii";
     }
 
@@ -241,7 +237,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                             <div class="form-group">
                                                 <label for="statusFilter" class="font-weight-bold"><?=__('filter_by_status')?></label>
                                                 <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                    <option value="all" <?php if ($current_filter == 'all' || $current_filter == 'hr_manager_combined_view') echo 'selected'; ?>><?=__('all_requests')?></option>
+                                                    <option value="all" <?php if ($current_filter == 'all') echo 'selected'; ?>><?=__('all_requests')?></option>
                                                     <?php foreach ($all_statuses as $status_key => $status_value): ?>
                                                         <option value="<?=$status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
                                                             <?=htmlspecialchars($status_value); ?>
@@ -294,15 +290,42 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
 															<div class="detail-item">
                                                                 <?php 
-																	$status_text = $all_statuses[$req['approval_status']] ?? __('unknown');
-																	$badge_class = 'secondary';
-																	switch ($req['approval_status']) {
-																		case 'apply': $badge_class = 'info'; break;
-																		case 'pending': $badge_class = 'warning'; break;
-																		case 'gm_approved': $badge_class = 'success'; break;
-																		case 'rejected': $badge_class = 'danger'; break;
-																		default: $badge_class = 'primary'; break;
-																	}
+                                                                    $badge_class = 'secondary';
+                                                                    $status_text = '';
+
+                                                                    switch ($req['approval_status']) {
+                                                                        case 'apply':
+                                                                            $badge_class = 'info';
+                                                                            $status_text = $req['dept'] == 5 ? __('pending_with_hr_manager') : __('pending_with_dpt_manager');
+                                                                            break;
+                                                                        case 'pending':
+                                                                            $badge_class = 'warning';
+                                                                            $status_text = __('pending_with_hr_assistant');
+                                                                            break;
+                                                                        case 'hr_assistant_approved':
+                                                                            $badge_class = 'primary';
+                                                                            $status_text = __('pending_with_hr_manager');
+                                                                            break;
+                                                                        case 'it_pending':
+                                                                            $badge_class = 'primary';
+                                                                            $status_text = __('pending_with_it');
+                                                                            break;
+                                                                        case 'hr_manager_approved':
+                                                                            $badge_class = 'primary';
+                                                                            $status_text = ($req['it_approval_status'] == 'pending') ? __('pending_with_it') : __('pending_with_gm');
+                                                                            break;
+                                                                        case 'gm_approved':
+                                                                            $badge_class = 'success';
+                                                                            $status_text = __('approved');
+                                                                            break;
+                                                                        case 'rejected':
+                                                                            $badge_class = 'danger';
+                                                                            $status_text = __('rejected');
+                                                                            break;
+                                                                        default:
+                                                                            $status_text = __('unknown');
+                                                                            break;
+                                                                    }
 																?>
 																<i class="fad fa-info-circle duotone-info"></i>
 																<strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=htmlspecialchars($status_text); ?></span>
@@ -315,29 +338,60 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 														</div>
 														<div class="card-footer d-flex justify-content-between align-items-center btn-group">
 															<button class="btn btn-info btn-block waves-effect" onclick="window.open('vacation_report_details.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>')"><i class="fa fa-eye"></i> <?=__('view')?></button>
-															<?php 
-                                                            if (
-																($req['approval_status'] == 'apply' && $user_role == 'DPT_Manager') ||
-																($req['approval_status'] == 'pending' && $user_role == 'HR_Assistant') ||
-																($req['approval_status'] == 'hr_assistant_approved' && $user_role == 'HR_Manager') ||
-																($req['approval_status'] == 'hr_manager_approved' && $user_role == 'HR_Manager') ||
-																($req['approval_status'] == 'hr_manager_approved' && $user_role == 'GM')
-															): 
-															$employee_name_js = htmlspecialchars(addslashes($req['employee_name']), ENT_QUOTES);
-															$vac_type_js = htmlspecialchars($req['vac_type']);
-															$start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
-															$end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
-															$days_js = htmlspecialchars($req['vacdays']);
-															?>
-																<button class="btn btn-danger btn-block waves-effect" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$user_role; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
-																<button class="btn btn-success btn-block waves-effect" onclick="approveRequest(<?=$req['id']; ?>, '<?=$user_role; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')"><i class="fa fa-check"></i> <?=__('approve')?></button>
-															<?php endif; ?>
+															
+                                                            <?php
+                                                            if ($req['approval_status'] != 'gm_approved' && $req['approval_status'] != 'rejected'):
+
+                                                                $show_standard_buttons = false;
+                                                                
+                                                                if (
+                                                                    // DPT Manager or HR can approve 'apply' status
+                                                                    ($req['approval_status'] == 'apply' && ($user_role == 'DPT_Manager' || ($user_role == 'HR_Manager' && $req['dept'] == 5))) ||
+                                                                    // HR Assistant approves 'pending' status
+                                                                    ($req['approval_status'] == 'pending' && $user_role == 'HR_Assistant') ||
+                                                                    // HR Manager approves requests from other depts after HR Assistant
+                                                                    ($req['approval_status'] == 'hr_assistant_approved' && $user_role == 'HR_Manager')
+                                                                ) {
+                                                                    $show_standard_buttons = true;
+                                                                }
+                                                                
+                                                                // GM and HR Manager final approval button with IT check
+                                                                if ($req['approval_status'] == 'hr_manager_approved' && $req['it_approval_status'] != 'pending' && ($user_role == 'GM' || $user_role == 'HR_Manager')) {
+                                                                    $show_standard_buttons = true;
+                                                                }
+
+                                                                if ($show_standard_buttons):
+                                                                    $employee_name_js = htmlspecialchars(addslashes($req['employee_name']), ENT_QUOTES);
+                                                                    $vac_type_js = htmlspecialchars($req['vac_type']);
+                                                                    $start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
+                                                                    $end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
+                                                                    $days_js = htmlspecialchars($req['vacdays']);
+                                                                ?>
+                                                                    <button class="btn btn-danger btn-block waves-effect" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$user_role; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
+                                                                    <button class="btn btn-success btn-block waves-effect" onclick="approveRequest(<?=$req['id']; ?>, '<?=$user_role; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')"><i class="fa fa-check"></i> <?=__('approve')?></button>
+                                                                <?php endif; ?>
+                                                                
+                                                                <?php // IT Clearance Buttons: Show if status is IT pending OR if status is HR Manager approved AND IT status is pending
+                                                                if (($req['approval_status'] == 'it_pending' || ($req['approval_status'] == 'hr_manager_approved' && $req['it_approval_status'] == 'pending')) && ($user_dept == 6 || $is_system_admin)):
+                                                                    $employee_name_js_it = htmlspecialchars(addslashes($req['employee_name']), ENT_QUOTES);
+                                                                    $vac_type_js_it = htmlspecialchars($req['vac_type']);
+                                                                    $start_date_js_it = htmlspecialchars($req['start_date'] ?? 'N/A');
+                                                                    $end_date_js_it = htmlspecialchars($req['return_date'] ?? 'N/A');
+                                                                    $days_js_it = htmlspecialchars($req['vacdays']);
+                                                                ?>
+                                                                    <button class="btn btn-danger btn-block waves-effect" onclick="rejectVacationRequest(<?=$req['id']; ?>, 'IT_Technician', '<?=$employee_name_js_it; ?>', '<?=$vac_type_js_it; ?>', '<?=$start_date_js_it; ?>', '<?=$end_date_js_it; ?>', '<?=$days_js_it; ?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
+                                                                    <button class="btn btn-primary btn-block waves-effect" onclick="approveITClearance(<?=$req['id'];?>, '<?=$employee_name_js_it;?>')">
+                                                                        <i class="fa fa-laptop"></i> <?=__('clearance')?>
+                                                                    </button>
+                                                                <?php endif; ?>
+
+                                                            <?php endif; // End check for final statuses ?>
 
                                                             <?php
                                                             // Condition to show "Add/Edit Payments" button
                                                             if (
                                                                 $user_role == 'HR_Assistant' &&
-                                                                in_array($req['approval_status'], ['hr_assistant_approved', 'hr_manager_approved', 'gm_approved']) &&
+                                                                in_array($req['approval_status'], ['hr_assistant_approved', 'hr_manager_approved', 'gm_approved', 'it_pending']) &&
                                                                 $req['vac_type'] == 'Fly' &&
                                                                 ($req['ticket_pay'] == 00.0 || $req['permit_fee'] == 00.0)
                                                             ):
@@ -540,6 +594,49 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 				}
 			})
 		}
+
+        function approveITClearance(vacationId, employeeName) {
+            Swal.fire({
+                title: __('it_asset_clearance_for').replace('{0}', employeeName),
+                html: `
+                    <p class="mt-3"><strong>${__('provide_clearance_notes')}</strong></p>
+                    <select id="it_notes" class="swal2-input">
+                        <option value="">${__('cleared_all_assets')}</option>
+                        <option value="not_received">${__('not_received')}</option>
+                        <option value="received">${__('received')}</option>
+                    </select>
+                `,
+                confirmButtonText: __('submit_clearance'),
+                showCancelButton: true,
+                allowOutsideClick: false,
+                preConfirm: () => {
+                    return {
+                        it_notes: document.getElementById('it_notes').value
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'JSON',
+                        data: {
+                            ajaxType: 'approveITClearance',
+                            vacation_id: vacationId,
+                            it_notes: result.value.it_notes
+                        },
+                    })
+                    .done(function(response){
+                        Swal.fire({
+                            title:response.title, text:response.message, icon:response.type, allowOutsideClick:false
+                        }).then(function(isConfirm){ if(isConfirm.value) { location.reload(); } });
+                    })
+                    .fail(function() {
+                        Swal.fire('Error', __('error_processing_clearance'), 'error');
+                    });
+                }
+            });
+        }
 
         function addVacationPayments(vacationId, employeeName, currentTicketPay, currentPermitFee) {
             Swal.fire({

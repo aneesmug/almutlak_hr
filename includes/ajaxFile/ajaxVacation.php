@@ -103,6 +103,20 @@ if ($ajaxType == 'applyVacation') {
         echo json_encode($data);
     }
 }
+
+/*================================================================
+== NEW FUNCTION TO HANDLE IT CLEARANCE APPROVAL
+================================================================
+*/
+elseif ($ajaxType == 'approveITClearance') {
+    $vacationProcessor = new VacationProcessor($conDB);
+    $result = $vacationProcessor->approveITClearance($_POST['vacation_id'], $_POST['it_notes'], $_SESSION['user_id']);
+    if ($result['success']) {
+        send_json_response("Success!", "IT clearance has been processed successfully.", "success");
+    } else {
+        send_json_response("Error!", $result['message'], "error");
+    }
+}
 /*
 ================================================================
 == UPDATED CODE BLOCK TO HANDLE GENERAL LEAVE APPLICATIONS

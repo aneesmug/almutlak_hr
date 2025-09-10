@@ -1,4 +1,11 @@
 <?php
+/****************************************************************
+ * MODIFICATION SUMMARY:
+ * 1. REVISED APPROVAL TIMELINE: Overhauled the approval timeline logic to accurately reflect the new multi-step workflow (DPT_Manager -> HR_Assistant -> HR_Manager -> IT -> GM).
+ * 2. DYNAMIC WORKFLOW PATH: The timeline now dynamically adjusts its path, correctly skipping steps for HR employees and omitting the IT step if the employee has no assigned assets.
+ * 3. IMPROVED STATUS VISUALS: Corrected the timeline rendering to properly show completed steps as 'approved', the current step as 'pending', and future steps with a neutral style.
+ * 4. ENHANCED LABELS & ICONS: Updated the map of approval steps with clearer labels and more distinct icons for each stage of the process.
+ ****************************************************************/
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
@@ -13,7 +20,7 @@ if (mysqli_num_rows($query) == 1) {
         die("Invalid request parameters.");
     }
 
-    // 2. MODIFIED: Fetch all data with a single query, now including contract vacation days and attachment path
+    // 2. MODIFIED: Fetch all data with a single query
     $sql = "SELECT 
                 v.*, 
                 v.attachment_path,
@@ -61,69 +68,105 @@ if (mysqli_num_rows($query) == 1) {
     $salary = $salary_result->fetch_assoc();
     $stmt_salary->close();
 
-    // 4. MODIFIED: Calculate Vacation Salary & Fees with new logic
+    // Fetch employee's assigned assets
+    $assets_sql = "SELECT a.name as asset_name, ea.serial_number 
+                   FROM employee_assets ea 
+                   JOIN assets a ON ea.asset_id = a.id 
+                   WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
+    $stmt_assets = $conDB->prepare($assets_sql);
+    $stmt_assets->bind_param("s", $emp_id);
+    $stmt_assets->execute();
+    $assets_result = $stmt_assets->get_result();
+    $assigned_assets = [];
+    while ($row = $assets_result->fetch_assoc()) {
+        $assigned_assets[] = $row;
+    }
+    $stmt_assets->close();
+
+    // 4. Calculate Vacation Salary & Fees
     $vacation_salary = 0;
+    $working_days_salary = 0;
     $gosi_deduction = 0;
     $ticket_fee = 0;
     $permit_fee = 0;
+    $applied_days = (float)($request['vacdays'] ?? 0);
     
-    // Define leave types for which salary should not be calculated
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
     $is_payable_leave = !in_array($request['vac_type'], $non_payable_leave_types);
 
-
-    if ($is_payable_leave && $request['fly_type'] !== 'emergency') {
+    if ($is_payable_leave) {
         if ($salary) {
-            // Sum all salary components for a full monthly salary
-            $total_monthly_salary = 
-                ($salary['basic'] ?? 0) + 
-                ($salary['housing'] ?? 0) + 
-                ($salary['transport'] ?? 0) + 
-                ($salary['food'] ?? 0) +
-                ($salary['misc'] ?? 0) +
-                ($salary['cashier'] ?? 0) +
-                ($salary['fuel'] ?? 0) +
-                ($salary['tel'] ?? 0) +
-                ($salary['other'] ?? 0) +
-                ($salary['guard'] ?? 0);
-                
-            $applied_days = (float)$request['vacdays'];
-            $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
+            $total_monthly_salary = ($salary['basic'] ?? 0) + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
+            $daily_rate = $total_monthly_salary / 30;
 
-            // If applied days match the total contract days, pay full salary
-            if ($contract_days > 0 && $applied_days == $contract_days) {
-                $vacation_salary = $total_monthly_salary;
-            } else {
-                // Otherwise, calculate salary per day based on a 30-day month
-                $vacation_salary = ($total_monthly_salary / 30) * $applied_days;
+            // Calculate vacation days salary
+            if ($request['fly_type'] !== 'emergency') {
+                $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
+                if ($contract_days > 0 && $applied_days == $contract_days) {
+                    $vacation_salary = $total_monthly_salary;
+                } else {
+                    $vacation_salary = $daily_rate * $applied_days;
+                }
             }
+            
+            // Calculate working days salary
+            $start_date_obj = new DateTime($request['start_date']);
+            $working_days = (int)$start_date_obj->format('d');
+            $working_days_salary = $daily_rate * $working_days;
 
-            // Apply GOSI deduction only for Saudi employees (country_id = 191)
             if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
                 $gosi_percentage = (float)$request['gosi'];
-                $gosi_deduction = ($vacation_salary * $gosi_percentage) / 100;
+                $gosi_deduction = (($vacation_salary + $working_days_salary) * $gosi_percentage) / 100;
             }
         }
-        
-        // Check for ticket and permit fees for non-saudi employees on annual or local vacation
         if (($request['vac_type'] === 'Fly' || $request['vac_type'] === 'Local Vacation') && $request['country_id'] != 191) {
             $ticket_fee = $request['ticket_pay'] ?? 0;
             $permit_fee = $request['permit_fee'] ?? 0;
         }
     }
-    
-    // Calculate final total payable
-    $total_payable = ($vacation_salary) + $ticket_fee + $permit_fee - $gosi_deduction;
+    $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee - $gosi_deduction;
 
-    $all_statuses = [
-        'pending' => ['text' => 'Pending', 'badge' => 'warning'],
-        'hr_assistant_approved' => ['text' => 'HR Assistant Approved', 'badge' => 'primary'],
-        'hr_manager_approved' => ['text' => 'HR Manager Approved', 'badge' => 'info'],
-        'gm_approved' => ['text' => 'GM Approved', 'badge' => 'success'],
-        'rejected' => ['text' => 'Rejected', 'badge' => 'danger']
+    // Approval Timeline Logic
+    $approval_steps_map = [
+        'apply'                 => ['label' => 'Dept. Manager Approval', 'icon' => 'fa-user-tie'],
+        'pending'               => ['label' => 'HR Assistant Approval', 'icon' => 'fa-user-cog'],
+        'hr_assistant_approved' => ['label' => 'HR Manager Approval', 'icon' => 'fa-user-shield'],
+        'it_pending'            => ['label' => 'IT Clearance', 'icon' => 'fa-laptop'],
+        'hr_manager_approved'   => ['label' => 'General Manager Approval', 'icon' => 'fa-crown'],
+        'gm_approved'           => ['label' => 'Approved', 'icon' => 'fa-check-circle'],
+        'rejected'              => ['label' => 'Request Rejected', 'icon' => 'fa-times'],
     ];
     
-    $status_info = $all_statuses[$request['approval_status']] ?? ['text' => 'Unknown', 'badge' => 'secondary'];
+    // Determine if the employee is HR
+    $employee_dept_sql = "SELECT dept FROM employees WHERE emp_id = ?";
+    $stmt_dept = $conDB->prepare($employee_dept_sql);
+    $stmt_dept->bind_param("s", $emp_id);
+    $stmt_dept->execute();
+    $employee_dept_result = $stmt_dept->get_result()->fetch_assoc();
+    $stmt_dept->close();
+    $is_hr_employee = ($employee_dept_result && $employee_dept_result['dept'] == 5);
+    
+    // Customize the flow based on employee type and assets
+    if ($is_hr_employee) {
+        // HR employees skip Dept Manager and HR Assistant
+        $approval_flow = ['hr_assistant_approved', 'it_pending', 'hr_manager_approved', 'gm_approved'];
+    } else {
+        // Standard flow
+        $approval_flow = ['apply', 'pending', 'hr_assistant_approved', 'it_pending', 'hr_manager_approved', 'gm_approved'];
+    }
+    
+    // If employee has no assets, skip IT step
+    if (empty($assigned_assets)) {
+        $approval_flow = array_filter($approval_flow, function($step) {
+            return $step !== 'it_pending';
+        });
+    }
+    
+    $current_status_index = array_search($request['approval_status'], $approval_flow);
+    // If status not in flow (e.g., rejected), it won't be found
+    if ($current_status_index === false) {
+        $current_status_index = -1; 
+    }
 
 ?>
     <!doctype html>
@@ -136,6 +179,7 @@ if (mysqli_num_rows($query) == 1) {
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
@@ -143,288 +187,287 @@ if (mysqli_num_rows($query) == 1) {
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
         <style>
-            .report-container {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            :root {
+                --primary-color: #4a90e2;
+                --text-color: #333;
+                --muted-color: #6c757d;
+                --border-color: #e9ecef;
+                --background-light: #f8f9fa;
+                --success-color: #28a745;
+                --danger-color: #dc3545;
+                --warning-color: #ffc107;
+            }
+            body.enlarged {
+                 background-color: #f4f7f6;
+            }
+            .report-wrapper {
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                max-width: 800px; /* Reduced width */
+                margin: 1rem auto; /* Reduced margin */
+                background-color: #fff;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,.08);
+                color: var(--text-color);
+                font-size: 14px; /* Base font size */
             }
             .report-header {
-                text-align: center;
-                margin-bottom: 2rem;
-                padding-bottom: 1rem;
-                border-bottom: 1px solid #dee2e6;
-            }
-            .report-header img {
-                max-height: 70px;
-                margin-bottom: 1rem;
-            }
-            .report-title {
-                font-weight: 600;
-                font-size: 1.5rem;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                color: #343a40;
-            }
-            .report-main-card {
-                background-color: #fff;
-                border-radius: .75rem;
-                border: 1px solid #e9ecef;
-                box-shadow: 0 0.5rem 1rem rgba(0,0,0,.05);
-            }
-            .report-card-header {
-                background-color: #f8f9fa;
-                padding: 1rem 1.5rem;
-                border-bottom: 1px solid #e9ecef;
-                display: flex;
-                align-items: center;
-            }
-            .report-card-header .avatar {
-                width: 60px;
-                height: 60px;
-                border-radius: 50%;
-                margin-right: 1rem;
-                border: 3px solid #fff;
-                box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,.075);
-            }
-            .report-card-header h4 {
-                font-weight: 600;
-                margin-bottom: .25rem;
-            }
-            .report-card-header p {
-                color: #6c757d;
-                margin-bottom: 0;
-            }
-            .report-card-body {
-                padding: 1.5rem;
-            }
-            .section-title {
-                font-weight: 600;
-                color: #4a90e2;
-                margin-bottom: 1rem;
-                font-size: 1.1rem;
-            }
-            .detail-list {
-                list-style: none;
-                padding-left: 0;
-            }
-            .detail-list li {
                 display: flex;
                 justify-content: space-between;
-                padding: .6rem 0;
-                border-bottom: 1px solid #f1f1f1;
+                align-items: center;
+                padding: 1rem 1.5rem; /* Reduced padding */
+                border-bottom: 1px solid var(--border-color);
             }
-            .detail-list li:last-child {
-                border-bottom: none;
-            }
-            .detail-list .label {
-                font-weight: 600;
-                color: #6c757d;
-            }
-            .detail-list .value {
-                font-weight: 500;
-                color: #343a40;
-            }
-            .notes-section {
-                background-color: #f8f9fa;
-                border-radius: .5rem;
-                padding: 1rem;
-            }
+            .report-header .logo-container img { max-height: 40px; } /* Reduced logo size */
+            .report-header .report-meta { text-align: right; }
+            .report-header .report-title { font-size: 1.1rem; font-weight: 600; margin: 0; }
+            .report-header .report-subtitle { font-size: 0.8rem; color: var(--muted-color); margin: 0; }
             
-            /* --- PRINT STYLES --- */
+            .report-body { padding: 1.5rem; } /* Reduced padding */
+            
+            .employee-banner { display: flex; align-items: center; background-color: var(--background-light); padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid var(--border-color); }
+            .employee-banner .avatar { width: 60px; height: 60px; border-radius: 50%; margin-right: 1rem; }
+            .employee-banner .info h4 { font-weight: 600; margin: 0 0 0.2rem 0; font-size: 1.1rem; }
+            .employee-banner .info p { color: var(--muted-color); margin: 0; font-size: 0.85rem; }
+
+            .report-section { margin-bottom: 1.5rem; } /* Reduced margin */
+            .section-title { font-weight: 600; color: var(--primary-color); margin-bottom: 1rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+            .section-title i { margin-right: 0.5rem; }
+
+            .grid-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+            .detail-item .label { font-size: 0.8rem; color: var(--muted-color); margin-bottom: 0.1rem; }
+            .detail-item .value { font-weight: 500; font-size: 0.9rem; }
+            .detail-item .value.highlight { font-weight: 700; color: var(--success-color); }
+
+            .payment-summary { background-color: var(--background-light); border-radius: 6px; padding: 1rem; border: 1px solid var(--border-color); }
+            .payment-summary ul { list-style: none; padding-left: 0; margin-bottom: 0;}
+            .payment-summary li { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; font-size: 0.9rem; border-bottom: 1px solid #e9ecef; }
+            .payment-summary li:last-child { border-bottom: none; }
+            .payment-summary .total-payable { background-color: #e9f5ec; margin: 1rem -1rem -1rem; padding: 1rem 1rem; border-top: 1px solid #c3e6cb; }
+            .payment-summary .total-payable .label { font-weight: 700; color: #155724; }
+            .payment-summary .total-payable .value { font-size: 1.1rem; font-weight: 700; color: #155724; }
+            
+            .approval-timeline { position: relative; padding-left: 5px; }
+            .timeline-item { position: relative; padding-bottom: 1rem; padding-left: 30px; min-height: 20px; }
+            .timeline-item:last-child { padding-bottom: 0; }
+            .timeline-item::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 0; width: 2px; background: var(--border-color); }
+            .timeline-item:last-child::before { display: none; }
+            .timeline-item .icon { position: absolute; left: -9px; top: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; border: 2px solid #fff; }
+            .timeline-item.approved .icon { background-color: var(--success-color); }
+            .timeline-item.pending .icon { background-color: var(--warning-color); }
+            .timeline-item.rejected .icon { background-color: var(--danger-color); }
+            .timeline-item.future .icon, .timeline-item .icon { background-color: #ced4da; }
+            .timeline-item .status { font-weight: 600; line-height: 20px; font-size: 0.9rem; }
+            
+            .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
+            
+            .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
+            .signature-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; text-align: center; margin-top: 2.5rem; }
+            .signature-box { border-top: 1px solid var(--muted-color); padding-top: 0.5rem; }
+            .signature-box p { margin: 0; color: var(--muted-color); font-size: 0.8rem; }
+
             @media print {
-                @page {
-                    size: A4;
-                    margin: 1cm;
-                }
-
-                body {
-                    background-color: #fff !important;
-                }
-                
-                /* Hide everything that is not the report */
-                .no-print,
-                .left.side-menu,
-                .footer,
-                .topbar,
-                #wrapper > .content-page > .content > .container-fluid > .row > .col-xl-12 > .card-box > .text-right {
-                    display: none !important;
-                }
-                
-                /* Ensure the report container and its parents are visible and take up full space */
-                body, #wrapper, .content-page, .content, .container-fluid, .row, .col-xl-12, .card-box {
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    box-shadow: none !important;
-                    border: none !important;
-                    background: transparent !important;
-                }
-
-                .report-main-card {
-                    box-shadow: none !important;
-                    border: 1px solid #dee2e6 !important;
-                    page-break-inside: avoid;
-                }
-
-                .report-container {
-                    display: block !important;
-                }
+                @page { size: A4; margin: 0.5cm; }
+                body { background-color: #fff !important; font-size: 12px; }
+                .no-print, .left.side-menu, .footer, .topbar { display: none !important; }
+                #wrapper, .content-page, .content, .container-fluid { padding: 0 !important; margin: 0 !important; }
+                .report-wrapper { max-width: 100%; margin: 0; box-shadow: none; border: none; border-radius: 0; }
+                .report-body { padding: 1cm 0.5cm; }
+                .employee-banner, .payment-summary, .notes-section { background-color: #f8f9fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .signature-area { margin-top: 3rem; }
+                .report-section { margin-bottom: 1rem; }
             }
         </style>
     </head>
 
     <body class="enlarged" data-keep-enlarged="true">
-        <!-- Begin page -->
         <div id="wrapper">
-            <!-- ========== Left Sidebar Start ========== -->
             <div class="left side-menu no-print">
                 <div class="slimscroll-menu" id="remove-scroll">
-                    <div class="topbar-left">
-                        <a href="dashboard.php" class="logo">
-                            <span><img src="assets/images/logo.png" alt="" height="22"></span>
-                            <i><img src="assets/images/logo_sm.png" alt="" height="28"></i>
-                        </a>
-                    </div>
+                    <div class="topbar-left"><a href="dashboard.php" class="logo"><span><img src="assets/images/logo.png" alt="" height="22"></span><i><img src="assets/images/logo_sm.png" alt="" height="28"></i></a></div>
                     <?php include("./includes/main_menu.php"); ?>
                     <div class="clearfix"></div>
                 </div>
             </div>
-            <!-- Left Sidebar End -->
 
-            <!-- ============================================================== -->
-            <!-- Start right Content here -->
-            <!-- ============================================================== -->
             <div class="content-page">
-                <!-- Top Bar Start -->
                 <?php include("./includes/topbar.php"); ?>
-                <!-- Top Bar End -->
-
-                <!-- Start Page content -->
                 <div class="content">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-xl-12">
-                                <div class="card-box">
-                                    <div class="text-right no-print mb-3">
-                                        <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print mr-1"></i> Print Report</a>
+                        <div class="text-right no-print mb-3">
+                            <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print mr-1"></i> Print Report</a>
+                        </div>
+                        
+                        <div class="report-wrapper">
+                            <div class="report-header">
+                                <div class="logo-container"><img src="assets/images/logo.png" alt="Company Logo"></div>
+                                <div class="report-meta">
+                                    <h2 class="report-title">Vacation Request Report</h2>
+                                    <p class="report-subtitle">Request ID: #<?=htmlspecialchars($request['id']); ?></p>
+                                </div>
+                            </div>
+
+                            <div class="report-body">
+                                <div class="employee-banner">
+                                    <img src="<?=htmlspecialchars($request['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
+                                    <div class="info">
+                                        <h4><?=htmlspecialchars($request['employee_name']); ?></h4>
+                                        <p>Employee ID: <?=htmlspecialchars($request['emp_id']); ?> | <?=htmlspecialchars($request['deptname']); ?><?= !empty($request['section_name']) ? ' / ' . htmlspecialchars($request['section_name']) : '' ?></p>
                                     </div>
+                                </div>
 
-                                    <!-- THIS IS THE PRINTABLE CONTENT -->
-                                    <div class="report-container" id="report-content">
-                                        <div class="report-header">
-                                            <img src="assets/images/logo.png" alt="Company Logo">
-                                            <h2 class="report-title">Vacation Request Report</h2>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-calendar-alt"></i>Vacation Details</h5>
+                                    <div class="grid-details">
+                                        <div class="detail-item"><span class="label">Vacation Type</span> <span class="value"><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></span></div>
+                                        <div class="detail-item"><span class="label">Start Date</span> <span class="value"><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></span></div>
+                                        <div class="detail-item"><span class="label">Return Date</span> <span class="value"><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></span></div>
+                                        <div class="detail-item"><span class="label">Total Days</span> <span class="value highlight"><?=htmlspecialchars($request['vacdays']); ?> Days</span></div>
+                                        <div class="detail-item"><span class="label">Replacement</span> <span class="value"><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></span></div>
+                                        <div class="detail-item"><span class="label">Requested On</span> <span class="value"><small><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></small></span></div>
+                                         <?php if (!empty($request['attachment_path'])): ?>
+                                            <div class="detail-item"><span class="label">Attachment</span> <span class="value"><a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank">View Document</a></span></div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i>Payment Details</h5>
+                                    <?php if (!$is_payable_leave): ?>
+                                        <div class="alert alert-info">Salary and benefits are not applicable for this type of leave (<?=htmlspecialchars($request['vac_type']); ?>).</div>
+                                    <?php else: ?>
+                                        <div class="payment-summary">
+                                            <ul>
+                                                <li>
+                                                    <div>
+                                                        <span class="label">Working Days Salary</span>
+                                                        <small class="text-muted d-block">Calculated for <?= htmlspecialchars($working_days); ?> day(s)</small>
+                                                    </div>
+                                                    <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
+                                                </li>
+                                                <li>
+                                                    <div>
+                                                        <span class="label">Vacation Salary</span>
+                                                        <small class="text-muted d-block">Calculated for <?= htmlspecialchars($applied_days); ?> day(s)</small>
+                                                    </div>
+                                                    <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>
+                                                </li>
+                                                <?php if ($ticket_fee > 0): ?><li><span class="label">Ticket Payment</span> <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span></li><?php endif; ?>
+                                                <?php if ($permit_fee > 0): ?><li><span class="label">Permit Fee</span> <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span></li><?php endif; ?>
+                                                <?php if ($gosi_deduction > 0): ?><li><span class="label text-danger">GOSI Deduction</span> <span class="value text-danger">-<?=number_format($gosi_deduction, 2); ?> SAR</span></li><?php endif; ?>
+                                                <li class="total-payable"><span class="label">Total Payable</span> <span class="value"><?=number_format($total_payable, 2); ?> SAR</span></li>
+                                            </ul>
                                         </div>
+                                    <?php endif; ?>
+                                </div>
 
-                                        <div class="report-main-card">
-                                            <div class="report-card-header">
-                                                <img src="<?=htmlspecialchars($request['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
-                                                <div>
-                                                    <h4><?=htmlspecialchars($request['employee_name']); ?></h4>
-                                                    <p>Employee ID: <?=htmlspecialchars($request['emp_id']); ?> | Request ID: #<?=htmlspecialchars($request['id']); ?></p>
-                                                </div>
-                                            </div>
-                                            <div class="report-card-body">
-                                                <div class="row">
-                                                    <div class="col-md-6 mb-4">
-                                                        <h5 class="section-title">Employee Information</h5>
-                                                        <ul class="detail-list">
-                                                            <li><span class="label">Department</span> <span class="value"><?=htmlspecialchars($request['deptname']); ?></span></li>
-                                                            <li><span class="label">Section</span> <span class="value"><?=htmlspecialchars($request['section_name'] ?? 'N/A'); ?></span></li>
-                                                            <li><span class="label">Nationality</span> <span class="value"><?=htmlspecialchars($request['country_name']); ?></span></li>
-                                                            <li><span class="label">Joining Date</span> <span class="value"><?=htmlspecialchars(date('d M Y', strtotime($request['joining_date']))); ?></span></li>
-                                                        </ul>
+                                <div class="row">
+                                    <div class="col-md-7">
+                                        <div class="report-section">
+                                            <h5 class="section-title"><i class="fa fa-tasks"></i>Approval Status</h5>
+                                            <div class="approval-timeline">
+                                                <?php if ($request['approval_status'] == 'rejected'): ?>
+                                                    <div class="timeline-item rejected">
+                                                        <div class="icon"><i class="fa <?= $approval_steps_map['rejected']['icon'] ?>"></i></div>
+                                                        <span class="status ml-3"><?= $approval_steps_map['rejected']['label'] ?></span>
                                                     </div>
-                                                    <div class="col-md-6 mb-4">
-                                                        <h5 class="section-title">Request Information</h5>
-                                                        <ul class="detail-list">
-                                                            <li><span class="label">Request Date</span> <span class="value"><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></span></li>
-                                                            <li><span class="label">Status</span> <span class="value"><span class="badge badge-<?=$status_info['badge']; ?> p-1"><?=$status_info['text']; ?></span></span></li>
-                                                            <li><span class="label">Replacement</span> <span class="value"><?=htmlspecialchars($request['replacement_person_name'] ?? 'N/A'); ?></span></li>
-                                                        </ul>
-                                                    </div>
-                                                </div>
-                                                <hr>
-                                                <div class="row">
-                                                    <div class="col-md-6 mb-4">
-                                                        <h5 class="section-title">Vacation Details</h5>
-                                                         <ul class="detail-list">
-                                                            <li><span class="label">Vacation Type</span> <span class="value"><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></span></li>
-                                                            <li><span class="label">Start Date</span> <span class="value"><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></span></li>
-                                                            <li><span class="label">Return Date</span> <span class="value"><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></span></li>
-                                                            <li><span class="label">Total Days</span> <span class="value font-weight-bold"><?=htmlspecialchars($request['vacdays']); ?> Days</span></li>
-                                                            <!-- NEW: Attachment Link Display -->
-                                                            <?php if (!empty($request['attachment_path'])): ?>
-                                                                <li>
-                                                                    <span class="label">Attachment</span> 
-                                                                    <span class="value">
-                                                                        <a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank" class="btn btn-sm btn-info no-print">
-                                                                            <i class="fa fa-paperclip mr-1"></i> View Document
-                                                                        </a>
-                                                                    </span>
-                                                                </li>
-                                                            <?php endif; ?>
-                                                        </ul>
-                                                    </div>
-                                                     <div class="col-md-6 mb-4">
-                                                        <h5 class="section-title">Payment Details</h5>
-                                                        <!-- NEW: Logic to hide payment for non-payable leave types -->
-                                                        <?php if (!$is_payable_leave): ?>
-                                                            <div class="alert alert-info">
-                                                                Salary and benefits are not applicable for this type of leave (<?=htmlspecialchars($request['vac_type']); ?>).
-                                                            </div>
-                                                        <?php else: ?>
-                                                            <ul class="detail-list">
-                                                                <li><span class="label">Vacation Salary</span> <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span></li>
-                                                                <?php if ($ticket_fee > 0): ?>
-                                                                    <li><span class="label">Ticket Payment</span> <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span></li>
-                                                                <?php endif; ?>
-                                                                <?php if ($permit_fee > 0): ?>
-                                                                    <li><span class="label">Permit Fee</span> <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span></li>
-                                                                <?php endif; ?>
-                                                                <?php if ($gosi_deduction > 0): ?>
-                                                                    <li><span class="label text-danger">GOSI Deduction</span> <span class="value text-danger">-<?=number_format($gosi_deduction, 2); ?> SAR</span></li>
-                                                                <?php endif; ?>
-                                                                <li class="bg-light p-2 rounded"><span class="label">Total Payable</span> <span class="value font-weight-bold text-success h5 mb-0"><?=number_format($total_payable, 2); ?> SAR</span></li>
-                                                            </ul>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </div>
-
-                                                <?php if(!empty($request['remarks'])): ?>
-                                                <hr>
-                                                <div class="row">
-                                                    <div class="col-12">
-                                                        <?php if($request['approval_status'] == 'rejected'): ?>
-                                                            <h5 class="section-title text-danger"><i class="fas fa-comment-slash mr-2"></i>Rejection Note</h5>
-                                                            <div class="alert alert-danger mb-0">
-                                                                <?=nl2br(htmlspecialchars($request['note'])); ?>
-                                                            </div>
-                                                        <?php else: ?>
-                                                            <h5 class="section-title"><i class="fas fa-comments mr-2"></i>Notes & Remarks</h5>
-                                                            <div class="notes-section">
-                                                                <p class="mb-0"><?=nl2br(htmlspecialchars($request['remarks'])); ?></p>
-                                                            </div>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </div>
+                                                <?php else: ?>
+                                                    <?php foreach ($approval_flow as $index => $status_key): 
+                                                        $item_class = ''; // Default for future steps
+                                                        if ($request['approval_status'] == 'gm_approved') {
+                                                            $item_class = 'approved';
+                                                        } else {
+                                                            if ($current_status_index > $index) {
+                                                                $item_class = 'approved';
+                                                            } elseif ($current_status_index == $index) {
+                                                                $item_class = 'pending';
+                                                            }
+                                                        }
+                                                    ?>
+                                                        <div class="timeline-item <?= $item_class ?>">
+                                                            <div class="icon"><i class="fa <?= $approval_steps_map[$status_key]['icon'] ?>"></i></div>
+                                                            <span class="status ml-3"><?= $approval_steps_map[$status_key]['label'] ?></span>
+                                                        </div>
+                                                    <?php endforeach; ?>
                                                 <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
-                                    <!-- END PRINTABLE CONTENT -->
+                                    <div class="col-md-5">
+                                        <?php if(!empty($request['remarks']) || !empty($request['note'])): ?>
+                                        <div class="report-section">
+                                             <h5 class="section-title"><i class="fa fa-comments"></i>Remarks</h5>
+                                             <?php if($request['approval_status'] == 'rejected'): ?>
+                                                <div class="alert alert-danger mb-0"><?=nl2br(htmlspecialchars($request['note'])); ?></div>
+                                             <?php elseif(!empty($request['remarks'])): ?>
+                                                <div class="notes-section"><p class="mb-0"><?=nl2br(htmlspecialchars($request['remarks'])); ?></p></div>
+                                             <?php endif; ?>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
 
+                                <?php // NEW IT CLEARANCE SECTION
+                                if ($request['it_approval_status'] === 'cleared' && !empty($assigned_assets)): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-laptop"></i>IT Clearance Details</h5>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Asset Name</th>
+                                                    <th>Serial Number</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($assigned_assets as $asset): 
+                                                    $it_notes_lower = strtolower($request['it_notes'] ?? '');
+                                                    $status = __('received');
+                                                    $badge = 'success';
+                                                    
+                                                    // Check for keywords indicating the asset was not returned
+                                                    if (
+                                                        strpos($it_notes_lower, 'keep') !== false ||
+                                                        strpos($it_notes_lower, 'kept') !== false ||
+                                                        strpos($it_notes_lower, 'not received') !== false
+                                                    ) {
+                                                        $status = __('not_received');
+                                                        $badge = 'warning';
+                                                    }
+                                                ?>
+                                                <tr>
+                                                    <td><?= htmlspecialchars($asset['asset_name']); ?></td>
+                                                    <td><?= htmlspecialchars($asset['serial_number']); ?></td>
+                                                    <td><span class="badge badge-<?= $badge ?>"><?= $status ?></span></td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <?php if (!empty($request['it_notes'])): ?>
+                                    <div class="notes-section mt-2">
+                                        <strong>IT Notes:</strong>
+                                        <p class="mb-0"><?=nl2br(htmlspecialchars($request['it_notes'])); ?></p>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            
+                            <div class="report-footer">
+                                <div class="signature-area">
+                                    <div class="signature-box"><p>Employee Signature</p></div>
+                                    <div class="signature-box"><p>HR Manager Signature</p></div>
+                                    <div class="signature-box"><p>General Manager Signature</p></div>
                                 </div>
                             </div>
                         </div>
-                    </div> <!-- container -->
-                </div> <!-- content -->
-                <footer class="footer no-print">
-                    <?= $site_footer ?>
-                </footer>
+
+                    </div>
+                </div>
+                <footer class="footer no-print"><?= $site_footer ?></footer>
             </div>
-            <!-- ============================================================== -->
-            <!-- End Right content here -->
-            <!-- ============================================================== -->
         </div>
-        <!-- END wrapper -->
 
         <script src="assets/js/jquery.min.js"></script>
         <script src="assets/js/bootstrap.bundle.min.js"></script>

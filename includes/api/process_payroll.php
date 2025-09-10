@@ -6,6 +6,7 @@
  * 3. BALANCE CALCULATION & DEDUCTION: It calculates the remaining balance and automatically inserts a 'Loan Installment' record if one doesn't already exist.
  * 4. PAYMENT TRACKING: After creating the deduction, it also inserts a record into `emp_loan_payments` to track the repayment.
  * 5. LOAN COMPLETION: If the payment clears the balance, the loan's status is updated to 'paid'.
+ * 6. ADDED VACATION SALARY BENEFIT: A new function, `addVacationWorkingDaysSalary`, has been added to automatically calculate and add the salary for days worked in the month a vacation starts. This is added as a benefit in the payroll.
  ****************************************************************/
 // Set the content type of the response to JSON
 header('Content-Type: application/json');
@@ -91,6 +92,9 @@ try {
         
         // --- LEAVE DEDUCTION LOGIC ---
         addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
+
+        // --- (NEW) VACATION WORKING DAYS SALARY ---
+        addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary);
 
         // --- (NEW) LOAN DEDUCTION LOGIC ---
         addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
@@ -303,6 +307,61 @@ function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
             if (($totalPaid + $deductionAmount) >= $loan['total_payable']) {
                 $stmtUpdateLoan = $pdo->prepare("UPDATE emp_loan SET status = 'paid' WHERE id = :loan_id");
                 $stmtUpdateLoan->execute([':loan_id' => $loanId]);
+            }
+        }
+    }
+}
+
+
+/**
+ * NEW FUNCTION
+ * Calculates and inserts a benefit for salary of days worked in the month a vacation starts.
+ */
+function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary) {
+    // First, remove any previous vacation working days salary benefit to avoid duplication
+    $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year AND benefit LIKE 'Working Days Salary for Vacation%'");
+    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+
+    // Find approved, payable vacations starting this month
+    $stmtVacation = $pdo->prepare("
+        SELECT id, start_date, vac_type, fly_type
+        FROM emp_vacation
+        WHERE emp_id = :emp_id
+        AND approval_status = 'gm_approved'
+        AND DATE_FORMAT(start_date, '%Y-%m') = :month_year
+    ");
+    $stmtVacation->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    $vacation = $stmtVacation->fetch(PDO::FETCH_ASSOC);
+
+    if ($vacation) {
+        // Define non-payable leave types
+        $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+        
+        // Check if it's a payable leave (not in the non-payable list and not an emergency)
+        $is_payable_leave = !in_array($vacation['vac_type'], $non_payable_leave_types) && $vacation['fly_type'] !== 'emergency';
+
+        if ($is_payable_leave) {
+            // Calculate working days before vacation starts
+            $startDate = new DateTime($vacation['start_date']);
+            $workingDays = (int)$startDate->format('d') - 1;
+
+            if ($workingDays > 0) {
+                $dailyRate = $totalGrossSalary / 30;
+                $workingDaysSalary = $dailyRate * $workingDays;
+
+                if ($workingDaysSalary > 0) {
+                    $benefitName = "Working Days Salary for Vacation (ID: {$vacation['id']})";
+                    $stmtInsertBenefit = $pdo->prepare("
+                        INSERT INTO payroll_benefits (emp_id, benefit, note, month, status)
+                        VALUES (:emp_id, :benefit_name, :amount, :month_year, 1)
+                    ");
+                    $stmtInsertBenefit->execute([
+                        ':emp_id' => $empId,
+                        ':benefit_name' => $benefitName,
+                        ':amount' => number_format($workingDaysSalary, 2, '.', ''),
+                        ':month_year' => $monthYear
+                    ]);
+                }
             }
         }
     }
