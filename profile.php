@@ -28,13 +28,13 @@ if (!$emprow) {
     die("Employee data not found.");
 }
 
-$hours_in_day   = 24;
-$minutes_in_hour = 60;
-$seconds_in_mins = 60;
-$birth_date     = new DateTime($emprow['dob']);
-$current_date   = new DateTime();
-$diff           = $birth_date->diff($current_date);
-$years	   		= $diff->y . " " . __('years');
+$hours_in_day       = 24;
+$minutes_in_hour    = 60;
+$seconds_in_mins    = 60;
+$birth_date         = new DateTime($emprow['dob']);
+$current_date       = new DateTime();
+$diff               = $birth_date->diff($current_date);
+$years	   		    = $diff->y . " " . __('years');
 
 if ($emprow['status'] == 0 && $note_get == "expired") {
     $note_get = "Expired";
