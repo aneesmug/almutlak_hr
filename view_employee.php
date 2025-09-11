@@ -430,6 +430,7 @@ if (mysqli_num_rows($query) == 1) {
 	<?php */ ?>
 									</ul>
 									<div class="tab-content">
+										<!-- Profile -->
 										<div class="tab-pane active show" id="profile1">
 											<table class="table table-hover mb-0">
 												<tbody>

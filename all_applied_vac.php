@@ -312,7 +312,12 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                                             break;
                                                                         case 'hr_manager_approved':
                                                                             $badge_class = 'primary';
-                                                                            $status_text = ($req['it_approval_status'] == 'pending') ? __('pending_with_it') : __('pending_with_gm');
+                                                                            // This is the key logic: if the main status is hr_manager_approved, check the sub-status for IT.
+                                                                            if ($req['it_approval_status'] == 'pending') {
+                                                                                $status_text = __('pending_with_it');
+                                                                            } else {
+                                                                                $status_text = __('pending_with_gm');
+                                                                            }
                                                                             break;
                                                                         case 'gm_approved':
                                                                             $badge_class = 'success';
@@ -390,7 +395,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                             <?php
                                                             // Condition to show "Add/Edit Payments" button
                                                             if (
-                                                                $user_role == 'HR_Assistant' &&
+                                                                ($user_role == 'HR_Assistant' || $user_role == 'HR_Manager') &&
                                                                 in_array($req['approval_status'], ['hr_assistant_approved', 'hr_manager_approved', 'gm_approved', 'it_pending']) &&
                                                                 $req['vac_type'] == 'Fly' &&
                                                                 ($req['ticket_pay'] == 00.0 || $req['permit_fee'] == 00.0)
@@ -600,8 +605,9 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                 title: __('it_asset_clearance_for').replace('{0}', employeeName),
                 html: `
                     <p class="mt-3"><strong>${__('provide_clearance_notes')}</strong></p>
-                    <select id="it_notes" class="swal2-input">
-                        <option value="">${__('cleared_all_assets')}</option>
+                    <select id="it_notes" class="swal2-input" required>
+                        <option value="">${__('select_an_option')}</option>
+                        <option value="cleared">${__('cleared_all_assets')}</option>
                         <option value="not_received">${__('not_received')}</option>
                         <option value="received">${__('received')}</option>
                     </select>
@@ -610,8 +616,18 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                 showCancelButton: true,
                 allowOutsideClick: false,
                 preConfirm: () => {
+                    const itNotes = document.getElementById('it_notes').value;
+                    // const errorElement = document.getElementById('it_notes_error');
+                    
+                    // Validate selection
+                    if (!itNotes) {
+                        // errorElement.style.display = 'block';
+                        Swal.showValidationMessage(__('please_select_an_option'));
+                        return false;
+                    }
+                    // errorElement.style.display = 'none';
                     return {
-                        it_notes: document.getElementById('it_notes').value
+                        it_notes: itNotes
                     }
                 }
             }).then((result) => {
@@ -628,8 +644,15 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                     })
                     .done(function(response){
                         Swal.fire({
-                            title:response.title, text:response.message, icon:response.type, allowOutsideClick:false
-                        }).then(function(isConfirm){ if(isConfirm.value) { location.reload(); } });
+                            title:response.title, 
+                            text:response.message, 
+                            icon:response.type, 
+                            allowOutsideClick:false
+                        }).then(function(isConfirm){ 
+                            if(isConfirm.value) { 
+                                location.reload(); 
+                            } 
+                        });
                     })
                     .fail(function() {
                         Swal.fire('Error', __('error_processing_clearance'), 'error');
@@ -669,7 +692,6 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                         },
                     })
                     .done(function(response){
-                        // console.log(response);
                         Swal.fire({
                             title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
                         }).then(function(isConfirm){(isConfirm)?location.reload():""});

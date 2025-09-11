@@ -2,11 +2,10 @@
 
 /****************************************************************
  * MODIFICATION SUMMARY:
- * 1. ADDED HR MANAGER FINAL APPROVAL: The `getApprovalUpdateData` method has been modified to allow an HR Manager to move a request from 'hr_manager_approved' (post-IT clearance) to the final 'gm_approved' status. This grants them the same final approval authority as the GM in this specific scenario.
- * 2. CORRECTED IT CLEARANCE LOGIC: The `approveITClearance` method's database query has been updated. The `WHERE` clause now allows the update to proceed if the `approval_status` is 'it_pending' OR if the `it_approval_status` is 'pending'. This ensures that the backend can successfully process a clearance even if the main status has already advanced, resolving the "Request not found" error for the IT department.
- * 3. REVISED WORKFLOW ORDER: The IT clearance step has been moved to occur *after* the HR Manager's approval and *before* the General Manager's final approval.
- * 4. ASSET CHECK ON HR MANAGER APPROVAL: The `approveVacationRequest` method now checks for employee assets when the HR Manager approves the request.
- * 5. CONDITIONAL ROUTING TO IT: If assets are found, the status is set to 'it_pending'. Otherwise, it proceeds directly to 'gm_approved'.
+ * 1. SIMPLIFIED FLY STATUS LOGIC: The logic for updating the employee's `fly` status has been simplified and made more robust. It is now triggered for any vacation type except 'Encashed' upon final approval. This ensures that whenever a request is finalized (`review` is set to 'C'), the employee is correctly marked as away.
+ * 2. RESTRUCTURED APPROVAL LOGIC: The `approveVacationRequest` method now explicitly checks if the request is moving to the 'gm_approved' status and sets `review = 'C'` accordingly.
+ * 3. REMOVED HR WORKFLOW EXCEPTION: The special condition that automatically approved vacation requests for HR department employees has been removed.
+ * 4. ADDED HR MANAGER FINAL APPROVAL: The `getApprovalUpdateData` method allows an HR Manager to move a request from 'hr_manager_approved' (post-IT clearance) to the final 'gm_approved' status.
  ****************************************************************/
 require_once 'vacation_calculator.php';
 
@@ -61,18 +60,6 @@ class VacationProcessor
             // Pass the is_deductible flag to the insert method
             $vacation_id = $this->insertVacationRecord($emp_id, $request_data, $vac_days, $is_deductible);
 
-            // Check if the employee is from the HR department (ID 5)
-            $emp_details = $this->getEmployeeDetails($emp_id);
-            if ($emp_details && $emp_details['dept'] == 5) {
-                // If HR employee, set status directly for GM approval
-                $this->updateVacationStatus($vacation_id, 'apply');
-                return [
-                    'success' => true,
-                    'vacation_id' => $vacation_id,
-                    'message' => 'Vacation request submitted and forwarded directly to GM for approval.'
-                ];
-            }
-
             return [
                 'success' => true,
                 'vacation_id' => $vacation_id,
@@ -95,63 +82,70 @@ class VacationProcessor
             if (!$vacation) {
                 throw new Exception("Vacation request with ID $vacation_id not found.");
             }
-
+    
             $current_status = $vacation['approval_status'];
             $update_data = $this->getApprovalUpdateData($approver_role, $current_status);
-
-            // --- NEW WORKFLOW: IT Clearance Check after HR Manager ---
+    
+            // --- IT Clearance Check ---
             if ($approver_role === 'HR_Manager' && $update_data['new_status'] === 'hr_manager_approved' && $this->employeeHasAssets($vacation['emp_id'])) {
                 $update_data['new_status'] = 'it_pending';
             }
-
-            if ($approver_role === 'HR_Assistant' || $approver_role === 'HR_Manager') {
-                $query = "UPDATE emp_vacation SET 
-                            approval_status = ?,
-                            ticket_pay = ?,
-                            permit_fee = ?,
-                            {$update_data['approval_field']} = NOW()
-                          WHERE id = ?";
-                $stmt = $this->conDB->prepare($query);
-                $stmt->bind_param("sddi", $update_data['new_status'], $ticket_pay, $permit_fee, $vacation_id);
-            } elseif ($update_data['new_status'] === 'gm_approved') {
-                $query = "UPDATE emp_vacation SET 
-                            review = 'C',
-                            approval_status = ?,
-                            {$update_data['approval_field']} = NOW()
-                          WHERE id = ?";
-                $stmt = $this->conDB->prepare($query);
-                $stmt->bind_param("si", $update_data['new_status'], $vacation_id);
-            } else {
-                $query = "UPDATE emp_vacation SET 
-                            approval_status = ?,
-                            {$update_data['approval_field']} = NOW()
-                          WHERE id = ?";
-                $stmt = $this->conDB->prepare($query);
-                $stmt->bind_param("si", $update_data['new_status'], $vacation_id);
+    
+            // --- Build Query ---
+            $is_final_approval = ($update_data['new_status'] === 'gm_approved');
+            
+            $sql_parts = [];
+            $params = [];
+            $types = "";
+    
+            // Status
+            $sql_parts[] = "approval_status = ?";
+            $params[] = $update_data['new_status'];
+            $types .= "s";
+    
+            // Timestamp
+            $sql_parts[] = "{$update_data['approval_field']} = NOW()";
+    
+            // Review status for final approval
+            if ($is_final_approval) {
+                $sql_parts[] = "review = 'C'";
             }
-
+            
+            // HR Assistant specific fields
+            if ($approver_role === 'HR_Assistant') {
+                $sql_parts[] = "ticket_pay = ?";
+                $params[] = $ticket_pay;
+                $types .= "d";
+                
+                $sql_parts[] = "permit_fee = ?";
+                $params[] = $permit_fee;
+                $types .= "d";
+            }
+            
+            $query = "UPDATE emp_vacation SET " . implode(", ", $sql_parts) . " WHERE id = ?";
+            $params[] = $vacation_id;
+            $types .= "i";
+            
+            $stmt = $this->conDB->prepare($query);
+            $stmt->bind_param($types, ...$params);
             $stmt->execute();
-
-            if ($update_data['new_status'] === 'gm_approved') {
-
+            
+            // --- Post-Approval Actions ---
+            if ($is_final_approval) {
                 $non_balance_deductible_leaves = [
-                    'Sick Leave',
-                    'Casual Leave',
-                    'Maternity Leave',
-                    'Business Trip',
-                    'Compensatory Leave',
-                    'Other Leave'
+                    'Sick Leave', 'Casual Leave', 'Maternity Leave', 
+                    'Business Trip', 'Compensatory Leave', 'Other Leave'
                 ];
-
+    
                 if (!in_array($vacation['vac_type'], $non_balance_deductible_leaves)) {
                     $this->calculator->calculateVacationBalance($vacation['emp_id'], $vacation_id);
                 }
-
-                if ($vacation['vac_type'] === 'Fly' || $vacation['vac_type'] === 'Local Vacation') {
+    
+                if ($vacation['vac_type'] !== 'Encashed') {
                     $this->updateEmployeeFlyStatus($vacation['emp_id'], 1);
                 }
             }
-
+    
             return ['success' => true, 'message' => 'Vacation approval status has been updated.'];
         } catch (Exception $e) {
             error_log("Vacation approval error for vacation_id $vacation_id: " . $e->getMessage());
@@ -285,7 +279,6 @@ class VacationProcessor
                 if ($current_status === 'apply' || $current_status === 'hr_assistant_approved') {
                     return ['new_status' => 'hr_manager_approved', 'approval_field' => 'hr_manager_approval'];
                 }
-                // MODIFIED: Allow HR Manager to give final approval after IT clearance
                 if ($current_status === 'hr_manager_approved') {
                     return ['new_status' => 'gm_approved', 'approval_field' => 'gm_approval'];
                 }

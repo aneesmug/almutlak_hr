@@ -6121,20 +6121,20 @@ function vacationApply_HTML(country) {
             <label for="inlineRadio3" class="radioalign">${__('remarks')}<span class="text-danger">*</span></label>
             <div class="radio radio-info form-check-inline mt-3">
                 <input type="radio" id="inlineRadio3" value="Local Vacation" name="vac_type">
-                <label for="inlineRadio3" class="atch"><i class="fa fa-odnoklassniki"></i> ${__('local_vacation')}</label>
+                <label for="inlineRadio3" class="atch"><i class="fa fa-brands fa-odnoklassniki"></i> ${__('local_vacation')}</label>
              </div>`;
              
                 if (country != 191 && country != 150) {
                     strView += `<div class="radio radio-info form-check-inline">
                         <input type="radio" id="inlineRadio1" value="Fly" name="vac_type">
-                        <label for="inlineRadio1" class="atch"><i class="mdi mdi-airplane-takeoff"></i> ${__('fly')}</label>
+                        <label for="inlineRadio1" class="atch"><i class="fa fa-solid fa-plane-departure"></i> ${__('fly')}</label>
                     </div>`;
                 }
 
                 strView += `
             <div class="radio radio-info form-check-inline">
                 <input type="radio" id="inlineRadio2" value="Encashed" name="vac_type">
-                <label for="inlineRadio2" class="atch"><i class="mdi mdi-square-inc-cash"></i> ${__('encashed')}</label>
+                <label for="inlineRadio2" class="atch"><i class="fa fa-solid fa-money-from-bracket"></i> ${__('encashed')}</label>
             </div>
         </div>
 
@@ -6143,11 +6143,11 @@ function vacationApply_HTML(country) {
                 <label for="type" class="radioalign">${__('select_vacation_type')}<span class="text-danger">*</span></label>
                 <div class="radio radio-info form-check-inline">
                     <input type="radio" id="vac_type1" value="annual" name="fly_type">
-                    <label for="vac_type1" class="atch"><i class="mdi mdi-all-inclusive"></i> ${__('annual_vacation')}</label>
+                    <label for="vac_type1" class="atch"><i class="fa fa-solid fa-truck-plane"></i> ${__('annual_vacation')}</label>
                 </div>
                 <div class="radio radio-info form-check-inline">
                     <input type="radio" id="vac_type2" value="emergency" name="fly_type">
-                    <label for="vac_type2" class="atch"><i class="mdi mdi-chemical-weapon"></i> ${__('emergency_vacation')}</label>
+                    <label for="vac_type2" class="atch"><i class="fa fa-solid fa-light-emergency"></i> ${__('emergency_vacation')}</label>
                 </div>
             </div>
         </div>

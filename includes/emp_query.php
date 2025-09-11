@@ -1,12 +1,8 @@
 <?php
 /*******************************************************************************************************************
- * MODIFICATION SUMMARY (005-emp_query.php):
+ * MODIFICATION SUMMARY (015-emp_query.php):
  *
- * 1. REMOVED OLD LOAN JOIN: The previous LEFT JOIN to the `emp_loan` table has been removed to avoid ambiguity.
- * 2. ADDED SPECIFIC LOAN CHECKS: Two new subqueries have been added to the main SELECT statement.
- * - `has_active_regular_loan`: This checks if the employee has any 'regular' loan with a status of 'pending' or 'approved'.
- * - `has_active_emergency_loan`: This checks if the employee has any 'emergency' loan with a status of 'pending' or 'approved'.
- * 3. IMPROVED ACCURACY: This new method accurately determines the presence of each type of active loan, allowing for more precise control over button visibility in `view_employee.php`.
+ * 1. ENHANCED `lastVacIdGet` FUNCTION: Modified the `lastVacIdGet` function to also select the `start_date` of the last completed vacation. This provides the necessary data to the front-end to correctly configure the date picker for recording an employee's return, allowing for early returns to be processed.
  *******************************************************************************************************************/
 
 	$empidget = (isset($_GET['emp_id'])? $_GET['emp_id'] : $_SESSION['empid']);
@@ -144,12 +140,12 @@
 		// Sanitize the ID to prevent SQL injection
 		$empidget = (int)$empidget;
 		$query = "SELECT 
-			`employees`.*, 
-			`approved_vacations`.`id` AS `vacid`,
-			`approved_vacations`.`return_date` AS `returndate`
-			FROM `employees`
-			LEFT JOIN (SELECT * FROM `emp_vacation` WHERE `review`='C' ORDER BY `id` DESC LIMIT 1) AS `approved_vacations` ON `approved_vacations`.`emp_id` = `employees`.`emp_id`
-			WHERE `employees`.`emp_id` = $empidget";
+			`id` AS `vacid`,
+			`return_date` AS `returndate`
+			FROM `emp_vacation`
+			WHERE `emp_id` = {$empidget} AND `review`='C' 
+			ORDER BY `id` DESC 
+			LIMIT 1";
 		$result = mysqli_query($conDB, $query);
 		// Return null if query fails
 		if (!$result) {

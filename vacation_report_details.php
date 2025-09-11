@@ -124,7 +124,13 @@ if (mysqli_num_rows($query) == 1) {
             $permit_fee = $request['permit_fee'] ?? 0;
         }
     }
-    $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee - $gosi_deduction;
+
+
+    if ($request['vac_type'] !== 'Encashed'){
+        $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee - $gosi_deduction;
+    } else {
+        $total_payable = $vacation_salary + $ticket_fee + $permit_fee - $gosi_deduction;
+    }
 
     // Approval Timeline Logic
     $approval_steps_map = [
@@ -318,14 +324,14 @@ if (mysqli_num_rows($query) == 1) {
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-calendar-alt"></i>Vacation Details</h5>
                                     <div class="grid-details">
-                                        <div class="detail-item"><span class="label">Vacation Type</span> <span class="value"><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></span></div>
-                                        <div class="detail-item"><span class="label">Start Date</span> <span class="value"><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></span></div>
-                                        <div class="detail-item"><span class="label">Return Date</span> <span class="value"><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></span></div>
-                                        <div class="detail-item"><span class="label">Total Days</span> <span class="value highlight"><?=htmlspecialchars($request['vacdays']); ?> Days</span></div>
-                                        <div class="detail-item"><span class="label">Replacement</span> <span class="value"><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></span></div>
+                                        <div class="detail-item"><span class="label">Vacation Type</span> <span class="value"><small><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></small></span></div>
+                                        <div class="detail-item"><span class="label">Start Date</span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></small></span></div>
+                                        <div class="detail-item"><span class="label">Return Date</span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></small></span></div>
+                                        <div class="detail-item"><span class="label">Total Days</span> <span class="value highlight"><small><?=htmlspecialchars($request['vacdays']); ?> Days</small></span></div>
+                                        <div class="detail-item"><span class="label">Replacement</span> <span class="value"><small><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></small></span></div>
                                         <div class="detail-item"><span class="label">Requested On</span> <span class="value"><small><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></small></span></div>
                                          <?php if (!empty($request['attachment_path'])): ?>
-                                            <div class="detail-item"><span class="label">Attachment</span> <span class="value"><a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank">View Document</a></span></div>
+                                            <div class="detail-item"><span class="label">Attachment</span> <span class="value"><small><a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank">View Document</a></small></span></div>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -337,6 +343,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <?php else: ?>
                                         <div class="payment-summary">
                                             <ul>
+                                                <?php if($request['vac_type'] !== 'Encashed'): ?>
                                                 <li>
                                                     <div>
                                                         <span class="label">Working Days Salary</span>
@@ -344,6 +351,7 @@ if (mysqli_num_rows($query) == 1) {
                                                     </div>
                                                     <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
                                                 </li>
+                                                <?php endif; ?>
                                                 <li>
                                                     <div>
                                                         <span class="label">Vacation Salary</span>
@@ -427,8 +435,8 @@ if (mysqli_num_rows($query) == 1) {
                                                     
                                                     // Check for keywords indicating the asset was not returned
                                                     if (
-                                                        strpos($it_notes_lower, 'keep') !== false ||
-                                                        strpos($it_notes_lower, 'kept') !== false ||
+                                                        strpos($it_notes_lower, 'cleared') !== false ||
+                                                        strpos($it_notes_lower, 'received') !== false ||
                                                         strpos($it_notes_lower, 'not received') !== false
                                                     ) {
                                                         $status = __('not_received');
@@ -444,12 +452,12 @@ if (mysqli_num_rows($query) == 1) {
                                             </tbody>
                                         </table>
                                     </div>
-                                    <?php if (!empty($request['it_notes'])): ?>
+                                    <?php /*if (!empty($request['it_notes'])): ?>
                                     <div class="notes-section mt-2">
                                         <strong>IT Notes:</strong>
-                                        <p class="mb-0"><?=nl2br(htmlspecialchars($request['it_notes'])); ?></p>
+                                        <p class="mb-0"><?=__(nl2br(htmlspecialchars($request['it_notes']))); ?></p>
                                     </div>
-                                    <?php endif; ?>
+                                    <?php endif; */ ?>
                                 </div>
                                 <?php endif; ?>
                             </div>
