@@ -47,6 +47,27 @@ if (mysqli_num_rows($query) == 1) {
 	$format = "YYYY-MM-DD";
 	require("./includes/emp_query.php");
 
+
+	// Get the current user's department and type from session  
+	$target_dept = $emprow["dept"] ?? 0;
+	// The main fix is adding $is_system_admin to this check.
+	$hasAccess = ($user_dept == $target_dept) || $isHR || $isDeptHr || $is_system_admin || $isItAssistant;
+	if (!$hasAccess) {
+		$_SESSION['error_msg'] = sprintf(
+			'<div class="col-xl-12">
+				<div class="alert alert-danger bg-danger text-white border-0" role="alert">
+					<b>Error ooooh!</b> 
+					<h4>You don\'t have access for ( %s ) Department.</h4>
+				</div>
+			</div>',
+			$emprow["deptnme"]
+		);
+		header("Location: ./dashboard.php");
+		exit;
+	}
+	// If we get here, access is granted
+
+
 	if (mysqli_num_rows($get_emp_data) !== 0) {
 		$allRecords = mysqli_fetch_all($get_emp_data, MYSQLI_ASSOC);
 		foreach ($allRecords as $rec) {
@@ -79,27 +100,8 @@ if (mysqli_num_rows($query) == 1) {
 			];
 		}
 		// --- END: Loan Summary Calculation ---
-
 		// debug($emprow);
 
-		// Get the current user's department and type from session  
-		$target_dept = $emprow["dept"] ?? 0;
-		// The main fix is adding $is_system_admin to this check.
-		$hasAccess = ($user_dept == $target_dept) || $isHR || $isDeptHr || $is_system_admin;
-		if (!$hasAccess) {
-			$_SESSION['error_msg'] = sprintf(
-				'<div class="col-xl-12">
-					<div class="alert alert-danger bg-danger text-white border-0" role="alert">
-						<b>Error ooooh!</b> 
-						<h4>You don\'t have access for ( %s ) Department.</h4>
-					</div>
-				</div>',
-				$emprow["deptnme"]
-			);
-			header("Location: ./dashboard.php");
-			exit;
-		}
-		// If we get here, access is granted
 
 		$salary_get = str_replace(',', '', ($emprow['basic'] + $emprow['housing'] + $emprow['transport'] + $emprow["food"] + $emprow["misc"] + $emprow["cashier"] + $emprow["fuel"] + $emprow["tel"] + $emprow["other"] + $emprow["guard"]));
 

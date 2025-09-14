@@ -291,9 +291,6 @@ $all_statuses = [
                                                             <i class="fa fa-chart-simple-horizontal font-18 vertical-middle"></i> <?= __('more') ?>
                                                         </button>
                                                         <div class="dropdown-menu">
-                                                            <a href="javascript:void(0);" class="text-primary dropdown-item addEmpDocuAtter" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-mobile="<?= $emprow['mobile'] ?>" data-email="<?= $emprow['email'] ?>" data-address="<?= $emprow['address'] ?>" data-passport_number="<?= $emprow['passport_number'] ?>" data-passport_exp="<?= $emprow['passport_exp'] ?>">
-                                                                <i class="fa fa-cloud-upload"></i> <?= __('add_documents') ?>
-                                                            </a>
                                                             <?php if (empty($emprow['has_active_regular_loan'])) : ?>
                                                                 <a href="javascript:void(0);" class="text-warning dropdown-item applyLoan" data-emp_id="<?= $emprow['empid'] ?>">
                                                                     <i class="fa fa-money-bill-trend-up"></i> <?= __('apply_loan') ?>
@@ -304,7 +301,7 @@ $all_statuses = [
                                                                     <i class="fa fa-money-bill-wheat"></i> <?= __('emergency_loan') ?>
                                                                 </a>
                                                             <?php endif; ?>
-                                                            <?php if ($isEmployee) : ?>
+                                                            <?php if ($isEmployee || $isAssistant) : ?>
                                                                 <a href="javascript:void(0);" id="startUpdateRequest" data-avatar="<?= $emprow['avatar'] ?>" data-empid="<?= $emprow['empid'] ?>" class="text-primary dropdown-item">
                                                                     <i class="fa fa-user-pen"></i> <?= __('update_information') ?>
                                                                 </a>

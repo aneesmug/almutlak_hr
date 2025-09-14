@@ -3454,6 +3454,7 @@ $('#startUpdateRequest').on('click', function() {
             'Passport Exp': __('passport_expiry_date'),
             'Profile Picture': __('profile_picture')
         },
+        allowOutsideClick: false,
         inputPlaceholder: __('select_an_item_placeholder'),
         showCancelButton: true,
         confirmButtonText: __('next'),

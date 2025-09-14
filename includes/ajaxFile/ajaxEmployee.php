@@ -556,6 +556,32 @@ if($ajaxType == 'emp_search') {
     }
     // IMPORTANT: Stop script execution after handling the AJAX request
     exit;
+} elseif ($ajaxType == 'get_emp_vacation_details') {
+    $empid = $_POST['empid'] ?? null;
+    if (!$empid) {
+        echo json_encode(['status' => 400, 'message' => 'Employee ID is required.']);
+        exit;
+    }
+
+    $query = "SELECT e.name, e.vac_period as vac_period_id, cp.vac_period as vac_period_days 
+              FROM employees e 
+              JOIN contract_period cp ON e.vac_period = cp.id 
+              WHERE e.emp_id = ?";
+    
+    $stmt = $conDB->prepare($query);
+    $stmt->bind_param("s", $empid);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0) {
+        $data = $result->fetch_assoc();
+        $data['emp_id'] = $empid;
+        echo json_encode(['status' => 200, 'data' => $data]);
+    } else {
+        echo json_encode(['status' => 404, 'message' => 'Employee not found or has no vacation contract assigned.']);
+    }
+    $stmt->close();
+    exit;
 }
 
 ?>

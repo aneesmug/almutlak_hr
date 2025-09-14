@@ -45,6 +45,7 @@ $fileManagerLink = 'file_manager.php';
 $galleryLink = 'gallery.php';
 $languageLink = 'language.php';
 $logActivityLink = 'log_activity.php';
+$manualVacationLink = 'manual_vacation.php';
 
 
 // =================================================================================
@@ -52,14 +53,14 @@ $logActivityLink = 'log_activity.php';
 // =================================================================================
 
 $page_roles = [
-    'dashboard.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'GM', 'Employee'],
+    'dashboard.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'GM', 'Employee','IT_Assistant'],
     'dashboardgm.php' => ['GM'],
     'add_new_employee.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
-    'reg_employee.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager'],
+    'reg_employee.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager','IT_Assistant'],
     'emp_temp_contant.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
     'employee_audit_gen.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'],
     'generate_payroll.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
-    'all_applied_vac.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'GM','Employee'],
+    'all_applied_vac.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'GM','Employee','IT_Assistant'],
     'all_applied_loan.php' => ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'Employee'],
     'all_cars.php' => ['administrator'],
     'all_locations.php' => ['administrator'],
@@ -73,6 +74,7 @@ $page_roles = [
     'gallery.php' => ['administrator'],
     'language.php' => ['administrator'],
     'log_activity.php' => ['administrator'],
+    'manual_vacation.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'IT_Assistant'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -88,9 +90,9 @@ if ($user_type != 'administrator') {
 
 // --- Role lists for menu visibility ---
 $can_see_employees_group_main = ['administrator', 'HR_Manager', 'HR_Assistant'];
-$can_see_all_employees_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager'];
+$can_see_all_employees_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager','IT_Assistant'];
 $can_see_employees_bank_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'];
-$can_see_applied_vac_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'DPT_Manager'];
+$can_see_applied_vac_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'DPT_Manager','IT_Assistant'];
 $can_see_loan_approvals_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager'];
 $can_see_content_approvals_page = ['administrator', 'HR_Manager', 'HR_Assistant'];
 $can_see_smart_requests_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager'];
@@ -241,6 +243,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $payrollLink ?>"><i class="fa fa-money-bill-transfer"></i><span><?=__('payroll') ?></span></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                    <li><a href="<?= $manualVacationLink ?>"><i class="fa fa-plus"></i><span><?=__('add_manual_history') ?></span></a></li>
                 <?php endif; ?>
             </ul>
         </li>

@@ -93,12 +93,14 @@ $is_system_admin = ($user_type === 'administrator');
 $isHR = ($user_type === 'hr');
 $isDeptHr = ($user_type === 'assistant' && $user_dept == 5);
 $isEmployee = ($user_type === 'employee');
+$isAssistant = ($user_type === 'assistant');
+$isItAssistant = ($user_type === 'assistant' && $user_dept == 6);
 
 // --- 7. Page Access Control ---
 $current_page = strtolower(basename($_SERVER['PHP_SELF']));
 
 const EMPLOYEE_ALLOWED_PAGES = ['profile.php', 'all_applied_loan.php','all_applied_vac.php'];
-const ASSISTANT_RESTRICTED_PAGES = ['dashbydepart.php', 'filter_employee.php', 'reg_employee.php', 'search.php'];
+const ASSISTANT_RESTRICTED_PAGES = ['dashbydepart.php', 'filter_employee.php', 'reg_employee.php', 'search.php', 'manual_vacation.php'];
 
 
 if (($emprow['user_type'] ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true)) {
@@ -106,7 +108,7 @@ if (($emprow['user_type'] ?? null) === 'employee' && !in_array($current_page, EM
     exit();
 }
 
-$isSpecialAssistant = (($user_dept ?? null) == 5 && ($user_type ?? null) === 'assistant');
+$isSpecialAssistant = ((($user_dept ?? null) == 5 && ($user_type ?? null) === 'assistant') || (($user_dept ?? null) == 6 && ($user_type ?? null) === 'assistant'));
 if (!$isSpecialAssistant && ($user_type ?? null) === 'assistant' && in_array($current_page, ASSISTANT_RESTRICTED_PAGES, true)) {
     header("Location: ./dashboard.php");
     exit();

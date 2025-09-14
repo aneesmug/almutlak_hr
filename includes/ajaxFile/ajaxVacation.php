@@ -117,6 +117,47 @@ elseif ($ajaxType == 'approveITClearance') {
         send_json_response("Error!", $result['message'], "error");
     }
 }
+
+elseif ($ajaxType == 'addManualHistory') {
+    $emp_id = $_POST['emp_id'] ?? null;
+    $contract_id = $_POST['contract_id'] ?? null;
+    $period_start = $_POST['period_start'] ?? null;
+    $period_end = $_POST['period_end'] ?? null;
+    $total_days = $_POST['total_days'] ?? 0;
+    $used_days = $_POST['used_days'] ?? 0;
+    $remaining_balance = $_POST['remaining_balance'] ?? 0;
+    $name = $_POST['name'] ?? 'N/A';
+    
+    if (!$emp_id || !$contract_id || !$period_start || !$period_end) {
+        send_json_response("Validation Error", "Missing required fields.", "error");
+        exit;
+    }
+
+    $conDB->begin_transaction();
+    try {
+        // 1. Insert into emp_vacation to keep history
+        $sql_vac = "INSERT INTO `emp_vacation` (`emp_id`, `start_date`, `return_date`, `vacdays`, `vac_type`, `fly_type`, `remarks`,`is_deductible`, `approval_status`, `review`, `created_at`, `gm_approval`) VALUES (?, ?, ?, ?, 'Fly', 'annual', 'Manual History Entry',1, 'gm_approved', 'C', NOW(), NOW())";
+        $stmt_vac = $conDB->prepare($sql_vac);
+        $stmt_vac->bind_param("sssi", $emp_id, $period_start, $period_end, $used_days);
+        $stmt_vac->execute();
+        $vac_id = $conDB->insert_id;
+        $stmt_vac->close();
+
+        // 2. Insert into emp_vacation_balance
+        $sql_balance = "INSERT INTO `emp_vacation_balance` (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, `total_days`, `used_days`, `remaining_balance`, `available_balance`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        $stmt_balance = $conDB->prepare($sql_balance);
+        $stmt_balance->bind_param("siisssddd", $emp_id, $vac_id, $contract_id, $period_start, $period_end, $total_days, $used_days, $remaining_balance, $remaining_balance);
+        $stmt_balance->execute();
+        $stmt_balance->close();
+
+        $conDB->commit();
+        send_json_response("Success", "Manual vacation history for {$name} has been saved successfully.", "success");
+    } catch (Exception $e) {
+        $conDB->rollback();
+        error_log("Manual History Error: " . $e->getMessage());
+        send_json_response("Database Error", "Failed to save manual history. " . $e->getMessage(), "error");
+    }
+}
 /*
 ================================================================
 == UPDATED CODE BLOCK TO HANDLE GENERAL LEAVE APPLICATIONS

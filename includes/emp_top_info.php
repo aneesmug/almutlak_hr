@@ -99,18 +99,22 @@ if ($emprow['user_type'] !== 'employee') {
 										<?= __('more') ?> <i class="fa fa-chart-simple-horizontal font-18 vertical-middle"></i>
 									</button>
 									<div class="dropdown-menu">
+										<?php if($isDeptHr || $isHR || $is_system_admin): ?>
 										<a href="javascript:void(0);" class="text-primary dropdown-item addEmpDocuAtter d-flex align-items-center" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>">
 											<i class="fa fa-solid fa-upload mr-2"></i> <?= __('add_documents') ?>
 										</a>
+										<?php endif; ?>
+										<?php if($isItAssistant || $is_system_admin): ?>
 										<a href="javascript:void(0);" class="text-dark dropdown-item d-flex align-items-center" onclick="assignAsset('<?= $emprow['empid'] ?>')">
 											<i class="fa fa-solid fa-project-diagram mr-2"></i> <?= __('assign_asset') ?>
 										</a>
-										<?php if (empty($emprow['has_active_regular_loan'])) : ?>
+										<?php endif; ?>
+										<?php if (empty($emprow['has_active_regular_loan']) && $is_system_admin || $isDeptHr || $isHR) : ?>
 											<a href="javascript:void(0);" class="text-warning dropdown-item applyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 												<i class="fa fa-money-bill-trend-up mr-2"></i> <?= __('apply_loan') ?>
 											</a>
 										<?php endif; ?>
-										<?php if (empty($emprow['has_active_emergency_loan'])) : ?>
+										<?php if (empty($emprow['has_active_emergency_loan']) && $is_system_admin || $isDeptHr || $isHR) : ?>
 											<a href="javascript:void(0);" class="text-info dropdown-item applyEmergencyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 												<i class="fa fa-money-bill-wheat mr-2"></i> <?= __('emergency_loan') ?>
 											</a>
@@ -187,13 +191,13 @@ if ($emprow['user_type'] !== 'employee') {
 												</a>
 											<?php endif; ?>
 
-											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR or $is_system_admin or $isDeptHr) : ?>
+											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR || $is_system_admin || $isDeptHr) : ?>
 												<a href="edit_employee.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item d-flex align-items-center">
 													<i class="fa fa-user-pen mr-2"></i> <?= __('edit') ?>
 												</a>
 											<?php endif; ?>
 
-											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR or $is_system_admin or $isDeptHr) : ?>
+											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR || $is_system_admin || $isDeptHr) : ?>
 												<a href="javascript:void(0);" class="text-info dropdown-item addnote d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 													<i class="fa fa-book-user mr-2"></i> <?= __('note') ?>
 												</a>

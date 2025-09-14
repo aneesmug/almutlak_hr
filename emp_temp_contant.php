@@ -6,7 +6,7 @@
 	include("./includes/avatar_select.php");
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
     <head>
         <meta charset="utf-8" />
@@ -58,6 +58,11 @@
                 padding: 10px !important;
             }
         </style>
+
+        <?php if ($is_rtl): ?>
+            <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+        <?php endif; ?>
+		<script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 
     </head>
     <body class="enlarged" data-keep-enlarged="true">

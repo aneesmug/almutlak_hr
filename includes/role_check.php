@@ -35,6 +35,8 @@ if ($user_type == "gm" && $emp_type == "Manager" && $user_dept == 10) {
     $user_role = 'Finance_Manager';
 } elseif ($user_type == "assistant" && $user_dept == 2) { // Dept 2 is Finance
     $user_role = 'Finance_Assistant';
+} elseif ($user_type == "assistant" && $user_dept == 6) { // Dept 2 is IT Dept.
+    $user_role = 'IT_Assistant';
 } elseif (($user_type == "administrator" || $emp_type == "Manager") && !in_array($user_dept, [2, 5, 10])) {
     $user_role = 'DPT_Manager';
 }
