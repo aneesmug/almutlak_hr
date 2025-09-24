@@ -5,6 +5,7 @@
  * 2. DYNAMIC WORKFLOW PATH: The timeline now dynamically adjusts its path, correctly skipping steps for HR employees and omitting the IT step if the employee has no assigned assets.
  * 3. IMPROVED STATUS VISUALS: Corrected the timeline rendering to properly show completed steps as 'approved', the current step as 'pending', and future steps with a neutral style.
  * 4. ENHANCED LABELS & ICONS: Updated the map of approval steps with clearer labels and more distinct icons for each stage of the process.
+ * 5. EMERGENCY LEAVE: Financial details are not calculated and the "Payment Details" section is hidden if the fly_type is 'emergency'.
  ****************************************************************/
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
@@ -23,6 +24,7 @@ if (mysqli_num_rows($query) == 1) {
     // 2. MODIFIED: Fetch all data with a single query
     $sql = "SELECT 
                 v.*, 
+                v.fly_type as raw_fly_type,
                 v.attachment_path,
                 e.name as employee_name,
                 e.avatar,
@@ -94,19 +96,22 @@ if (mysqli_num_rows($query) == 1) {
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
     $is_payable_leave = !in_array($request['vac_type'], $non_payable_leave_types);
 
+    // If fly_type is emergency, it is not payable.
+    if (isset($request['raw_fly_type']) && $request['raw_fly_type'] === 'emergency') {
+        $is_payable_leave = false;
+    }
+
     if ($is_payable_leave) {
         if ($salary) {
             $total_monthly_salary = ($salary['basic'] ?? 0) + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
             $daily_rate = $total_monthly_salary / 30;
 
             // Calculate vacation days salary
-            if ($request['fly_type'] !== 'emergency') {
-                $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
-                if ($contract_days > 0 && $applied_days == $contract_days) {
-                    $vacation_salary = $total_monthly_salary;
-                } else {
-                    $vacation_salary = $daily_rate * $applied_days;
-                }
+            $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
+            if ($contract_days > 0 && $applied_days == $contract_days) {
+                $vacation_salary = $total_monthly_salary;
+            } else {
+                $vacation_salary = $daily_rate * $applied_days;
             }
             
             // Calculate working days salary
@@ -336,10 +341,11 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 </div>
 
+                                <?php if ($request['raw_fly_type'] !== 'emergency'): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i>Payment Details</h5>
                                     <?php if (!$is_payable_leave): ?>
-                                        <div class="alert alert-info">Salary and benefits are not applicable for this type of leave (<?=htmlspecialchars($request['vac_type']); ?>).</div>
+                                        <div class="alert alert-info">Salary and benefits are not applicable for this type of leave.</div>
                                     <?php else: ?>
                                         <div class="payment-summary">
                                             <ul>
@@ -367,6 +373,7 @@ if (mysqli_num_rows($query) == 1) {
                                         </div>
                                     <?php endif; ?>
                                 </div>
+                                <?php endif; ?>
 
                                 <div class="row">
                                     <div class="col-md-7">
@@ -491,3 +498,4 @@ if (mysqli_num_rows($query) == 1) {
     $conDB->close();
 }
 ?>
+

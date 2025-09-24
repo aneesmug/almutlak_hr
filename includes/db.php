@@ -36,6 +36,24 @@ function getDbConnection() {
     }
 }
 
+// --- Function to Get Settings ---
+function get_setting($conn, $setting_name) {
+    $value = null; // Default value
+    $sql = "SELECT setting_value FROM app_settings WHERE setting_name = ?";
+    $stmt = $conn->prepare($sql);
+    if ($stmt) {
+        $stmt->bind_param("s", $setting_name);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($row = $result->fetch_assoc()) {
+            $value = $row['setting_value'];
+        }
+        $stmt->close();
+    }
+    return $value;
+}
+
+
 /****time_zone****/
 date_default_timezone_set("Asia/Riyadh");
 mysqli_query($conDB,"SET NAMES utf8;");
@@ -43,11 +61,15 @@ mysqli_query($conDB,"SET NAMES utf8;");
 header('Content-Type: text/html; charset=utf-8');
 
 
+$developer_mode = get_setting($conDB, 'developer_mode');
 
+if($developer_mode == 1){
+    error_reporting(E_ALL ^ E_NOTICE);
+    ini_set('display_errors', 0);
+    ini_set('display_startup_errors', 0);
+    ini_set('log_errors', 1);
+}
 
-error_reporting(E_ALL ^ E_NOTICE);
-ini_set('display_errors', 0);
-ini_set('display_startup_errors', 0);
 
 
 $pgname = basename($_SERVER['REQUEST_URI'], '?' . $_SERVER['QUERY_STRING']);

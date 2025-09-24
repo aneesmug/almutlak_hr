@@ -6221,6 +6221,121 @@ function add_note_HTML(){
 
 /*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/
 
+
+
+/*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/
+
+ $(document).ready(function() {
+        // Initialize DataTable
+        const table = $('#settingsTable').DataTable({
+            "ajax": {
+                "url": "/includes/settings_handler.php",
+                "type": "POST",
+                "data": { "action": "get_settings_for_datatable" },
+                "dataSrc": "data"
+            },
+            "columns": [
+                { "data": "id", "title": "ID" },
+                { "data": "setting_group", "title": "Group" },
+                { "data": "setting_name", "title": "Name" },
+                { "data": "setting_value", "title": "Value" },
+                { "data": "description", "title": "Description" }
+            ]
+        });
+        
+        // --- Event Listeners ---
+        $('#editAllBtn').on('click', openSettingsModal);
+
+    });
+
+    async function openSettingsModal() {
+        try {
+            const response = await fetch('/includes/settings_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'get_settings' })
+            });
+
+            if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+            const data = await response.json();
+            if (!data.success) throw new Error(data.message || 'Failed to retrieve settings.');
+            
+            const settings = data.settings;
+            
+            let formHtml = '<div id="settings-form" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;" class="p-4">';
+            let currentGroup = '';
+
+            settings.forEach(setting => {
+                if (setting.setting_group !== currentGroup) {
+                    currentGroup = setting.setting_group;
+                    formHtml += `<h2 style="grid-column: span 2; font-size: 1.125rem; font-weight: 600; border-bottom: 2px solid #e5e7eb; margin-bottom: 0.5rem; margin-top: 1rem; text-transform: capitalize;">${currentGroup} Settings</h2>`;
+                }
+
+                const id = `swal-${setting.setting_name}`;
+                const label = setting.description;
+
+                formHtml += `<div style="display: flex; flex-direction: column;">`;
+                formHtml += `<label for="${id}" style="font-weight: 600; margin-bottom: 0.25rem; display: block; text-transform: capitalize;">${label}</label>`;
+
+                switch (setting.input_type) {
+                    case 'select':
+                        let options = JSON.parse(setting.options || '{}');
+                        formHtml += `<select id="${id}" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem;">`;
+                        for (const [value, text] of Object.entries(options)) {
+                            formHtml += `<option value="${value}" ${setting.setting_value == value ? 'selected' : ''}>${text}</option>`;
+                        }
+                        formHtml += `</select>`;
+                        break;
+                    default:
+                        formHtml += `<input id="${id}" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem;" value="${setting.setting_value || ''}">`;
+                        break;
+                }
+                formHtml += `</div>`;
+            });
+            formHtml += '</div>';
+
+            Swal.fire({
+                title: 'Application Settings',
+                html: formHtml,
+                width: '600px',
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Save Changes',
+                preConfirm: () => {
+                    const newSettings = {};
+                    settings.forEach(setting => {
+                        const element = document.getElementById(`swal-${setting.setting_name}`);
+                        if (element) newSettings[setting.setting_name] = element.value;
+                    });
+
+                    return fetch('/includes/settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'update_settings', settings: JSON.stringify(newSettings) })
+                    }).then(response => {
+                        if (!response.ok) throw new Error(response.statusText);
+                        return response.json();
+                    }).catch(error => Swal.showValidationMessage(`Request failed: ${error}`));
+                }
+            }).then(result => {
+                if (result.isConfirmed) {
+                    if (result.value.success) {
+                        Swal.fire('Saved!', 'Your settings have been updated.', 'success');
+                        $('#settingsTable').DataTable().ajax.reload(); // Reload table data
+                    } else {
+                        Swal.fire('Error!', result.value.message || 'Could not save settings.', 'error');
+                    }
+                }
+            });
+        } catch (error) {
+            Swal.fire('Error!', `Could not load settings: ${error.message}`, 'error');
+        }
+    }
+
+/*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/
+
+
+
 String.prototype.toArabicNumber = function() {
     var id = ['۰', '١', '٢', '۳', '٤', '٥', '٦', '۷', '۸', '۹'];
     return this.replace(/[0-9]/g, function(w) {

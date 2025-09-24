@@ -582,6 +582,19 @@ if($ajaxType == 'emp_search') {
     }
     $stmt->close();
     exit;
+} elseif($ajaxType == 'emp_search_select2') { // New case for Select2
+    $searchTerm = $_POST['searchTerm'] ?? '';
+    $stmt = $conDB->prepare("SELECT `emp_id` as `id`, `name` as `text` FROM `employees` WHERE `status`=1 AND (`name` LIKE ? OR `emp_id` LIKE ?) ORDER BY `name` ASC");
+    $likeTerm = "%{$searchTerm}%";
+    $stmt->bind_param("ss", $likeTerm, $likeTerm);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $employees = [];
+    while($row = $result->fetch_assoc()) {
+        $employees[] = $row;
+    }
+    echo json_encode(['data' => $employees]);
+    exit;
 }
 
 ?>

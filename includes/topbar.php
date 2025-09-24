@@ -69,7 +69,7 @@
                     </a>
                     
                     <!-- item-->
-                    <a href="javascript:void(0);" class="dropdown-item notify-item">
+                    <a href="javascript:void(0);" id="editAllBtn" class="dropdown-item notify-item">
                         <i class="fi-cog"></i> <span><?=__('settings'); ?></span>
                     </a>
 

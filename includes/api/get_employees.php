@@ -15,20 +15,27 @@ try {
     // Always include gp.status with a LEFT JOIN.
     // If no matching record in payrolls, gp.status will be NULL.
     $sql = "SELECT
-            e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept,
+            e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept, 
             es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard,
-            gp.status AS payroll_status, -- Always select payroll_status
-            d.dep_nme as department_name, -- Include department name for filtering/display
-            e.country, -- Include department name for filtering/display
+            gp.basic_salary, gp.housing_allowance, gp.transport_allowance, gp.food_allowance, gp.miscellaneous_allowance, gp.cashier_allowance, gp.fuel_allowance, gp.telephone_allowance, gp.other_allowance, gp.guard_allowance,
+            gp.status AS payroll_status,
+            d.dep_nme as department_name,
+            e.country,
             s.sponsor,
             c.comp_name
         FROM employees e
         LEFT JOIN emp_salary es ON e.emp_id = es.emp_id AND es.status = 1
         LEFT JOIN payrolls gp ON e.emp_id = gp.emp_id AND gp.month_year = :month_year_param
-        LEFT JOIN department d ON e.dept = d.id -- Join for department name
+        LEFT JOIN department d ON e.dept = d.id
         LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
         LEFT JOIN companies c ON e.comp_no = c.comp_id
         WHERE e.status = 1 AND e.fly = 0
+        -- AND e.emp_id NOT IN (
+        --     SELECT emp_id FROM emp_vacation 
+        --     WHERE DATE_FORMAT(start_date, '%Y-%m') <= :month_year_param
+        --     AND DATE_FORMAT(return_date, '%Y-%m') >= :month_year_param
+        --     AND approval_status = 'gm_approved' AND is_deductible = 1
+        -- )
         ORDER BY e.dept, e.name
     ";
 

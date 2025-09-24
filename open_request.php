@@ -12,11 +12,11 @@ MODIFICATION SUMMARY:
 */
 
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/session_check.php'; // Needed for user details
 
 // Handle AJAX Payment Processing Separately
 if (isset($_POST['process_payment'])) {
     header('Content-Type: application/json');
-    require_once __DIR__ . '/includes/session_check.php'; // Needed for user details
 
     $inv_no_pay = $_POST['inv_no'];
     $paid_amount = $_POST['paid_amount'];
@@ -55,8 +55,6 @@ if (isset($_POST['process_payment'])) {
     exit(); // Stop script execution for AJAX requests
 }
 
-
-require_once __DIR__ . '/includes/session_check.php';
 include("./includes/convertNumbersToWords.php");
 
 require './includes/vendor/autoload.php';
@@ -479,14 +477,14 @@ if ($current_status_get == 'paid') {
                                                             <h5><?=__('approval_status')?></h5>
                                                             <div class="approval-status <?= $dept_manager_status_get ? ($dept_manager_status_get == 'approved' ? 'approved' : ($dept_manager_status_get == 'rejected' ? 'rejected' : 'pending')) : '' ?>">
                                                                 <strong><?=__('department_manager')?>:</strong> 
-                                                                <span><?= __($dept_manager_status_get) ?? __('pending') ?></span>
+                                                                <span><?= ($dept_manager_status_get) ?? __('pending') ?></span>
                                                                 <?php if($dept_manager_name_get): ?>
                                                                     <br><small><?=__('by')?> <?= htmlspecialchars($dept_manager_name_get) ?> <?=__('on')?> <?= $dept_manager_date_get ? date('d M Y H:i', strtotime($dept_manager_date_get)) : '' ?></small>
                                                                 <?php endif; ?>
                                                             </div>
                                                             <div class="approval-status <?= $finance_manager_status_get ? ($finance_manager_status_get == 'approved' ? 'approved' : ($finance_manager_status_get == 'rejected' ? 'rejected' : 'pending')) : '' ?>">
                                                                 <strong><?=__('finance')?>:</strong>
-                                                                <span><?= __($finance_manager_status_get) ?? __('pending') ?></span>
+                                                                <span><?= ($finance_manager_status_get) ?? __('pending') ?></span>
                                                                 <?php if($finance_manager_name_get): ?>
                                                                     <br><small><?=__('by')?> <?= htmlspecialchars($finance_manager_name_get) ?> <?=__('on')?> <?= $finance_manager_date_get ? date('d M Y H:i', strtotime($finance_manager_date_get)) : '' ?></small>
                                                                 <?php endif; ?>

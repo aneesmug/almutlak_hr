@@ -45,7 +45,9 @@ $fileManagerLink = 'file_manager.php';
 $galleryLink = 'gallery.php';
 $languageLink = 'language.php';
 $logActivityLink = 'log_activity.php';
-$manualVacationLink = 'manual_vacation.php';
+// $manualVacationLink = 'manual_vacation.php';
+$manualVacationLink = 'import_vacation_balance.php';
+$processIqamaImportLink = 'import_iqama_exp.php';
 
 
 // =================================================================================
@@ -75,6 +77,7 @@ $page_roles = [
     'language.php' => ['administrator'],
     'log_activity.php' => ['administrator'],
     'manual_vacation.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'IT_Assistant'],
+    'import_iqama_exp.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -246,6 +249,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $manualVacationLink ?>"><i class="fa fa-plus"></i><span><?=__('add_manual_history') ?></span></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                    <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus"></i><span><?=__('import_iqama_exp') ?></span></a></li>
                 <?php endif; ?>
             </ul>
         </li>

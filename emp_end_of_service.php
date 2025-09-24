@@ -574,6 +574,7 @@ $vac_used_days = round($vac_used_days, 2);
                                                         <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($available_vacation_days); ?>">
                                                         <input type="hidden" id="emp_country" value="<?= htmlspecialchars($emprow['country']); ?>">
                                                         <input type="hidden" id="emp_gosi_percent" value="<?= htmlspecialchars($emprow['gosi']); ?>">
+                                                        
                                                     </fieldset>
                                                 </form>
                                             <?php else: ?>

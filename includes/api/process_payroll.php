@@ -1,12 +1,14 @@
 <?php
 /****************************************************************
  * MODIFICATION SUMMARY:
- * 1. ADDED LOAN DEDUCTION FUNCTION: A new function, `addOrUpdateLoanDeduction`, has been created at the end of the file.
- * 2. SKIPPABLE DEDUCTIONS: This function now first checks if a "Loan Installment" has already been manually added to the `payroll_deductions` table for the month. If it exists (even with a value of 0), the automatic deduction is skipped.
- * 3. BALANCE CALCULATION & DEDUCTION: It calculates the remaining balance and automatically inserts a 'Loan Installment' record if one doesn't already exist.
- * 4. PAYMENT TRACKING: After creating the deduction, it also inserts a record into `emp_loan_payments` to track the repayment.
+ * 1. ADDED LOAN DEDUCTION FUNCTION: A new function, `addOrUpdateLoanDeduction`, has been created.
+ * 2. SKIPPABLE DEDUCTIONS: This function now first checks if a "Loan Installment" has already been manually added.
+ * 3. BALANCE CALCULATION & DEDUCTION: It calculates the remaining balance and automatically inserts a 'Loan Installment' record.
+ * 4. PAYMENT TRACKING: After creating the deduction, it also inserts a record into `emp_loan_payments`.
  * 5. LOAN COMPLETION: If the payment clears the balance, the loan's status is updated to 'paid'.
- * 6. ADDED VACATION SALARY BENEFIT: A new function, `addVacationWorkingDaysSalary`, has been added to automatically calculate and add the salary for days worked in the month a vacation starts. This is added as a benefit in the payroll.
+ * 6. ADDED VACATION SALARY BENEFIT: A new function, `addVacationWorkingDaysSalary`, has been added to automatically calculate and add the salary for days worked in the month a vacation starts.
+ * 7. PRORATED SALARY FOR RETURNING EMPLOYEES: The main payroll generation logic now checks if an employee returned from vacation mid-month and prorates their salary accordingly.
+ * 8. CORRECTED COLUMN NAMES: The script now uses the correct salary component column names (e.g., `basic_salary`).
  ****************************************************************/
 // Set the content type of the response to JSON
 header('Content-Type: application/json');
@@ -63,7 +65,7 @@ try {
         // --- FIX ENDS ---
 
         // Get employee's salary components and country for GOSI calculation
-        $stmtEmployeeData = $pdo->prepare("SELECT es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard, e.country, e.gosi
+        $stmtEmployeeData = $pdo->prepare("SELECT es.basic as basic_salary, es.housing as housing_allowance, es.transport as transport_allowance, es.food as food_allowance, es.misc as miscellaneous_allowance, es.cashier as cashier_allowance, es.fuel as fuel_allowance, es.tel as telephone_allowance, es.other as other_allowance, es.guard as guard_allowance, e.country, e.gosi
             FROM emp_salary es
             JOIN employees e ON es.emp_id = e.emp_id
             WHERE es.emp_id = :emp_id AND e.status = 1 AND es.status = 1
@@ -76,17 +78,40 @@ try {
 
         // Create an array of salary components for easier summation
         $salaryComponents = [
-            'basic' => $employeeData['basic'],
-            'housing' => $employeeData['housing'],
-            'transport' => $employeeData['transport'],
-            'food' => $employeeData['food'],
-            'misc' => $employeeData['misc'],
-            'cashier' => $employeeData['cashier'],
-            'fuel' => $employeeData['fuel'],
-            'tel' => $employeeData['tel'],
-            'other' => $employeeData['other'],
-            'guard' => $employeeData['guard']
+            'basic_salary' => $employeeData['basic_salary'],
+            'housing_allowance' => $employeeData['housing_allowance'],
+            'transport_allowance' => $employeeData['transport_allowance'],
+            'food_allowance' => $employeeData['food_allowance'],
+            'miscellaneous_allowance' => $employeeData['miscellaneous_allowance'],
+            'cashier_allowance' => $employeeData['cashier_allowance'],
+            'fuel_allowance' => $employeeData['fuel_allowance'],
+            'telephone_allowance' => $employeeData['telephone_allowance'],
+            'other_allowance' => $employeeData['other_allowance'],
+            'guard_allowance' => $employeeData['guard_allowance']
         ];
+        
+        // --- PRORATED SALARY LOGIC FOR RETURNING EMPLOYEES ---
+        $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND approval_status = 'gm_approved' AND is_deductible = 1");
+        $stmtVacationReturn->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
+
+        $daysInMonth = date('t', strtotime($monthYear . '-01'));
+        $prorationFactor = 1.0;
+
+        if ($vacationReturn) {
+            $returnDate = new DateTime($vacationReturn['return_date']);
+            $daysWorked = $daysInMonth - ($returnDate->format('d') - 1);
+            if ($daysWorked > 0) {
+                $prorationFactor = $daysWorked / $daysInMonth;
+            } else {
+                continue; // Skip payroll if they returned at the end or after the month
+            }
+        }
+        
+        foreach ($salaryComponents as $key => $value) {
+            $salaryComponents[$key] = $value * $prorationFactor;
+        }
+        
         // Calculate the total gross salary
         $totalGrossSalary = array_sum(array_map('floatval', $salaryComponents));
         
@@ -102,7 +127,7 @@ try {
 
         // --- GOSI Deduction Logic ---
         if ($employeeData['country'] === '191') {
-            $basicPlusHousing = floatval($salaryComponents['basic']) + floatval($salaryComponents['housing']);
+            $basicPlusHousing = floatval($salaryComponents['basic_salary']) + floatval($salaryComponents['housing_allowance']);
             $gosiAmount = round($basicPlusHousing * ($employeeData['gosi'] / 100) , 2); // 0.0975
             $stmtCheckGosi = $pdo->prepare("SELECT id, note FROM payroll_deductions
                 WHERE emp_id = :emp_id AND deduction = 'GOSI' AND month = :month_year LIMIT 1
@@ -146,7 +171,7 @@ try {
             $amount = 0;
             if ($benefit['calculation_type'] === 'overtime_basic') {
                 $hours = floatval($benefit['hours'] ?? 0);
-                $basicSalary = floatval($salaryComponents['basic']);
+                $basicSalary = floatval($salaryComponents['basic_salary']);
                 $hourlyRate = ($basicSalary / 240 / 2) + ($totalGrossSalary / 240);
                 $amount = $hourlyRate * $hours;
             } elseif ($benefit['calculation_type'] === 'overtime_total') {
@@ -174,9 +199,9 @@ try {
                 telephone_allowance, other_allowance, guard_allowance, total_gross_salary,
                 total_benefits, total_deductions, net_salary, status
             ) VALUES (
-                :emp_id, :month_year, :basic, :housing, :transport,
-                :food, :misc, :cashier, :fuel,
-                :tel, :other, :guard, :total_gross_salary,
+                :emp_id, :month_year, :basic_salary, :housing_allowance, :transport_allowance,
+                :food_allowance, :miscellaneous_allowance, :cashier_allowance, :fuel_allowance,
+                :telephone_allowance, :other_allowance, :guard_allowance, :total_gross_salary,
                 :total_benefits, :total_deductions, :net_salary, 'generated'
             ) ON DUPLICATE KEY UPDATE
                 basic_salary = VALUES(basic_salary),
@@ -198,16 +223,16 @@ try {
         $stmt->execute([
             ':emp_id' => $empId,
             ':month_year' => $monthYear,
-            ':basic' => number_format($salaryComponents['basic'], 2, '.', ''),
-            ':housing' => number_format($salaryComponents['housing'], 2, '.', ''),
-            ':transport' => number_format($salaryComponents['transport'], 2, '.', ''),
-            ':food' => number_format($salaryComponents['food'], 2, '.', ''),
-            ':misc' => number_format($salaryComponents['misc'], 2, '.', ''),
-            ':cashier' => number_format($salaryComponents['cashier'], 2, '.', ''),
-            ':fuel' => number_format($salaryComponents['fuel'], 2, '.', ''),
-            ':tel' => number_format($salaryComponents['tel'], 2, '.', ''),
-            ':other' => number_format($salaryComponents['other'], 2, '.', ''),
-            ':guard' => number_format($salaryComponents['guard'], 2, '.', ''),
+            ':basic_salary' => number_format($salaryComponents['basic_salary'], 2, '.', ''),
+            ':housing_allowance' => number_format($salaryComponents['housing_allowance'], 2, '.', ''),
+            ':transport_allowance' => number_format($salaryComponents['transport_allowance'], 2, '.', ''),
+            ':food_allowance' => number_format($salaryComponents['food_allowance'], 2, '.', ''),
+            ':miscellaneous_allowance' => number_format($salaryComponents['miscellaneous_allowance'], 2, '.', ''),
+            ':cashier_allowance' => number_format($salaryComponents['cashier_allowance'], 2, '.', ''),
+            ':fuel_allowance' => number_format($salaryComponents['fuel_allowance'], 2, '.', ''),
+            ':telephone_allowance' => number_format($salaryComponents['telephone_allowance'], 2, '.', ''),
+            ':other_allowance' => number_format($salaryComponents['other_allowance'], 2, '.', ''),
+            ':guard_allowance' => number_format($salaryComponents['guard_allowance'], 2, '.', ''),
             ':total_gross_salary' => number_format($totalGrossSalary, 2, '.', ''),
             ':total_benefits' => number_format($totalBenefits, 2, '.', ''),
             ':total_deductions' => number_format($totalDeductions, 2, '.', ''),

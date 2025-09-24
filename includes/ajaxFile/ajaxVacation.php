@@ -118,7 +118,7 @@ elseif ($ajaxType == 'approveITClearance') {
     }
 }
 
-elseif ($ajaxType == 'addManualHistory') {
+elseif ($ajaxType == 'addManualHistory') { // --- NEW CASE TO HANDLE MANUAL/HISTORICAL BALANCE ENTRY ---
     $emp_id = $_POST['emp_id'] ?? null;
     $contract_id = $_POST['contract_id'] ?? null;
     $period_start = $_POST['period_start'] ?? null;
@@ -135,7 +135,8 @@ elseif ($ajaxType == 'addManualHistory') {
 
     $conDB->begin_transaction();
     try {
-        // 1. Insert into emp_vacation to keep history
+        // 1. Insert into emp_vacation to keep a historical record of the "used" days from the old system.
+        // This acts as an audit log.
         $sql_vac = "INSERT INTO `emp_vacation` (`emp_id`, `start_date`, `return_date`, `vacdays`, `vac_type`, `fly_type`, `remarks`,`is_deductible`, `approval_status`, `review`, `created_at`, `gm_approval`) VALUES (?, ?, ?, ?, 'Fly', 'annual', 'Manual History Entry',1, 'gm_approved', 'C', NOW(), NOW())";
         $stmt_vac = $conDB->prepare($sql_vac);
         $stmt_vac->bind_param("sssi", $emp_id, $period_start, $period_end, $used_days);
@@ -143,7 +144,7 @@ elseif ($ajaxType == 'addManualHistory') {
         $vac_id = $conDB->insert_id;
         $stmt_vac->close();
 
-        // 2. Insert into emp_vacation_balance
+        // 2. Insert into emp_vacation_balance. This record becomes the definitive starting point (baseline) for all future dynamic calculations.
         $sql_balance = "INSERT INTO `emp_vacation_balance` (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, `total_days`, `used_days`, `remaining_balance`, `available_balance`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt_balance = $conDB->prepare($sql_balance);
         $stmt_balance->bind_param("siisssddd", $emp_id, $vac_id, $contract_id, $period_start, $period_end, $total_days, $used_days, $remaining_balance, $remaining_balance);

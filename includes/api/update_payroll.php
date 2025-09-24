@@ -2,8 +2,10 @@
 /****************************************************************
  * MODIFICATION SUMMARY:
  * 1. ADDED LOAN PAYMENT SYNC ON UPDATE: The script now checks if a deduction being updated is named "Loan Installment".
- * 2. SYNCHRONIZED UPDATE: If it is a loan installment, the script will find the corresponding payment record in the `emp_loan_payments` table for the same employee and month and update its amount to match the new amount from the payroll. This handles cases where a payment is skipped by setting the amount to 0.
+ * 2. SYNCHRONIZED UPDATE: If it is a loan installment, the script will find the corresponding payment record in the `emp_loan_payments` table for the same employee and month and update its amount.
  * 3. TRANSACTIONAL SAFETY: The entire operation remains wrapped in a database transaction.
+ * 4. PRORATED SALARY FOR RETURNING EMPLOYEES: Logic added to prorate salary components based on the number of days worked after returning from vacation.
+ * 5. CORRECTED COLUMN NAMES: The script now uses the correct salary component column names (e.g., `basic_salary`).
  ****************************************************************/
 // Set the content type of the response to JSON
 header('Content-Type: application/json');
@@ -63,13 +65,34 @@ try {
 
 
     // --- PROCESS SUBMITTED DATA (UPDATES & INSERTS) ---
-    $stmtSalary = $pdo->prepare("SELECT basic, housing, transport, food, misc, cashier, fuel, tel, other, guard FROM emp_salary WHERE emp_id = :emp_id AND status = 1");
+    $stmtSalary = $pdo->prepare("SELECT basic as basic_salary, housing as housing_allowance, transport as transport_allowance, food as food_allowance, misc as miscellaneous_allowance, cashier as cashier_allowance, fuel as fuel_allowance, tel as telephone_allowance, other as other_allowance, guard as guard_allowance FROM emp_salary WHERE emp_id = :emp_id AND status = 1");
     $stmtSalary->execute([':emp_id' => $empId]);
     $salaryComponents = $stmtSalary->fetch(PDO::FETCH_ASSOC);
 
     if (!$salaryComponents) {
         throw new Exception("No salary components found for employee ID: $empId");
     }
+    
+    // --- PRORATED SALARY LOGIC ---
+    $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND approval_status = 'gm_approved' AND is_deductible = 1");
+    $stmtVacationReturn->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
+    
+    $daysInMonth = date('t', strtotime($monthYear . '-01'));
+    $prorationFactor = 1.0;
+
+    if ($vacationReturn) {
+        $returnDate = new DateTime($vacationReturn['return_date']);
+        $daysWorked = $daysInMonth - ($returnDate->format('d') - 1);
+        if ($daysWorked > 0) {
+            $prorationFactor = $daysWorked / $daysInMonth;
+        }
+    }
+    
+    foreach ($salaryComponents as $key => $value) {
+        $salaryComponents[$key] = $value * $prorationFactor;
+    }
+
     $totalGrossSalary = array_sum(array_map('floatval', $salaryComponents));
 
     // --- Process Benefits (Update or Insert) ---
@@ -89,7 +112,7 @@ try {
             $calculationType = $stmtBenefitType->fetchColumn();
 
             if ($calculationType === 'overtime_basic' && $benefitHours !== null) {
-                $basicSalary = (float)$salaryComponents['basic'];
+                $basicSalary = (float)$salaryComponents['basic_salary'];
                 $hourlyRate = ($basicSalary / 240 / 2) + ($totalGrossSalary / 240);
                 $calculatedAmount = $hourlyRate * $benefitHours;
             } elseif ($calculationType === 'overtime_total' && $benefitHours !== null) {

@@ -1,18 +1,20 @@
 <?php
 /*********************************************************************************
- * MODIFICATION SUMMARY (010-end_of_service_print.php):
+ * MODIFICATION SUMMARY (013-end_of_service_print.php):
  *
- * 1. ADDED SALARY & BENEFITS SECTION: A new section has been added to display
- * a detailed breakdown of the employee's salary and allowances.
- * 2. NEW DATABASE QUERY: The script now queries the `emp_salary` table to fetch
- * the detailed financial information for the report.
- * 3. TOTAL SALARY CALCULATION: A total salary is calculated and displayed by
- * summing the basic salary and all allowances.
- * 4. SINGLE-PAGE OPTIMIZATION: The new section is integrated into the existing
- * flexbox layout to ensure the entire report remains on a single A4 page.
- * 5. DYNAMIC BENEFIT DISPLAY: The Salary & Benefits section now only shows
- * benefits with a value greater than 0 and displays them in a single row
- * with the title above the amount.
+ * 1. ENHANCED DEDUCTION BREAKDOWN: The financial settlement now explicitly
+ * separates deductions for absence from hourly deductions for greater clarity.
+ * 2. IMPROVED SALARY DISPLAY: The report now shows the potential salary for the
+ * final month and then lists any absence-related deductions, rather than just
+ * showing the net salary for the period.
+ * 3. REFINED CALCULATION LOGIC: The backend logic has been updated to derive
+ * the value of absence deductions based on the employee's basic salary,
+ * working days, and the final salary paid for the month.
+ * 4. CLEANER LABELS: Renamed deduction labels to be more specific (e.g.,
+ * "Hourly Deductions" instead of "Hourly / Absent Deductions").
+ * 5. SINGLE-PAGE INTEGRITY: The layout has been carefully adjusted to
+ * accommodate the more detailed breakdown while ensuring the report still fits
+ * on a single A4 page.
  *********************************************************************************/
 
 	require_once __DIR__ . '/includes/db.php';
@@ -31,34 +33,50 @@
 	
     $emprow = []; // Initialize emprow
 	if (mysqli_num_rows($get_emp_data) > 0) {
-		$allRecords = mysqli_fetch_all($get_emp_data, MYSQLI_ASSOC);
-		foreach ($allRecords as $rec) {
-			$emprow = $rec;
-		}
+		$emprow = mysqli_fetch_assoc($get_emp_data);
 	} else {
 		//when the id not equals id show database
 		header("Location: ./reg_employee.php");
         exit();
 	}
 
-    // New query to get EOS details specifically, as it's not in emp_query.php
+    // Get EOS details
     $get_eos_data = mysqli_query($conDB, "
         SELECT `emp_eos`.*, `eos_calc`.`details`
         FROM `emp_eos`
         LEFT JOIN `eos_calc` ON `eos_calc`.`cid` = `emp_eos`.`eos_reason`
         WHERE `emp_eos`.`emp_id`='".$_GET['emp_id']."'
     ");
-    $eosrow = mysqli_fetch_assoc($get_eos_data);
-    if (!$eosrow) {
-        $eosrow = []; // Initialize as empty array if no EOS record found to prevent errors.
-    }
+    $eosrow = mysqli_fetch_assoc($get_eos_data) ?: [];
 
-    // Query for salary benefits
+    // Get Salary benefits
     $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='".$_GET['emp_id']."'");
-    $salaryrow = mysqli_fetch_assoc($get_salary_data);
-    if (!$salaryrow) {
-        $salaryrow = []; // Initialize to prevent errors if no record is found
-    }
+    $salaryrow = mysqli_fetch_assoc($get_salary_data) ?: [];
+
+    // Get Assigned Assets for Clearance
+    $get_assets_data = mysqli_query($conDB, "
+        SELECT ea.serial_number, ea.description, ea.assigned_date, a.name as asset_name
+        FROM `employee_assets` ea
+        LEFT JOIN `assets` a ON ea.asset_id = a.id
+        WHERE ea.emp_id = '".$_GET['emp_id']."' AND ea.status = 'Assigned'
+    ");
+    $assigned_assets = mysqli_fetch_all($get_assets_data, MYSQLI_ASSOC);
+
+    // Get Outstanding Loans
+    $get_loans_data = mysqli_query($conDB, "
+        SELECT 
+            l.loan_type,
+            l.loan_amount,
+            l.total_payable,
+            l.status,
+            (l.total_payable - COALESCE((SELECT SUM(amount) FROM emp_loan_payments WHERE loan_id = l.id), 0)) as remaining_balance
+        FROM `emp_loan` l
+        WHERE l.emp_id = '".$_GET['emp_id']."' 
+        AND l.status NOT IN ('processed', 'rejected') 
+        HAVING remaining_balance > 0
+    ");
+    $outstanding_loans = mysqli_fetch_all($get_loans_data, MYSQLI_ASSOC);
+
 
     // Age Calculation
     $years = '';
@@ -68,6 +86,33 @@
         $diff = $birth_date->diff($current_date);
         $years = $diff->y . " Years";
     }
+
+    // *** NEW: Calculate individual deduction components for display ***
+    $gosi_deduction = 0;
+    if ($emprow['country'] == 191 && !empty($emprow['gosi']) && (float)$emprow['gosi'] > 0 && !empty($salaryrow['basic'])) {
+        $gosi_deduction = (float)$salaryrow['basic'] * ((float)$emprow['gosi'] / 100);
+    }
+
+    // Calculate potential salary and absent deduction
+    $potential_last_month_salary = (float)($eosrow['curt_month_salry'] ?? 0);
+    $absent_deduction = 0;
+    if (!empty($eosrow['end_date']) && !empty($salaryrow['basic']) && (float)$salaryrow['basic'] > 0 && isset($eosrow['curt_month_days'])) {
+        $end_date_obj = new DateTime($eosrow['end_date']);
+        $days_in_month = $end_date_obj->format('t');
+        $daily_rate = (float)$salaryrow['basic'] / (int)$days_in_month;
+        $potential_last_month_salary = $daily_rate * (int)$eosrow['curt_month_days'];
+        $absent_deduction = $potential_last_month_salary - (float)($eosrow['curt_month_salry'] ?? 0);
+        $absent_deduction = max(0, $absent_deduction); // Ensure it's not negative
+    }
+
+    // Recalculate total earnings and deductions for clarity
+    $total_earnings = (float)($eosrow['eos_amount'] ?? 0) + (float)($eosrow['anul_vac_salry'] ?? 0) + (float)($eosrow['curt_month_salry'] ?? 0);
+    $loan_deduction = (float)($eosrow['deduct'] ?? 0);
+    $net_payment = (float)($eosrow['net_payment'] ?? 0);
+
+    // Hourly deduction is what's left after accounting for earnings, net pay, and known deductions
+    $hourly_deduction = $total_earnings - $net_payment - $gosi_deduction - $loan_deduction;
+    $hourly_deduction = max(0, $hourly_deduction); // Ensure it's not negative
 
 ?>
 <!doctype html> 
@@ -177,6 +222,7 @@
                                             </div>
 
                                             <!-- Salary & Benefits Section -->
+                                             <?php /* ?>
                                             <div class="section">
                                                 <h4 class="section-title"><span>Salary & Benefits</span><span class="arabic-label">الراتب والمستحقات</span></h4>
                                                 <div>
@@ -216,6 +262,61 @@
                                                     <p class="label-pair"><span><strong>TOTAL SALARY:</strong> <?=number_format($total_salary, 2)?></span><span class="arabic-label"><strong>إجمالي الراتب</strong></span></p>
                                                 </div>
                                             </div>
+                                             <?php */ ?>
+
+
+                                            <!-- Assets for Clearance Section -->
+                                            <?php if (!empty($assigned_assets)): ?>
+                                            <div class="section">
+                                                <h4 class="section-title"><span>Assets for Clearance</span><span class="arabic-label">الأصول للتسليم</span></h4>
+                                                <table class="clearance-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th><span class="label-pair"><span>Asset Type</span><span class="arabic-label">نوع الأصل</span></span></th>
+                                                            <th><span class="label-pair"><span>Serial No.</span><span class="arabic-label">الرقم التسلسلي</span></span></th>
+                                                            <th><span class="label-pair"><span>Assigned Date</span><span class="arabic-label">تاريخ التعيين</span></span></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($assigned_assets as $asset): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars($asset['asset_name']); ?></td>
+                                                            <td><?= htmlspecialchars($asset['serial_number']); ?></td>
+                                                            <td><?= htmlspecialchars($asset['assigned_date']); ?></td>
+                                                        </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <?php endif; ?>
+
+                                            <!-- Outstanding Loans Section -->
+                                            <?php if (!empty($outstanding_loans)): ?>
+                                            <div class="section">
+                                                <h4 class="section-title"><span>Outstanding Loans</span><span class="arabic-label">السلف المستحقة</span></h4>
+                                                <table class="clearance-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th><span class="label-pair"><span>Loan Type</span><span class="arabic-label">نوع السلفة</span></span></th>
+                                                            <th><span class="label-pair"><span>Total Amount</span><span class="arabic-label">المبلغ الإجمالي</span></span></th>
+                                                            <th><span class="label-pair"><span>Remaining</span><span class="arabic-label">المتبقي</span></span></th>
+                                                            <th><span class="label-pair"><span>Status</span><span class="arabic-label">الحالة</span></span></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <?php foreach ($outstanding_loans as $loan): ?>
+                                                        <tr>
+                                                            <td><?= htmlspecialchars(ucfirst($loan['loan_type'])); ?></td>
+                                                            <td class="text-right"><?= number_format($loan['total_payable'], 2); ?></td>
+                                                            <td class="text-right"><?= number_format($loan['remaining_balance'], 2); ?></td>
+                                                            <td><?= htmlspecialchars($loan['status']); ?></td>
+                                                        </tr>
+                                                        <?php endforeach; ?>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <?php endif; ?>
+
 
                                             <!-- Financial Settlement Section -->
                                             <div class="section">
@@ -224,23 +325,59 @@
                                                     <tbody>
                                                         <tr>
                                                             <td><span class="label-pair"><span>End of Service Amount (EOS)</span><span class="arabic-label">مبلغ نهاية الخدمة</span></span></td>
-                                                            <td class="text-right"><?=number_format((float)(isset($eosrow['eos_amount']) ? $eosrow['eos_amount'] : 0), 2)?></td>
+                                                            <td class="text-right"><?=number_format((float)($eosrow['eos_amount'] ?? 0), 2)?></td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="label-pair"><span>Unpaid Salary (<?=isset($eosrow['curt_month_days']) ? $eosrow['curt_month_days'] : 'N/A'?> days)</span><span class="arabic-label">(أيام <?=isset($eosrow['curt_month_days']) ? $eosrow['curt_month_days'] : 'N/A'?>) رواتب غير مدفوعة</span></span></td>
-                                                            <td class="text-right"><?=number_format((float)(isset($eosrow['curt_month_salry']) ? $eosrow['curt_month_salry'] : 0), 2)?></td>
+                                                            <td><span class="label-pair"><span>Vacation Balance (<?= number_format((float)($eosrow['anul_vac_days'] ?? 0), 2)?> days)</span><span class="arabic-label">(أيام <?= number_format((float)($eosrow['anul_vac_days'] ?? 0), 2)?>) رصيد الإجازات</span></span></td>
+                                                            <td class="text-right"><?=number_format((float)($eosrow['anul_vac_salry'] ?? 0), 2)?></td>
                                                         </tr>
                                                         <tr>
-                                                            <td><span class="label-pair"><span>Vacation Balance (<?=isset($eosrow['anul_vac_days']) ? number_format($eosrow['anul_vac_days'], 2) : 'N/A'?> days)</span><span class="arabic-label">(أيام <?=isset($eosrow['anul_vac_days']) ? number_format($eosrow['anul_vac_days'], 2) : 'N/A'?>) رصيد الإجازات</span></span></td>
-                                                            <td class="text-right"><?=number_format((float)(isset($eosrow['anul_vac_salry']) ? $eosrow['anul_vac_salry'] : 0), 2)?></td>
+                                                            <td><span class="label-pair"><span>Salary for Last Month (<?=($eosrow['curt_month_days'] ?? 'N/A')?> days)</span><span class="arabic-label">(أيام <?=($eosrow['curt_month_days'] ?? 'N/A')?>) راتب الشهر الأخير</span></span></td>
+                                                            <td class="text-right"><?=number_format($potential_last_month_salary, 2)?></td>
                                                         </tr>
+                                                        
+                                                        <tr style="background-color: #f8f9fa !important;">
+                                                            <td colspan="2"><span class="label-pair"><span><strong>Deductions</strong></span><span class="arabic-label"><strong>الخصومات</strong></span></span></td>
+                                                        </tr>
+
+                                                        <?php if ($absent_deduction > 0.01): ?>
                                                         <tr>
-                                                            <td><span class="label-pair"><span>Deductions (Absent / Loan)</span><span class="arabic-label">الخصومات (غياب / سلف)</span></span></td>
-                                                            <td class="text-right text-danger">-<?=number_format((float)(isset($eosrow['deduct']) ? $eosrow['deduct'] : 0), 2)?></td>
+                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Absent Deduction</span><span class="arabic-label">خصم الغياب</span></span></td>
+                                                            <td class="text-right text-danger">-<?=number_format($absent_deduction, 2)?></td>
                                                         </tr>
+                                                        <?php endif; ?>
+
+                                                        <?php if ($gosi_deduction > 0): ?>
+                                                        <tr>
+                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>GOSI Deduction</span><span class="arabic-label">خصم التأمينات</span></span></td>
+                                                            <td class="text-right text-danger">-<?=number_format($gosi_deduction, 2)?></td>
+                                                        </tr>
+                                                        <?php endif; ?>
+
+                                                        <?php if ($hourly_deduction > 0.01): ?>
+                                                        <tr>
+                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Hourly Deductions</span><span class="arabic-label">خصومات الساعات</span></span></td>
+                                                            <td class="text-right text-danger">-<?=number_format($hourly_deduction, 2)?></td>
+                                                        </tr>
+                                                        <?php endif; ?>
+
+                                                        <?php if ($loan_deduction > 0): ?>
+                                                        <tr>
+                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Loan / Other Deductions</span><span class="arabic-label">خصم السلف / أخرى</span></span></td>
+                                                            <td class="text-right text-danger">-<?=number_format($loan_deduction, 2)?></td>
+                                                        </tr>
+                                                        <?php endif; ?>
+                                                        
+                                                        <?php if ($absent_deduction < 0.01 && $gosi_deduction == 0 && $hourly_deduction < 0.01 && $loan_deduction == 0) : ?>
+                                                        <tr>
+                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Total Deductions</span><span class="arabic-label">إجمالي الخصومات</span></span></td>
+                                                            <td class="text-right text-danger">-0.00</td>
+                                                        </tr>
+                                                        <?php endif; ?>
+
                                                         <tr class="net-payment-row">
                                                             <td><span class="label-pair"><strong>NET PAYMENT DUE</strong><strong class="arabic-label">صافي المبلغ المستحق</strong></span></td>
-                                                            <td class="text-right"><strong><?=number_format((float)(isset($eosrow['net_payment']) ? $eosrow['net_payment'] : 0), 2)?> SAR</strong></td>
+                                                            <td class="text-right"><strong><?=number_format($net_payment, 2)?> SAR</strong></td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -392,15 +529,19 @@ function printDiv() {
                         margin-top: 5px;
                         font-size: 13px;
                     }
-                    .financial-table {
+                    .financial-table, .clearance-table {
                         width: 100%;
                         margin-top: 5px;
                         border-collapse: collapse;
                         font-size: 13px;
                     }
-                    .financial-table td {
+                    .financial-table td, .clearance-table td, .clearance-table th {
                         padding: 8px;
                         border: 1px solid #dee2e6 !important;
+                    }
+                    .clearance-table th {
+                        background-color: #f8f9fa !important;
+                        text-align: left;
                     }
                     .label-pair {
                         display: flex;
@@ -496,3 +637,4 @@ function printDiv() {
     </body>
 </html>
 <?php } ?>
+
