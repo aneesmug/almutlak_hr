@@ -43,7 +43,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .select2-container { width: 100% !important; }
         .nav-pills .nav-link.active, .nav-pills .show>.nav-link {
             color: #fff;
             background-color: #4fa0e3;
@@ -55,6 +54,29 @@
             padding: 5px;
             border-radius: 4px;
             background-color: #f8f9fa;
+        }
+
+        /* --- Select2 Bootstrap 4 Style Fixes --- */
+        .select2-container {
+            width: 100% !important;
+        }
+        .select2-container .select2-selection--single {
+            height: 38px !important; /* Match Bootstrap's form-control height */
+            border: 1px solid #ced4da;
+            border-radius: .25rem;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 36px; /* Vertically center text */
+            padding-left: .75rem;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 36px;
+            right: 5px;
+        }
+        .select2-dropdown {
+             border: 1px solid #ced4da;
+             border-radius: .25rem;
+             z-index: 1050; /* Ensure dropdown appears above other content */
         }
     </style>
 </head>
@@ -188,7 +210,8 @@
                     switch (setting.input_type) {
                         case 'select':
                             let options = JSON.parse(setting.options || '{}');
-                            inputHtml = `<select id="${id}" name="${setting.setting_name}" class="form-control">`;
+                            // Note: We still use form-control for layout, but our custom CSS will target .select2-container for styling.
+                            inputHtml = `<select id="${id}" name="${setting.setting_name}" class="form-control select2">`;
                             for (const [value, text] of Object.entries(options)) {
                                 inputHtml += `<option value="${value}" ${setting.setting_value == value ? 'selected' : ''}>${text}</option>`;
                             }
@@ -206,10 +229,10 @@
             formHtml += `</div>`;
             settingsContainer.innerHTML = formHtml;
             
-            // Re-initialize Select2 if the timezone field is in the current group
-            if (groupedSettings[groupName].some(s => s.setting_name === 'timezone')) {
-                 $('#setting-timezone').select2();
-            }
+            // Initialize Select2 with a width setting for better Bootstrap integration.
+            $('.select2').select2({
+                width: '100%'
+            });
 
             attachPreviewListeners();
         }
@@ -303,9 +326,8 @@
                         if (element.files.length > 0) {
                             formData.append(setting.setting_name, element.files[0]);
                         }
-                    } else if (setting.setting_name === 'timezone') {
-                        formData.append(setting.setting_name, $('#setting-timezone').val());
                     } else {
+                        // Simplified logic: this works for both standard inputs and select2.
                         formData.append(setting.setting_name, element.value);
                     }
                 }
