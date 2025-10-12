@@ -2055,13 +2055,13 @@ EOT;
  *
  * <form name="phpmailer_unit" action=__FILE__ method="get">
  * <input type="hidden" name="submitted" value="1"/>
- * From Address: <input type="text" size="50" name="mail_from" value="<?=get("mail_from"); ?>"/>
+ * From Address: <input type="text" size="50" name="mail_from" value="<?php echo get("mail_from"); ?>"/>
  * <br/>
- * To Address: <input type="text" size="50" name="mail_to" value="<?=get("mail_to"); ?>"/>
+ * To Address: <input type="text" size="50" name="mail_to" value="<?php echo get("mail_to"); ?>"/>
  * <br/>
- * Cc Address: <input type="text" size="50" name="mail_cc" value="<?=get("mail_cc"); ?>"/>
+ * Cc Address: <input type="text" size="50" name="mail_cc" value="<?php echo get("mail_cc"); ?>"/>
  * <br/>
- * SMTP Hostname: <input type="text" size="50" name="mail_host" value="<?=get("mail_host"); ?>"/>
+ * SMTP Hostname: <input type="text" size="50" name="mail_host" value="<?php echo get("mail_host"); ?>"/>
  * <p/>
  * <input type="submit" value="Run Test"/>
  *

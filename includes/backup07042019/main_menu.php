@@ -2,8 +2,8 @@
 
 	<div class="user-img">
 
-		<img src="assets/images/users/ava<?=alt="user-img" title="Mat Helme" class="rounded-circle img-fluid">
-<?=
+		<img src="assets/images/users/avatar-1.jpg" alt="user-img" title="Mat Helme" class="rounded-circle img-fluid">
+
 	</div>
 
 	<h5><a href="javascript:voif(0);"><?php echo $userwel ?></a> </h5>
@@ -14,38 +14,38 @@
 
 
 
-<div id="sidebar-menu"><?=
+<div id="sidebar-menu">
 
 
 
 	<ul class="metismenu" id="side-menu">
 
-<?=
+
 
 		<li class="menu-title">Navigation</li>
 
 
 
-<?=
+
 
 		<li>
 
 			<a href="dashboard.php" class="<?php echo dashboard($current_page) ?>" >
 
-				<i class="fi-air-play"></i><?=
+				<i class="fi-air-play"></i>
 
 				<span>Dashboard</span>
 
 			</a>
 
-		</li><?=
+		</li>
 
 		<li>
 
 			<a href="reg_employee.php" class="<?php echo reg_employee($current_page) ?>" >
 
 				<i class="mdi mdi-account-multiple"></i>
-<?=
+
 				<span>All Employees</span>
 
 			</a>

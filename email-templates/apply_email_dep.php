@@ -110,7 +110,7 @@
 
                 font-size: 18px !important;
 
-            }<?=get_setting($conDB, 'logo')?>
+            }
 
 
 

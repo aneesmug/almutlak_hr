@@ -71,7 +71,7 @@ try {
         // Define variables
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
         $domainName = $_SERVER['HTTP_HOST'];
-        $logoUrl = $protocol . $domainName . '/<?=get_setting($conDB, 'logo')?>'; // Use white logo for dark theme
+        $logoUrl = $protocol . $domainName . '/assets/images/logo.png'; // Use white logo for dark theme
         
         // Replace placeholders with variables
         $replacements = [
