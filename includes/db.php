@@ -55,9 +55,8 @@ function get_setting($conn, $setting_name) {
 
 
 /****time_zone****/
-date_default_timezone_set("Asia/Riyadh");
+date_default_timezone_set(get_setting($conDB, 'timezone'));
 mysqli_query($conDB,"SET NAMES utf8;");
-// mysqli_query($conDB,"SET CHARACTER_SET utf8;");
 header('Content-Type: text/html; charset=utf-8');
 
 
@@ -69,7 +68,6 @@ if($developer_mode == 1){
     ini_set('display_startup_errors', 0);
     ini_set('log_errors', 1);
 }
-
 
 
 $pgname = basename($_SERVER['REQUEST_URI'], '?' . $_SERVER['QUERY_STRING']);

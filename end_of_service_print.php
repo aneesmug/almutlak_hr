@@ -1,20 +1,13 @@
 <?php
 /*********************************************************************************
- * MODIFICATION SUMMARY (013-end_of_service_print.php):
+ * MODIFICATION SUMMARY (006-end_of_service_print.php):
  *
- * 1. ENHANCED DEDUCTION BREAKDOWN: The financial settlement now explicitly
- * separates deductions for absence from hourly deductions for greater clarity.
- * 2. IMPROVED SALARY DISPLAY: The report now shows the potential salary for the
- * final month and then lists any absence-related deductions, rather than just
- * showing the net salary for the period.
- * 3. REFINED CALCULATION LOGIC: The backend logic has been updated to derive
- * the value of absence deductions based on the employee's basic salary,
- * working days, and the final salary paid for the month.
- * 4. CLEANER LABELS: Renamed deduction labels to be more specific (e.g.,
- * "Hourly Deductions" instead of "Hourly / Absent Deductions").
- * 5. SINGLE-PAGE INTEGRITY: The layout has been carefully adjusted to
- * accommodate the more detailed breakdown while ensuring the report still fits
- * on a single A4 page.
+ * 1. STANDARDIZED DAILY RATE: The daily rate used for calculating the last
+ * month's salary and any absence-related deductions is now consistently based
+ * on a 30-day month to match the calculation form.
+ * 2. CORRECTED DEDUCTION CALCULATION: The logic for deriving the potential
+ * last month's salary and the subsequent absent deduction has been updated
+ * to use this new standardized daily rate, ensuring consistency.
  *********************************************************************************/
 
 	require_once __DIR__ . '/includes/db.php';
@@ -87,23 +80,66 @@
         $years = $diff->y . " Years";
     }
 
-    // *** NEW: Calculate individual deduction components for display ***
-    $gosi_deduction = 0;
-    if ($emprow['country'] == 191 && !empty($emprow['gosi']) && (float)$emprow['gosi'] > 0 && !empty($salaryrow['basic'])) {
-        $gosi_deduction = (float)$salaryrow['basic'] * ((float)$emprow['gosi'] / 100);
+    // Calculate Total Salary for EOS Amount (including provisional housing)
+    $total_salary_for_eos = 0;
+    if (!empty($salaryrow)) {
+        $basic_salary = (float)($salaryrow['basic'] ?? 0);
+        $housing_benefit = (float)($salaryrow['housing'] ?? 0);
+        $calculated_housing = 0;
+
+        if ($housing_benefit == 0 && $basic_salary > 0) {
+            $calculated_housing = ($basic_salary / 12) * 2;
+        } else {
+            $calculated_housing = $housing_benefit;
+        }
+
+        $total_salary_for_eos += $basic_salary;
+        $total_salary_for_eos += $calculated_housing;
+        $total_salary_for_eos += (float)($salaryrow['transport'] ?? 0);
+        $total_salary_for_eos += (float)($salaryrow['food'] ?? 0);
+        $total_salary_for_eos += (float)($salaryrow['misc'] ?? 0);
+        $total_salary_for_eos += (float)($salaryrow['cashier'] ?? 0);
+        $total_salary_for_eos += (float)($salaryrow['fuel'] ?? 0);
+        $total_salary_for_eos += (float)($salaryrow['tel'] ?? 0);
+        $total_salary_for_eos += (float)($salaryrow['guard'] ?? 0);
+        $total_salary_for_eos += (float)($salaryrow['other'] ?? 0);
     }
 
-    // Calculate potential salary and absent deduction
+    // Calculate Actual Salary Base for Deductions (sum of actual benefits only)
+    $actual_salary_base = 0;
+    if (!empty($salaryrow)) {
+        $actual_salary_base += (float)($salaryrow['basic'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // actual housing
+        $actual_salary_base += (float)($salaryrow['transport'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['food'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['misc'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['cashier'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['fuel'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['tel'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['guard'] ?? 0);
+        $actual_salary_base += (float)($salaryrow['other'] ?? 0);
+    }
+
+    // *** Calculate individual deduction components for display ***
+    $gosi_deduction = 0;
+    // GOSI is calculated on Basic + actual Housing for Saudi employees
+    if ($emprow['country'] == 191 && !empty($emprow['gosi']) && (float)$emprow['gosi'] > 0) {
+        $gosi_base = (float)($salaryrow['basic'] ?? 0) + (float)($salaryrow['housing'] ?? 0);
+        if ($gosi_base > 0) {
+            $gosi_deduction = $gosi_base * ((float)$emprow['gosi'] / 100);
+        }
+    }
+
+    // Calculate potential salary and absent deduction based on ACTUAL salary and a 30-day month
     $potential_last_month_salary = (float)($eosrow['curt_month_salry'] ?? 0);
     $absent_deduction = 0;
-    if (!empty($eosrow['end_date']) && !empty($salaryrow['basic']) && (float)$salaryrow['basic'] > 0 && isset($eosrow['curt_month_days'])) {
-        $end_date_obj = new DateTime($eosrow['end_date']);
-        $days_in_month = $end_date_obj->format('t');
-        $daily_rate = (float)$salaryrow['basic'] / (int)$days_in_month;
+    if (!empty($eosrow['end_date']) && $actual_salary_base > 0 && isset($eosrow['curt_month_days'])) {
+        $daily_rate = $actual_salary_base / 30; // Standardized daily rate
         $potential_last_month_salary = $daily_rate * (int)$eosrow['curt_month_days'];
         $absent_deduction = $potential_last_month_salary - (float)($eosrow['curt_month_salry'] ?? 0);
         $absent_deduction = max(0, $absent_deduction); // Ensure it's not negative
     }
+
 
     // Recalculate total earnings and deductions for clarity
     $total_earnings = (float)($eosrow['eos_amount'] ?? 0) + (float)($eosrow['anul_vac_salry'] ?? 0) + (float)($eosrow['curt_month_salry'] ?? 0);
@@ -221,13 +257,12 @@
                                                 <p class="service-reason detail-line"><span><strong>End of Service Reason:</strong> <?=isset($eosrow['leaving_reason']) ? $eosrow['leaving_reason'] : 'N/A'?></span><span class="arabic-label"> <?=isset($eosrow['leaving_reason_ar']) ? $eosrow['leaving_reason_ar'] : 'N/A'?><strong>سبب نهاية الخدمة</strong></span></p>
                                             </div>
 
+                                            <?php /* ?>
                                             <!-- Salary & Benefits Section -->
-                                             <?php /* ?>
                                             <div class="section">
                                                 <h4 class="section-title"><span>Salary & Benefits</span><span class="arabic-label">الراتب والمستحقات</span></h4>
                                                 <div>
                                                     <?php
-                                                        $total_salary = 0;
                                                         $benefits_map = [
                                                             'basic'     => ['en' => 'Basic Salary', 'ar' => 'الراتب الأساسي'],
                                                             'housing'   => ['en' => 'Housing Allowance', 'ar' => 'بدل سكن'],
@@ -251,7 +286,6 @@
                                                                     $active_benefits_en[] = '<div class="benefit-item"><div class="benefit-label">' . $labels['en'] . '</div><div class="benefit-value">' . number_format($value, 2) . '</div></div>';
                                                                     $active_benefits_ar[] = '<div class="benefit-item"><div class="benefit-label">' . $labels['ar'] . '</div><div class="benefit-value">' . number_format($value, 2) . '</div></div>';
                                                                 }
-                                                                $total_salary += $value;
                                                             }
                                                         }
                                                     ?>
@@ -262,7 +296,7 @@
                                                     <p class="label-pair"><span><strong>TOTAL SALARY:</strong> <?=number_format($total_salary, 2)?></span><span class="arabic-label"><strong>إجمالي الراتب</strong></span></p>
                                                 </div>
                                             </div>
-                                             <?php */ ?>
+                                            <?php */ ?>
 
 
                                             <!-- Assets for Clearance Section -->

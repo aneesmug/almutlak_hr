@@ -275,17 +275,17 @@ if ($emprow['user_type'] !== 'employee') {
 								}
 							}
 						} ?>
-						<?php if ($emprow['empsocialcount'] < 9): ?>
+						<?php if ($emprow['empsocialcount'] < 9 || $is_system_admin): ?>
 							<a href="javascript:void(0);" class="btn-sm btn btn-info waves-effect btn-rounded addSocial" data-emp_id="<?= $emprow['empid'] ?>">
 								Add Social Media <i class="mdi mdi-link-variant"></i>
 							</a>
 						<?php endif ?>
-						<?php if (!$emprow['description']): ?>
+						<?php if (!$emprow['description'] || $is_system_admin): ?>
 							<a href="javascript:void(0);" class="btn-sm btn btn-dark waves-effect btn-rounded addPortfolio" data-emp_id="<?= $emprow['empid'] ?>">
 								Add Portfolio Dedails <i class="mdi mdi mdi-account-card-details"></i>
 							</a>
 						<?php endif ?>
-						<?php if ($is_system_admin || $isHR): ?>
+						<?php if ($is_system_admin || $isHR || $isDeptHr): ?>
 							<?php if ($current_page_name <> "add_emp_slry.php"): ?>
 								<a href="add_emp_slry.php?emp_id=<?= $emprow['empid'] ?>" class="btn-sm btn btn-secondary waves-effect btn-rounded">
 									<?= __('update_salary') ?> <i class="mdi mdi-inbox-arrow-up"></i>

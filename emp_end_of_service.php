@@ -1,20 +1,14 @@
 <?php
 /****************************************************************
  * MODIFICATION SUMMARY (009-emp_end_of_service.php):
- * - Fixed vacation day calculation to be dependent on the selected End of Service Date, not the current date.
- * - Corrected the translation function call for the asset warning message to properly handle dynamic content.
- * - Made the 'days_served' calculation inclusive of the end date for better accuracy.
- * - Made the 'Working Days' field editable to allow manual override of salary calculation.
- * - Added a check against the 'payrolls' table to zero out working days and salary if already paid for the selected month.
- * - Made the payroll check case-insensitive and robust against whitespace.
- * - MODIFICATION: Re-implemented vacation calculation in JavaScript to provide a real-time, dynamic experience without page reloads.
- * - FIXED: All calculations now correctly and instantly trigger upon changing the End of Service Date.
- * - ROBUSTNESS: Updated the cURL function to improve reliability when fetching data from the external API.
- * - RE-IMPLEMENTED: Vacation balance is now correctly prorated to the last working day by calculating accrual vs. used days within the current service year, ignoring potentially incorrect balance records.
- * - UX FIX: Removed page reloads on date change for a smoother user experience.
- * - FEATURE: Added an "Absent Days" field to deduct from working days for salary calculation.
- * - FEATURE: Added "Deduction (Hours)" field for hourly-based deductions from salary.
- * - FEATURE: Added automatic "GOSI Deduction" for Saudi employees (Country ID 191) based on their GOSI percentage.
+ * - REVERTED & FIXED VACATION LOGIC: Reinstated the use of the
+ * `emp_vacation_balance` table to get a carried-over balance.
+ * - IMPROVED ACCRUAL CALCULATION: The logic now correctly calculates
+ * the vacation accrued only for the final, partial year of service and
+ * adds it to the opening balance before subtracting vacation taken
+ * during that same period.
+ * - ADDED OPENING BALANCE FIELD: A new hidden field has been added
+ * to pass the carried-over balance to the JavaScript calculator.
  ****************************************************************/
 
 	require_once __DIR__ . '/includes/init.php';
@@ -35,33 +29,66 @@
 
 	if(mysqli_num_rows($get_emp_data) !== 0){
 		$emprow = mysqli_fetch_assoc($get_emp_data);
+        
+        // Get full salary details for accurate calculations
+        $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='".$emprow['empid']."'");
+        $salaryrow = mysqli_fetch_assoc($get_salary_data) ?: [];
+        
+        // Calculate Total Salary by summing up all components
+        $total_salary = 0;
+        if (!empty($salaryrow)) {
+            $basic_salary = (float)($salaryrow['basic'] ?? 0);
+            $housing_benefit = (float)($salaryrow['housing'] ?? 0);
+            $calculated_housing = 0;
 
+            // If housing benefit is not provided, calculate it as (basic/12)*2
+            if ($housing_benefit == 0 && $basic_salary > 0) {
+                $calculated_housing = ($basic_salary / 12) * 2;
+            } else {
+                $calculated_housing = $housing_benefit;
+            }
 
-// --- START: Compute available vacation days from emp_vacation_balance (injected by ChatGPT) ---
-$available_vacation_days = floatval($emprow['vacation_days']); // default from employee record
-$vac_total_days = $available_vacation_days;
-$vac_used_days = 0.0;
+            $total_salary += $basic_salary;
+            $total_salary += $calculated_housing;
+            $total_salary += (float)($salaryrow['transport'] ?? 0);
+            $total_salary += (float)($salaryrow['food'] ?? 0);
+            $total_salary += (float)($salaryrow['misc'] ?? 0);
+            $total_salary += (float)($salaryrow['cashier'] ?? 0);
+            $total_salary += (float)($salaryrow['fuel'] ?? 0);
+            $total_salary += (float)($salaryrow['tel'] ?? 0);
+            $total_salary += (float)($salaryrow['guard'] ?? 0);
+            $total_salary += (float)($salaryrow['other'] ?? 0);
+        }
 
-$empid_esc = mysqli_real_escape_string($conDB, $emprow['empid']);
-$vac_balance_q = mysqli_query($conDB, "SELECT total_days, used_days, remaining_balance FROM emp_vacation_balance WHERE emp_id = '{$empid_esc}' ORDER BY id DESC LIMIT 1");
-if ($vac_balance_q && mysqli_num_rows($vac_balance_q) > 0) {
-    $vac_row = mysqli_fetch_assoc($vac_balance_q);
-    if (isset($vac_row['remaining_balance']) && is_numeric($vac_row['remaining_balance'])) {
-        $available_vacation_days = floatval($vac_row['remaining_balance']);
-    } elseif (isset($vac_row['total_days']) && is_numeric($vac_row['total_days'])) {
-        $used_tmp = isset($vac_row['used_days']) && is_numeric($vac_row['used_days']) ? floatval($vac_row['used_days']) : 0.0;
-        $available_vacation_days = floatval($vac_row['total_days']) - $used_tmp;
-    }
-    $vac_total_days = isset($vac_row['total_days']) && is_numeric($vac_row['total_days']) ? floatval($vac_row['total_days']) : $vac_total_days;
-    $vac_used_days = isset($vac_row['used_days']) && is_numeric($vac_row['used_days']) ? floatval($vac_row['used_days']) : $vac_used_days;
-}
-// Make safe for output
-$available_vacation_days = round($available_vacation_days, 2);
-// Expose to JS if needed (keeps variable names consistent in page)
-$vac_total_days = round($vac_total_days, 2);
-$vac_used_days = round($vac_used_days, 2);
-// --- END: Compute available vacation days ---
+        // NEW: Calculate the base salary for vacation pay (sum of actual benefits only)
+        $actual_salary_base = 0;
+        if (!empty($salaryrow)) {
+            $actual_salary_base += (float)($salaryrow['basic'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // actual housing
+            $actual_salary_base += (float)($salaryrow['transport'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['food'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['misc'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['cashier'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['fuel'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['tel'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['guard'] ?? 0);
+            $actual_salary_base += (float)($salaryrow['other'] ?? 0);
+        }
 
+        // Get the annual vacation entitlement directly from the employee's record.
+        $annual_vacation_entitlement = (float)($emprow['vacation_days'] ?? 0);
+
+        // --- START: Get opening vacation balance ---
+        $opening_balance = 0.0;
+        $empid_esc = mysqli_real_escape_string($conDB, $emprow['empid']);
+        $vac_balance_q = mysqli_query($conDB, "SELECT remaining_balance FROM emp_vacation_balance WHERE emp_id = '{$empid_esc}' ORDER BY id DESC LIMIT 1");
+        if ($vac_balance_q && mysqli_num_rows($vac_balance_q) > 0) {
+            $vac_row = mysqli_fetch_assoc($vac_balance_q);
+            if (isset($vac_row['remaining_balance']) && is_numeric($vac_row['remaining_balance'])) {
+                $opening_balance = floatval($vac_row['remaining_balance']);
+            }
+        }
+        // --- END: Get opening vacation balance ---
         
         // Second query to get EOS-specific details
         $eos_query = mysqli_query($conDB, "SELECT
@@ -272,8 +299,8 @@ $vac_used_days = round($vac_used_days, 2);
                 $stmt->bind_param("sisssdssiiiddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
                 $stmt->execute();
 
-                $stmt_update = $conDB->prepare("UPDATE `employees` SET `status`='0', `ter_note`=?, `fly`='0', `ter_date`=NOW() WHERE `emp_id`=?");
-                $stmt_update->bind_param("ss", $notes, $emprow['empid']);
+                $stmt_update = $conDB->prepare("UPDATE `employees` SET `status`='0', `ter_note`=?, `fly`='0', `ter_date`=? WHERE `emp_id`=?");
+                $stmt_update->bind_param("sss", $notes, $endDateStr, $emprow['empid']);
                 $stmt_update->execute();
                 
                 mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$username."','emp_end_of_service','".$_GET['emp_id']."','".date("c")."')");
@@ -570,10 +597,15 @@ $vac_used_days = round($vac_used_days, 2);
                                                         <input type="hidden" name="eos_amount" id="eos_amount_hidden" value="">
                                                         <input type="hidden" name="anul_vac_salry" id="anul_vac_salry_hidden" value="">
                                                         <input type="hidden" name="net_payment" id="net_payment_hidden" value="">
-                                                        <input type="hidden" id="salary" value="<?= htmlspecialchars($emprow['salary']); ?>">
-                                                        <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($available_vacation_days); ?>">
+                                                        <input type="hidden" id="total_salary" value="<?= htmlspecialchars($total_salary); ?>">
+                                                        <input type="hidden" id="basic_salary" value="<?= htmlspecialchars($salaryrow['basic'] ?? 0); ?>">
+                                                        <input type="hidden" id="housing_allowance" value="<?= htmlspecialchars($salaryrow['housing'] ?? 0); ?>">
+                                                        <input type="hidden" id="actual_salary_base" value="<?= htmlspecialchars($actual_salary_base); ?>">
+                                                        <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($annual_vacation_entitlement); ?>">
+                                                        <input type="hidden" id="opening_balance" value="<?= htmlspecialchars($opening_balance); ?>">
                                                         <input type="hidden" id="emp_country" value="<?= htmlspecialchars($emprow['country']); ?>">
                                                         <input type="hidden" id="emp_gosi_percent" value="<?= htmlspecialchars($emprow['gosi']); ?>">
+                                                        <input type="hidden" id="emp_contract_type" value="<?= htmlspecialchars($emprow['contract_type']); ?>">
                                                         
                                                     </fieldset>
                                                 </form>
@@ -619,8 +651,9 @@ $vac_used_days = round($vac_used_days, 2);
                 function updateProratedVacation() {
                     const joiningDateStr = $('#joining_date').val();
                     const endDateStr = $('#end_date').val();
-                    // const annualVacationEntitlement = parseFloat($('#annual_vacation_entitlement').val()) || 0;
-                    const annualVacationEntitlement = parseFloat(document.getElementById('annual_vacation_entitlement').value) || 0;
+                    const annualVacationEntitlement = parseFloat($('#annual_vacation_entitlement').val()) || 0;
+                    const openingBalance = parseFloat($('#opening_balance').val()) || 0;
+                    const contractType = $('#emp_contract_type').val(); // 'limited' or 'unlimited'
 
                     if (!joiningDateStr || !endDateStr) {
                         $('#anul_vac_days').val('0.00');
@@ -637,36 +670,43 @@ $vac_used_days = round($vac_used_days, 2);
                         return;
                     }
 
-                    let currentServiceYearStart = new Date(joiningDate.getTime());
-                    while (true) {
-                        let nextYearStart = new Date(currentServiceYearStart.getTime());
-                        nextYearStart.setFullYear(nextYearStart.getFullYear() + 1);
-                        if (nextYearStart > endDate) {
-                            break;
-                        }
-                        currentServiceYearStart = nextYearStart;
-                    }
-
-                    let usedDaysForPeriod = 0;
-                    if (window.vacationRecords) {
-                        window.vacationRecords.forEach(function(record) {
-                            const vacDate = new Date(record.start_date + 'T00:00:00');
-                            if (vacDate >= currentServiceYearStart && vacDate <= endDate) {
-                                usedDaysForPeriod += parseFloat(record.vacdays);
+                    // --- Vacation Calculation Logic ---
+                    let finalBalance = 0;
+                    if (contractType.toLowerCase() === 'limited') {
+                        // For limited contracts, vacation is not prorated. It's the full entitlement.
+                        finalBalance = annualVacationEntitlement;
+                    } else {
+                        // For unlimited contracts, prorate the vacation for the final year.
+                        let currentServiceYearStart = new Date(joiningDate.getTime());
+                        while (true) {
+                            let nextYearStart = new Date(currentServiceYearStart.getTime());
+                            nextYearStart.setFullYear(nextYearStart.getFullYear() + 1);
+                            if (nextYearStart > endDate) {
+                                break;
                             }
-                        });
+                            currentServiceYearStart = nextYearStart;
+                        }
+
+                        const timeDiff = endDate.getTime() - currentServiceYearStart.getTime();
+                        const daysServedThisYear = (timeDiff / (1000 * 3600 * 24)) + 1;
+                        const accruedThisYear = (daysServedThisYear / 365.0) * annualVacationEntitlement;
+
+                        let usedThisYear = 0;
+                        if (window.vacationRecords) {
+                            window.vacationRecords.forEach(function(record) {
+                                const vacDate = new Date(record.start_date + 'T00:00:00');
+                                if (vacDate >= currentServiceYearStart && vacDate <= endDate) {
+                                    usedThisYear += parseFloat(record.vacdays);
+                                }
+                            });
+                        }
+                        finalBalance = openingBalance + accruedThisYear - usedThisYear;
                     }
+                    
+                    finalBalance = Math.max(0, finalBalance);
 
-                    const timeDiff = endDate.getTime() - currentServiceYearStart.getTime();
-                    const daysServed = (timeDiff / (1000 * 3600 * 24)) + 1;
-
-                    const accruedDays = (daysServed / 365.0) * annualVacationEntitlement;
-
-                    let balance = accruedDays - usedDaysForPeriod;
-                    balance = Math.max(0, balance);
-
-                    $('#anul_vac_days').val(balance.toFixed(2));
-                    $('#vacation_days_summary').text(balance.toFixed(2));
+                    $('#anul_vac_days').val(finalBalance.toFixed(2));
+                    $('#vacation_days_summary').text(finalBalance.toFixed(2));
                 }
 
                 function calculateFinalPayment() {
@@ -678,16 +718,30 @@ $vac_used_days = round($vac_used_days, 2);
                     const workingDays = isPaid ? 0 : endDate.getDate();
                     $('#curt_month_days_display').val(workingDays);
                     
-                    const basicSalary = parseFloat($('#salary').val()) || 0;
+                    const actualSalaryBase = parseFloat($('#actual_salary_base').val()) || 0;
+                    const basicSalary = parseFloat($('#basic_salary').val()) || 0;
+                    const housingAllowance = parseFloat($('#housing_allowance').val()) || 0;
                     const absentDays = parseInt($('#absent_days').val()) || 0;
                     const effectiveWorkedDays = Math.max(0, workingDays - absentDays);
-                    const daysInMonth = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate();
-                    const resignationSalary = (daysInMonth > 0 && !isPaid) ? (basicSalary / daysInMonth) * effectiveWorkedDays : 0;
+                    
+                    const dailyRate = actualSalaryBase / 30; // Use fixed 30 days for daily rate
+                    let resignationSalary = (!isPaid) ? dailyRate * effectiveWorkedDays : 0;
+
+                    // Calculate and apply hourly deduction directly to the resignation month's salary
+                    const deductionHours = parseFloat($('#deduction_hours').val()) || 0;
+                    const hourlyRate = (actualSalaryBase / 30) / 8; // Hourly rate based on actual salary base
+                    const hourlyDeductionAmount = hourlyRate * deductionHours;
+                    resignationSalary -= hourlyDeductionAmount;
+                    
+                    // Ensure resignation salary doesn't go below zero
+                    resignationSalary = Math.max(0, resignationSalary);
+                    
                     $('#curt_month_salry').val(resignationSalary.toFixed(2));
 
                     const empCountry = $('#emp_country').val();
                     const gosiPercent = parseFloat($('#emp_gosi_percent').val()) || 0;
-                    const gosiDeduction = (empCountry == '191' && gosiPercent > 0) ? (basicSalary * gosiPercent / 100) : 0;
+                    const gosiBase = basicSalary + housingAllowance;
+                    const gosiDeduction = (empCountry == '191' && gosiPercent > 0 && gosiBase > 0) ? (gosiBase * gosiPercent / 100) : 0;
                     if ($('#gosi_deduction').length) {
                         $('#gosi_deduction').val(gosiDeduction.toFixed(2));
                     }
@@ -696,12 +750,9 @@ $vac_used_days = round($vac_used_days, 2);
                     const vacationSalary = parseFloat($('#vacation_salary_display').val()) || 0;
                     
                     const loanDeduction = parseFloat($('#deduct').val()) || 0;
-                    const deductionHours = parseFloat($('#deduction_hours').val()) || 0;
-                    const hourlyRate = (basicSalary / 30) / 8;
-                    const hourlyDeductionAmount = hourlyRate * deductionHours;
                     
                     const totalEarnings = eosAmount + vacationSalary + resignationSalary;
-                    const totalDeductions = loanDeduction + gosiDeduction + hourlyDeductionAmount;
+                    const totalDeductions = loanDeduction + gosiDeduction;
                     const netPayment = totalEarnings - totalDeductions;
                     
                     $('#net_payment_display').val(netPayment.toFixed(2));
@@ -717,7 +768,7 @@ $vac_used_days = round($vac_used_days, 2);
                         eos_reason: $('#eos_reason').val(),
                         end_date: $('#end_date').val(),
                         joining_date: $('#joining_date').val(),
-                        salary: $('#salary').val(),
+                        salary: $('#total_salary').val(),
                         anul_vac_days: $('#anul_vac_days').val(),
                     };
 
@@ -737,11 +788,19 @@ $vac_used_days = round($vac_used_days, 2);
                         success: function(response) {
                             if (response.success) {
                                 $('#eos_amount_display').val(response.eos_amount);
-                                $('#vacation_salary_display').val(response.vacation_salary);
+                                
+                                // --- NEW LOGIC for Vacation Salary ---
+                                // Calculate vacation salary based on actual benefits, ignoring API response for this value.
+                                const vacationBase = parseFloat($('#actual_salary_base').val()) || 0;
+                                const vacationDays = parseFloat($('#anul_vac_days').val()) || 0;
+                                const calculatedVacationSalary = (vacationBase > 0 && vacationDays > 0) ? (vacationBase / 30) * vacationDays : 0;
+                                $('#vacation_salary_display').val(calculatedVacationSalary.toFixed(2));
+                                // --- END NEW LOGIC ---
+
                             } else {
                                 $('#eos_amount_display, #vacation_salary_display').val('0.00');
                             }
-                            calculateFinalPayment();
+                            calculateFinalPayment(); // This will now use the correctly calculated vacation salary
                         },
                         error: function() {
                             $('#eos_amount_display, #vacation_salary_display').val('Error');
@@ -773,3 +832,4 @@ $vac_used_days = round($vac_used_days, 2);
 	</body>
 	</html>
 <?php } ?>
+

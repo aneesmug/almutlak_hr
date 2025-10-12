@@ -4617,6 +4617,23 @@ $(document).on('click', '.applyvacationAtter', function (e) {
         rtl: true,
         // width: "50%",
         willOpen: () => {
+            $('#start_date').datepicker({
+                format: "yyyy-mm-dd",
+                todayHighlight: true,
+                autoclose: true
+            }).on('changeDate', function (e) {
+                var startDate = e.date;
+                $('#end_date').datepicker('setStartDate', startDate); // Prevent end date before start
+            });
+
+            $('#end_date').datepicker({
+                format: "yyyy-mm-dd",
+                todayHighlight: true,
+                autoclose: true
+            }).on('changeDate', function (e) {
+                var endDate = e.date;
+                $('#start_date').datepicker('setEndDate', endDate); // Prevent start date after end
+            });
             // Date picker initialization
             /*$('#start_date').datepicker({
                 format: "yyyy-mm-dd",
@@ -4650,7 +4667,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     }
                 }
             });*/
-            $('#start_date').datepicker({
+            /*$('#start_date').datepicker({
                 format: "yyyy-mm-dd",
                 todayHighlight: true,
                 autoclose: true,
@@ -4667,7 +4684,8 @@ $(document).on('click', '.applyvacationAtter', function (e) {
             }).on('changeDate', function (e) {
                 var endDate = e.date;
                 $('#start_date').datepicker('setEndDate', endDate); // Prevent start date after end
-            });
+            });*/
+
             // Initialize Select2 for replacement person dropdown
             $("#replacement_per").select2();
             // Load replacement persons

@@ -67,6 +67,10 @@ if (mysqli_num_rows($query) == 1) {
 	}
 	// If we get here, access is granted
 
+	if(!isset($_GET['emp_id']) || empty($_GET['emp_id']) ){
+		header("Location: ./reg_employee.php");
+		exit;
+	}
 
 	if (mysqli_num_rows($get_emp_data) !== 0) {
 		$allRecords = mysqli_fetch_all($get_emp_data, MYSQLI_ASSOC);
@@ -815,7 +819,7 @@ if (mysqli_num_rows($query) == 1) {
 														<tr>
 															<td><?= date('d, M Y', strtotime($payment_rec['payment_date'])); ?></td>
 															<td><?= $payment_rec['amount']; ?></td>
-															<td><?= htmlspecialchars($payment_rec['receipt_id'] ?? 'N/A'); ?></td>
+															<td><?= __(strtolower($payment_rec['receipt_id'])); ?></td>
 															<td>
 																<?php if (!empty($payment_rec['attachment'])): ?>
 																	<a href="./assets/loan_receipts/<?= htmlspecialchars($payment_rec['attachment']); ?>" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> <?= __('view') ?></a>
@@ -996,6 +1000,7 @@ if (mysqli_num_rows($query) == 1) {
 			<!-- ============================================================== -->
 		</div>
 		<!-- END wrapper -->
+		 <?php /* ?>
 		<div class="modal fade terminat" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
 			<form action="./includes/apply_vac_emp.php" method="get">
 				<div class="modal-dialog modal-dialog-centered">
@@ -1067,6 +1072,7 @@ if (mysqli_num_rows($query) == 1) {
 				</div><!-- /.modal-dialog -->
 			</form>
 		</div>
+		<?php */ ?>
 
 		<!-- jQuery  -->
 		<script src="assets/js/jquery.min.js"></script>

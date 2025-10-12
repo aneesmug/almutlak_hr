@@ -87,7 +87,7 @@ $is_rtl = ($current_lang === 'ar');
 load_language($current_lang);
 
 // Global settings
-$site_name   = "Al-Mutlak Co.";
-$site_title  = "Al-Mutlak Co. | cPanel";
+$site_name   = get_setting($conDB, 'application_name');
+$site_title  = get_setting($conDB, 'application_name')." | cPanel";
 $site_footer = "2008 - " . date("Y") . " © SnapS Production House";
 ?>

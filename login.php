@@ -25,6 +25,7 @@ require_once __DIR__ . '/includes/vendor/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 
 $resp = ['status' => 'error', 'message' => '', 'redirect_url' => './index.php'];
@@ -112,14 +113,22 @@ try {
 
             $mail = new PHPMailer(true);
             $mail->isSMTP();
-            $mail->Host = 'smtp.office365.com';
+            $mail->Host = get_setting($conDB, 'smtp_host');
             $mail->SMTPAuth = true;
-            $mail->Username = 'noreply@almutlak.com';
-            $mail->Password = 'HO@66887';
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port = 587;
+            $mail->Username = get_setting($conDB, 'smtp_user');
+            $mail->Password = get_setting($conDB, 'smtp_pass'); //'u&)HM(,Ld9XLVX,c';
+            $encryption_setting = get_setting($conDB, 'smtp_encryption');
+            switch (strtolower($encryption_setting)) {
+                case 'tls':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    break;
+                case 'ssl':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    break;
+            }
+            $mail->Port = get_setting($conDB, 'smtp_port');
             $mail->CharSet = 'UTF-8';
-            $mail->setFrom("noreply@almutlak.com", "Al Mutlak System");
+            $mail->setFrom(get_setting($conDB, 'smtp_user'), get_setting($conDB, 'application_name'));
             $mail->addAddress($user['email'], $user['fullname']);
             $mail->isHTML(true);
             $mail->Subject = __("email_otp_subject"); // Use translation

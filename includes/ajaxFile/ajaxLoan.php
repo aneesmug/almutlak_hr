@@ -1,5 +1,16 @@
 <?php
 /*******************************************************************************************************************
+ * MODIFICATION SUMMARY (008-ajaxLoan.php):
+ * 1. ENHANCED `add_simplified_manual_loan`: This function has been updated to process payment documentation. It now handles the file upload for the "Payment Attachment" and saves the "Receipt ID" provided in the form.
+ * 2. ROBUST FILE HANDLING: The function now includes logic to securely upload the payment attachment and will automatically delete the uploaded file if the database transaction fails, preventing orphaned files on the server.
+ *******************************************************************************************************************
+ * MODIFICATION SUMMARY (007-ajaxLoan.php):
+ * 1. ADDED `add_simplified_manual_loan`: Created a new backend function to handle the new simplified manual loan entry form.
+ * 2. TRANSACTIONAL INSERT: This function uses a database transaction to ensure data integrity.
+ * 3. SIMPLIFIED LOAN CREATION: It inserts a single record into `emp_loan` with all necessary approval statuses pre-set to 'approved' and 'processed' to mark it as a historical record that doesn't need to go through the live approval workflow.
+ * 4. SIMPLIFIED PAYMENT CREATION: If a "Paid Amount" is entered, it creates a single corresponding payment record in `emp_loan_payments` dated the same as the loan's start date.
+ * 5. STATUS DETERMINATION: The final status of the loan (`paid` or `approved`) is automatically determined based on whether the paid amount is equal to or greater than the total loan amount.
+ *******************************************************************************************************************
  * MODIFICATION SUMMARY (018-ajaxLoan.php):
  * 1.  CORRECTED `finalize_loan` LOGIC: This function has been corrected to handle loan disbursement properly.
  * 2.  STORES DISBURSEMENT PROOF: It now updates the main `emp_loan` record with the `disbursement_receipt_id` and `disbursement_attachment` provided by the Finance Assistant. This serves as proof of payment *to* the employee.
@@ -47,6 +58,15 @@ if (isset($_POST['ajaxType'])) {
             break;
         case 'check_receipt_id':
             check_receipt_id();
+            break;
+        case 'search_employee':
+            search_employee();
+            break;
+        case 'add_manual_loan_history':
+            add_manual_loan_history();
+            break;
+        case 'add_simplified_manual_loan':
+            add_simplified_manual_loan();
             break;
         default:
             echo json_encode(['status' => 'error','title' => 'Error','message' => 'Invalid AJAX type specified.','type' => 'error']);
@@ -680,6 +700,252 @@ function check_receipt_id() {
 
     echo json_encode(['status' => 'success', 'exists' => ($result->num_rows > 0)]);
     $stmt->close();
+}
+
+function search_employee() {
+    global $conDB;
+    $searchTerm = $_POST['searchTerm'] ?? '';
+    if (empty($searchTerm)) {
+        echo json_encode(['status' => 'error', 'message' => 'Search term is empty.']);
+        return;
+    }
+    
+    $param = "%{$searchTerm}%";
+    $stmt = $conDB->prepare("SELECT `emp_id`, `name` FROM `employees` WHERE (`name` LIKE ? OR `emp_id` LIKE ?) AND `status`=1 LIMIT 10");
+    $stmt->bind_param("ss", $param, $param);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $employees = [];
+    while ($row = $result->fetch_assoc()) {
+        $employees[] = $row;
+    }
+    $stmt->close();
+    
+    echo json_encode(['status' => 'success', 'employees' => $employees]);
+}
+
+function add_manual_loan_history() {
+    global $conDB;
+    if (session_status() == PHP_SESSION_NONE) session_start();
+    $username = $_SESSION['auth_user']['user_id'] ?? null;
+    if (empty($username)) {
+        echo json_encode(['status' => 'error', 'title' => 'Authentication Error', 'message' => 'User session not found.', 'type' => 'error']);
+        return;
+    }
+
+    $required_fields = ['emp_id', 'loan_type', 'loan_amount', 'total_payable', 'monthly_deduction', 'start_date', 'end_date', 'status'];
+    foreach ($required_fields as $field) {
+        if (!isset($_POST[$field]) || empty($_POST[$field])) {
+            echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => "Field '{$field}' is required.", 'type' => 'error']);
+            return;
+        }
+    }
+
+    $uploaded_files = [];
+    $upload_dir = __DIR__ . '/../../assets/loan_receipts/';
+    if (!is_dir($upload_dir)) {
+        if (!mkdir($upload_dir, 0777, true)) {
+            echo json_encode(['status' => 'error', 'title' => 'Server Error', 'message' => 'Failed to create upload directory.', 'type' => 'error']);
+            return;
+        }
+    }
+
+    $conDB->begin_transaction();
+
+    try {
+        $disbursement_attachment_filename = null;
+        if (isset($_FILES['disbursement_attachment']) && $_FILES['disbursement_attachment']['error'] == UPLOAD_ERR_OK) {
+            $file_ext = pathinfo($_FILES['disbursement_attachment']['name'], PATHINFO_EXTENSION);
+            $disbursement_attachment_filename = 'disbursement_manual_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
+            $upload_file = $upload_dir . $disbursement_attachment_filename;
+            if (move_uploaded_file($_FILES['disbursement_attachment']['tmp_name'], $upload_file)) {
+                $uploaded_files[] = $upload_file;
+            } else {
+                throw new Exception('Failed to upload disbursement attachment.');
+            }
+        }
+
+        $stmt_loan = $conDB->prepare("INSERT INTO `emp_loan` (`emp_id`, `loan_type`, `loan_amount`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`, `disbursement_receipt_id`, `disbursement_attachment`, `dept_manager_status`, `hr_assistant_status`, `hr_manager_status`, `finance_manager_status`, `gm_status`, `finance_assistant_status`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 'approved', 'approved', 'approved', 'approved', 'processed')");
+        
+        $interest_rate = 0.00;
+        $disbursement_receipt_id = $_POST['disbursement_receipt_id'] ?? null;
+
+        $stmt_loan->bind_param(
+            "ssddddsssss",
+            $_POST['emp_id'],
+            $_POST['loan_type'],
+            $_POST['loan_amount'],
+            $interest_rate,
+            $_POST['total_payable'],
+            $_POST['monthly_deduction'],
+            $_POST['start_date'],
+            $_POST['end_date'],
+            $_POST['status'],
+            $disbursement_receipt_id,
+            $disbursement_attachment_filename
+        );
+        $stmt_loan->execute();
+        $loan_id = $conDB->insert_id;
+        if ($loan_id == 0) {
+            throw new Exception("Failed to create the loan record: " . $stmt_loan->error);
+        }
+        $stmt_loan->close();
+
+        if (isset($_POST['payment_amount']) && is_array($_POST['payment_amount'])) {
+            $stmt_payment = $conDB->prepare("INSERT INTO `emp_loan_payments` (loan_id, payment_date, amount, payment_method, receipt_id, attachment) VALUES (?, ?, ?, ?, ?, ?)");
+            
+            foreach ($_POST['payment_amount'] as $i => $amount) {
+                if (empty($amount) || $amount <= 0) continue;
+
+                $payment_attachment_filename = null;
+                if (isset($_FILES['payment_attachment']['name'][$i]) && $_FILES['payment_attachment']['error'][$i] == UPLOAD_ERR_OK) {
+                     $file_ext = pathinfo($_FILES['payment_attachment']['name'][$i], PATHINFO_EXTENSION);
+                     $payment_attachment_filename = 'payment_manual_' . $loan_id . '_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
+                     $upload_file = $upload_dir . $payment_attachment_filename;
+                     if (move_uploaded_file($_FILES['payment_attachment']['tmp_name'][$i], $upload_file)) {
+                         $uploaded_files[] = $upload_file;
+                     } else {
+                         throw new Exception("Failed to upload payment attachment for payment #".($i+1));
+                     }
+                }
+                
+                $receipt_id_pay = $_POST['receipt_id'][$i] ?? null;
+
+                $stmt_payment->bind_param(
+                    "isdsss",
+                    $loan_id,
+                    $_POST['payment_date'][$i],
+                    $amount,
+                    $_POST['payment_method'][$i],
+                    $receipt_id_pay,
+                    $payment_attachment_filename
+                );
+                $stmt_payment->execute();
+                if ($stmt_payment->affected_rows == 0) {
+                     throw new Exception("Failed to save payment #".($i+1).": " . $stmt_payment->error);
+                }
+            }
+            $stmt_payment->close();
+        }
+
+        $conDB->commit();
+        echo json_encode(['status' => 'success', 'title' => 'Success', 'message' => 'Manual loan history added successfully.', 'type' => 'success']);
+
+    } catch (Exception $e) {
+        $conDB->rollback();
+        foreach($uploaded_files as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => $e->getMessage(), 'type' => 'error']);
+    }
+}
+
+function add_simplified_manual_loan() {
+    global $conDB;
+    if (session_status() == PHP_SESSION_NONE) session_start();
+    $username = $_SESSION['auth_user']['user_id'] ?? null;
+    if (empty($username)) {
+        echo json_encode(['status' => 'error', 'title' => 'Authentication Error', 'message' => 'User session not found.', 'type' => 'error']);
+        return;
+    }
+
+    $required_fields = ['emp_id', 'start_date', 'total_loan_amount', 'paid_amount'];
+     foreach ($required_fields as $field) {
+        if (!isset($_POST[$field])) {
+            echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => "Field '{$field}' is required.", 'type' => 'error']);
+            return;
+        }
+    }
+
+    $emp_id = $_POST['emp_id'];
+    $start_date = $_POST['start_date'];
+    $total_amount = filter_var($_POST['total_loan_amount'], FILTER_VALIDATE_FLOAT);
+    $paid_amount = filter_var($_POST['paid_amount'], FILTER_VALIDATE_FLOAT);
+    $payment_receipt_id = $_POST['payment_receipt_id'] ?? null;
+    $payment_attachment_filename = null;
+    $uploaded_file_path = null;
+
+
+    if($total_amount === false || $paid_amount === false || $total_amount <= 0) {
+         echo json_encode(['status' => 'error', 'title' => 'Invalid Input', 'message' => 'Please provide valid numbers for loan amounts.', 'type' => 'error']);
+        return;
+    }
+    
+    if($paid_amount > $total_amount) {
+        echo json_encode(['status' => 'error', 'title' => 'Invalid Input', 'message' => 'Paid amount cannot be greater than the total loan amount.', 'type' => 'error']);
+        return;
+    }
+
+    $conDB->begin_transaction();
+    try {
+        if (isset($_FILES['payment_attachment']) && $_FILES['payment_attachment']['error'] == UPLOAD_ERR_OK) {
+            $upload_dir = __DIR__ . '/../../assets/loan_receipts/';
+            if (!is_dir($upload_dir)) { 
+                if(!mkdir($upload_dir, 0777, true)) {
+                    throw new Exception('Failed to create upload directory.');
+                }
+            }
+
+            $file_ext = pathinfo($_FILES['payment_attachment']['name'], PATHINFO_EXTENSION);
+            $payment_attachment_filename = 'pmt_hist_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
+            $uploaded_file_path = $upload_dir . $payment_attachment_filename;
+
+            if (!move_uploaded_file($_FILES['payment_attachment']['tmp_name'], $uploaded_file_path)) {
+                throw new Exception('Failed to upload payment attachment.');
+            }
+        }
+
+        $final_status = ($paid_amount >= $total_amount) ? 'paid' : 'approved';
+        
+        $stmt_loan = $conDB->prepare("INSERT INTO `emp_loan` (`emp_id`, `loan_type`, `loan_amount`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`, `dept_manager_status`, `hr_assistant_status`, `hr_manager_status`, `finance_manager_status`, `gm_status`, `finance_assistant_status`) VALUES (?, 'regular', ?, 0.00, ?, ?, ?, ?, ?, 'approved', 'approved', 'approved', 'approved', 'approved', 'processed')");
+        
+        $stmt_loan->bind_param(
+            "sddssss",
+            $emp_id,
+            $total_amount,
+            $total_amount,
+            $total_amount,
+            $start_date,
+            $start_date,
+            $final_status
+        );
+        
+        $stmt_loan->execute();
+        $loan_id = $conDB->insert_id;
+        if ($loan_id == 0) {
+            throw new Exception("Failed to create the loan record: " . $stmt_loan->error);
+        }
+        $stmt_loan->close();
+
+        if ($paid_amount > 0) {
+            $stmt_payment = $conDB->prepare("INSERT INTO `emp_loan_payments` (loan_id, payment_date, amount, payment_method, receipt_id, attachment) VALUES (?, ?, ?, 'manual', ?, ?)");
+            $stmt_payment->bind_param(
+                "isdss",
+                $loan_id,
+                $start_date,
+                $paid_amount,
+                $payment_receipt_id,
+                $payment_attachment_filename
+            );
+            $stmt_payment->execute();
+             if ($stmt_payment->affected_rows == 0) {
+                throw new Exception("Failed to save the payment record: " . $stmt_payment->error);
+            }
+            $stmt_payment->close();
+        }
+
+        $conDB->commit();
+        echo json_encode(['status' => 'success', 'title' => 'Success', 'message' => 'Simplified manual loan added successfully.', 'type' => 'success']);
+
+    } catch (Exception $e) {
+        $conDB->rollback();
+        if ($uploaded_file_path && file_exists($uploaded_file_path)) {
+            unlink($uploaded_file_path);
+        }
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => $e->getMessage(), 'type' => 'error']);
+    }
 }
 
 

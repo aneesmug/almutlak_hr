@@ -1,5 +1,8 @@
 <?php
 /****************************************************************
+ * MODIFICATION SUMMARY (005-main_menu.php):
+ * 1. ADDED MANUAL LOAN LINK: A new menu item "Add Manual Loan" has been added to the "Employee's" group. This link provides direct access to the `add_manual_loan.php` page, making it easy to add historical loan records.
+ ****************************************************************
  * MODIFICATION SUMMARY (024-main_menu.php):
  * 1. CREATED "APPROVALS" GROUP: A new dropdown menu group named "Approvals" has been created to centralize all approval-related tasks.
  * 2. MOVED MENU ITEMS: The following pages have been moved into this new group:
@@ -48,6 +51,7 @@ $logActivityLink = 'log_activity.php';
 // $manualVacationLink = 'manual_vacation.php';
 $manualVacationLink = 'import_vacation_balance.php';
 $processIqamaImportLink = 'import_iqama_exp.php';
+$addManualLoanLink = 'add_manual_loan.php';
 
 
 // =================================================================================
@@ -64,6 +68,7 @@ $page_roles = [
     'generate_payroll.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
     'all_applied_vac.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'GM','Employee','IT_Assistant'],
     'all_applied_loan.php' => ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'Employee'],
+    'add_manual_loan.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'],
     'all_cars.php' => ['administrator'],
     'all_locations.php' => ['administrator'],
     'all_machines.php' => ['administrator'],
@@ -92,7 +97,7 @@ if ($user_type != 'administrator') {
 }
 
 // --- Role lists for menu visibility ---
-$can_see_employees_group_main = ['administrator', 'HR_Manager', 'HR_Assistant'];
+$can_see_employees_group_main = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'];
 $can_see_all_employees_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager','IT_Assistant'];
 $can_see_employees_bank_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'];
 $can_see_applied_vac_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'DPT_Manager','IT_Assistant'];
@@ -247,11 +252,21 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $payrollLink ?>"><i class="fa fa-money-bill-transfer"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
+                
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-users-gear"></i><span><?=__("history") ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-second-level" aria-expanded="false">
+                        <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                            <li><a href="<?= $addManualLoanLink ?>"><i class="fa fa-solid fa-history"></i><span><?=__('add_loan_history') ?></span></a></li>
+                        <?php endif; ?>
+                        <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                            <li><a href="<?= $manualVacationLink ?>"><i class="fa fa-solid fa-history"></i><span><?=__('add_vacation_history') ?></span></a></li>
+                        <?php endif; ?>
+                    </ul>
+                </li>
+
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
-                    <li><a href="<?= $manualVacationLink ?>"><i class="fa fa-plus"></i><span><?=__('add_manual_history') ?></span></a></li>
-                <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
-                    <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus"></i><span><?=__('import_iqama_exp') ?></span></a></li>
+                    <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
                 <?php endif; ?>
             </ul>
         </li>

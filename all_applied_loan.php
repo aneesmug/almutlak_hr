@@ -1,5 +1,8 @@
 <?php
 /****************************************************************
+ * MODIFICATION SUMMARY (001-all_applied_loan.php):
+ * 1. ADDED MANUAL LOAN BUTTON: A new button "Add Manual Loan History" has been added to the top of the page, linking to the new `add_manual_loan.php` page. This provides an entry point for users to add historical loan records from the old system.
+ ****************************************************************
  * MODIFICATION SUMMARY (015-all_applied_loan.php):
  * 1.  ROBUST VARIABLE ASSIGNMENT: Moved the explicit fetching of user data (`user_type`, `emp_type`, `user_dept`) to run BEFORE the `avatar_select.php` include. This prevents the include file from overwriting the correct user data and ensures the role detection logic works reliably.
  * 2.  REVISED WORKFLOW: The role definitions and status arrays have been updated to match the new approval chain:
@@ -233,7 +236,12 @@ if (mysqli_num_rows($query) == 1) {
                         <div class="row">
                             <div class="col-xl-12">
                                 <div class="card-box">
-                                    <h4 class="header-title m-t-0 m-b-30"><?=__('loan_approval_center')?></h4>
+                                    <div class="d-flex justify-content-between align-items-center m-b-30">
+                                        <h4 class="header-title m-t-0 m-b-0"><?=__('loan_approval_center')?></h4>
+                                        <a href="add_manual_loan.php" class="btn btn-success waves-effect waves-light">
+                                            <i class="fa fa-plus"></i> <?=__('add_manual_loan_history')?>
+                                        </a>
+                                    </div>
 
                                     <div class="row filter-controls mx-auto mb-5">
                                         <div class="col-md-6 mb-3 mb-md-0">

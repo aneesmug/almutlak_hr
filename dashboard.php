@@ -178,6 +178,8 @@ if(isset($_POST['submit'])){
 								unset($_SESSION['error_msg']); // Clear after displaying
 								header("refresh:3 ; ./dashboard.php");
 							}
+
+							echo $sajdkl;
 						?>
                         <div class="row text-center">
                             <div class="col-sm-4 col-xl-4" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">

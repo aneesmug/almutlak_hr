@@ -17,7 +17,7 @@
 require_once __DIR__ . '/includes/session_check.php';
 
 // Only HR and Admins should access this page
-if (!$isHR && !$is_system_admin) {
+if (!$isHR && !$is_system_admin && !$isDeptHr) {
     header("Location: ./dashboard.php");
     exit;
 }

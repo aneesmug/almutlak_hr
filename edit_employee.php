@@ -12,6 +12,11 @@ if (mysqli_num_rows($query) == 1) {
 
 	require("./includes/emp_query.php");
 
+	if(!isset($_GET['emp_id']) || empty($_GET['emp_id']) ){
+		header("Location: ./reg_employee.php");
+		exit;
+	}
+
 	if (mysqli_num_rows($get_emp_data) !== 0) {
 		$allRecords = mysqli_fetch_all($get_emp_data, MYSQLI_ASSOC);
 		foreach ($allRecords as $rec) {
@@ -671,9 +676,9 @@ if (mysqli_num_rows($query) == 1) {
 				$('.department option').removeAttr('selected').filter('[value='+department+']').attr('selected', true);*/
 				// var department   = "<? //=$emprow['dept']
 										?>";
-				var vac_period = "<?= $vac_period_get ?>";
+				// var vac_period = "<?//= $vac_period_get ?>";
 				// $('.department option[value="'+department+'"]').prop("selected", "selected");
-				$('.vac_period option[value="' + vac_period + '"]').prop("selected", "selected");
+				// $('.vac_period option[value="' + vac_period + '"]').prop("selected", "selected");
 
 			});
 		</script>
@@ -729,7 +734,7 @@ if (mysqli_num_rows($query) == 1) {
 						type: "POST",
 						data: {
 							"image": resp,
-							"id": "<?= $id_get; ?>",
+							"id": "<?= $emprow['id'] ?>",
 							"emp_id": "<?= $emprow['empid']; ?>",
 							"emp_name": "<?= $emprow['name']; ?>"
 						},

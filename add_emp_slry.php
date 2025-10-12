@@ -1,4 +1,12 @@
 <?php
+/*********************************************************************************
+ * MODIFICATION SUMMARY
+ *
+ * 1.  **Corrected Form Action URL**: Modified the <form> tag's `action` attribute to include the employee's ID in the URL's query string. This ensures that when the form is submitted, the application knows which employee's record to update, preventing it from incorrectly defaulting to the logged-in user's record.
+ *
+ * 2.  **Fixed Salary Update Validation**: Removed the incorrect validation logic that compared the new submitted salary total with the old total from the database. The validation now correctly ensures only that the sum of the submitted salary components (`basic`, `housing`, etc.) matches the submitted total, allowing for successful updates.
+ *********************************************************************************/
+
 	require_once __DIR__ . '/includes/db.php';
 
 	require_once __DIR__ . '/includes/session_check.php';
@@ -24,18 +32,25 @@
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
         try {
-            // Validate total salary match
-            $salaryData = $_POST;
             $postedTotal = (float)$_POST['totalsal'];
-            $expectedTotal = (float)$emprow['salary'];
-            if (abs($postedTotal - $expectedTotal) > 0.01) {
-                throw new Exception(__('total_salary_mismatch')." ".__('expected'). ": {$expectedTotal}, " . __('submitted'). ": {$postedTotal}");
-            }
+
             // Define allowed salary components (whitelist)
             $allowedFields = [
                 'basic', 'housing', 'transport', 'food', 'misc',
                 'cashier', 'fuel', 'tel', 'other', 'guard'
             ];
+
+            // Calculate sum of submitted components for verification
+            $componentsSum = 0;
+            foreach ($allowedFields as $field) {
+                $componentsSum += (float)($_POST[$field] ?? 0);
+            }
+
+            // Verify that the sum of the individual components matches the submitted total
+            if (abs($componentsSum - $postedTotal) > 0.01) {
+                throw new Exception(__('salary_components_dont_add_up_to_the_total'));
+            }
+
             // Process dynamic fields
             $salaryData = [':emp_id' => $emprow['empid']];
             $columns = ['emp_id'];
@@ -52,11 +67,7 @@
             if (count($columns) <= 1) {
                 throw new Exception(__('no_valid_salary_components_provided'));
             }
-            // Calculate sum of components for verification
-            $componentsSum = array_sum(array_slice($salaryData, 1)); // Skip emp_id
-            if (abs($componentsSum - $postedTotal) > 0.01) {
-                throw new Exception(__('salary_components_dont_add_up_to_the_total'));
-            }
+
             // Begin transaction
             $pdo->beginTransaction();
             // 1. Check if record exists and update status to 0 if it does
@@ -194,7 +205,7 @@
                                 <div class="card-box">
 
                                     <h4 class="m-t-0 header-title"><?=__('edit_employee_salary') ?></h4>
-                                    <form action="<?= $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data" class="registration">
+                                    <form action="add_emp_slry.php?emp_id=<?= htmlspecialchars($_GET['emp_id']); ?>" method="post" enctype="multipart/form-data" class="registration">
                                         <div class="form-row">
 											<div class="form-group col-md-2">
                                                 <label for="basic" class="col-form-label"><?=__('basic') ?><span class="text-danger">*</span></label>
