@@ -86,14 +86,14 @@ $u = "UPDATE `machines` SET `name_mach`='".$name_mach_po."', `maker_name`='".$ma
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -125,10 +125,10 @@ $u = "UPDATE `machines` SET `name_mach`='".$name_mach_po."', `maker_name`='".$ma
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -169,33 +169,33 @@ $u = "UPDATE `machines` SET `name_mach`='".$name_mach_po."', `maker_name`='".$ma
 					<div class="card-box">
 						<h4 class="m-t-0 header-title">Register New Machine</h4>
             			<a href="add_brand.php" class="btn btn-primary waves-effect"><i class="mdi mdi-settings"></i> Add Brand</a>	
-						<form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-							<?php echo $msg ?>
+						<form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+							<?=$msg ?>
 							<div class="form-row">
 								<div class="form-group col-md-4">
 									<label for="name_mach" class="col-form-label">Machine Name<span class="text-danger">*</span></label>
-									<input type="text" name="name_mach" required placeholder="Enter Machine name" class="form-control" id="name_mach" value="<?php echo $name_mach_get ?>">
+									<input type="text" name="name_mach" required placeholder="Enter Machine name" class="form-control" id="name_mach" value="<?=$name_mach_get ?>">
 								</div>
 								<div class="form-group col-md-2">
 									<label for="m_id" class="col-form-label">Machine ID<span class="text-danger">*</span></label>
-									<input type="text" name="m_id" required placeholder="Enter m id" class="form-control" id="m_id" value="<?php echo $m_id_get ?>">
+									<input type="text" name="m_id" required placeholder="Enter m id" class="form-control" id="m_id" value="<?=$m_id_get ?>">
 								</div>
 								<div class="form-group col-md-3">
 									<label for="serial" class="col-form-label">Serial No.<span class="text-danger">*</span></label>
-									<input type="text" name="serial" required placeholder="Enter serial no." class="form-control" id="serial" value="<?php echo $serial_get ?>">
+									<input type="text" name="serial" required placeholder="Enter serial no." class="form-control" id="serial" value="<?=$serial_get ?>">
 								</div>
 								<div class="form-group col-md-3">
 									<label for="made_year" class="col-form-label">Made Year<span class="text-danger">*</span></label>
-									<input type="text" name="made_year" required placeholder="Enter made year" class="form-control" id="made_year" value="<?php echo $made_year_get ?>">
+									<input type="text" name="made_year" required placeholder="Enter made year" class="form-control" id="made_year" value="<?=$made_year_get ?>">
 								</div>
 								<div class="form-group col-md-4">
 									<label for="remarks" class="col-form-label">Remarks</label>
-									<input type="text" name="remarks" placeholder="Enter remarks" class="form-control" id="remarks" value="<?php echo $remarks_get ?>">
+									<input type="text" name="remarks" placeholder="Enter remarks" class="form-control" id="remarks" value="<?=$remarks_get ?>">
 								</div>
 								<div class="form-group col-md-4">
 									<label for="maker_name" class="col-form-label">Select Model Name<span class="text-danger">*</span></label>
 									<select class="form-control selectpicker" data-live-search="true" data-style="btn-custom" name="maker_name" required>
-										<option value="<?php echo $maker_name_get ?>"><?php echo $maker_name_get ?></option>
+										<option value="<?=$maker_name_get ?>"><?=$maker_name_get ?></option>
 										<?php
 
 											// echo ($maker_name_get='') ? "<option value=''>Select</option>" : $maker_name_get ;
@@ -204,17 +204,17 @@ $u = "UPDATE `machines` SET `name_mach`='".$name_mach_po."', `maker_name`='".$ma
 											while($rec = mysqli_fetch_assoc($query_brand_nme)){
 												$brand_name = $rec["name"];
 										?>
-											<option value="<?php echo $brand_name ?>"><?php echo $brand_name ?></option>
+											<option value="<?=$brand_name ?>"><?=$brand_name ?></option>
 										<?php } ?>
 									</select>
 								</div>
 								<div class="form-group col-md-4">
 									<label for="location" class="col-form-label">Select Location<span class="text-danger">*</span></label>
 									<select class="form-control selectpicker" data-live-search="true" data-style="btn-custom" name="location" required>
-										<option value="<?php echo $old_location ?>"><?php echo $old_location ?></option>
+										<option value="<?=$old_location ?>"><?=$old_location ?></option>
 										<?php /* ?>
-										<option value="<?php echo ($_SESSION['lastlocation'] != "") ? $_SESSION['lastlocation'] : "" ; ?>">
-											<?php echo ($_SESSION['lastlocation'] != "") ? $_SESSION['lastlocation'] : "Select" ; ?>
+										<option value="<?=($_SESSION['lastlocation'] != "") ? $_SESSION['lastlocation'] : "" ; ?>">
+											<?=($_SESSION['lastlocation'] != "") ? $_SESSION['lastlocation'] : "Select" ; ?>
 										</option>
 										<?php */ ?>
 
@@ -226,14 +226,14 @@ $u = "UPDATE `machines` SET `name_mach`='".$name_mach_po."', `maker_name`='".$ma
 											while($rec = mysqli_fetch_assoc($query_sectin_nme)){
 												$sectin_nme = $rec["name"];
 										?>
-											<option value="<?php echo $sectin_nme ?>"><?php echo $sectin_nme ?></option>
+											<option value="<?=$sectin_nme ?>"><?=$sectin_nme ?></option>
 										<?php } ?>
 									</select>
 								</div>
 								
 							</div>
 							<div class="btn-group" role="group" aria-label="Edit Button">
-							<a href="view_machine.php?id=<?php echo $_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+							<a href="view_machine.php?id=<?=$_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
 							<button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-settings"></i> Update</button>
 							</div>
 						</form>
@@ -247,7 +247,7 @@ $u = "UPDATE `machines` SET `name_mach`='".$name_mach_po."', `maker_name`='".$ma
 	</div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

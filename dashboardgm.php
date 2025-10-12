@@ -46,14 +46,14 @@ GROUP BY `smart_request`.`inv_no`
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -95,10 +95,10 @@ GROUP BY `smart_request`.`inv_no`
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -138,21 +138,21 @@ GROUP BY `smart_request`.`inv_no`
                             <div class="col-sm-4 col-xl-4" onclick="window.location.href='gm_emp_list.php?page=1&status=app_hr'" style="cursor: pointer;">
                                 <div class="card-box widget-flat border-warning bg-warning text-white">
                                     <i class="mdi mdi-account-convert"></i>
-                                    <h3 class="m-b-10"><?php echo $status_cont_wait ?></h3>
+                                    <h3 class="m-b-10"><?=$status_cont_wait ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600">Waiting for Approval</p>
                                 </div>
                             </div>
                             <div class="col-sm-4 col-xl-4" onclick="window.location.href='gm_emp_list.php?page=1&status=approve'" style="cursor: pointer;">
                                 <div class="card-box widget-flat border-success bg-success text-white">
                                     <i class="mdi mdi-account-check"></i>
-                                    <h3 class="m-b-10"><?php echo $status_cont_appr ?></h3>
+                                    <h3 class="m-b-10"><?=$status_cont_appr ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600">Approved Applications</p>
                                 </div>
                             </div>
                             <div class="col-sm-4 col-xl-4" onclick="window.location.href='gm_emp_list.php?page=1&status=not_approve'" style="cursor: pointer;">
                                 <div class="card-box bg-danger widget-flat border-danger text-white">
                                     <i class="mdi mdi-account-remove"></i>
-                                    <h3 class="m-b-10"><?php echo $status_cont_not_appr ?></h3>
+                                    <h3 class="m-b-10"><?=$status_cont_not_appr ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600">Rejected Applications</p>
                                 </div>
                             </div>
@@ -234,21 +234,21 @@ GROUP BY `smart_request`.`inv_no`
                                         }
                                     ?>
                                 <tr>
-                                    <th><?php echo $idno; ?></th>
-                                    <th><?php echo $inv_no_get; ?></th>
-                                    <th><?php echo $tally_id_get; ?></th>
-                                    <th><?php echo $injazat_id_get; ?></th>
-                                    <th><?php echo $item_name_get; ?></th>
-                                    <th><?php echo $sub_type_get; ?></th>
-                                    <th><?php echo $location_get; ?></th>
-                                    <th><?php echo $approv_by_get; ?></th>
-                                    <th><?php echo $prep_by_get; ?></th>
-                                    <th><?php echo $date_reg; ?></th>
-                                    <th><?php echo $status_get; ?></th>
+                                    <th><?=$idno; ?></th>
+                                    <th><?=$inv_no_get; ?></th>
+                                    <th><?=$tally_id_get; ?></th>
+                                    <th><?=$injazat_id_get; ?></th>
+                                    <th><?=$item_name_get; ?></th>
+                                    <th><?=$sub_type_get; ?></th>
+                                    <th><?=$location_get; ?></th>
+                                    <th><?=$approv_by_get; ?></th>
+                                    <th><?=$prep_by_get; ?></th>
+                                    <th><?=$date_reg; ?></th>
+                                    <th><?=$status_get; ?></th>
 
                                     <th>
                                     <div class="btn-group" role="group" aria-label="Edit Button">
-                                        <a href="./open_request.php?id=<?php echo $inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
+                                        <a href="./open_request.php?id=<?=$inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
                                             Open <i class="mdi mdi-eye-outline"></i>
                                         </a>
                                     </div>
@@ -265,7 +265,7 @@ GROUP BY `smart_request`.`inv_no`
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

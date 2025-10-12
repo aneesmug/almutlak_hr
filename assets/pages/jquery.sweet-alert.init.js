@@ -107,7 +107,7 @@
             swal({
                 title: 'Sweet!',
                 text: 'Modal with a custom image.',
-                imageUrl: 'assets/images/logo_sm.png',
+                imageUrl: '<?=get_setting($conDB, 'white_logo')?>',
                 imageHeight: 50,
                 animation: false,
                 confirmButtonClass: 'btn btn-confirm mt-2'

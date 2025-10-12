@@ -157,14 +157,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -206,10 +206,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -256,17 +256,17 @@ if(isset($_POST['submit'])){
                             <div class="col-md-12">
                                 <div class="card-box">
                                     <h4 class="m-t-0 header-title">Add New Vacation</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-										<?php echo $msg; ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+										<?=$msg; ?>
                                         <div class="form-row">
 											<div class="form-group col-md-3">
                                                 <label for="date_select" class="col-form-label">Vacation Date<span class="text-danger">*</span></label>
-                                                <input type="text" name="date" parsley-trigger="change" required placeholder="dd/mm/yyyy" class="form-control" id="date_select" autocomplete="off" value="<?php echo $vac_strt_datevac ?>" />
+                                                <input type="text" name="date" parsley-trigger="change" required placeholder="dd/mm/yyyy" class="form-control" id="date_select" autocomplete="off" value="<?=$vac_strt_datevac ?>" />
                                             </div>
                                             <?php if($vac_type_vac_get <> "Encashed"){?>
                                             <div class="form-group col-md-3">
                                                 <label for="return_date" class="col-form-label">Return Date<span class="text-danger">*</span></label>
-                                                <input type="text" name="return_date" parsley-trigger="change" placeholder="dd/mm/yyyy" class="form-control" id="return_dated" autocomplete="off" required value="<?php echo $return_datevac ?>" />
+                                                <input type="text" name="return_date" parsley-trigger="change" placeholder="dd/mm/yyyy" class="form-control" id="return_dated" autocomplete="off" required value="<?=$return_datevac ?>" />
                                             </div>
                                             
 											<?php if($vac_typevac <> 'emergency' && $country_get <> "Myanmar" && $country_get <> "Saudi Arabia"){
@@ -274,28 +274,28 @@ if(isset($_POST['submit'])){
 											?>
                                             <div class="form-group col-md-3">
                                                 <label for="ticket_pay" class="col-form-label">Ticket Allowance<span class="text-danger">*</span></label>
-                                                <input type="text" name="ticket_pay" class="form-control" id="ticket_pay" required value="<?php echo $ticket_payvac ?>" />
+                                                <input type="text" name="ticket_pay" class="form-control" id="ticket_pay" required value="<?=$ticket_payvac ?>" />
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="permit_fee" class="col-form-label">Exit Re-Entry Permit Fee<span class="text-danger">*</span></label>
-                                                <input type="text" name="permit_fee" class="form-control" id="permit_fee" required value="<?php echo $permit_feevac ?>" />
+                                                <input type="text" name="permit_fee" class="form-control" id="permit_fee" required value="<?=$permit_feevac ?>" />
                                             </div>
 											<?php } } } ?>
                                             <div class="form-group col-md-3">
                                                 <label for="last_vac_date" class="col-form-label">Last Vacation Date </label>
-                                                <input type="text" name="last_vac_date" parsley-trigger="change" placeholder="dd/mm/yyyy" class="form-control" id="last_vac_date" autocomplete="off" value="<?php echo $last_vac_datevac ?>" />
+                                                <input type="text" name="last_vac_date" parsley-trigger="change" placeholder="dd/mm/yyyy" class="form-control" id="last_vac_date" autocomplete="off" value="<?=$last_vac_datevac ?>" />
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="next_vac_date" class="col-form-label">Next Vacation Date<span class="text-danger">*</span></label>
-                                                <input type="text" name="next_vac_date" parsley-trigger="change"  placeholder="dd/mm/yyyy" class="form-control" id="next_vac_date" autocomplete="off" required value="<?php echo $next_vac_datevac ?>" />
+                                                <input type="text" name="next_vac_date" parsley-trigger="change"  placeholder="dd/mm/yyyy" class="form-control" id="next_vac_date" autocomplete="off" required value="<?=$next_vac_datevac ?>" />
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="note" class="col-form-label">Notes</label>
-                                                <input type="text" name="hr_note" parsley-trigger="change" class="form-control" id="note"  autocomplete="off" value="<?php echo $hr_notevac ?>" />
+                                                <input type="text" name="hr_note" parsley-trigger="change" class="form-control" id="note"  autocomplete="off" value="<?=$hr_notevac ?>" />
                                             </div>
                                         </div>
 										<div class="btn-group" role="group" aria-label="Edit Button">
-										<a href="view_employee.php?id=<?php echo $empgid ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+										<a href="view_employee.php?id=<?=$empgid ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
                                         <button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-table-edit"></i> Edit Application</button>
 										</div>
                                     </form>
@@ -313,7 +313,7 @@ if(isset($_POST['submit'])){
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

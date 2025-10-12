@@ -186,7 +186,7 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
@@ -195,7 +195,7 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
 
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -239,10 +239,10 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -281,45 +281,45 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
 					<div class="row">
 						<div class="col-xl-12">
 							<div class="row">
-                                    <div class="<?php echo $colsm ?>" >
+                                    <div class="<?=$colsm ?>" >
                                         <div class="card-box tilebox-one">
                                            	<i class="fa fa-money float-right text-muted"></i>
                                             <h6 class="text-muted text-uppercase mt-0">Basic Salary</h6>
-                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $basic_slry_get ?></h2>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?=$basic_slry_get ?></h2>
                                         </div>
                                     </div><!-- end col -->
                                     <?php if($housing_slry_get != "0"){ ?>
-                                    <div class="<?php echo $colsm ?>" >
+                                    <div class="<?=$colsm ?>" >
                                         <div class="card-box tilebox-one">
 											<i class="fa fa-money float-right text-muted"></i>
                                             <h6 class="text-muted text-uppercase mt-0">Housing</h6>
-                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $housing_slry_get ?></h2>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?=$housing_slry_get ?></h2>
                                         </div>
                                     </div><!-- end col -->
                                     <?php } ?>
                                     <?php if($transport_slry_get != "0"){?>
-                                    <div class="<?php echo $colsm ?>">
+                                    <div class="<?=$colsm ?>">
                                         <div class="card-box tilebox-one">
 											<i class="fa fa-money float-right text-muted"></i>
                                             <h6 class="text-muted text-uppercase mt-0">Transport</h6>
-                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $transport_slry_get ?></h2>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?=$transport_slry_get ?></h2>
                                         </div>
                                     </div><!-- end col -->
                                     <?php } ?>
                                     <?php if($other_slry_get != "0"){?>
-                                    <div class="<?php echo $colsm ?>">
+                                    <div class="<?=$colsm ?>">
                                         <div class="card-box tilebox-one">
 											<i class="fa fa-money float-right text-muted"></i>
                                             <h6 class="text-muted text-uppercase mt-0">Others</h6>
-                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $other_slry_get ?></h2>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?=$other_slry_get ?></h2>
                                         </div>
                                     </div><!-- end col -->
                                     <?php } ?>
-                                    <div class="<?php echo ($tolslry==3) ? 'col-sm-3' : 'col-sm-4' ; ?>" >
+                                    <div class="<?=($tolslry==3) ? 'col-sm-3' : 'col-sm-4' ; ?>" >
                                         <div class="card-box tilebox-one">
 											<i class="fa fa-money float-right text-muted"></i>
                                             <h6 class="text-muted text-uppercase mt-0">Total Salary</h6>
-                                            <h2 class="m-b-20" data-plugin="counterup"><?php echo $salary_get ?></h2>
+                                            <h2 class="m-b-20" data-plugin="counterup"><?=$salary_get ?></h2>
                                         </div>
                                     </div><!-- end col -->
 							</div>
@@ -336,14 +336,14 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
 				Flys
 			<?php } ?>
 			</h6>
-			<h2 class="m-b-20" data-plugin="counterup"><?php echo $cont_fly ?></h2>
+			<h2 class="m-b-20" data-plugin="counterup"><?=$cont_fly ?></h2>
 		</div>
 	</div><!-- end col -->
 	<div class="col-sm-6">
 		<div class="card-box tilebox-one">
 			<i class="mdi mdi-square-inc-cash float-right text-muted"></i>
 			<h6 class="text-uppercase mt-0 text-muted">Encashed</h6>
-			<h2 class="m-b-20"><span data-plugin="counterup"><?php echo $cont_encashed ?></span></h2>
+			<h2 class="m-b-20"><span data-plugin="counterup"><?=$cont_encashed ?></span></h2>
 		</div>
 	</div><!-- end col -->
 </div><!-- end col -->
@@ -357,7 +357,7 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
 <div class="row">
 	<div class="col-12">
 	<div class="card-box">
-	<h4 class="header-title m-t-0 m-b-30">About <?php echo $name_get ?></h4>
+	<h4 class="header-title m-t-0 m-b-30">About <?=$name_get ?></h4>
 
 	<ul class="nav nav-pills navtab-bg nav-justified pull-in ">
 
@@ -397,69 +397,69 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
 			<tbody>
 			<tr>
 				<th>Name of Employee:</th>
-				<td><?php echo $name_get; ?></td>
+				<td><?=$name_get; ?></td>
 				<th>Emali Address:</th>
-				<td><?php echo $emp_email_get; ?></td>
+				<td><?=$emp_email_get; ?></td>
 			</tr>
 			<tr>
 				<th>Iqama / ID:</th>
-				<td><?php echo $iqama_get; ?></td>
+				<td><?=$iqama_get; ?></td>
 				<th>Iqama / ID Expiry:</th>
-				<td><?php echo $iqama_exp_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->HijriToGregorian($iqama_exp_get, $format); ?></span></td>
+				<td><?=$iqama_exp_get; ?><span class="badge badge-info float-right"><?=$DateConv->HijriToGregorian($iqama_exp_get, $format); ?></span></td>
 			</tr>
 			<tr>
 				<th>Passport No.:</th>
-				<td><?php echo $passport_number_get; ?></td>
+				<td><?=$passport_number_get; ?></td>
 				<th>Passport Expiry:</th>
-				<td><?php echo $passport_exp_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($passport_exp_get, $format); ?></span></td>
+				<td><?=$passport_exp_get; ?><span class="badge badge-info float-right"><?=$DateConv->GregorianToHijri($passport_exp_get, $format); ?></span></td>
 			</tr>
 				<tr>
 				<th>Date of Birth:</th>
-				<td><?php echo $dob_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($dob_get, $format); ?></span></td>
+				<td><?=$dob_get; ?><span class="badge badge-info float-right"><?=$DateConv->GregorianToHijri($dob_get, $format); ?></span></td>
 				<th>Age:</th>
 				<td><?php if($dob_get <> ""){echo $years; } ?></td>
 			</tr>
 			<tr>
 				<th>Gender:</th>
-				<td><?php echo ucfirst($sex_get); ?></td>
+				<td><?=ucfirst($sex_get); ?></td>
 				<th>Marital Status:</th>
-				<td><?php echo ucfirst($mar_status_get); ?></td>
+				<td><?=ucfirst($mar_status_get); ?></td>
 			</tr>
 			<tr>
 				<th>T-Shirt Size:</th>
-				<td><?php echo ucfirst($t_shirt_size_get); ?></td>
+				<td><?=ucfirst($t_shirt_size_get); ?></td>
 				<th>Contract Period:</th>
-				<td><?php echo $vac_period_get; ?></td>
+				<td><?=$vac_period_get; ?></td>
 			</tr>
 			<tr>
 				<th>Mobile No.:</th>
-				<td><?php echo $mobile_get; ?></td>
+				<td><?=$mobile_get; ?></td>
 				<th>Country:</th>
-				<td><?php echo $country_get; ?></td>
+				<td><?=$country_get; ?></td>
 			</tr>
 			<tr>
 				<th>Date Hired:</th>
-				<td><?php echo $joining_date_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($joining_date_get, $format); ?></span></td>
+				<td><?=$joining_date_get; ?><span class="badge badge-info float-right"><?=$DateConv->GregorianToHijri($joining_date_get, $format); ?></span></td>
 				<th>Department:</th>
-				<td><?php echo $dept_get; ?></td>
+				<td><?=$dept_get; ?></td>
 			</tr>
 			<tr>
 				<th>Section Area:</th>
-				<td><?php echo $sectin_nme_get; ?></td>
+				<td><?=$sectin_nme_get; ?></td>
 				<th>Current Total Salary:</th>
-				<td><?php echo $salary_get; ?></td>
+				<td><?=$salary_get; ?></td>
 			</tr>
 			<tr>
 				<th>Insurance No:</th>
-				<td><?php echo $insurance_no_get; ?></td>
+				<td><?=$insurance_no_get; ?></td>
 				<th>Insurance Expiry:</th>
-				<td><?php echo $insurance_exp_get; ?><span class="badge badge-info float-right"><?php echo $DateConv->GregorianToHijri($insurance_exp_get, $format); ?></span></td>
+				<td><?=$insurance_exp_get; ?><span class="badge badge-info float-right"><?=$DateConv->GregorianToHijri($insurance_exp_get, $format); ?></span></td>
 			</tr>
 			<tr>
 				<th>Emergency Contact:</th>
-				<td><?php echo $emg_mobile_get." - ".$emg_name_get ?></td>
+				<td><?=$emg_mobile_get." - ".$emg_name_get ?></td>
 				<th>Address:</th>
-				<td><?php echo ucfirst($address_get) ?></td>
+				<td><?=ucfirst($address_get) ?></td>
 			</tr>
 			</tbody>
 		</table>
@@ -467,7 +467,7 @@ $getquery = mysql_query("SELECT * FROM `employees` WHERE `id`='".$_GET['id']."' 
 
 		<div class="text-right">
 			<div class="btn-group" role="group" aria-label="Edit Button">
-				<a href="./employee_profile.php?emp_id=<?php echo $emp_id_get; ?>" class="btn btn-sm waves-effect btn-primary" target="_blank"><i class="fi-printer "></i> Print Profile</a>
+				<a href="./employee_profile.php?emp_id=<?=$emp_id_get; ?>" class="btn btn-sm waves-effect btn-primary" target="_blank"><i class="fi-printer "></i> Print Profile</a>
 			</div>
 		</div>
 
@@ -530,12 +530,12 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 
 ?>
 											<tr>
-												<th><?php echo $note_emp; ?></th>
-												<th><?php echo $date_emp; ?></th>
-												<th><?php echo $return_date_emp; ?></th>
-												<th><?php echo $permit_no_emp; ?></th>
-												<th><?php echo $remarks_get; ?></th>
-												<th><?php echo $vacdays_emp; ?></th>
+												<th><?=$note_emp; ?></th>
+												<th><?=$date_emp; ?></th>
+												<th><?=$return_date_emp; ?></th>
+												<th><?=$permit_no_emp; ?></th>
+												<th><?=$remarks_get; ?></th>
+												<th><?=$vacdays_emp; ?></th>
 												<th>
 													<?php
 														if($arrived_date_get == ""){
@@ -546,15 +546,15 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 
 													?>
 												</th>
-												<th><?php echo $new_date_format; ?></th>
-												<th><?php echo $id_emp_reg; ?></th>
+												<th><?=$new_date_format; ?></th>
+												<th><?=$id_emp_reg; ?></th>
 												<?php if($user_type <> "dept_user"){ ?>
 												<th>
-												<a href="./edit_vac.php?id=<?php echo $id_emp_reg ?>&emp_id=<?php echo "".$_GET['id']."" ?>" class="btn btn-sm btn-primary waves-effect">
+												<a href="./edit_vac.php?id=<?=$id_emp_reg ?>&emp_id=<?="".$_GET['id']."" ?>" class="btn btn-sm btn-primary waves-effect">
                                                     <i class="fa fa-edit"></i>
 												</a>
 												<?php if($user_type == $access1){ ?>
-												<a href="./includes/delete_vac.php?id=<?php echo $id_emp_reg ?>" class="btn btn-sm btn-danger waves-effect">
+												<a href="./includes/delete_vac.php?id=<?=$id_emp_reg ?>" class="btn btn-sm btn-danger waves-effect">
                                                     <i class="dripicons-tag-delete"></i>
 												</a>
 												<?php } ?>
@@ -577,9 +577,9 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 												</thead>
 												<tr>
 													<th>Bank Name:</th>
-													<td><?php echo $bank_name_get; ?></td>
+													<td><?=$bank_name_get; ?></td>
 													<th>IBAN Number:</th>
-													<td><?php echo $iban_get; ?></td>
+													<td><?=$iban_get; ?></td>
 												</tr>
 												<?php
 													if($gosi_no_get <> ""){
@@ -591,20 +591,20 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 												</thead>
 												<tr>
 													<th>Gosi No:</th>
-													<td><?php echo $gosi_no_get; ?></td>
+													<td><?=$gosi_no_get; ?></td>
 													<th>Gosi Payment:</th>
-													<td><?php echo $amount_gosi_get; ?></td>
+													<td><?=$amount_gosi_get; ?></td>
 												</tr>
 												<tr>
 													<th>Gregorian Date:</th>
-													<td><?php echo $date_greg_get; ?></td>
+													<td><?=$date_greg_get; ?></td>
 													<th>تاريخ الهجري :</th>
-													<td><?php echo $date_hijri_get; ?></td>
+													<td><?=$date_hijri_get; ?></td>
 												</tr>
 												<?php }else{ ?>
 												<tr>
 													<td colspan="4">
-														<a href="./add_gosi.php?id=<?php echo "".$_GET['id']."" ?>" class="btn btn-sm btn-primary waves-effect">
+														<a href="./add_gosi.php?id=<?="".$_GET['id']."" ?>" class="btn btn-sm btn-primary waves-effect">
 															<i class="mdi mdi-database-plus"></i> Add Gosi Details
 														</a>
 													</td>
@@ -616,7 +616,7 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 
 <div class="tab-pane" id="documents">
 								<div class="card-box">
-                                    <a href="add_emp_docs.php?id=<?php echo $_GET['id'] ?>" class="btn btn-primary btn-rounded w-md waves-effect waves-light float-left"><i class="mdi mdi-upload"></i> Upload Files</a><br><br>
+                                    <a href="add_emp_docs.php?id=<?=$_GET['id'] ?>" class="btn btn-primary btn-rounded w-md waves-effect waves-light float-left"><i class="mdi mdi-upload"></i> Upload Files</a><br><br>
                                     <h4 class="header-title m-b-30">My Files</h4>
 
                                     <div class="row">
@@ -637,15 +637,15 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 	<div class="col-lg-3 col-xl-2">
 	<div class="file-man-box">
 	   <?php if($user_type == "administrator" OR $user_type == "hr"){ ?>
-		<a href="./includes/del_docu.php?id=<?php echo $id_empdoc_get ?>&emp_id=<?php echo $emp_id_get ?>" class="file-close"><i class="mdi mdi-close-circle"></i></a>
+		<a href="./includes/del_docu.php?id=<?=$id_empdoc_get ?>&emp_id=<?=$emp_id_get ?>" class="file-close"><i class="mdi mdi-close-circle"></i></a>
 		<?php } ?>
 		<div class="file-img-box">
 			<img src="assets/images/file_icons/<?php if($docu_ext_get == "jpg"){echo"jpg";}elseif($docu_ext_get == "jpeg"){echo"jpg";}elseif($docu_ext_get == "pdf"){echo"pdf";}?>.svg" alt="icon">
 		</div>
-		<a href="./downloadFile.php?file=<?php echo $attachment_get ?>" class="file-download"><i class="mdi mdi-download"></i></a>
+		<a href="./downloadFile.php?file=<?=$attachment_get ?>" class="file-download"><i class="mdi mdi-download"></i></a>
 		<div class="file-man-title">
-			<h5 class="mb-0 text-overflow"><?php echo $docu_typ_get ?></h5>
-			<p class="mb-0"><small><?php echo $doc_date_reg_get ?></small></p>
+			<h5 class="mb-0 text-overflow"><?=$docu_typ_get ?></h5>
+			<p class="mb-0"><small><?=$doc_date_reg_get ?></small></p>
 		</div>
 	</div>
 
@@ -673,7 +673,7 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -699,10 +699,10 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 <div class="form-row">
 <div class="form-group col-md-6">
 <!--	<a href="" class="btn btn-da nger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-<input type="hidden" name="id" value="<?php echo $_GET['id'] ?>" >
-<input type="hidden" name="emp_id" value="<?php echo $emp_id_get ?>" >
-<input type="hidden" name="emp_name" value="<?php echo $name_get ?>" >
-<input type="hidden" name="dept" value="<?php echo $dept_get ?>" >
+<input type="hidden" name="id" value="<?=$_GET['id'] ?>" >
+<input type="hidden" name="emp_id" value="<?=$emp_id_get ?>" >
+<input type="hidden" name="emp_name" value="<?=$name_get ?>" >
+<input type="hidden" name="dept" value="<?=$dept_get ?>" >
 
 	<div class="input-group">
 		<select class="form-control" name="replacement_per" required>
@@ -712,7 +712,7 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 			while($rec = mysql_fetch_assoc($query_emp_apl_nme)){
 				$emp_apl_nme = $rec["name"];
 		?>
-			<option value="<?php echo $emp_apl_nme ?>"><?php echo $emp_apl_nme ?></option>
+			<option value="<?=$emp_apl_nme ?>"><?=$emp_apl_nme ?></option>
 		<?php } ?>
 		</select>
 	</div>
@@ -770,10 +770,10 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
 				<h5>Please select Date for Arrival!</h5>
 <div class="form-row">
 <!--	<a href="" class="btn btn-da nger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-<input type="text" placeholder="employee page id" name="id" value="<?php echo $_GET['id'] ?>" required>
-<input type="text" placeholder="apply_vac_dep emp id" name="appid" value="<?php echo $id_vac_get ?>" required>
-<input type="text" placeholder="emp_vacation vac. id" name="arvid" value="<?php echo $id_empvac_get ?>" required readonly >
-<input type="text" placeholder="employee emp_id" name="emp_id" value="<?php echo $emp_id_empvac_get ?>" required readonly >
+<input type="text" placeholder="employee page id" name="id" value="<?=$_GET['id'] ?>" required>
+<input type="text" placeholder="apply_vac_dep emp id" name="appid" value="<?=$id_vac_get ?>" required>
+<input type="text" placeholder="emp_vacation vac. id" name="arvid" value="<?=$id_empvac_get ?>" required readonly >
+<input type="text" placeholder="employee emp_id" name="emp_id" value="<?=$emp_id_empvac_get ?>" required readonly >
 
 	<div class="form-group col-md-12">
 		<label for="arrived_date" class="col-form-label">Return Date<span class="text-danger">*</span></label>
@@ -850,7 +850,7 @@ while ($rec = mysql_fetch_array($query_emp_vac)) {
             $(document).ready(function() {
 
         var buttonConfig = [];
-        var exportTitle = "Name: <?php echo $name_get ?>"
+        var exportTitle = "Name: <?=$name_get ?>"
         buttonConfig.push({extend:'excel',exportOptions: {columns: [ 0, 1, 2, 3, 4, 5, 6, 7 ]} ,title: exportTitle,className: 'btn-success'});
         buttonConfig.push({extend:'pdf',exportOptions: {columns: [ 0, 1, 2, 3, 4, 5, 6, 7 ]} ,title: exportTitle,className: 'btn-danger'});
         buttonConfig.push({extend:'print' ,exportOptions: {columns: [ 0, 1, 2, 3, 4, 5, 6, 7 ]} ,title: exportTitle,className: 'btn-dark'});

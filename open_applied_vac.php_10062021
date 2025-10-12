@@ -135,14 +135,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -185,10 +185,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -229,22 +229,22 @@
                             <div class="col-md-12">
                                 <div class="card-box" id="nodeToRenderAsPDF">
                                     <div class="clearfix">
-                                        <center> <img src="assets/images/logo.png" alt="" height="80"></center>
+                                        <center> <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="80"></center>
                                         <div class="float-right">
-                                            <h4 class="m-0">Vacation for <?php echo $name_get ?></h4>
+                                            <h4 class="m-0">Vacation for <?=$name_get ?></h4>
                                         </div>
                                     </div>
                                     
                                     <div class="row">
                                        	<div class="col-6">
                                        	<div class="card-box">
-											<img src="<?php echo $emp_avatar_get ?>" alt="<?php echo $name_get ?>" class="img-thumbnail" style="height: 160px !important;" />
+											<img src="<?=$emp_avatar_get ?>" alt="<?=$name_get ?>" class="img-thumbnail" style="height: 160px !important;" />
 										</div>
 										</div>
                                        
                                         <div class="col-4 offset-2">
                                             <div class="mt-3 float-right">
-                                                <p class="m-b-13 font-18"><strong>Request Date: </strong> <?php echo $date_reg_vac_get." ". $vac_days_get ?></p>
+                                                <p class="m-b-13 font-18"><strong>Request Date: </strong> <?=$date_reg_vac_get." ". $vac_days_get ?></p>
 												<?php
 													if($status_vac_get == "app_hr"){
 												?>
@@ -277,8 +277,8 @@
 												<p class="m-b-13 font-18"><strong>Request Status: </strong> <span class="badge badge-danger">Vacation Not Approved
 												</span></p>
 												<?php } ?>
-                                                <p class="m-b-10"><strong>Employee ID: </strong> #<?php echo $emp_id_get ?></p>
-                                                <p class="m-b-10"><strong>Request ID: </strong> #<?php echo $_GET['id'] ?></p>
+                                                <p class="m-b-10"><strong>Employee ID: </strong> #<?=$emp_id_get ?></p>
+                                                <p class="m-b-10"><strong>Request ID: </strong> #<?=$_GET['id'] ?></p>
                                             </div>
                                         </div><!-- end col -->
                                     </div>
@@ -286,7 +286,7 @@
 									<div class="row">
 										<?php if($status_vac_get == "not_approve"){?>
 										<div class="col-12">
-										<center><h3 class="mt-0 m-b-20" style="color: #F1556C;">Rejection Note: <?php echo ucwords($gm_note_vac_get) ."<br>".ucwords($hr_note_vac_get); ?></h3></center>
+										<center><h3 class="mt-0 m-b-20" style="color: #F1556C;">Rejection Note: <?=ucwords($gm_note_vac_get) ."<br>".ucwords($hr_note_vac_get); ?></h3></center>
 										</div>
 										<?php } ?>
 										<div class="col-6">
@@ -298,25 +298,25 @@
                                         <hr>
 
                                         <div class="text-left">
-                                            <p class="font-15"><strong>Full Name :</strong> <span class="m-l-15"><?php echo $name_get ?></span></p>
-                                            <p class="font-15"><strong>Nationality :</strong> <span class="m-l-15"><?php echo $country_get ?></span></p>
-                                            <p class="font-15"><strong>Department :</strong><span class="m-l-15"><?php echo $dept_get ?></span></p>
-                                            <p class="font-15"><strong>Section :</strong> <span class="m-l-15"><?php echo $sectin_nme_get ?></span></p>
+                                            <p class="font-15"><strong>Full Name :</strong> <span class="m-l-15"><?=$name_get ?></span></p>
+                                            <p class="font-15"><strong>Nationality :</strong> <span class="m-l-15"><?=$country_get ?></span></p>
+                                            <p class="font-15"><strong>Department :</strong><span class="m-l-15"><?=$dept_get ?></span></p>
+                                            <p class="font-15"><strong>Section :</strong> <span class="m-l-15"><?=$sectin_nme_get ?></span></p>
                                             <?php if($vac_type_get <> "Encashed"){?>
-                                            <p class="font-15"><strong>Replacement Person :</strong> <span class="m-l-15"><?php echo $replacement_per_vac_get ?></span></p>
+                                            <p class="font-15"><strong>Replacement Person :</strong> <span class="m-l-15"><?=$replacement_per_vac_get ?></span></p>
                                             <?php } ?>
                                             <?php if($vac_type_get == "Encashed" OR $vac_type_get == "Local Vacation"){?>
-                                            <p class="font-15"><strong>Vacation Salary :</strong> <span class="m-l-15"><?php echo number_format($vacslryfinal_get) ?>/-SAR</span></p>
+                                            <p class="font-15"><strong>Vacation Salary :</strong> <span class="m-l-15"><?=number_format($vacslryfinal_get) ?>/-SAR</span></p>
                                             <?php } ?>
                                             <?php if($fly_type_get == "annual"){ ?>
-											<p class="font-15"><strong>Vacation Salary :</strong> <span class="m-l-15"><?php echo $vacslryfinal_get ?>/-SAR</span></p>
+											<p class="font-15"><strong>Vacation Salary :</strong> <span class="m-l-15"><?=$vacslryfinal_get ?>/-SAR</span></p>
                                             <?php if($country_get <> "Saudi Arabia" OR $vac_type_get <> "Local Vacation"){?>
-                                            <p class="font-15"><strong>Ticket Fares :</strong> <span class="m-l-15"><?php echo $ticket_pay_vac_get ?>/-SAR</span></p>
-                                            <p class="font-15"><strong>Exit Re-Entry Permit Fee :</strong> <span class="m-l-15"><?php echo $permit_fee_vac_get ?>/-SAR</span></p>
+                                            <p class="font-15"><strong>Ticket Fares :</strong> <span class="m-l-15"><?=$ticket_pay_vac_get ?>/-SAR</span></p>
+                                            <p class="font-15"><strong>Exit Re-Entry Permit Fee :</strong> <span class="m-l-15"><?=$permit_fee_vac_get ?>/-SAR</span></p>
                                             <?php } ?>
                                             <?php } ?>
 											<?php if($country_get == "Saudi Arabia"){ ?>
-											<p class="font-15"><strong>GOSI Deduction :</strong><span class="m-l-15 badge badge-danger">-<?php echo number_format($vacslrygosi_get) ?>/-SAR</span></p>
+											<p class="font-15"><strong>GOSI Deduction :</strong><span class="m-l-15 badge badge-danger">-<?=number_format($vacslrygosi_get) ?>/-SAR</span></p>
 											<?php } ?>
                                         </div>
                                     </div>
@@ -330,22 +330,22 @@
 
                                         <div class="text-left">
 											<?php if($fly_type_get == "emergency"){ ?>
-											<p class="font-15 badge badge-danger"><strong>Vacation Date :</strong> <span class="m-l-15"><?php echo $vac_strt_date_vac_get ?></span></p>
+											<p class="font-15 badge badge-danger"><strong>Vacation Date :</strong> <span class="m-l-15"><?=$vac_strt_date_vac_get ?></span></p>
 											<?php }else{ ?>
-											<p class="font-15 badge badge-primary"><strong>Vacation Date :</strong> <span class="m-l-15"><?php echo $vac_strt_date_vac_get ?></span></p>
+											<p class="font-15 badge badge-primary"><strong>Vacation Date :</strong> <span class="m-l-15"><?=$vac_strt_date_vac_get ?></span></p>
                                         	<?php }?>
                                            	<?php if($vac_type_get <> "Encashed"){ ?>
-                                            <p class="font-15"><strong>Return Before :</strong><span class="m-l-15"><?php echo $return_date_vac_get ?></span></p>
-                                            <p class="font-15"><strong>Days of Vacation :</strong> <span class="m-l-15"><?php echo $vacdays ?> Days</span></p>
+                                            <p class="font-15"><strong>Return Before :</strong><span class="m-l-15"><?=$return_date_vac_get ?></span></p>
+                                            <p class="font-15"><strong>Days of Vacation :</strong> <span class="m-l-15"><?=$vacdays ?> Days</span></p>
                                             <?php } ?>
-                                            <p class="font-15"><strong>Next Vacation :</strong> <span class="m-l-15"><?php echo $next_vac_date_vac_get ?></span></p>
-                                            <p class="font-15"><strong>Last Vacation :</strong> <span class="m-l-15"><?php echo $last_vac_date_vac_get ?></span></p>
-                                            <p class="font-15"><strong>Joining Date :</strong> <span class="m-l-15"><?php echo $joining_date_get ?></span></p>
+                                            <p class="font-15"><strong>Next Vacation :</strong> <span class="m-l-15"><?=$next_vac_date_vac_get ?></span></p>
+                                            <p class="font-15"><strong>Last Vacation :</strong> <span class="m-l-15"><?=$last_vac_date_vac_get ?></span></p>
+                                            <p class="font-15"><strong>Joining Date :</strong> <span class="m-l-15"><?=$joining_date_get ?></span></p>
                                             <?php if($gm_note_vac_get !== ""){ ?>
-                                            <p class="font-15"><strong>General Manager Note :</strong> <span class="m-l-15"><?php echo $gm_note_vac_get ?></span></p>
+                                            <p class="font-15"><strong>General Manager Note :</strong> <span class="m-l-15"><?=$gm_note_vac_get ?></span></p>
                                             <?php } ?>
 											<?php if($hr_note_vac_get !== ""){ ?>
-                                            <p class="font-15"><strong>HR Note :</strong> <span class="m-l-15"><?php echo $hr_note_vac_get ?></span></p>
+                                            <p class="font-15"><strong>HR Note :</strong> <span class="m-l-15"><?=$hr_note_vac_get ?></span></p>
                                             <?php } ?>
                                         </div>
 
@@ -360,8 +360,8 @@
                                            <?php if($fly_type_get == "annual" OR $vac_type_get == "Encashed" OR $vac_type_get == "Local Vacation"){ ?>
                                             <div class="float-right">
                                                 <p><b>Total Payment for Vacation:</p>
-                                                <?php /*?><h3>SR <?php echo number_format((float)$total_pay_vac, 2, '.', '') ?> SAR</h3><?php */?>
-                                                <h3>SR <?php echo number_format($total_pay_vac); ?> SAR</h3>
+                                                <?php /*?><h3>SR <?=number_format((float)$total_pay_vac, 2, '.', '') ?> SAR</h3><?php */?>
+                                                <h3>SR <?=number_format($total_pay_vac); ?> SAR</h3>
                                             </div>
                                             <?php } else { ?>
                                              <div class="float-right">
@@ -392,7 +392,7 @@
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -415,15 +415,15 @@
 			</div>
 			<div class="modal-body">
 				<h3>You need to Approve!</h3>
-				<h4><strong style="font-size: 30px; "><?php echo $name_get ?></strong></h4>
+				<h4><strong style="font-size: 30px; "><?=$name_get ?></strong></h4>
 <div class="form-row" id="content" style="display:none;">
 
 <!--	<a href="" class="btn btn-danger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-<input type="hidden" name="id" value="<?php echo $_GET['id'] ?>" >
+<input type="hidden" name="id" value="<?=$_GET['id'] ?>" >
 <input type="hidden" name="status" value="not_approve" >
-<input type="hidden" name="appid" value="<?php echo $id_vac_get ?>" >
-<input type="hidden" name="empidnoapp" value="<?php echo $emp_id_get ?>" >
-<input type="hidden" name="reviewnoapp" value="<?php echo $review_vac_get ?>" >
+<input type="hidden" name="appid" value="<?=$id_vac_get ?>" >
+<input type="hidden" name="empidnoapp" value="<?=$emp_id_get ?>" >
+<input type="hidden" name="reviewnoapp" value="<?=$review_vac_get ?>" >
 	<div class="input-group">
 		<input type="text" id="ter_note" name="note" class="form-control" aria-describedby="basic-addon2">
 		<div class="input-group-append">
@@ -436,7 +436,7 @@
 			<div class="modal-footer">
 				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
 				<button type="button" id="terminat_emp" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-off"></i> Not Approve</button>
-				<a href="./includes/vac_app_emp.php?id=<?php echo $_GET['id'] ?>&status=approve&empidnoapp=<?php echo $emp_id_get ?>&reviewnoapp=<?php echo $review_vac_get ?>" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-account-star"></i> Approved</a>			
+				<a href="./includes/vac_app_emp.php?id=<?=$_GET['id'] ?>&status=approve&empidnoapp=<?=$emp_id_get ?>&reviewnoapp=<?=$review_vac_get ?>" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-account-star"></i> Approved</a>			
 				
 			</div>
 		</div><!-- /.modal-content -->

@@ -6,14 +6,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -81,7 +81,7 @@
                                 <div class="card-box">
                                     <h4 class="m-t-0 header-title">Please Enter your Mochachino Employee ID.</h4>
                                     <form action="vacation_details_sch.php" method="get">
-										<?php echo $msg; ?>
+										<?=$msg; ?>
                                         <div class="form-row">
 											<div class="form-group col-md-12">
                                                 <label for="emp_id" class="col-form-label">Please Enter your Employee ID.<span class="text-danger">*</span></label>
@@ -106,7 +106,7 @@
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

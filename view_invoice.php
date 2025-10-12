@@ -53,14 +53,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - <?php echo $name_mach ?></title>
+        <title><?=$site_title ?> - <?=$name_mach ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -92,10 +92,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -135,13 +135,13 @@
 				<div class="col-md-12">
 					
 						<div class="card-box">	
-								<?php echo $msg ?>
+								<?=$msg ?>
                                     <div class="clearfix">
                                         <div class="float-left mb-3">
-                                            <img src="assets/images/logo.png" alt="" height="50">
+                                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="50">
                                         </div>
                                         <div class="float-right">
-                                            <h4 class="m-0 d-print-none">Items adding of "<?php echo $name_mach ?>"</h4>
+                                            <h4 class="m-0 d-print-none">Items adding of "<?=$name_mach ?>"</h4>
                                         </div>
                                     </div>
 
@@ -149,11 +149,11 @@
                                     <div class="row">
                                         <div class="col-6 ">
                                             <div class="mt-3 float-left">
-                                                <p class="m-b-10"><strong>Invoice Date: </strong><?php echo date("d F Y") ?></p>
-                                                <p class="m-b-10"><strong>Invoice No.: </strong><?php echo $_GET['invo'] ?></p>
-                                                <p class="m-b-10"><strong>Machine ID: </strong>	<?php echo $macid ?> (<?php echo $name_mach ?>) </p>
-                                                <p class="m-b-10"><strong>Invoice Location: </strong><?php echo $new_location_invo ?></p>
-                                                <p class="m-b-10"><strong>Current Location: </strong> <span class="badge badge-success"><?php echo $old_location ?></span></p>
+                                                <p class="m-b-10"><strong>Invoice Date: </strong><?=date("d F Y") ?></p>
+                                                <p class="m-b-10"><strong>Invoice No.: </strong><?=$_GET['invo'] ?></p>
+                                                <p class="m-b-10"><strong>Machine ID: </strong>	<?=$macid ?> (<?=$name_mach ?>) </p>
+                                                <p class="m-b-10"><strong>Invoice Location: </strong><?=$new_location_invo ?></p>
+                                                <p class="m-b-10"><strong>Current Location: </strong> <span class="badge badge-success"><?=$old_location ?></span></p>
                                             </div>
                                         </div><!-- end col -->
                                     </div>
@@ -187,11 +187,11 @@
 
                                                     ?>
                                                     <tr>
-                                                        <td><?php echo $x++; ?></td>
-                                                        <td><b><?php echo $item; ?></b></td>
-                                                        <td><?php echo $qty; ?></td>
-                                                        <td><?php echo $price; ?></td>
-                                                        <td class="text-right"><?php echo $subtotal ?></td>
+                                                        <td><?=$x++; ?></td>
+                                                        <td><b><?=$item; ?></b></td>
+                                                        <td><?=$qty; ?></td>
+                                                        <td><?=$price; ?></td>
+                                                        <td class="text-right"><?=$subtotal ?></td>
                                                     </tr>
                                                     <?php } ?>
                                                     </tbody>
@@ -219,16 +219,16 @@
                                         </div>
                                         <div class="col-6">
                                             <div class="float-right">
-                                           		<p><b>Sub-total:</b> <?php echo $gtotal ?></p>
-                                                <p><b>VAT (%15):</b> <?php echo $vatval; ?></p>
-                                                <h3><?php echo $gtotal + $vatval; ?> SAR</h3>
+                                           		<p><b>Sub-total:</b> <?=$gtotal ?></p>
+                                                <p><b>VAT (%15):</b> <?=$vatval; ?></p>
+                                                <h3><?=$gtotal + $vatval; ?> SAR</h3>
                                             <div class="clearfix"></div>
                                         </div>
                                     </div>
 
                                     <div class="hidden-print mt-4 mb-4">
                                         <div class="btn-group text-right" role="group" aria-label="Invoice">
-										<a href="view_machine.php?id=<?php echo $_GET['id'] ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+										<a href="view_machine.php?id=<?=$_GET['id'] ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
 										<a href="javascript:window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print m-r-5"></i> Print</a>
 										</div>
                                     </div>
@@ -242,7 +242,7 @@
 	</div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

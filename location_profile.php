@@ -136,14 +136,14 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -187,10 +187,10 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -227,7 +227,7 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
                             <div class="col-md-12">
                                 <div class="card-box" id="nodeToRenderAsPDF">
                                     <div class="clearfix">
-                                            <center><img src="assets/images/logo.png" alt="" height="80"></center>
+                                            <center><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="80"></center>
 										
                                        
                                     </div>
@@ -235,14 +235,14 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
                                     <div class="row">
                                        	<div class="col-6">
                                        	<div class="card-box">
-											<img src="<?php echo $in_img ?>" alt="<?php echo $section_name ?>" class="img-thumbnail" style="height: 160px !important; margin-left: 15px !important;" />
-											<img src="<?php echo $out_img ?>" alt="<?php echo $section_name ?>" class="img-thumbnail" style="height: 160px !important; margin-left: 15px !important;" />
+											<img src="<?=$in_img ?>" alt="<?=$section_name ?>" class="img-thumbnail" style="height: 160px !important; margin-left: 15px !important;" />
+											<img src="<?=$out_img ?>" alt="<?=$section_name ?>" class="img-thumbnail" style="height: 160px !important; margin-left: 15px !important;" />
 										</div>
 										</div>
 										<div class="col-6">
                                        	<div class="card-box float-right">
-                                       		<h4 class="m-0 text-right">Profile for <?php echo $section_name ?></h4>
-											<img src="qrconfig_geo_location.php?glocation=<?php echo $latitude.",".$longitude ?>" alt="<?php echo $section_name ?>" class="img-thumbnail" style="height: 160px !important; margin-left: 15px !important;" />
+                                       		<h4 class="m-0 text-right">Profile for <?=$section_name ?></h4>
+											<img src="qrconfig_geo_location.php?glocation=<?=$latitude.",".$longitude ?>" alt="<?=$section_name ?>" class="img-thumbnail" style="height: 160px !important; margin-left: 15px !important;" />
 										</div>
 										</div>
 										
@@ -263,52 +263,52 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
 			<tbody>
 			<tr>
 				<th>Name of Location:</th>
-				<td><?php echo $section_name; ?></td>
+				<td><?=$section_name; ?></td>
 				<th>Total Bulding Size <small>(in Metters)</small>:</th>
-				<td><?php echo $t_bulding_size; ?></td>
+				<td><?=$t_bulding_size; ?></td>
 			</tr>
 			<tr>
 				<th>Balady License No.:</th>
-				<td><?php echo $b_license_no; ?></td>
+				<td><?=$b_license_no; ?></td>
 				<th>Balady License Expiry <small>(in Hijri)</small>:</th>
-				<td><?php echo $b_license_exp; ?><span class="badge badge-info float-right"><?php echo $DateConv->HijriToGregorian($b_license_exp, $format); ?></span></td>
+				<td><?=$b_license_exp; ?><span class="badge badge-info float-right"><?=$DateConv->HijriToGregorian($b_license_exp, $format); ?></span></td>
 			</tr>
 			<tr>
 				<th>Municipality:</th>
-				<td><?php echo ucfirst($municipality); ?></td>
+				<td><?=ucfirst($municipality); ?></td>
 				<th>Sub-Municipality:</th>
-				<td><?php echo ucfirst($sub_municipality); ?></td>
+				<td><?=ucfirst($sub_municipality); ?></td>
 			</tr>
 			<tr>
 				<th>Address:</th>
-				<td><?php echo $location_name; ?></td>
+				<td><?=$location_name; ?></td>
 				<th>District:</th>
-				<td><?php echo $location_dist; ?></td>
+				<td><?=$location_dist; ?></td>
 			</tr>
 			<tr>
 				<th>Bulding Base.:</th>
-				<td><?php echo $bulding_base; ?></td>
+				<td><?=$bulding_base; ?></td>
 				<th>Bulding Size <small>(L * W)</small>:</th>
-				<td><?php echo $bulding_size; ?></td>
+				<td><?=$bulding_size; ?></td>
 			</tr>
 			<tr>
 				<th>Camera Inside.:</th>
-				<td><?php echo $camera_in; ?></td>
+				<td><?=$camera_in; ?></td>
 				<th>Camera Outside.:</th>
-				<td><?php echo $camera_out; ?></td>
+				<td><?=$camera_out; ?></td>
 			</tr>
 			<tr>
 				<th>Latitude:</th>
-				<td><?php echo $latitude; ?></td>
+				<td><?=$latitude; ?></td>
 				<th>Longitude:</th>
-				<td><?php echo $longitude; ?></td>
+				<td><?=$longitude; ?></td>
 			</tr>
 
 			<?php /* if($emp_status_get == "no"){ ?>
 			<tfoot class="thead-danger">
 				<tr style="background: #F1556C;">
 					<th>Termination Date:</th>
-					<td><?php echo $ter_date_get; ?></td>
+					<td><?=$ter_date_get; ?></td>
 					<th>Termination Reason(s):</th>
 					<td><?php if($ter_note_get <> ""){echo $ter_note_get;}else{echo "No termination note";} ?></td>
 				</tr>
@@ -328,21 +328,21 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
 			<tbody>
 			<tr>
 				<th>Owner of Location:</th>
-				<td><?php echo $owner_name; ?></td>
+				<td><?=$owner_name; ?></td>
 				<th>Location Contact No:</th>
-				<td><?php echo $owner_number; ?></td>
+				<td><?=$owner_number; ?></td>
 			</tr>
 			<tr>
 				<th>Owner Email:</th>
-				<td><?php echo $owner_email; ?></td>
+				<td><?=$owner_email; ?></td>
 				<th>Contract No:</th>
-				<td><?php echo $contract_no; ?></td>
+				<td><?=$contract_no; ?></td>
 			</tr>
 			<tr>
 				<th>Contract Start <small>(in Hijri)</small>:</th>
-				<td><?php echo $start_cont_date; ?><span class="badge badge-info float-right"><?php echo $DateConv->HijriToGregorian($start_cont_date, $format); ?></span></td>
+				<td><?=$start_cont_date; ?><span class="badge badge-info float-right"><?=$DateConv->HijriToGregorian($start_cont_date, $format); ?></span></td>
 				<th>Contract End <small>(in Hijri)</small>:</th>
-				<td><?php echo $end_cont_date; ?><span class="badge badge-info float-right"><?php echo $DateConv->HijriToGregorian($end_cont_date, $format); ?></span>
+				<td><?=$end_cont_date; ?><span class="badge badge-info float-right"><?=$DateConv->HijriToGregorian($end_cont_date, $format); ?></span>
 				</td>
 			</tr>
 			</tbody>
@@ -354,27 +354,27 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
 			
 			<tr>
 				<th>Amount of Rent:</th>
-				<td><?php echo number_format($rent, 2); ?> - SAR</td>
+				<td><?=number_format($rent, 2); ?> - SAR</td>
 				<th>Amount of Service:</th>
-				<td><?php echo number_format($service ,2); ?> - SAR</td>
+				<td><?=number_format($service ,2); ?> - SAR</td>
 			</tr>
 			<tr>
 				<th>Amount of Electric City:</th>
-				<td><?php echo number_format($elect_prc, 2); ?> - SAR</td>
+				<td><?=number_format($elect_prc, 2); ?> - SAR</td>
 				<th>Amount of Water:</th>
-				<td><?php echo number_format($water_prc, 2); ?> - SAR</td>
+				<td><?=number_format($water_prc, 2); ?> - SAR</td>
 			</tr>
 			<tr>
 				<th>Amount of Incuranse:</th>
-				<td><?php echo number_format($incuranse_prc, 2); ?> - SAR</td>
+				<td><?=number_format($incuranse_prc, 2); ?> - SAR</td>
 				<th>Others:</th>
-				<td><?php echo number_format($others, 2); ?> - SAR</td>
+				<td><?=number_format($others, 2); ?> - SAR</td>
 			</tr>
 			<tr>
 				<th>Total VAT <small>(15%)</small> :</th>
-				<td><?php echo number_format($totvat, 2); ?> - SAR</td>
+				<td><?=number_format($totvat, 2); ?> - SAR</td>
 				<th>Total Amount with VAT <small>(15%)</small> :</th>
-				<td><?php echo number_format($tamount + $totvat, 2); ?> - SAR</td>
+				<td><?=number_format($tamount + $totvat, 2); ?> - SAR</td>
 			</tr>
 			</tbody>
 		</table>
@@ -396,7 +396,7 @@ WHERE `section`.`id` ='".$_GET['location_id']."'
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

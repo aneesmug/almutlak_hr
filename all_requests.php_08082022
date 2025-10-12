@@ -30,14 +30,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -81,10 +81,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -280,28 +280,28 @@ if($_SESSION['user_type'] == "administrator"){
     
 ?>
                 <tr>
-                    <th><?php echo $idno; ?></th>
-                    <th><?php echo $inv_no_get; ?></th>
-                    <th><?php echo $sub_title_get; ?></th>
-                    <th><?php echo $sub_type_get; ?></th>
-                    <th><?php echo $department_get; ?></th>
-                    <th><?php echo $prep_by_get; ?></th>
-                    <th><?php echo $date_reg; ?></th>
-                    <th><?php echo $status_get; ?></th>
+                    <th><?=$idno; ?></th>
+                    <th><?=$inv_no_get; ?></th>
+                    <th><?=$sub_title_get; ?></th>
+                    <th><?=$sub_type_get; ?></th>
+                    <th><?=$department_get; ?></th>
+                    <th><?=$prep_by_get; ?></th>
+                    <th><?=$date_reg; ?></th>
+                    <th><?=$status_get; ?></th>
 
                     <th>
                     <div class="btn-group" role="group" aria-label="Edit Button">
-                        <a href="./open_request.php?id=<?php echo $inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
+                        <a href="./open_request.php?id=<?=$inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
                             <i class="mdi mdi-eye-outline"></i>
                         </a>
                         <?php if ($_SESSION['user_dept'] == 'Finance'):?>
-                        <a href="javascript:void(0);" class="btn btn-sm btn-info waves-effect addNoteAttr" data-toggle="modal" data-target="#noteModuleModal" data-backdrop="static" data-id="<?php echo $inv_no_get ?>" data-emp_id="<?php echo $empid ?>" data-emp_name="<?php echo $userwel ?>">
+                        <a href="javascript:void(0);" class="btn btn-sm btn-info waves-effect addNoteAttr" data-toggle="modal" data-target="#noteModuleModal" data-backdrop="static" data-id="<?=$inv_no_get ?>" data-emp_id="<?=$empid ?>" data-emp_name="<?=$userwel ?>">
                             <i class="mdi mdi-pencil"></i>
                         </a>
                         <?php endif; ?>
 
                         <?php if($user_type == $access1){ ?>
-                        <a href="./includes/smt_delete.php?id=<?php echo $inv_no_get ?>"  class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this item?');">
+                        <a href="./includes/smt_delete.php?id=<?=$inv_no_get ?>"  class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this item?');">
                             <i class="dripicons-cross"></i>
                         </a>
                         <?php } ?>
@@ -442,18 +442,18 @@ if($_SESSION['user_type'] == "administrator"){
     
 ?>
                 <tr>
-                    <th><?php echo $idno; ?></th>
-                    <th><?php echo $inv_no_get; ?></th>
-                    <th><?php echo $sub_title_get; ?></th>
-                    <th><?php echo $sub_type_get; ?></th>
-                    <th><?php echo $department_get; ?></th>
-                    <th><?php echo $prep_by_get; ?></th>
-                    <th><?php echo $date_reg; ?></th>
-                    <th><?php echo $status_get; ?></th>
+                    <th><?=$idno; ?></th>
+                    <th><?=$inv_no_get; ?></th>
+                    <th><?=$sub_title_get; ?></th>
+                    <th><?=$sub_type_get; ?></th>
+                    <th><?=$department_get; ?></th>
+                    <th><?=$prep_by_get; ?></th>
+                    <th><?=$date_reg; ?></th>
+                    <th><?=$status_get; ?></th>
 
                     <th>
                     <div class="btn-group" role="group" aria-label="Edit Button">
-                        <a href="./open_request.php?id=<?php echo $inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
+                        <a href="./open_request.php?id=<?=$inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
                             <i class="mdi mdi-eye-outline"></i>
                         </a>
 
@@ -592,19 +592,19 @@ if($_SESSION['user_type'] == "administrator"){
     
 ?>
                 <tr>
-                    <th><?php echo $idno; ?></th>
-                    <th><?php echo $inv_no_get; ?></th>
-                    <th><?php echo $sub_title_get; ?></th>
-                    <th><?php echo $sub_type_get; ?></th>
-                    <th><?php echo $department_get; ?></th>
-                    <th><?php echo $prep_by_get; ?></th>
-                    <th><?php echo $note_get; ?></th>
-                    <th><?php echo $date_reg; ?></th>
-                    <th><?php echo $status_get; ?></th>
+                    <th><?=$idno; ?></th>
+                    <th><?=$inv_no_get; ?></th>
+                    <th><?=$sub_title_get; ?></th>
+                    <th><?=$sub_type_get; ?></th>
+                    <th><?=$department_get; ?></th>
+                    <th><?=$prep_by_get; ?></th>
+                    <th><?=$note_get; ?></th>
+                    <th><?=$date_reg; ?></th>
+                    <th><?=$status_get; ?></th>
 
                     <th>
                     <div class="btn-group" role="group" aria-label="Edit Button">
-                        <a href="./open_request.php?id=<?php echo $inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
+                        <a href="./open_request.php?id=<?=$inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
                             <i class="mdi mdi-eye-outline"></i>
                         </a>
 
@@ -749,19 +749,19 @@ if($_SESSION['user_type'] == "administrator"){
     
 ?>
                 <tr>
-                    <th><?php echo $idno; ?></th>
-                    <th><?php echo $inv_no_get; ?></th>
-                    <th><?php echo $sub_title_get; ?></th>
-                    <th><?php echo $sub_type_get; ?></th>
-                    <th><?php echo $department_get; ?></th>
-                    <th><?php echo $prep_by_get; ?></th>
-                    <th><?php echo $note_get; ?></th>
-                    <th><?php echo $date_reg; ?></th>
-                    <th><?php echo $status_get; ?></th>
+                    <th><?=$idno; ?></th>
+                    <th><?=$inv_no_get; ?></th>
+                    <th><?=$sub_title_get; ?></th>
+                    <th><?=$sub_type_get; ?></th>
+                    <th><?=$department_get; ?></th>
+                    <th><?=$prep_by_get; ?></th>
+                    <th><?=$note_get; ?></th>
+                    <th><?=$date_reg; ?></th>
+                    <th><?=$status_get; ?></th>
 
                     <th>
                     <div class="btn-group" role="group" aria-label="Edit Button">
-                        <a href="./open_request.php?id=<?php echo $inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
+                        <a href="./open_request.php?id=<?=$inv_no_get ?>" class="btn btn-sm btn-dark waves-effect">
                             <i class="mdi mdi-eye-outline"></i>
                         </a>
 
@@ -788,7 +788,7 @@ if($_SESSION['user_type'] == "administrator"){
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -804,7 +804,7 @@ if($_SESSION['user_type'] == "administrator"){
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <section class="contact-form">
-                <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+                <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
                     <div class="modal-header">
                         <h4 class="modal-title" id="myModalLabel17">Add Notes</h4>
                         <button type="button" class="close" data-dismiss="modal" aria-label="Close">

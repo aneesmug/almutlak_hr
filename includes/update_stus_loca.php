@@ -147,14 +147,14 @@ function gjCountAndRedirect(secounds, url) {
     if (secounds == 0) {
       clearInterval(interval);
       	//window.location = url;
-      	window.location = '<?php echo $loc_red ?>';
+      	window.location = '<?=$loc_red ?>';
       $('#gj-counter-box').hide();
     }
   }, 1000);
   $('#gj-counter-box').click(function() {
     clearInterval(interval);
     //window.location = url;
-	  window.location = '<?php echo $loc_red ?>';
+	  window.location = '<?=$loc_red ?>';
   });
 }
 // USE EXAMPLE
@@ -171,7 +171,7 @@ $(document).ready(function() {
 	<div class="row">
      <br><br>
 		<div class="error-notice">
-          <?php echo $error ?>
+          <?=$error ?>
         </div>
 	</div>
 </div>

@@ -30,14 +30,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -81,10 +81,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -129,27 +129,27 @@
 
 	<li class="nav-item">
 		<a href="#NewApplied" data-toggle="tab" aria-expanded="true" class="nav-link active show">
-			<i class="mdi mdi-account-star mr-2"></i>New Applied Vacation's <span class="badge badge-custom float-right"><?php echo $status_cont_apply ?></span>
+			<i class="mdi mdi-account-star mr-2"></i>New Applied Vacation's <span class="badge badge-custom float-right"><?=$status_cont_apply ?></span>
 		</a>
 	</li>
 	<li class="nav-item app_hr">
 		<a href="#app_hr" data-toggle="tab" aria-expanded="false" class="nav-link">
-			<i class="mdi mdi-account-convert mr-2"></i>Approved from HR <span class="badge badge-warning float-right"><?php echo $status_cont_app_hr ?></span>
+			<i class="mdi mdi-account-convert mr-2"></i>Approved from HR <span class="badge badge-warning float-right"><?=$status_cont_app_hr ?></span>
 		</a>
 	</li>
 	<li class="nav-item approved_vac">
 		<a href="#approved" data-toggle="tab" aria-expanded="false" class="nav-link">
-			<i class="mdi mdi-account-check mr-2"></i>Approved <span class="badge badge-success float-right"><?php echo $status_cont_approve ?></span>
+			<i class="mdi mdi-account-check mr-2"></i>Approved <span class="badge badge-success float-right"><?=$status_cont_approve ?></span>
 		</a>
 	</li>
 	<li class="nav-item rejected_vac">
 		<a href="#rejected" data-toggle="tab" aria-expanded="false" class="nav-link">
-			<i class="mdi mdi-account-off mr-2"></i>Rejected <span class="badge badge-danger float-right"><?php echo $status_cont_not_approve ?></span>
+			<i class="mdi mdi-account-off mr-2"></i>Rejected <span class="badge badge-danger float-right"><?=$status_cont_not_approve ?></span>
 		</a>
 	</li>
 	<li class="nav-item">
 		<a href="#allvacapp" data-toggle="tab" aria-expanded="false" class="nav-link">
-			<i class="mdi mdi-all-inclusive mr-2"></i>All Registerd Vacations <span class="badge badge-custom float-right"><?php echo $status_cont_all_reg ?></span>
+			<i class="mdi mdi-all-inclusive mr-2"></i>All Registerd Vacations <span class="badge badge-custom float-right"><?=$status_cont_all_reg ?></span>
 		</a>
 	</li>
 
@@ -202,12 +202,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 	
 ?>
 				<tr>
-					<td><?php echo $emp_id_usr ?></td>
-					<td><?php echo $emp_name_usr ?></td>
-					<td><?php echo $dept_usr ?></td>
-					<td><?php echo ucfirst($vac_type_apl_usr); ?></td>
-					<td><?php echo $datevac_apl ?></td>
-					<td><?php echo $id_user_usr ?></td>
+					<td><?=$emp_id_usr ?></td>
+					<td><?=$emp_name_usr ?></td>
+					<td><?=$dept_usr ?></td>
+					<td><?=ucfirst($vac_type_apl_usr); ?></td>
+					<td><?=$datevac_apl ?></td>
+					<td><?=$id_user_usr ?></td>
 					<td>
 					<div class="btn-group" role="group" aria-label="Edit Button">
 						<?php
@@ -216,10 +216,10 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 						<?php if($user_type == "dept_user"){ ?>
 							<a class="btn btn-sm btn-warning waves-effect"><i class="dripicons-hourglass"></i> Waiting from HR</a>
 						<?php }else{ ?>
-							<a href="./open_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
+							<a href="./open_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
 								<i class="mdi mdi-folder-plus"></i><?php if($vac_type_apl_usr == 'emergency'){echo " Emergency Vacation";}else{echo " Add Details";}?>
 							</a>
-							<a href="./includes/vac_app_emp.php?id=<?php echo $id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
+							<a href="./includes/vac_app_emp.php?id=<?=$id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
 								<i class="dripicons-wrong"></i> Reject
 							</a>
 						<?php } ?>
@@ -229,12 +229,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								<i class="mdi mdi-chevron-double-right"></i> FWD. to Management
 							</a>
 						<?php }else{ ?>
-							<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
+							<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
 								<i class="dripicons-hourglass"></i> Waiting from GM
 							</a>
 						<?php } ?>
 						<?php }elseif($status_usr == "approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
 							<i class="dripicons-checkmark"></i> Approved
 						</a>
 						<?php
@@ -242,20 +242,20 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								if($user_type <> "dept_user"){
 								if($fly_get <> "yes"){
 						?>
-						<a href="./add_vac_emp.php?id=<?php echo $empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
+						<a href="./add_vac_emp.php?id=<?=$empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
 							<i class="dripicons-rocket"></i> Add Vacation
 						</a>
-						<a href="./open_edit_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
+						<a href="./open_edit_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
 							<i class="mdi mdi-calendar-clock"></i> Edit
 						</a>
 						<?php } } } ?>
 						<?php }elseif($status_usr == "not_approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="mdi mdi-eye-outline"></i> Not Approved
 						</a>
 						<?php } ?>
 						<?php if($user_type == $access1){ ?>
-						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?php echo $id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?=$id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="dripicons-cross"></i>
 						</a>
 					<?php } ?>
@@ -311,12 +311,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 	
 ?>
 				<tr>
-					<td><?php echo $emp_id_usr ?></td>
-					<td><?php echo $emp_name_usr ?></td>
-					<td><?php echo $dept_usr ?></td>
-					<td><?php echo ucfirst($vac_type_apl_usr); ?></td>
-					<td><?php echo $datevac_apl ?></td>
-					<td><?php echo $id_user_usr ?></td>
+					<td><?=$emp_id_usr ?></td>
+					<td><?=$emp_name_usr ?></td>
+					<td><?=$dept_usr ?></td>
+					<td><?=ucfirst($vac_type_apl_usr); ?></td>
+					<td><?=$datevac_apl ?></td>
+					<td><?=$id_user_usr ?></td>
 					<td>
 					<div class="btn-group" role="group" aria-label="Edit Button">
 						<?php
@@ -325,10 +325,10 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 						<?php if($user_type == "dept_user"){ ?>
 							<a class="btn btn-sm btn-warning waves-effect"><i class="dripicons-hourglass"></i> Waiting from HR</a>
 						<?php }else{ ?>
-							<a href="./open_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
+							<a href="./open_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
 								<i class="mdi mdi-folder-plus"></i><?php if($vac_type_apl_usr == 'emergency'){echo " Emergency Vacation";}else{echo " Add Details";}?>
 							</a>
-							<a href="./includes/vac_app_emp.php?id=<?php echo $id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
+							<a href="./includes/vac_app_emp.php?id=<?=$id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
 								<i class="dripicons-wrong"></i> Reject
 							</a>
 						<?php } ?>
@@ -338,12 +338,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								<i class="mdi mdi-chevron-double-right"></i> FWD. to Management
 							</a>
 						<?php }else{ ?>
-							<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
+							<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
 								<i class="dripicons-hourglass"></i> Waiting from GM
 							</a>
 						<?php } ?>
 						<?php }elseif($status_usr == "approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
 							<i class="dripicons-checkmark"></i> Approved
 						</a>
 						<?php
@@ -351,21 +351,21 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								if($user_type <> "dept_user"){
 								if($fly_get <> "yes"){
 						?>
-						<a href="./add_vac_emp.php?id=<?php echo $empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
+						<a href="./add_vac_emp.php?id=<?=$empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
 							<i class="dripicons-rocket"></i> Add Vacation
 						</a>
-						<a href="./open_edit_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
+						<a href="./open_edit_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
 							<i class="mdi mdi-calendar-clock"></i> Edit
 						</a>
 						<?php } } } ?>
 						<?php }elseif($status_usr == "not_approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="mdi mdi-eye-outline"></i> Not Approved
 						</a>
 
 						<?php } ?>
 						<?php if($user_type == $access1){ ?>
-						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?php echo $id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?=$id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="dripicons-cross"></i>
 						</a>
 					<?php } ?>
@@ -421,12 +421,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 	
 ?>
 				<tr>
-					<td><?php echo $emp_id_usr ?></td>
-					<td><?php echo $emp_name_usr ?></td>
-					<td><?php echo $dept_usr ?></td>
-					<td><?php echo ucfirst($vac_type_apl_usr); ?></td>
-					<td><?php echo $datevac_apl ?></td>
-					<td><?php echo $id_user_usr ?></td>
+					<td><?=$emp_id_usr ?></td>
+					<td><?=$emp_name_usr ?></td>
+					<td><?=$dept_usr ?></td>
+					<td><?=ucfirst($vac_type_apl_usr); ?></td>
+					<td><?=$datevac_apl ?></td>
+					<td><?=$id_user_usr ?></td>
 					<td>
 					<div class="btn-group" role="group" aria-label="Edit Button">
 						<?php
@@ -435,10 +435,10 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 						<?php if($user_type == "dept_user"){ ?>
 							<a class="btn btn-sm btn-warning waves-effect"><i class="dripicons-hourglass"></i> Waiting from HR</a>
 						<?php }else{ ?>
-							<a href="./open_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
+							<a href="./open_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
 								<i class="mdi mdi-folder-plus"></i><?php if($vac_type_apl_usr == 'emergency'){echo " Emergency Vacation";}else{echo " Add Details";}?>
 							</a>
-							<a href="./includes/vac_app_emp.php?id=<?php echo $id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
+							<a href="./includes/vac_app_emp.php?id=<?=$id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
 								<i class="dripicons-wrong"></i> Reject
 							</a>
 						<?php } ?>
@@ -448,12 +448,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								<i class="mdi mdi-chevron-double-right"></i> FWD. to Management
 							</a>
 						<?php }else{ ?>
-							<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
+							<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
 								<i class="dripicons-hourglass"></i> Waiting from GM
 							</a>
 						<?php } ?>
 						<?php }elseif($status_usr == "approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
 							<i class="dripicons-checkmark"></i> Approved
 						</a>
 						<?php
@@ -461,21 +461,21 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								if($user_type <> "dept_user"){
 								if($fly_get <> "yes"){
 						?>
-						<a href="./add_vac_emp.php?id=<?php echo $empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
+						<a href="./add_vac_emp.php?id=<?=$empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
 							<i class="dripicons-rocket"></i> Add Vacation
 						</a>
-						<a href="./open_edit_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
+						<a href="./open_edit_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
 							<i class="mdi mdi-calendar-clock"></i> Edit
 						</a>
 						<?php } } } ?>
 						<?php }elseif($status_usr == "not_approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="mdi mdi-eye-outline"></i> Not Approved
 						</a>
 
 						<?php } ?>
 						<?php if($user_type == $access1){ ?>
-						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?php echo $id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?=$id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="dripicons-cross"></i>
 						</a>
 					<?php } ?>
@@ -531,12 +531,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 	
 ?>
 				<tr>
-					<td><?php echo $emp_id_usr ?></td>
-					<td><?php echo $emp_name_usr ?></td>
-					<td><?php echo $dept_usr ?></td>
-					<td><?php echo ucfirst($vac_type_apl_usr); ?></td>
-					<td><?php echo $datevac_apl ?></td>
-					<td><?php echo $id_user_usr ?></td>
+					<td><?=$emp_id_usr ?></td>
+					<td><?=$emp_name_usr ?></td>
+					<td><?=$dept_usr ?></td>
+					<td><?=ucfirst($vac_type_apl_usr); ?></td>
+					<td><?=$datevac_apl ?></td>
+					<td><?=$id_user_usr ?></td>
 					<td>
 					<div class="btn-group" role="group" aria-label="Edit Button">
 						<?php
@@ -545,10 +545,10 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 						<?php if($user_type == "dept_user"){ ?>
 							<a class="btn btn-sm btn-warning waves-effect"><i class="dripicons-hourglass"></i> Waiting from HR</a>
 						<?php }else{ ?>
-							<a href="./open_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
+							<a href="./open_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
 								<i class="mdi mdi-folder-plus"></i><?php if($vac_type_apl_usr == 'emergency'){echo " Emergency Vacation";}else{echo " Add Details";}?>
 							</a>
-							<a href="./includes/vac_app_emp.php?id=<?php echo $id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
+							<a href="./includes/vac_app_emp.php?id=<?=$id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
 								<i class="dripicons-wrong"></i> Reject
 							</a>
 						<?php } ?>
@@ -558,12 +558,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								<i class="mdi mdi-chevron-double-right"></i> FWD. to Management
 							</a>
 						<?php }else{ ?>
-							<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
+							<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
 								<i class="dripicons-hourglass"></i> Waiting from GM
 							</a>
 						<?php } ?>
 						<?php }elseif($status_usr == "approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
 							<i class="dripicons-checkmark"></i> Approved
 						</a>
 						<?php
@@ -571,21 +571,21 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								if($user_type <> "dept_user"){
 								if($fly_get <> "yes"){
 						?>
-						<a href="./add_vac_emp.php?id=<?php echo $empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
+						<a href="./add_vac_emp.php?id=<?=$empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
 							<i class="dripicons-rocket"></i> Add Vacation
 						</a>
-						<a href="./open_edit_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
+						<a href="./open_edit_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
 							<i class="mdi mdi-calendar-clock"></i> Edit
 						</a>
 						<?php } } } ?>
 						<?php }elseif($status_usr == "not_approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="mdi mdi-eye-outline"></i> Not Approved
 						</a>
 
 						<?php } ?>
 						<?php if($user_type == $access1){ ?>
-						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?php echo $id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?=$id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="dripicons-cross"></i>
 						</a>
 					<?php } ?>
@@ -641,12 +641,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 	
 ?>
 				<tr>
-					<td><?php echo $emp_id_usr ?></td>
-					<td><?php echo $emp_name_usr ?></td>
-					<td><?php echo $dept_usr ?></td>
-					<td><?php echo ucfirst($vac_type_apl_usr); ?></td>
-					<td><?php echo $datevac_apl ?></td>
-					<td><?php echo $id_user_usr ?></td>
+					<td><?=$emp_id_usr ?></td>
+					<td><?=$emp_name_usr ?></td>
+					<td><?=$dept_usr ?></td>
+					<td><?=ucfirst($vac_type_apl_usr); ?></td>
+					<td><?=$datevac_apl ?></td>
+					<td><?=$id_user_usr ?></td>
 					<td>
 					<div class="btn-group" role="group" aria-label="Edit Button">
 						<?php
@@ -655,10 +655,10 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 						<?php if($user_type == "dept_user"){ ?>
 							<a class="btn btn-sm btn-warning waves-effect"><i class="dripicons-hourglass"></i> Waiting from HR</a>
 						<?php }else{ ?>
-							<a href="./open_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
+							<a href="./open_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-purple waves-effect">
 								<i class="mdi mdi-folder-plus"></i><?php if($vac_type_apl_usr == 'emergency'){echo " Emergency Vacation";}else{echo " Add Details";}?>
 							</a>
-							<a href="./includes/vac_app_emp.php?id=<?php echo $id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
+							<a href="./includes/vac_app_emp.php?id=<?=$id_user_usr."&empidnoapp=".$emp_id_usr."&hrnote=Rejected from HR" ?>&status=not_approve" class="btn btn-sm btn-danger waves-effect">
 								<i class="dripicons-wrong"></i> Reject
 							</a>
 						<?php } ?>
@@ -668,12 +668,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								<i class="mdi mdi-chevron-double-right"></i> FWD. to Management
 							</a>
 						<?php }else{ ?>
-							<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
+							<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-warning waves-effect">
 								<i class="dripicons-hourglass"></i> Waiting from GM
 							</a>
 						<?php } ?>
 						<?php }elseif($status_usr == "approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-success waves-effect">
 							<i class="dripicons-checkmark"></i> Approved
 						</a>
 						<?php
@@ -681,21 +681,21 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 								if($user_type <> "dept_user"){
 								if($fly_get <> "yes"){
 						?>
-						<a href="./add_vac_emp.php?id=<?php echo $empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
+						<a href="./add_vac_emp.php?id=<?=$empgid_apl_usr ?>" class="btn btn-sm btn-primary waves-effect">
 							<i class="dripicons-rocket"></i> Add Vacation
 						</a>
-						<a href="./open_edit_vac_aply.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
+						<a href="./open_edit_vac_aply.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-info waves-effect">
 							<i class="mdi mdi-calendar-clock"></i> Edit
 						</a>
 						<?php } } } ?>
 						<?php }elseif($status_usr == "not_approve"){?>
-						<a href="./open_applied_vac.php?id=<?php echo $id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./open_applied_vac.php?id=<?=$id_user_usr."&emp_id=".$emp_id_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="mdi mdi-eye-outline"></i> Not Approved
 						</a>
 
 						<?php } ?>
 						<?php if($user_type == $access1){ ?>
-						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?php echo $id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
+						<a href="./includes/delete.php?tbl=apply_vac_dep&id=<?=$id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
 							<i class="dripicons-cross"></i>
 						</a>
 					<?php } ?>
@@ -720,7 +720,7 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

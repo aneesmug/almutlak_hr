@@ -99,14 +99,14 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -140,10 +140,10 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -184,20 +184,20 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
 								<div class="profile-user-box card-box <?php if($emp_status_get == "active"){echo "bg-custom";}else{echo "bg-danger";}?>">
                                     <div class="row">
                                         <div class="col-sm-6">
-                                            <span class="float-left mr-3"><img src="<?php echo $emp_avatar_get ?>" alt="<?php echo $name_get ?>" class="thumb-lg rounded-circle"></span>
+                                            <span class="float-left mr-3"><img src="<?=$emp_avatar_get ?>" alt="<?=$name_get ?>" class="thumb-lg rounded-circle"></span>
                                             <div class="media-body text-white">
-                                                <h4 class="mt-1 mb-1 font-18">Name: <?php echo $name_get ?></h4>
-                                                <p class="font-13 text-light">Joing Date: <?php echo date('M d Y', strtotime(str_replace('/', '-', $joining_date_get))) ?></p>
-                                                <p class="text-light mb-0">Mobile: <?php echo $mobile_get ?></p>
+                                                <h4 class="mt-1 mb-1 font-18">Name: <?=$name_get ?></h4>
+                                                <p class="font-13 text-light">Joing Date: <?=date('M d Y', strtotime(str_replace('/', '-', $joining_date_get))) ?></p>
+                                                <p class="text-light mb-0">Mobile: <?=$mobile_get ?></p>
                                             </div>
                                         </div>
                                         <div class="col-sm-6">
                                             <div class="text-left">
-												<p class="text-light mb-0">Iqama No.: <?php echo $iqama_get ?></p>
-												<p class="text-light mb-0">Employee No.: <?php echo $emp_id_get ?></p>
+												<p class="text-light mb-0">Iqama No.: <?=$iqama_get ?></p>
+												<p class="text-light mb-0">Employee No.: <?=$emp_id_get ?></p>
 												<?php if($emp_status_get == "no" ){?>
 												<p class="text-light mb-0">
-													<?php echo $note_get." Date: ".date('d M Y', strtotime($emp_ter_date_get)); ?>
+													<?=$note_get." Date: ".date('d M Y', strtotime($emp_ter_date_get)); ?>
 												</p>
 												<?php } ?>
                                             </div>
@@ -221,47 +221,47 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
                                 <div class="card-box">
 
                                     <h4 class="m-t-0 header-title">Edit Vac</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
-										<?php echo $error_1 ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+										<?=$error_1 ?>
                                         <div class="form-row">
 											<div class="form-group col-md-6">
 												<label for="name">Employee Name<span class="text-danger">*</span></label>
-												<input type="text" name="name" value="<?php echo $permit_no_get_v ?>" class="form-control" id="name" autofocus>
+												<input type="text" name="name" value="<?=$permit_no_get_v ?>" class="form-control" id="name" autofocus>
 												</div>
                                             <div class="form-group col-md-6">
 												<label for="emp_id">Employee ID.<span class="text-danger">*</span></label>
-												<input type="text" name="emp_id" value="<?php echo $emp_id_get ?>" class="form-control" id="emp_id">
+												<input type="text" name="emp_id" value="<?=$emp_id_get ?>" class="form-control" id="emp_id">
                                         	</div>
                                         </div>
 										<div class="form-row">
                                             <div class="form-group col-md-6">
                                                 <label for="iqama" class="col-form-label">Iqama</label>
-                                                <input type="text" name="iqama" value="<?php echo $iqama_get ?>" data-mask="9999999999" class="form-control" id="iqama">
+                                                <input type="text" name="iqama" value="<?=$iqama_get ?>" data-mask="9999999999" class="form-control" id="iqama">
                                             </div>
                                             <div class="form-group col-md-6">
                                                 <label for="mobile" class="col-form-label">Mobile No.</label>
-                                                <input type="text" name="mobile" value="<?php echo $mobile_get ?>" data-mask="0599999999" class="form-control" id="mobile">
+                                                <input type="text" name="mobile" value="<?=$mobile_get ?>" data-mask="0599999999" class="form-control" id="mobile">
                                             </div>
                                         </div>
 										<div class="form-row">
 											<div class="form-group col-md-6">
-												<label for="avatar" class="col-form-label"><?php echo $image_txt ?></label>
+												<label for="avatar" class="col-form-label"><?=$image_txt ?></label>
 												<input type="file" class="filestyle" name="avatar" data-btnClass="btn-primary">
                                             </div>
 											<div class="form-group col-md-3">
                                                 <label for="salary" class="col-form-label">Salary</label>
-                                                <input type="text" name="salary" value="<?php echo $salary_get ?>" class="form-control autonumber" data-v-max="20000" data-v-min="0" id="salary">
+                                                <input type="text" name="salary" value="<?=$salary_get ?>" class="form-control autonumber" data-v-max="20000" data-v-min="0" id="salary">
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="vacation_days" class="col-form-label">Vacation Days</label>
                                                 <input type="text" name="vacation_days" 
-                                                   class="form-control autonumber" data-v-max="180" data-v-min="0" id="vacation_days" value="<?php echo $vacation_days_get ?>">
+                                                   class="form-control autonumber" data-v-max="180" data-v-min="0" id="vacation_days" value="<?=$vacation_days_get ?>">
                                             </div>
                                         </div>
 
 										<div class="btn-group" role="group" aria-label="Edit Button">
                                         
-										<a href="view_employee.php?id=<?php echo $_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+										<a href="view_employee.php?id=<?=$_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
                                         <button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-account-edit"></i> Save Edit</button>
 											
 										</div>
@@ -277,7 +277,7 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -299,11 +299,11 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
 			</div>
 			<div class="modal-body">
 				<h3>You need to Terminat!</h3>
-				<h4><strong style="font-size: 30px; "><?php echo $name_get ?></strong></h4>
+				<h4><strong style="font-size: 30px; "><?=$name_get ?></strong></h4>
 <div class="form-row" id="content" style="display:none;">
 <form action="./includes/terminat_emp.php" method="get">
 <!--	<a href="" class="btn btn-danger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-<input type="hidden" name="id" value="<?php echo $id_get ?>" >
+<input type="hidden" name="id" value="<?=$id_get ?>" >
 <input type="hidden" name="note" value="terminat" >
 	<div class="input-group">
 		<input type="text" id="ter_note" name="ter_note" class="form-control" aria-describedby="basic-addon2">
@@ -316,7 +316,7 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
-				<a href="./includes/terminat_emp.php?id=<?php echo $id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a>
+				<a href="./includes/terminat_emp.php?id=<?=$id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a>
 				<button type="button" id="terminat_emp" class="btn btn-danger waves-effect waves-light"><i class="mdi mdi-account-off"></i> Terminat</button>			
 				
 			</div>

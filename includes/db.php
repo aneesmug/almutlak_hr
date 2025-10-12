@@ -1,11 +1,36 @@
 <?php
+/**
+ * MODIFICATION SUMMARY
+ *
+ * - Removed hardcoded database credentials (DB_HOST, DB_USER, DB_PASS, DB_NAME).
+ * - Added functionality to parse database settings from an external `config.ini` file.
+ * - This approach improves security and makes configuration management easier.
+ * - The rest of the script will continue to function as before by using the constants
+ * defined from the .ini file.
+ * - Added error handling in case the configuration file is unreadable.
+ */
 
 ob_start();
 
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', 'admin123');
-define('DB_NAME', 'almutlak_db');
+// Load database configuration from an external .ini file
+$configPath = __DIR__ . '/config.ini';
+if (!file_exists($configPath)) {
+    die('Error: Configuration file (config.ini) not found.');
+}
+
+$config = parse_ini_file($configPath, true);
+
+if (!isset($config['database'])) {
+    die('Error: Database configuration section is missing in config.ini.');
+}
+
+$dbConfig = $config['database'];
+
+// Define constants from the configuration file
+define('DB_HOST', $dbConfig['DB_HOST']);
+define('DB_USER', $dbConfig['DB_USER']);
+define('DB_PASS', $dbConfig['DB_PASS']);
+define('DB_NAME', $dbConfig['DB_NAME']);
 
 $conDB = mysqli_connect( DB_HOST , DB_USER , DB_PASS , DB_NAME ) or die('Error: Could not connect to database.');
 $conDB->set_charset("UTF8");
@@ -52,7 +77,6 @@ function get_setting($conn, $setting_name) {
     }
     return $value;
 }
-
 
 /****time_zone****/
 date_default_timezone_set(get_setting($conDB, 'timezone'));

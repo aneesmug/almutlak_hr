@@ -68,14 +68,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -109,10 +109,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="index.html" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -153,8 +153,8 @@ if(isset($_POST['submit'])){
                             <div class="col-md-12">
                                 <div class="card-box">
                                     <h4 class="m-t-0 header-title">Register New Employee</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
-										<?php echo $msg ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+										<?=$msg ?>
                                         <div class="form-row">
 											<div class="form-group col-md-3">
 												<label for="name">Employee Name<span class="text-danger">*</span></label>
@@ -180,7 +180,7 @@ if(isset($_POST['submit'])){
 												while($rec_con = mysqli_fetch_assoc($query_country)){
 													$countrynme = $rec_con["name"];
 											?>
-												<option value="<?php echo $countrynme ?>"><?php echo $countrynme ?></option>
+												<option value="<?=$countrynme ?>"><?=$countrynme ?></option>
 											<?php } ?>
 											</select>
 											</div>
@@ -193,7 +193,7 @@ if(isset($_POST['submit'])){
 												while($rec = mysqli_fetch_assoc($query_dep_nme)){
 													$dep_nme = $rec["dep_nme"];
 											?>
-												<option value="<?php echo $dep_nme ?>"><?php echo $dep_nme ?></option>
+												<option value="<?=$dep_nme ?>"><?=$dep_nme ?></option>
 											<?php } ?>
 											</select>
 											</div>
@@ -206,7 +206,7 @@ if(isset($_POST['submit'])){
 												while($rec = mysqli_fetch_assoc($query_sectin_nme)){
 													$sectin_nme = $rec["section_name"];
 											?>
-												<option value="<?php echo $sectin_nme ?>"><?php echo $sectin_nme ?></option>
+												<option value="<?=$sectin_nme ?>"><?=$sectin_nme ?></option>
 											<?php } ?>
 											</select>
                                             </div>
@@ -278,20 +278,20 @@ if(isset($_POST['submit'])){
 													<?php if(empty($bank_name_get)){ ?>
 														<option value="">Select</option>
 													<?php } else { ?>
-														<option value="<?php echo $bank_name_get ?>"><?php echo $bank_name_get ?></option>
+														<option value="<?=$bank_name_get ?>"><?=$bank_name_get ?></option>
 													<?php } ?>
 													<?php
 														$query_bank = mysqli_query($conDB, "SELECT * FROM `bank_list` ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, name");
 														while($rec_con = mysqli_fetch_assoc($query_bank)){
 															$banknme = $rec_con["name"];
 													?>
-														<option value="<?php echo $banknme ?>"><?php echo $banknme ?></option>
+														<option value="<?=$banknme ?>"><?=$banknme ?></option>
 													<?php } ?>
 													</select>
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="iban" class="col-form-label">IBAN</label>
-                                                <input type="text" name="iban" class="form-control"  id="iban" data-mask="SA99 9999 9999 9999 9999 9999" value="<?php echo $iban_get ?>">
+                                                <input type="text" name="iban" class="form-control"  id="iban" data-mask="SA99 9999 9999 9999 9999 9999" value="<?=$iban_get ?>">
                                                
                                             </div>
                                         </div>
@@ -310,7 +310,7 @@ if(isset($_POST['submit'])){
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

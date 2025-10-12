@@ -152,14 +152,14 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -194,10 +194,10 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
                     <div class="topbar-left">
                         <a href="index.html" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -240,20 +240,20 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
                                 <div class="card-box">
 
                                     <h4 class="m-t-0 header-title">Edit Employee</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
-										<?php echo $error_1 ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+										<?=$error_1 ?>
                                         <div class="form-row">
 											<div class="form-group col-md-3">
 												<label for="name">Employee Name<span class="text-danger">*</span></label>
-												<input type="text" name="name" value="<?php echo ucwords($name_get); ?>" class="form-control" id="name" autofocus>
+												<input type="text" name="name" value="<?=ucwords($name_get); ?>" class="form-control" id="name" autofocus>
 												</div>
                                             <div class="form-group col-md-3">
 												<label for="emp_id">Employee ID.<span class="text-danger">*</span></label>
-												<input type="text" name="emp_id" value="<?php echo $emp_id_get ?>" class="form-control" id="emp_id">
+												<input type="text" name="emp_id" value="<?=$emp_id_get ?>" class="form-control" id="emp_id">
                                         	</div>
                                         	<div class="form-group col-md-3">
                                                 <label for="mobile">Mobile No.</label>
-                                                <input type="text" name="mobile" value="<?php echo $mobile_get ?>" data-mask="0599999999" class="form-control" id="mobile">
+                                                <input type="text" name="mobile" value="<?=$mobile_get ?>" data-mask="0599999999" class="form-control" id="mobile">
                                             </div>
                                             <div class="form-group col-md-3">
 											<label for="country">Nationality<span class="text-danger">*</span></label>
@@ -261,14 +261,14 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 											<?php if(empty($country_get)){ ?>
 												<option value="">Select</option>
 											<?php } else { ?>
-												<option value="<?php echo $country_get ?>"><?php echo $country_get ?></option>
+												<option value="<?=$country_get ?>"><?=$country_get ?></option>
 											<?php } ?>
 											<?php
 												$query_country = mysql_query("SELECT * FROM `country` ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, name");
 												while($rec_con = mysql_fetch_assoc($query_country)){
 													$countrynme = $rec_con["name"];
 											?>
-												<option value="<?php echo $countrynme ?>"><?php echo $countrynme ?></option>
+												<option value="<?=$countrynme ?>"><?=$countrynme ?></option>
 											<?php } ?>
 											</select>
 											</div>
@@ -281,14 +281,14 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 												<?php if(empty($dept_get)){ ?>
 												<option value="">Select</option>
 												<?php } else { ?>
-												<option value="<?php echo $dept_get ?>"><?php echo $dept_get ?></option>
+												<option value="<?=$dept_get ?>"><?=$dept_get ?></option>
 												<?php } ?>
 											<?php
 												$query_dep_nme = mysql_query("SELECT * FROM `department` ORDER BY `dep_nme` REGEXP '^[^A-Za-z]' ASC, dep_nme");
 												while($rec = mysql_fetch_assoc($query_dep_nme)){
 													$dep_nme = $rec["dep_nme"];
 											?>
-												<option value="<?php echo $dep_nme ?>"><?php echo $dep_nme ?></option>
+												<option value="<?=$dep_nme ?>"><?=$dep_nme ?></option>
 											<?php } ?>
 											</select>
 											</div>
@@ -298,14 +298,14 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 												<?php if(empty($sectin_nme_get)){ ?>
 												<option value="">Select</option>
 												<?php } else { ?>
-												<option value="<?php echo $sectin_nme_get ?>"><?php echo $sectin_nme_get ?></option>
+												<option value="<?=$sectin_nme_get ?>"><?=$sectin_nme_get ?></option>
 												<?php } ?>
 											<?php
 												$query_sectin_nme = mysql_query("SELECT * FROM `section` ORDER BY `section_name` REGEXP '^[^A-Za-z]' ASC, section_name");
 												while($rec = mysql_fetch_assoc($query_sectin_nme)){
 													$sectin_nme = $rec["section_name"];
 											?>
-												<option value="<?php echo $sectin_nme ?>"><?php echo $sectin_nme ?></option>
+												<option value="<?=$sectin_nme ?>"><?=$sectin_nme ?></option>
 											<?php } ?>
 											</select>
 											</div>
@@ -315,7 +315,7 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 													<?php if(empty($emptype_get)){ ?>
 													<option value="">Select</option>
 													<?php } else { ?>
-													<option value="<?php echo $emptype_get ?>"><?php echo $emptype_get ?></option>
+													<option value="<?=$emptype_get ?>"><?=$emptype_get ?></option>
 													<?php } ?>
 													<option value="Manager">Manager</option>
 													<option value="Supporter">Supporter</option>
@@ -323,11 +323,11 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
                                             </div>
 											 <div class="form-group col-md-3">
                                                 <label for="iqama" class="col-form-label">Iqama</label>
-                                                <input type="text" name="iqama" value="<?php echo $iqama_get ?>" data-mask="9999999999" class="form-control" id="iqama">
+                                                <input type="text" name="iqama" value="<?=$iqama_get ?>" data-mask="9999999999" class="form-control" id="iqama">
                                             </div>
 											<div class="form-group col-md-3">
                                                 <label for="dob" class="col-form-label">Date of Birth</label>
-                                                <input type="text" name="dob" parsley-trigger="change" placeholder="dd/mm/yyyy" class="form-control" id="dob" value="<?php echo $dob_get ?>">
+                                                <input type="text" name="dob" parsley-trigger="change" placeholder="dd/mm/yyyy" class="form-control" id="dob" value="<?=$dob_get ?>">
                                             </div>
 											<div class="form-group col-md-3">
                                                 <p class="font-14 mt-3 mb-2">Gender <span class="text-danger">*</span></p>
@@ -357,23 +357,23 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 													<?php if(empty($vac_period_get)){ ?>
 													<option value="">Select</option>
 													<?php } else { ?>
-													<option value="<?php echo $vac_period_get ?>"><?php echo $vac_period_get ?></option>
+													<option value="<?=$vac_period_get ?>"><?=$vac_period_get ?></option>
 													<?php } ?>
 													<option value="1 Year">1 Year</option>
 													<option value="2 Years">2 Years</option>
 												</select>
                                             </div>
 											<div class="form-group col-md-3">
-												<label for="avatar" class="col-form-label"><?php echo $image_txt ?></label>
+												<label for="avatar" class="col-form-label"><?=$image_txt ?></label>
 												<input type="file" class="filestyle" name="avatar" data-btnClass="btn-primary">
                                             </div>
 											<div class="form-group col-md-2">
                                                 <label for="salary" class="col-form-label">Salary</label>
-                                                <input type="text" name="salary" value="<?php echo $salary_get ?>" class="form-control autonumber" data-v-max="20000" data-v-min="0" id="salary">
+                                                <input type="text" name="salary" value="<?=$salary_get ?>" class="form-control autonumber" data-v-max="20000" data-v-min="0" id="salary">
                                             </div>
                                             <div class="form-group col-md-2">
                                                 <label for="vacation_days" class="col-form-label">Vacation Days</label>
-                                                <input type="text" name="vacation_days" class="form-control autonumber" data-v-max="180" data-v-min="0" id="vacation_days" value="<?php echo $vacation_days_get ?>">
+                                                <input type="text" name="vacation_days" class="form-control autonumber" data-v-max="180" data-v-min="0" id="vacation_days" value="<?=$vacation_days_get ?>">
                                             </div>
                                             <div class="form-group col-md-2">
                                                	 <label for="bank_name" class="col-form-label">Bank Name</label>
@@ -381,27 +381,27 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 													<?php if(empty($bank_name_get)){ ?>
 														<option value="">Select</option>
 													<?php } else { ?>
-														<option value="<?php echo $bank_name_get ?>"><?php echo $bank_name_get ?></option>
+														<option value="<?=$bank_name_get ?>"><?=$bank_name_get ?></option>
 													<?php } ?>
 													<?php
 														$query_bank = mysql_query("SELECT * FROM `bank_list` ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, name");
 														while($rec_con = mysql_fetch_assoc($query_bank)){
 															$banknme = $rec_con["name"];
 													?>
-														<option value="<?php echo $banknme ?>"><?php echo $banknme ?></option>
+														<option value="<?=$banknme ?>"><?=$banknme ?></option>
 													<?php } ?>
 													</select>
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="iban" class="col-form-label">IBAN</label>
-                                                <input type="text" name="iban" class="form-control"  id="iban" data-mask="SA99 9999 9999 9999 9999 9999" value="<?php echo $iban_get ?>">
+                                                <input type="text" name="iban" class="form-control"  id="iban" data-mask="SA99 9999 9999 9999 9999 9999" value="<?=$iban_get ?>">
                                                
                                             </div>
                                         </div>
 
 										<div class="btn-group" role="group" aria-label="Edit Button">
                                         
-										<a href="view_employee.php?id=<?php echo $_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+										<a href="view_employee.php?id=<?=$_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
                                         <button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-account-edit"></i> Save Edit</button>
 											
 										</div>
@@ -417,7 +417,7 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -439,11 +439,11 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 			</div>
 			<div class="modal-body">
 				<h3>You need to Terminat!</h3>
-				<h4><strong style="font-size: 30px; "><?php echo $name_get ?></strong></h4>
+				<h4><strong style="font-size: 30px; "><?=$name_get ?></strong></h4>
 <div class="form-row" id="content" style="display:none;">
 <form action="./includes/terminat_emp.php" method="get">
 <!--	<a href="" class="btn btn-danger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-<input type="hidden" name="id" value="<?php echo $id_get ?>" >
+<input type="hidden" name="id" value="<?=$id_get ?>" >
 <input type="hidden" name="note" value="terminat" >
 	<div class="input-group">
 		<input type="text" id="ter_note" name="ter_note" class="form-control" aria-describedby="basic-addon2">
@@ -456,7 +456,7 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
-				<?php /*?><a href="./includes/terminat_emp.php?id=<?php echo $id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a><?php */?>
+				<?php /*?><a href="./includes/terminat_emp.php?id=<?=$id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a><?php */?>
 				<button type="button" id="terminat_emp" class="btn btn-danger waves-effect waves-light"><i class="mdi mdi-account-off"></i> Terminat</button>			
 				
 			</div>

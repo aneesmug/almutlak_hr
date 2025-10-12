@@ -1,87 +1,143 @@
 <?php
-/**
- * MODIFICATION SUMMARY
- *
- * Replaced the direct file link for the sample template with a JavaScript-powered download.
- * A new script is added that dynamically generates the CSV content and triggers a download
- * when the user clicks the link, removing the need for a physical sample file on the server.
- * The link in the "sample-download" section has been updated to trigger this script.
- * Added a note to the page to clarify that the Hijri date (iqama_exp) is automatically
- * calculated and saved in a YYYY-MM-DD format based on the uploaded Gregorian date.
- */
+    require_once __DIR__ . '/includes/db.php';
+    require_once __DIR__ . '/includes/session_check.php';
+    $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
+    if(mysqli_num_rows($query) == 1){
+        include("./includes/avatar_select.php");
+    }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Import Iqama Expiration Dates</title>
+    <meta charset="utf-8" />
+    <title><?=$site_title ?> - Import Iqama Expiration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta content="Anees Afzal" name="author" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- App favicon -->
+    <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
+
+    <!-- App css -->
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <script src="assets/js/modernizr.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
-        .container { max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; background-color: #fff; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="file"] { padding: 5px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; }
-        input[type="submit"] { padding: 10px 15px; background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 3px; }
-        input[type="submit"]:hover { background-color: #0056b3; }
-        .alert { padding: 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; }
-        .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
-        .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
-        h2 { border-bottom: 2px solid #007bff; padding-bottom: 10px; }
-        .sample-download { margin-bottom: 20px; padding: 10px; background-color: #e7f3fe; border-left: 4px solid #2196F3; }
-        .sample-download a { color: #0d6efd; font-weight: bold; text-decoration: none; cursor: pointer; }
-        .sample-download a:hover { text-decoration: underline; }
-        .sample-download p { margin: 0; }
-        .sample-download p + p { margin-top: 5px; font-size: 0.9em; color: #555; }
+        .sample-download a {
+            cursor: pointer;
+        }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h2>Import and Update Iqama Expiration Dates</h2>
-        <p>Please upload an Excel or CSV file (<code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>) with two columns in this order: <strong>iqama</strong> and <strong>iqama_exp_g</strong>.</p>
-        <p>The first row should be a header and will be skipped.</p>
-        <p>Note: The Hijri date (<code>iqama_exp</code>) will be calculated automatically from the Gregorian date and saved in <code>YYYY-MM-DD</code> format.</p>
+<body class="enlarged" data-keep-enlarged="true">
 
-        <div class="sample-download">
-            <p>Need a template? <a id="downloadSampleLink">Click here to download a sample file.</a></p>
-            <p>You can open this file in Excel, add your employee data, and then upload it using the form below.</p>
-        </div>
+    <!-- Begin page -->
+    <div id="wrapper">
 
-        <?php if (isset($_GET['status'])): ?>
-            <?php if ($_GET['status'] == 'success'): ?>
-                <div class="alert alert-success">
-                    <?php echo htmlspecialchars($_GET['updated_count']); ?> records updated successfully.
-                    <?php if (isset($_GET['not_found_count']) && $_GET['not_found_count'] > 0): ?>
-                        <br><?php echo htmlspecialchars($_GET['not_found_count']); ?> records failed because the Iqama number was not found.
-                    <?php endif; ?>
+        <!-- ========== Left Sidebar Start ========== -->
+        <div class="left side-menu">
+            <div class="slimscroll-menu" id="remove-scroll">
+                <!-- LOGO -->
+                <div class="topbar-left">
+                    <a href="dashboard.php" class="logo">
+                        <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+                        <i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
+                    </a>
                 </div>
-            <?php elseif ($_GET['status'] == 'error'): ?>
-                <div class="alert alert-danger">
-                    <strong>Error:</strong> <?php echo htmlspecialchars($_GET['message']); ?>
-                </div>
-            <?php endif; ?>
-        <?php endif; ?>
-
-        <form action="./includes/process_iqama_import.php" method="post" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="employee_file">Select File:</label>
-                <input type="file" name="employee_file" id="employee_file" required accept=".xlsx, .xls, .csv">
+                <!--- Sidemenu -->
+                <?php include("./includes/main_menu.php"); ?>
+                <!-- Sidebar -->
+                <div class="clearfix"></div>
             </div>
-            <input type="submit" name="import" value="Upload and Process">
-        </form>
+        </div>
+        <!-- Left Sidebar End -->
+
+        <!-- ============================================================== -->
+        <!-- Start right Content here -->
+        <!-- ============================================================== -->
+        <div class="content-page">
+            <!-- Top Bar Start -->
+            <?php include("./includes/topbar.php"); ?>
+            <!-- Top Bar End -->
+
+            <!-- Start Page content -->
+            <div class="content">
+                <div class="container-fluid">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card-box">
+                                <h4 class="m-t-0 header-title">Import and Update Iqama Expiration Dates</h4>
+                                <p>Please upload an Excel or CSV file (<code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>) with two columns in this order: <strong>iqama</strong> and <strong>iqama_exp</strong>.</p>
+                                <p>The first row should be a header and will be skipped.</p>
+                                <p class="text-muted">Note: The Gregorian date (<code>iqama_exp_g</code>) will be calculated automatically from the Hijri date and saved in <code>YYYY-MM-DD</code> format.</p>
+
+                                <div class="alert alert-info sample-download">
+                                    <p class="mb-1">Need a template? <a id="downloadSampleLink" class="font-weight-bold">Click here to download a sample file.</a></p>
+                                    <small>You can open this file in Excel, add your employee data, and then upload it using the form below.</small>
+                                </div>
+
+                                <?php if (isset($_GET['status'])): ?>
+                                    <?php if ($_GET['status'] == 'success'): ?>
+                                        <div class="alert alert-success">
+                                            <?=htmlspecialchars($_GET['updated_count']); ?> records updated successfully.
+                                            <?php if (isset($_GET['not_found_count']) && $_GET['not_found_count'] > 0): ?>
+                                                <br><?=htmlspecialchars($_GET['not_found_count']); ?> records failed because the Iqama number was not found.
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php elseif ($_GET['status'] == 'error'): ?>
+                                        <div class="alert alert-danger">
+                                            <strong>Error:</strong> <?=htmlspecialchars($_GET['message']); ?>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+
+                                <form action="./includes/process_iqama_import.php" method="post" enctype="multipart/form-data">
+                                    <div class="form-group">
+                                        <label for="employee_file">Select File:</label>
+                                        <input type="file" name="employee_file" id="employee_file" class="form-control-file" required accept=".xlsx, .xls, .csv">
+                                    </div>
+                                    <button type="submit" name="import" class="btn btn-primary">Upload and Process</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div> <!-- container -->
+            </div> <!-- content -->
+
+            <footer class="footer">
+                <?=$site_footer ?>
+            </footer>
+        </div>
+        <!-- ============================================================== -->
+        <!-- End Right content here -->
+        <!-- ============================================================== -->
     </div>
+    <!-- END wrapper -->
+
+    <!-- jQuery  -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/metisMenu.min.js"></script>
+    <script src="assets/js/waves.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
+
+    <!-- App js -->
+    <script src="assets/js/jquery.core.js"></script>
+    <script src="assets/js/jquery.app.js"></script>
 
     <script>
     document.getElementById('downloadSampleLink').addEventListener('click', function(event) {
         event.preventDefault(); // Prevent default link behavior
 
         // Define the CSV content
-        const csvContent = "iqama,iqama_exp_g\n" +
-                           "2451234567,2026-10-25\n" +
-                           "2387654321,2027-01-15\n" +
-                           "2519876543,2025-12-05\n" +
-                           "2498765432,2026-02-28\n" +
-                           "2334567890,2027-05-30";
+        const csvContent = "iqama,iqama_exp\n" +
+                           "2451234567,1448-04-05\n" +
+                           "2387654321,1448-07-26\n" +
+                           "2519876543,1447-05-16\n" +
+                           "2498765432,1447-08-11\n" +
+                           "2334567890,1448-11-13";
 
         // Create a Blob from the CSV content
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

@@ -51,7 +51,7 @@ $asset = mysqli_fetch_assoc($query);
 <body onload="window.print()">
     <div class="report-container">
         <div class="report-header">
-            <img src="assets/images/logo.png" alt="Company Logo">
+            <img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo">
             <h3 class="mt-3">Asset Return Acknowledgment</h3>
             <p>إقرار استلام عهدة</p>
         </div>

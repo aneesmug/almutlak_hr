@@ -117,7 +117,7 @@ if (mysqli_num_rows($query) == 1) {
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
@@ -176,8 +176,8 @@ if (mysqli_num_rows($query) == 1) {
                 <div class="slimscroll-menu" id="remove-scroll">
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
-                            <span><img src="assets/images/logo.png" alt="" height="22"></span>
-                            <i><img src="assets/images/logo_sm.png" alt="" height="28"></i>
+                            <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+                            <i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
                         </a>
                     </div>
                     <?php include("./includes/main_menu.php"); ?>
@@ -202,8 +202,8 @@ if (mysqli_num_rows($query) == 1) {
                                                 <select class="form-control" id="statusFilter" onchange="applyFilters()">
                                                     <option value="all" <?php if ($current_filter == 'all') echo 'selected'; ?>>All Requests</option>
                                                     <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                                        <option value="<?php echo $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                            <?php echo htmlspecialchars($status_value); ?>
+                                                        <option value="<?=$status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
+                                                            <?=htmlspecialchars($status_value); ?>
                                                         </option>
                                                     <?php endforeach; ?>
                                                 </select>
@@ -213,7 +213,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <div class="form-group">
                                                 <label for="searchFilter" class="font-weight-bold">Search by Name / ID</label>
                                                 <div class="input-group">
-                                                    <input type="search" class="form-control" id="searchFilter" placeholder="Enter search term..." value="<?php echo htmlspecialchars($search_term); ?>">
+                                                    <input type="search" class="form-control" id="searchFilter" placeholder="Enter search term..." value="<?=htmlspecialchars($search_term); ?>">
                                                     <div class="input-group-append">
                                                         <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
                                                     </div>
@@ -223,8 +223,8 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
 
                                     <div class="d-flex justify-content-between align-items-center mb-4">
-                                        <h4 class="mb-0 text-muted">Showing: <?php echo htmlspecialchars($page_title); ?> Requests</h4>
-                                        <span class="badge badge-light p-2">Total Found: <?php echo $total_items; ?></span>
+                                        <h4 class="mb-0 text-muted">Showing: <?=htmlspecialchars($page_title); ?> Requests</h4>
+                                        <span class="badge badge-light p-2">Total Found: <?=$total_items; ?></span>
                                     </div>
 
                                     <?php if (!empty($requests)): ?>
@@ -233,17 +233,17 @@ if (mysqli_num_rows($query) == 1) {
                                                 <div class="col-lg-4 col-md-6 mb-3">
                                                     <div class="card request-card h-100">
                                                         <div class="card-header">
-                                                            <?php echo parseName($req['employee_name']); ?>
-                                                            <span class="float-right">ID: <?php echo htmlspecialchars($req['emp_id']); ?></span>
+                                                            <?=parseName($req['employee_name']); ?>
+                                                            <span class="float-right">ID: <?=htmlspecialchars($req['emp_id']); ?></span>
                                                         </div>
                                                         <div class="card-body">
                                                             <div class="detail-item">
                                                                 <i class="fad fa-paper-plane"></i>
-                                                                <strong>Applied:</strong> <?php echo htmlspecialchars(date('d M Y', strtotime($req['created_at']))); ?>
+                                                                <strong>Applied:</strong> <?=htmlspecialchars(date('d M Y', strtotime($req['created_at']))); ?>
                                                             </div>
                                                             <div class="detail-item">
                                                                 <i class="fad fa-suitcase-rolling"></i>
-                                                                <strong>Type:</strong> <?php echo htmlspecialchars($req['vac_type']); ?>
+                                                                <strong>Type:</strong> <?=htmlspecialchars($req['vac_type']); ?>
                                                             </div>
                                                              <div class="detail-item">
                                                                 <i class="fas fa-info-circle"></i>
@@ -256,12 +256,12 @@ if (mysqli_num_rows($query) == 1) {
                                                                         default: echo 'primary';
                                                                     }
                                                                 ?>">
-                                                                    <?php echo htmlspecialchars($all_statuses[$req['approval_status']]); ?>
+                                                                    <?=htmlspecialchars($all_statuses[$req['approval_status']]); ?>
                                                                 </span>
                                                             </div>
                                                         </div>
                                                         <div class="card-footer text-right">
-                                                            <a href="open_applied_vac.php?id=<?php echo $req['id']; ?>&emp_id=<?php echo $req['emp_id']; ?>" class="btn btn-primary" target="_blank">
+                                                            <a href="open_applied_vac.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>" class="btn btn-primary" target="_blank">
                                                                 <i class="fas fa-eye"></i> View Report
                                                             </a>
                                                         </div>

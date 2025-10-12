@@ -22,14 +22,14 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - Dashboard</title>
+        <title><?=$site_title ?> - Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -53,10 +53,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -96,28 +96,28 @@
                             <div class="col-sm-6 col-xl-6" onclick="window.location.href='filter_employee.php?page=1&active=active&fly=no'" style="cursor: pointer;">
                                 <div class="card-box widget-flat border-custom bg-custom text-white">
                                     <i class="mdi mdi-account-convert"></i>
-                                    <h3 class="m-b-10"><?php echo $status_cont_active ?></h3>
+                                    <h3 class="m-b-10"><?=$status_cont_active ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600">ON Job Employees</p>
                                 </div>
                             </div>
                             <div class="col-sm-6 col-xl-6" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&active=active&fly=yes'" style="cursor: pointer;" <?php } ?> >
                                 <div class="card-box bg-primary widget-flat border-primary text-white">
                                     <i class="mdi mdi-airplane-takeoff"></i>
-                                    <h3 class="m-b-10"><?php echo $status_cont_fly ?></h3>
+                                    <h3 class="m-b-10"><?=$status_cont_fly ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600">ON Vacations Employees</p>
                                 </div>
                             </div>
                             <div class="col-sm-6 col-xl-6" onclick="window.location.href='filter_employee.php?page=1&active=no&fly=no'" style="cursor: pointer;">
                                 <div class="card-box bg-danger widget-flat border-danger text-white">
                                     <i class="fi-delete"></i>
-                                    <h3 class="m-b-10"><?php echo $status_cont_ter ?></h3>
+                                    <h3 class="m-b-10"><?=$status_cont_ter ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600">Terminated Employees</p>
                                 </div>
                             </div>
 							<div class="col-sm-6 col-xl-6" onclick="window.location.href='reg_employee.php'" style="cursor: pointer;">
                                 <div class="card-box widget-flat border-success bg-success text-white">
                                     <i class="mdi mdi-account-multiple"></i>
-                                    <h3 class="m-b-10"><?php echo $status_cont_tot ?></h3>
+                                    <h3 class="m-b-10"><?=$status_cont_tot ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600">Total Employees</p>
                                 </div>
                             </div>						
@@ -128,7 +128,7 @@
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

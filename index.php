@@ -62,12 +62,12 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <title><?php echo isset($site_title) ? $site_title : 'Login'; ?> - Al Mutlak Access</title>
+        <title><?=isset($site_title) ? $site_title : 'Login'; ?> - Al Mutlak Access</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta content="A fully featured system which can be used to build CRM, CMS, etc." name="description" />
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -96,7 +96,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 </div>
                 <div class="bg-white/95 backdrop-blur-sm p-8 md:p-12 flex flex-col justify-center">
                     <div class="md:hidden text-center mb-8">
-                         <img src="assets/images/logo.png" alt="Company Logo" class="w-32 mx-auto">
+                         <img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo" class="w-32 mx-auto">
                     </div>
                     <h2 class="text-3xl font-bold text-gray-800 mb-2">Login to Your Account</h2>
                     <p class="text-gray-500 mb-8">Enter your credentials to access the portal.</p>

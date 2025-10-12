@@ -162,7 +162,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -183,8 +183,8 @@
                     <!-- LOGO -->
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
-                            <span><img src="assets/images/logo.png" alt="" height="22"></span>
-                            <i><img src="assets/images/logo_sm.png" alt="" height="28"></i>
+                            <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+                            <i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
                         </a>
                     </div>
                     <!--- Sidemenu -->
@@ -216,7 +216,7 @@
                                         <div class="main-content">
                                             <!-- Header -->
                                             <div class="header-section">
-                                                <img src="assets/images/logo.png" alt="Company Logo" class="logo">
+                                                <img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo" class="logo">
                                                 <div class="header-titles">
                                                     <h2>FINAL SETTLEMENT</h2>
                                                     <h3 class="arabic-title">مخالصة نهائية</h3>

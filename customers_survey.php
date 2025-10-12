@@ -13,14 +13,14 @@
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     	<meta charset="utf-8">
 
-        <title><?php echo $site_title ?> - All Registerd Surveys</title>
+        <title><?=$site_title ?> - All Registerd Surveys</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -71,10 +71,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -178,29 +178,29 @@ while ($rec = mysqli_fetch_array($query_loc)) {
 	*/
 ?>
 
-                <?php /* ?><tr <?php echo ($status != "A") ? "class='table-danger'" : false ; ?> > <?php */ ?>
+                <?php /* ?><tr <?=($status != "A") ? "class='table-danger'" : false ; ?> > <?php */ ?>
                 <?php /* ?>
                 <tr>
-					<td><?php echo $Injazat_no ?></td>
-					<td ><?php echo $full_name; ?></td>
-					<td><?php echo $acc_no; ?></td>
-                    <td><?php echo $mobile; ?></td>
-                    <td><?php echo $ExpDate; ?></td>
+					<td><?=$Injazat_no ?></td>
+					<td ><?=$full_name; ?></td>
+					<td><?=$acc_no; ?></td>
+                    <td><?=$mobile; ?></td>
+                    <td><?=$ExpDate; ?></td>
                      <?php if($user_type == $access1){ ?>
 
-					<td><?php echo ($status == "A") ? "<a href='./includes/update_stus_loca.php?status=C&id={$id}'><span class='badge badge-success'>Active</span></a>" : "<a href='./includes/update_stus_loca.php?status=A&id={$id}'><span class='badge badge-danger'>Closed</span></a>" ; ?>               
+					<td><?=($status == "A") ? "<a href='./includes/update_stus_loca.php?status=C&id={$id}'><span class='badge badge-success'>Active</span></a>" : "<a href='./includes/update_stus_loca.php?status=A&id={$id}'><span class='badge badge-danger'>Closed</span></a>" ; ?>               
                     </td>
                     <?php } ?>
 					<td>
 					<div class="btn-group" role="group" aria-label="Edit Button">
-                    <a href="./view_location.php?id=<?php echo $id ?>" class="btn btn-sm btn-dark waves-effect">
+                    <a href="./view_location.php?id=<?=$id ?>" class="btn btn-sm btn-dark waves-effect">
                         <i class="mdi mdi-eye-outline"></i>
                     </a>
-					<a href="./edit_location.php?id=<?php echo $id ?>" class="btn btn-sm btn-custom waves-effect">
+					<a href="./edit_location.php?id=<?=$id ?>" class="btn btn-sm btn-custom waves-effect">
                         <i class="fa fa-edit"></i>
                     </a>
                     <?php if($user_type == $access1){ ?>
-                    <a href="./includes/delete.php?tbl=cars&id=<?php echo $id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
+                    <a href="./includes/delete.php?tbl=cars&id=<?=$id_user_usr ?>" class="btn btn-sm btn-danger waves-effect">
                         <i class="dripicons-cross"></i>
                     </a>
 					<?php } ?>
@@ -224,7 +224,7 @@ while ($rec = mysqli_fetch_array($query_loc)) {
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -306,7 +306,7 @@ function drawChart() {
                         $Bad_get_q1 = $rec["Bad"];
                         $Verybad_get_q1 = $rec["Verybad"];
             ?>
-            ['<?php echo $Days_get_q1 ?>',<?php echo $VeryGood_get_q1.",".$Good_get_q1.",".$Average_get_q1.",".$Bad_get_q1.",".$Verybad_get_q1 ?>],
+            ['<?=$Days_get_q1 ?>',<?=$VeryGood_get_q1.",".$Good_get_q1.",".$Average_get_q1.",".$Bad_get_q1.",".$Verybad_get_q1 ?>],
             <?php } ?>
     ]);
 
@@ -347,7 +347,7 @@ function drawChart2() {
                         $NotStatified_get_q2 = $rec["NotStatified"];
                         $Dontknow_get_q2 = $rec["Dontknow"];
             ?>
-            ['<?php echo $Days_get_q2 ?>',<?php echo $Statified_get_q2.",".$NotStatified_get_q2.",".$Dontknow_get_q2 ?>],
+            ['<?=$Days_get_q2 ?>',<?=$Statified_get_q2.",".$NotStatified_get_q2.",".$Dontknow_get_q2 ?>],
             <?php } ?>
     ]);
 
@@ -388,7 +388,7 @@ function drawChart3() {
                         $NotStatified_get_q3 = $rec["NotStatified"];
                         $Dontknow_get_q3 = $rec["Dontknow"];
             ?>
-            ['<?php echo $Days_get_q3 ?>',<?php echo $Statified_get_q3.",".$NotStatified_get_q3.",".$Dontknow_get_q3 ?>],
+            ['<?=$Days_get_q3 ?>',<?=$Statified_get_q3.",".$NotStatified_get_q3.",".$Dontknow_get_q3 ?>],
             <?php } ?>
     ]);
 
@@ -427,7 +427,7 @@ function drawChart4() {
                         $Yes_get_q4 = $rec["Yes"];
                         $No_get_q4 = $rec["No"];
             ?>
-            ['<?php echo $Days_get_q4 ?>',<?php echo $Yes_get_q4.",".$No_get_q4 ?>],
+            ['<?=$Days_get_q4 ?>',<?=$Yes_get_q4.",".$No_get_q4 ?>],
             <?php } ?>
     ]);
 

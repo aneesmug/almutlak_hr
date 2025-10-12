@@ -91,7 +91,7 @@ if (mysqli_num_rows($query) == 1) {
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
@@ -255,7 +255,7 @@ if (mysqli_num_rows($query) == 1) {
         <div id="wrapper">
             <div class="left side-menu">
                 <div class="slimscroll-menu" id="remove-scroll">
-                    <div class="topbar-left"><a href="dashboard.php" class="logo"><span><img src="assets/images/logo.png" alt="" height="22"></span><i><img src="assets/images/logo_sm.png" alt="" height="28"></i></a></div><?php include("./includes/main_menu.php"); ?><div class="clearfix"></div>
+                    <div class="topbar-left"><a href="dashboard.php" class="logo"><span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span><i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i></a></div><?php include("./includes/main_menu.php"); ?><div class="clearfix"></div>
                 </div>
             </div>
             <div class="content-page">
@@ -270,7 +270,7 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                     <div class="report-container" id="report-content">
                                         <div class="report-header">
-                                            <img src="assets/images/logo.png" alt="Company Logo">
+                                            <img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo">
                                             <h2 class="report-title"><?= __('loan_request_report_header') ?></h2>
                                         </div>
                                         <div class="report-main-card">

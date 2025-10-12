@@ -161,14 +161,14 @@ $applist = implode(",",$applst);
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - <?php echo $name_mach ?></title>
+        <title><?=$site_title ?> - <?=$name_mach ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -200,10 +200,10 @@ $applist = implode(",",$applst);
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -238,10 +238,10 @@ $applist = implode(",",$applst);
     <div class="container-fluid">                                           
         <div class="row">
             <div class="col-12">
-                    <form action="reopen_request.php?id=<?php echo $_GET['id']?>&nid=<?php echo $_GET['nid']?>" method="post" >
+                    <form action="reopen_request.php?id=<?=$_GET['id']?>&nid=<?=$_GET['nid']?>" method="post" >
 
                         <div class="card-box">  
-                                <?php echo $msg ?>
+                                <?=$msg ?>
                                     <div class="row">
                                         <div class="col-6 ">
                                             <div class="mt-3 float-left">
@@ -249,7 +249,7 @@ $applist = implode(",",$applst);
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Invoice Date:</div>
                                                     </div>
-                                                    <input class="form-control" type='text' value="<?php echo date("d F Y")?>" readonly />
+                                                    <input class="form-control" type='text' value="<?=date("d F Y")?>" readonly />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
@@ -268,7 +268,7 @@ $applist = implode(",",$applst);
                                                         while($rec = mysqli_fetch_assoc($query_sub_type)){
                                                             $sub_type = $rec["sub_type"];
                                                     ?>
-                                                        <option value="<?php echo $sub_type ?>"><?php echo $sub_type ?></option>
+                                                        <option value="<?=$sub_type ?>"><?=$sub_type ?></option>
                                                     <?php } ?>
                                                     </select>
                                                 </div>
@@ -287,19 +287,19 @@ $applist = implode(",",$applst);
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Invoice No.:</div>
                                                     </div>
-                                                    <input class="form-control" type='text' name='inv_no' value="<?php echo $_GET['nid'] ?>" readonly />
+                                                    <input class="form-control" type='text' name='inv_no' value="<?=$_GET['nid'] ?>" readonly />
                                                 </div> 
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Department:</div>
                                                     </div>
-                                                    <input class="form-control" type='text' name='department' value="<?php echo $department_get ?>" readonly />
+                                                    <input class="form-control" type='text' name='department' value="<?=$department_get ?>" readonly />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Prepared by:</div>
                                                     </div>
-                                                    <input class="form-control" type='text' value="<?php echo $prep_by_get ?>" readonly />
+                                                    <input class="form-control" type='text' value="<?=$prep_by_get ?>" readonly />
                                                 </div>                                               
                                                 
                                                 <div class="input-group mb-2">
@@ -355,45 +355,45 @@ $applist = implode(",",$applst);
                                                     while($rec = mysqli_fetch_assoc($getdataloop)){
                                                 ?>
                                                     <tr class="set">
-                                                        <td><input type="text" class="form-control" readonly value="<?php echo $x++ ?>" id="row"></td>
+                                                        <td><input type="text" class="form-control" readonly value="<?=$x++ ?>" id="row"></td>
                                                         <td>
-                                                            <input type="text" name="item_name[]" readonly class="form-control" value="<?php echo $rec["item_name"]; ?>" />
+                                                            <input type="text" name="item_name[]" readonly class="form-control" value="<?=$rec["item_name"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input type="text" name="location[]" readonly class="form-control" value="<?php echo $rec["location"]; ?>" />
+                                                            <input type="text" name="location[]" readonly class="form-control" value="<?=$rec["location"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input class="form-control" readonly type='text' name='quantity[]' for="1" onkeypress="return isNumberKey(event,this)" value="<?php echo $rec["quantity"]; ?>" />
+                                                            <input class="form-control" readonly type='text' name='quantity[]' for="1" onkeypress="return isNumberKey(event,this)" value="<?=$rec["quantity"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input class="form-control" type='text' data-type="product_price" name='product_price[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?php echo $rec["product_price"]; ?>" />
+                                                            <input class="form-control" type='text' data-type="product_price" name='product_price[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?=$rec["product_price"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input class="form-control" type='text' data-type="itmvalue" name='itmvalue[]' for="1" readonly value="<?php echo $rec["itmvalue"]; ?>" />
+                                                            <input class="form-control" type='text' data-type="itmvalue" name='itmvalue[]' for="1" readonly value="<?=$rec["itmvalue"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input class="form-control" type='text' data-type="vat_rate" name='vat_rate[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?php echo $rec["vat_rate"]; ?>" />
+                                                            <input class="form-control" type='text' data-type="vat_rate" name='vat_rate[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?=$rec["vat_rate"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input class="form-control" type='text' data-type="vat_val" name='vat_val[]' for="1" readonly value="<?php echo $rec["vat_val"]; ?>" />
+                                                            <input class="form-control" type='text' data-type="vat_val" name='vat_val[]' for="1" readonly value="<?=$rec["vat_val"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input class="form-control" type='text' data-type="amount" name='amount[]' for="1" readonly value="<?php echo $rec["amount"]; ?>" />
+                                                            <input class="form-control" type='text' data-type="amount" name='amount[]' for="1" readonly value="<?=$rec["amount"]; ?>" />
                                                         </td>
                                                         <td>
-                                                            <input class="form-control" type='text' data-type="idiscount" name='idiscount[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?php echo $rec["idiscount"]; ?>" />
+                                                            <input class="form-control" type='text' data-type="idiscount" name='idiscount[]' for="1" readonly onkeypress="return isNumberKey(event,this)" value="<?=$rec["idiscount"]; ?>" />
                                                         </td>
                                                         <td class="text-right">
-                                                            <input class="form-control" type='text' name='total_cost[]' for='1' readonly value="<?php echo $rec["total_cost"]; ?>" />
+                                                            <input class="form-control" type='text' name='total_cost[]' for='1' readonly value="<?=$rec["total_cost"]; ?>" />
                                                         </td>
                                                         
                                                         
                                                         <td class="text-right">
                                                             <div class="btn-group" role="group" aria-label="Edit Button">
-                                                                <a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect editItemAttr bbtn" data-toggle="modal" data-target="#editItemModal" data-id="<?php echo $rec['id']?>" data-i_item_name="<?php echo $rec['item_name']?>" data-i_quantity="<?php echo $rec['quantity']?>" data-i_product_price="<?php echo $rec['product_price']?>" data-i_vat_rate="<?php echo $rec['vat_rate']?>" data-i_idiscount="<?php echo $rec['idiscount']?>" data-i_itmvalue="<?php echo $rec['itmvalue']?>" data-i_vat_val="<?php echo $rec['vat_val']?>" data-i_amount="<?php echo $rec['amount']?>" data-i_total_cost="<?php echo $rec['total_cost']?>" data-i_location="<?php echo $rec['location']?>" >
+                                                                <a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect editItemAttr bbtn" data-toggle="modal" data-target="#editItemModal" data-id="<?=$rec['id']?>" data-i_item_name="<?=$rec['item_name']?>" data-i_quantity="<?=$rec['quantity']?>" data-i_product_price="<?=$rec['product_price']?>" data-i_vat_rate="<?=$rec['vat_rate']?>" data-i_idiscount="<?=$rec['idiscount']?>" data-i_itmvalue="<?=$rec['itmvalue']?>" data-i_vat_val="<?=$rec['vat_val']?>" data-i_amount="<?=$rec['amount']?>" data-i_total_cost="<?=$rec['total_cost']?>" data-i_location="<?=$rec['location']?>" >
                                                                     <i class="mdi mdi-table-edit"></i>
                                                                 </a>
-                                                                <a href="./includes/delete.php?tbl=smart_request&id=<?php echo $rec["id"] ?>"  class="btn_remove btn btn-danger btn-sm bbtn" onclick="return confirm('Are you sure you want to delete this item?');">
+                                                                <a href="./includes/delete.php?tbl=smart_request&id=<?=$rec["id"] ?>"  class="btn_remove btn btn-danger btn-sm bbtn" onclick="return confirm('Are you sure you want to delete this item?');">
                                                                     <i class="mdi mdi-database-minus"></i>
                                                                 </a>
                                                             </div>
@@ -414,31 +414,31 @@ $applist = implode(",",$applst);
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Net-Total <small>(without VAT)</small></div>
                                                     </div>
-                                                    <input class="form-control subtotal" type='text' id='subtotal' name='subtotal' readonly value="<?php echo round($total_cost_get,2); ?>" />
+                                                    <input class="form-control subtotal" type='text' id='subtotal' name='subtotal' readonly value="<?=round($total_cost_get,2); ?>" />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">VAT 15%</div>
                                                     </div>
-                                                    <input class="form-control vat" type='text' id='vat' name='vat' readonly value="<?php echo round($vat_get,2); ?>" />
+                                                    <input class="form-control vat" type='text' id='vat' name='vat' readonly value="<?=round($vat_get,2); ?>" />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Total <small>(Before Disc.)</small></div>
                                                     </div>
-                                                    <input class="form-control total" type='text' id='total' name='total' readonly value="<?php echo round($total,2); ?>" />
+                                                    <input class="form-control total" type='text' id='total' name='total' readonly value="<?=round($total,2); ?>" />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Discount</div>
                                                     </div>
-                                                    <input class="form-control discount" type='text' data-type="discount" id='discount' name='discount' onkeypress="return isNumberKey(event,this)" value="<?php echo round($discount_get,2); ?>" <?php echo ($statusget == "Manager" AND $emptypeget == "Manager" AND $_SESSION['user_dept'] == $deptget)? "" : "readonly";?> />
+                                                    <input class="form-control discount" type='text' data-type="discount" id='discount' name='discount' onkeypress="return isNumberKey(event,this)" value="<?=round($discount_get,2); ?>" <?=($statusget == "Manager" AND $emptypeget == "Manager" AND $_SESSION['user_dept'] == $deptget)? "" : "readonly";?> />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Grand Total</div>
                                                     </div>
-                                                    <input class="form-control grandtotal" type='text' id='grandtotal' name='grandtotal' readonly value="<?php echo round($gtotal,2); ?>" />
+                                                    <input class="form-control grandtotal" type='text' id='grandtotal' name='grandtotal' readonly value="<?=round($gtotal,2); ?>" />
                                                 </div>
                                             </div>
                                             <div class="clearfix"></div>
@@ -469,7 +469,7 @@ $applist = implode(",",$applst);
 </div> <!-- content -->
 
 <footer class="footer">
-    <?php echo $site_footer ?>
+    <?=$site_footer ?>
 </footer>
 
 </div>
@@ -485,7 +485,7 @@ $applist = implode(",",$applst);
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <section class="contact-form">
-                <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+                <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
                     <div class="modal-header">
                         <h4 class="modal-title" id="myModalLabel17">Edit Item Details</h4>
                         <button type="button" class="close" data-dismiss="modal" aria-label="Close">
@@ -507,7 +507,7 @@ $applist = implode(",",$applst);
                                     while($rec = mysqli_fetch_assoc($query_sectin_nme)){
                                         $sectin_nme = $rec["section_name"];
                                 ?>
-                                    <option value="<?php echo $sectin_nme ?>"><?php echo str_replace(' ', '', $sectin_nme) ?></option>
+                                    <option value="<?=$sectin_nme ?>"><?=str_replace(' ', '', $sectin_nme) ?></option>
                                 <?php } ?>
                                 </select>
                             </div>
@@ -567,7 +567,7 @@ $applist = implode(",",$applst);
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
                 <h4 class="modal-title" id="myLargeModalLabel">
                     <i class="mdi mdi-image-filter-tilt-shift "></i> 
-                    Upload Documents for <?php echo $section_name ?>
+                    Upload Documents for <?=$section_name ?>
                 </h4>
             </div>
             <div class="modal-body">
@@ -664,7 +664,7 @@ $applist = implode(",",$applst);
         Dropzone.autoDiscover = false;
         $(function() {
             var myDropzone = new Dropzone(".dropzone", {
-                url: "upload_smt_attachments.php?id=<?php echo $invnoget ?>",
+                url: "upload_smt_attachments.php?id=<?=$invnoget ?>",
                 paramName: "file",
                 maxFilesize: 5,
                 maxFiles: 10,

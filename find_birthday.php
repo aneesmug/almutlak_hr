@@ -17,14 +17,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - Birthday by <?php echo $dobbymonth ?></title>
+        <title><?=$site_title ?> - Birthday by <?=$dobbymonth ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -66,10 +66,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -107,7 +107,7 @@
 <div class="row">
 	<div class="col-12">
         <div class="card-box">
-            <h3 class="m-t-0">Search Birthday by Month "<?php echo $dobbymonth ?>"</h3>
+            <h3 class="m-t-0">Search Birthday by Month "<?=$dobbymonth ?>"</h3>
             <form action="find_birthday.php" method="get">
             <div class="form-row">
                 <div class="form-group col-md-6">
@@ -119,7 +119,7 @@
             </form>
         </div>
 		<div class="card-box table-responsive">
-			<h4 class="m-t-0 header-title">All Employees Birthday of "<?php echo $dobbymonth ?>"</h4>
+			<h4 class="m-t-0 header-title">All Employees Birthday of "<?=$dobbymonth ?>"</h4>
 <table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 	<thead>
 		<tr>
@@ -185,12 +185,12 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
 	
 ?>
 				<tr>
-					<th><?php echo $emp_id_get ?></th>
-                    <th><?php echo $name_get ?></th>
-					<th><?php echo $dept_get; ?></th>
-					<th><?php echo $datevac; ?></th>
-                    <th><?php echo $country_get; ?></th>
-					<th><?php echo date('d', strtotime($dob_get)); ?></th>
+					<th><?=$emp_id_get ?></th>
+                    <th><?=$name_get ?></th>
+					<th><?=$dept_get; ?></th>
+					<th><?=$datevac; ?></th>
+                    <th><?=$country_get; ?></th>
+					<th><?=date('d', strtotime($dob_get)); ?></th>
 				</tr>
 <?php } ?>
 										</tbody>
@@ -205,7 +205,7 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

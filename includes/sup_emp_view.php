@@ -34,22 +34,22 @@
 
 				<div class="member-card pt-2 pb-2">
 					<div class="thumb-lg member-thumb m-b-10 mx-auto">
-						<img src="<?php echo $emp_avatar ?>" class="emp_avat_img empfil" alt="profile-image">
+						<img src="<?=$emp_avatar ?>" class="emp_avat_img empfil" alt="profile-image">
 					</div>
 
 					<div class=""><br>
-						<h4 class="m-b-5"><?php echo $name ?></h4>
+						<h4 class="m-b-5"><?=$name ?></h4>
 					</div>
 					<div class="btn-group" role="group" aria-label="Edit Button">
-					<a href="view_employee.php?id=<?php echo $id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="mdi mdi-account-search"></i> View Details</a>
+					<a href="view_employee.php?id=<?=$id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="mdi mdi-account-search"></i> View Details</a>
 					</div><br>
-					<span class="badge badge-dark badge-pill">Fly: <?php echo $cont_fly ?> | Encashed: <?php echo $cont_encashed ?></span>
+					<span class="badge badge-dark badge-pill">Fly: <?=$cont_fly ?> | Encashed: <?=$cont_encashed ?></span>
 
 					<div class="mt-4">
 						<div class="row">
 							<div class="col-4 text-left">
 								<div class="mt-3">
-									<h4 class="m-b-5"><?php echo $emp_id ?></h4>
+									<h4 class="m-b-5"><?=$emp_id ?></h4>
 									<p class="mb-0">Emp. ID</p>
 								</div>
 							</div>
@@ -57,7 +57,7 @@
 							<div class="col-4">
 								<div class="mt-3">
 									<?php if($emptype == "Manager"){?>
-										<h5 class="m-b-5"><?php echo $emptype; ?></h5>
+										<h5 class="m-b-5"><?=$emptype; ?></h5>
 <!--									<p class="mb-0 text-muted">Vac. No.</p>-->
 									<?php } ?>
 								</div>
@@ -65,7 +65,7 @@
 							
 							<div class="col-4 text-right">
 								<div class="mt-3">
-									<h5 class="m-b-5"><?php echo $iqama ?></h5>
+									<h5 class="m-b-5"><?=$iqama ?></h5>
 									<p class="mb-0">Iqama / ID</p>
 								</div>
 							</div>
@@ -78,7 +78,7 @@
 
 		</div> <!-- end col -->
 
-<div class="modal fade del_modal_sm_<?php echo $id ?>" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
+<div class="modal fade del_modal_sm_<?=$id ?>" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
 	<div class="modal-dialog modal-dialog-centered">
 		<div class="modal-content">
 			<div class="modal-header" style="background-color: brown !important; color: #fff !important;">
@@ -90,11 +90,11 @@
 			</div>
 			<div class="modal-body">
 				<h3>You need to delete!</h3>
-				<h4><strong style="font-size: 30px; "><?php echo $name ?></strong> Employee</h4>
+				<h4><strong style="font-size: 30px; "><?=$name ?></strong> Employee</h4>
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-light waves-effect" data-dismiss="modal">Close</button>
-				<a href="./includes/delete_emp.php?id=<?php echo $id ?>" class="btn btn-danger waves-effect waves-light"><i class="icon-close"></i> Delete</a>
+				<a href="./includes/delete_emp.php?id=<?=$id ?>" class="btn btn-danger waves-effect waves-light"><i class="icon-close"></i> Delete</a>
 			</div>
 		</div><!-- /.modal-content -->
 	</div><!-- /.modal-dialog -->

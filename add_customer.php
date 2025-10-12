@@ -58,14 +58,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - Add Customer</title>
+        <title><?=$site_title ?> - Add Customer</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -113,10 +113,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -154,8 +154,8 @@
 				<div class="col-md-12">
 					<div class="card-box" style="height: 300px;">
 						<h4 class="m-t-0 header-title">Register New Customer</h4>
-						<form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-							<?php echo $msg ?>
+						<form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+							<?=$msg ?>
 							<div class="form-row">
                                 <div class="form-group col-md-4">
                                     <label for="full_name" class="col-form-label">Customer Name</label>
@@ -186,14 +186,14 @@
                                             while($rec = mysqli_fetch_assoc($query_sectin_nme)){
                                                 $sectin_nme = $rec["section_name"];
                                         ?>
-                                            <option value="<?php echo $sectin_nme ?>"><?php echo str_replace(' ', '', $sectin_nme) ?></option>
+                                            <option value="<?=$sectin_nme ?>"><?=str_replace(' ', '', $sectin_nme) ?></option>
                                         <?php } ?>
                                         </select>
                                 </div>
 
 							</div>
 							<div class="btn-group" role="group" aria-label="Edit Button">
-							<a href="./view_customer.php?id=<?php echo $_GET['id'] ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+							<a href="./view_customer.php?id=<?=$_GET['id'] ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
 							<button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-gender-transgender"></i> Register</button>
 							</div>
 						</form>
@@ -207,7 +207,7 @@
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

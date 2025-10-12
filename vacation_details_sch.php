@@ -155,14 +155,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -249,15 +249,15 @@ if(isset($_POST['submit'])){
 	<div class="profile-user-box card-box <?php if($emp_status_get == "active" AND $fly_get == "no"){echo "bg-dark";}elseif($fly_get == "yes"){echo "bg-warning";}else{echo "bg-danger";}?>">
 		<div class="row">
 			<div class="col-sm-1">
-				<span class="float-left mr-3"><img src="<?php echo $emp_avatar_get ?>" alt="<?php echo $name_get ?>" class="thumb-lg rounded-circle"></span>
+				<span class="float-left mr-3"><img src="<?=$emp_avatar_get ?>" alt="<?=$name_get ?>" class="thumb-lg rounded-circle"></span>
 			</div>
 			<div class="col-sm-5">
 
 				<div class="media-body text-white">
-					<h4 class="mt-1 mb-1 font-18">Name: <?php echo $name_get ?></h4>
-					<p class="text-light mb-0">Joing Date: <?php echo date('M d Y', strtotime(str_replace('/', '-', $joining_date_get))) ?></p>
-					<p class="text-light mb-0">Mobile: <?php echo $mobile_get ?></p>
-					<p class="text-light mb-0">Vacation Days: <?php echo $vacation_days_get ?></p>
+					<h4 class="mt-1 mb-1 font-18">Name: <?=$name_get ?></h4>
+					<p class="text-light mb-0">Joing Date: <?=date('M d Y', strtotime(str_replace('/', '-', $joining_date_get))) ?></p>
+					<p class="text-light mb-0">Mobile: <?=$mobile_get ?></p>
+					<p class="text-light mb-0">Vacation Days: <?=$vacation_days_get ?></p>
 				</div>
 			</div>
 			<div class="col-sm-6">
@@ -265,13 +265,13 @@ if(isset($_POST['submit'])){
 					<p class="text-light mb-0">
 						<?php if($country_get == "Saudi Arabia"){echo "ID. No.: ".$iqama_get;}else{echo "Iqama No.: ".$iqama_get;}?>
 					</p>
-					<p class="text-light mb-0">Employee No.: <?php echo $emp_id_get ?></p>
-					<p class="text-light mb-0">Department: <?php echo $dept_get ?></p>
-					<p class="text-light mb-0">Nationality: <?php echo $country_get ?></p>
-					<p class="text-light mb-0">Balance Vacations: <?php echo $vacation_days_get - $emp_vacdays_get ?> Days</p>
+					<p class="text-light mb-0">Employee No.: <?=$emp_id_get ?></p>
+					<p class="text-light mb-0">Department: <?=$dept_get ?></p>
+					<p class="text-light mb-0">Nationality: <?=$country_get ?></p>
+					<p class="text-light mb-0">Balance Vacations: <?=$vacation_days_get - $emp_vacdays_get ?> Days</p>
 					<?php if($emp_status_get == "no" ){?>
 					<p class="text-light mb-0">
-						<?php echo $note_get." Date: ".date('d M Y', strtotime($emp_ter_date_get)); ?>
+						<?=$note_get." Date: ".date('d M Y', strtotime($emp_ter_date_get)); ?>
 					</p>
 					<?php } ?>
 				</div>
@@ -289,8 +289,8 @@ if(isset($_POST['submit'])){
                             <div class="col-md-12">
                                 <div class="card-box">
                                     <h4 class="m-t-0 header-title">Add Vacation</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-										<?php echo $msg; ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+										<?=$msg; ?>
                                         <div class="form-row">
 											<div class="form-group col-md-3">
                                                 <label for="date_select" class="col-form-label">Vacation Date<span class="text-danger">*</span></label>
@@ -299,7 +299,7 @@ if(isset($_POST['submit'])){
                                             
                                             <div class="form-group col-md-3">
                                                 <label for="last_vac_date" class="col-form-label">Last Vacation Date </label>
-                                                <input type="text" name="last_vac_date" class="form-control" value="<?php echo $last_vac_datevac ?>" readonly />
+                                                <input type="text" name="last_vac_date" class="form-control" value="<?=$last_vac_datevac ?>" readonly />
                                             </div>
 											
 											<div class="form-group col-md-3">
@@ -356,7 +356,7 @@ if(isset($_POST['submit'])){
 										<div class="col-sm-12 col-xl-12">
 											<div class="card-box bg-danger widget-flat border-danger text-white">
 												<i class="fi-delete"></i>
-												<h1 class="m-b-10">Your <strong>("<?php echo $name_get ?>")</strong> Vacation information registered already!</h1>
+												<h1 class="m-b-10">Your <strong>("<?=$name_get ?>")</strong> Vacation information registered already!</h1>
 											</div>
 											<a href="vacation_sch.php" class="btn btn-primary"><i class="fa fa-angle-double-left"></i> Back to main Page</a>
 											
@@ -381,7 +381,7 @@ if(isset($_POST['submit'])){
 										<div class="col-sm-12 col-xl-12">
 											<div class="card-box bg-danger widget-flat border-danger text-white">
 												<i class="fi-delete"></i>
-												<h1 class="m-b-10"><?php echo $msg ?></h1>
+												<h1 class="m-b-10"><?=$msg ?></h1>
 												<h1 class="m-b-10">Please Enter Correct Mochachino Employee ID. or Contact with Human Resource (HR) Department.</h1>
 											</div>
 											<a href="vacation_sch.php" class="btn btn-primary"><i class="fa fa-angle-double-left"></i> Back to main Page</a>
@@ -398,7 +398,7 @@ if(isset($_POST['submit'])){
 				<?php } ?>
 				
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
             </div>
 

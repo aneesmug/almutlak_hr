@@ -220,14 +220,14 @@ require_once __DIR__ . '/includes/db.php';
 
 <head>
     <meta charset="utf-8" />
-    <title><?php echo $site_title ?> - <?php echo $name_mach ?></title>
+    <title><?=$site_title ?> - <?=$name_mach ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
     <!-- App favicon -->
-    <link rel="shortcut icon" href="assets/images/favicon.ico">
+    <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
     <!-- Modal -->
     <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -272,10 +272,10 @@ require_once __DIR__ . '/includes/db.php';
                 <div class="topbar-left">
                     <a href="dashboard.php" class="logo">
                         <span>
-                            <img src="assets/images/logo.png" alt="" height="22">
+                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                         </span>
                         <i>
-                            <img src="assets/images/logo_sm.png" alt="" height="28">
+                            <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                         </i>
                     </a>
                 </div>
@@ -314,7 +314,7 @@ require_once __DIR__ . '/includes/db.php';
 
                         <div class="col-md-12" id="DataContact">
                             <div class="card-box">
-                                <?php echo $msg ?>
+                                <?=$msg ?>
                                 <div class="row">
                                     <div class="col-12">
                                         <div class="card-box">
@@ -343,7 +343,7 @@ require_once __DIR__ . '/includes/db.php';
             </div> <!-- content -->
 
             <footer class="footer">
-                <?php echo $site_footer ?>
+                <?=$site_footer ?>
             </footer>
 
         </div>

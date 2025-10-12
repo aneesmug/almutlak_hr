@@ -67,14 +67,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -117,10 +117,10 @@
                     <div class="topbar-left">
                         <a href="index.html" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -132,8 +132,8 @@
 	<div class="user-img">
 		<img src="assets/images/users/avatar-1.jpg" alt="user-img" title="Mat Helme" class="rounded-circle img-fluid">
 	</div>
-	<h5><a href="javascript:voif(0);"><?php echo $userwel ?></a> </h5>
-	<p class="text-muted"><?php echo $usracc ?></p>
+	<h5><a href="javascript:voif(0);"><?=$userwel ?></a> </h5>
+	<p class="text-muted"><?=$usracc ?></p>
 </div>
 
 <div id="sidebar-menu">
@@ -141,7 +141,7 @@
 	<ul class="metismenu" id="side-menu">
 		<li class="menu-title">Navigation</li>
 		<li>
-			<a href="dashboardgm.php" class="<?php echo dashboard($current_page) ?>" >
+			<a href="dashboardgm.php" class="<?=dashboard($current_page) ?>" >
 				<i class="fi-air-play"></i>
 				<span>Dashboard</span>
 			</a>
@@ -182,10 +182,10 @@
                                 <div class="card-box">
                                     <div class="clearfix">
                                         <div class="float-left mb-3">
-                                            <img src="assets/images/logo.png" alt="" height="28">
+                                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="28">
                                         </div>
                                         <div class="float-right">
-                                            <h4 class="m-0">Vacation for <?php echo $name_get ?></h4>
+                                            <h4 class="m-0">Vacation for <?=$name_get ?></h4>
                                         </div>
                                     </div>
 
@@ -194,7 +194,7 @@
                                         </div><!-- end col -->
                                         <div class="col-4 offset-2">
                                             <div class="mt-3 float-right">
-                                                <p class="m-b-13 font-18"><strong>Request Date: </strong> <?php echo $date_reg_vac_get ?></p>
+                                                <p class="m-b-13 font-18"><strong>Request Date: </strong> <?=$date_reg_vac_get ?></p>
 												
 												<?php
 													if($status_vac_get == "app_hr"){
@@ -213,7 +213,7 @@
 												<p class="m-b-13 font-18"><strong>Request Status: </strong> <span class="badge badge-danger">Vacation Not Approved
 												</span></p>
 												<?php } ?>
-                                                <p class="m-b-10"><strong>Request ID: </strong> #<?php echo $_GET['id'] ?></p>
+                                                <p class="m-b-10"><strong>Request ID: </strong> #<?=$_GET['id'] ?></p>
                                             </div>
                                         </div><!-- end col -->
                                     </div>
@@ -221,7 +221,7 @@
 									<div class="row">
 										<?php if($status_vac_get == "not_approve"){?>
 										<div class="col-12">
-										<center><h3 class="mt-0 m-b-20" style="color: #F1556C;">Rejection Note: <?php echo ucwords($note_vac_get); ?></h3></center>
+										<center><h3 class="mt-0 m-b-20" style="color: #F1556C;">Rejection Note: <?=ucwords($note_vac_get); ?></h3></center>
 										</div>
 										<?php } ?>
 										<div class="col-6">
@@ -232,9 +232,9 @@
                                         <hr>
 
                                         <div class="text-left">
-                                            <p class="font-15"><strong>Full Name :</strong> <span class="m-l-15"><?php echo $name_get ?></span></p>
+                                            <p class="font-15"><strong>Full Name :</strong> <span class="m-l-15"><?=$name_get ?></span></p>
 
-                                            <p class="font-15"><strong>Mobile :</strong><span class="m-l-15"><?php echo $mobile_get ?></span></p>
+                                            <p class="font-15"><strong>Mobile :</strong><span class="m-l-15"><?=$mobile_get ?></span></p>
 
                                             <p class="text-muted font-13"><strong>Location :</strong> <span class="m-l-15">USA</span></p>
 
@@ -394,11 +394,11 @@
 			</div>
 			<div class="modal-body">
 				<h3>You need to Approve!</h3>
-				<h4><strong style="font-size: 30px; "><?php echo $name_get ?></strong></h4>
+				<h4><strong style="font-size: 30px; "><?=$name_get ?></strong></h4>
 <div class="form-row" id="content" style="display:none;">
 <form action="./includes/vac_app_emp.php" method="get">
 <!--	<a href="" class="btn btn-danger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-<input type="hidden" name="id" value="<?php echo $_GET['id'] ?>" >
+<input type="hidden" name="id" value="<?=$_GET['id'] ?>" >
 <input type="hidden" name="status" value="not_approve" >
 	<div class="input-group">
 		<input type="text" id="ter_note" name="note" class="form-control" aria-describedby="basic-addon2">
@@ -412,7 +412,7 @@
 			<div class="modal-footer">
 				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
 				<button type="button" id="terminat_emp" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-off"></i> Not Approve</button>
-				<a href="./includes/vac_app_emp.php?id=<?php echo $_GET['id'] ?>&status=approve" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-account-star"></i> Approved</a>			
+				<a href="./includes/vac_app_emp.php?id=<?=$_GET['id'] ?>&status=approve" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-account-star"></i> Approved</a>			
 				
 			</div>
 		</div><!-- /.modal-content -->

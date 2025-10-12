@@ -87,14 +87,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - <?php echo $name_mach ?></title>
+        <title><?=$site_title ?> - <?=$name_mach ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -126,10 +126,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -168,16 +168,16 @@ if(isset($_POST['submit'])){
 			<div class="row">
 				<div class="col-md-12">
 					
-					<form action="add_replace_item.php?id=<?php echo $_GET['id'] ?>" method="post" >
+					<form action="add_replace_item.php?id=<?=$_GET['id'] ?>" method="post" >
 
 						<div class="card-box">	
-								<?php echo $msg ?>
+								<?=$msg ?>
                                     <div class="clearfix">
                                         <div class="float-left mb-3">
-                                            <img src="assets/images/logo.png" alt="" height="50">
+                                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="50">
                                         </div>
                                         <div class="float-right">
-                                            <h4 class="m-0 d-print-none">Items adding of "<?php echo $name_mach ?>"</h4>
+                                            <h4 class="m-0 d-print-none">Items adding of "<?=$name_mach ?>"</h4>
                                         </div>
                                     </div>
 
@@ -191,9 +191,9 @@ if(isset($_POST['submit'])){
                                     <div class="row">
                                         <div class="col-6 ">
                                             <div class="mt-3 float-left">
-                                                <p class="m-b-10"><strong>Invoice Date: </strong><?php echo date("d F Y") ?></p>
-                                                <p class="m-b-10"><strong>Location: </strong> <span class="badge badge-success"><?php echo $old_location ?></span></p>
-                                                <p class="m-b-10"><strong>Machine ID: </strong>	<?php echo $macid ?></p>
+                                                <p class="m-b-10"><strong>Invoice Date: </strong><?=date("d F Y") ?></p>
+                                                <p class="m-b-10"><strong>Location: </strong> <span class="badge badge-success"><?=$old_location ?></span></p>
+                                                <p class="m-b-10"><strong>Machine ID: </strong>	<?=$macid ?></p>
                                                 <p class="m-b-10">
 
                                                 <div class="input-group mb-2">
@@ -318,7 +318,7 @@ if(isset($_POST['submit'])){
 	</div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

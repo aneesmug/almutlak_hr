@@ -13,7 +13,7 @@
 		?>        
         </button>
         <div id="inbox-dropdown" class="dropdown-menu inbox">
-          <div class="dropdown-header">Inbox <span class="badge pull-right"><?php echo $unread_msg ?> </span></div>
+          <div class="dropdown-header">Inbox <span class="badge pull-right"><?=$unread_msg ?> </span></div>
           <div class="dropdown-container">
             <div class="nano">
               <div class="nano-content">
@@ -39,10 +39,10 @@
 							}
 						
 				  ?>
-                  <li><a href="message_open.php?tpages=1&page=1&inbox_id=<?php echo $id_st ?>&inbox_email=<?php echo $email_st ?>"> <span class="user-image"><img src="images/logo.png" alt="Gluck Dorris" /></span>
-                    <h5><?php echo $name_st ?></h5>
-                    <p><?php echo $message_st ?></p>
-                    <span class="label label-default"><i class="entypo-clock"></i> <?php echo $date_st_d." ".$date_st_m." ".$date_st_t ?></span> <span class="delete"><i class="entypo-back"></i></span> </a>
+                  <li><a href="message_open.php?tpages=1&page=1&inbox_id=<?=$id_st ?>&inbox_email=<?=$email_st ?>"> <span class="user-image"><img src="images/logo.png" alt="Gluck Dorris" /></span>
+                    <h5><?=$name_st ?></h5>
+                    <p><?=$message_st ?></p>
+                    <span class="label label-default"><i class="entypo-clock"></i> <?=$date_st_d." ".$date_st_m." ".$date_st_t ?></span> <span class="delete"><i class="entypo-back"></i></span> </a>
                     </li>
                   <?php } ?>
                 </ul>

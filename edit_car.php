@@ -55,14 +55,14 @@ $u = "UPDATE `cars` SET `maker_name`='".$maker_name_up."', `model`='".$model_up.
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -94,10 +94,10 @@ $u = "UPDATE `cars` SET `maker_name`='".$maker_name_up."', `model`='".$model_up.
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -137,31 +137,31 @@ $u = "UPDATE `cars` SET `maker_name`='".$maker_name_up."', `model`='".$model_up.
 				<div class="col-md-12">
 					<div class="card-box">
 						<h4 class="m-t-0 header-title">Register New Car</h4>
-						<form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-							<?php echo $error_1 ?>
+						<form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+							<?=$error_1 ?>
 							<div class="form-row">
 								<div class="form-group col-md-6">
 									<label for="maker_name">Maker Name<span class="text-danger">*</span></label>
-									<input type="text" name="maker_name" required placeholder="Enter maker name" class="form-control" id="maker_name" value="<?php echo $maker_name_get ?>" >
+									<input type="text" name="maker_name" required placeholder="Enter maker name" class="form-control" id="maker_name" value="<?=$maker_name_get ?>" >
 								</div>
 								<div class="form-group col-md-6">
 									<label for="model">Model<span class="text-danger">*</span></label>
-									<input type="text" name="model" required placeholder="Enter model" class="form-control" id="model" value="<?php echo $model_get ?>" >
+									<input type="text" name="model" required placeholder="Enter model" class="form-control" id="model" value="<?=$model_get ?>" >
 								</div>
 							</div>
 							<div class="form-row">
 								<div class="form-group col-md-3">
 									<label for="made_year" class="col-form-label">Made Year<span class="text-danger">*</span></label>
-									<input type="text" name="made_year" placeholder="Enter made year" class="form-control" id="made_year" required value="<?php echo $made_year_get ?>" >
+									<input type="text" name="made_year" placeholder="Enter made year" class="form-control" id="made_year" required value="<?=$made_year_get ?>" >
 								</div>
 								<div class="form-group col-md-3">
 									<label for="plate_no" class="col-form-label">Plate No.<span class="text-danger">*</span></label>
-									<input type="text" name="plate_no" placeholder="1234-ABC" class="form-control" id="plate_no" required autocomplete="off" style="text-transform: uppercase !important;" value="<?php echo $plate_no_get ?>" >
+									<input type="text" name="plate_no" placeholder="1234-ABC" class="form-control" id="plate_no" required autocomplete="off" style="text-transform: uppercase !important;" value="<?=$plate_no_get ?>" >
 								</div>
 								<div class="form-group col-md-3">
 									<label for="type" class="col-form-label">Type of car<span class="text-danger">*</span></label>
 									<select class="form-control selectpicker" data-live-search="true" data-style="btn-custom" name="type" required>
-										<option value="<?php echo $type_get ?>" ><?php echo $type_get ?></option>
+										<option value="<?=$type_get ?>" ><?=$type_get ?></option>
 										<option value="">Select</option>
 										<option value="Bus">Bus</option>
 										<option value="Car">Car</option>
@@ -175,11 +175,11 @@ $u = "UPDATE `cars` SET `maker_name`='".$maker_name_up."', `model`='".$model_up.
 								</div>
 								<div class="form-group col-md-3">
 									<label for="remarks" class="col-form-label">Remarks</label>
-									<input type="text" name="remarks" placeholder="Enter remarks" class="form-control" id="remarks" value="<?php echo $remarks_get ?>">
+									<input type="text" name="remarks" placeholder="Enter remarks" class="form-control" id="remarks" value="<?=$remarks_get ?>">
 								</div>
 							</div>
 							<div class="btn-group" role="group" aria-label="Edit Button">
-							<a href="./view_car.php?id=<?php echo $_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+							<a href="./view_car.php?id=<?=$_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
 							<button type="submit" name="submit" class="btn btn-success"><i class="mdi mdi-car"></i> Edit Save</button>
 							</div>
 						</form>
@@ -193,7 +193,7 @@ $u = "UPDATE `cars` SET `maker_name`='".$maker_name_up."', `model`='".$model_up.
 	</div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

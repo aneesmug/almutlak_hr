@@ -117,7 +117,7 @@ MODIFICATION SUMMARY:
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -143,8 +143,8 @@ MODIFICATION SUMMARY:
                 <div class="slimscroll-menu" id="remove-scroll">
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
-                            <span><img src="assets/images/logo.png" alt="" height="20"></span>
-                            <i><img src="assets/images/logo_sm.png" alt="" height="28"></i>
+                            <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="20"></span>
+                            <i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
                         </a>
                     </div>
                     <?php include("./includes/main_menu.php"); ?>
@@ -160,7 +160,7 @@ MODIFICATION SUMMARY:
                                 <div class="card-box">
                                     <div class="clearfix">
                                         <div class="float-left mb-3">
-                                            <img src="assets/images/logo.png" alt="" height="100">
+                                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="100">
                                         </div>
                                         <div class="float-right">
                                             <h4 class="m-0 d-print-none">Smart Table Request</h4>

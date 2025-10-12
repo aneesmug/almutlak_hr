@@ -35,7 +35,7 @@ if((isset($_COOKIE['user']) && $_COOKIE['user'] != '') || (isset($_SESSION['user
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -63,7 +63,7 @@ if((isset($_COOKIE['user']) && $_COOKIE['user'] != '') || (isset($_SESSION['user
                         <div class="card-box p-5">
                             <h2 class="text-uppercase text-center pb-4">
                                 <a href="index.html" class="text-success">
-                                    <span><img src="assets/images/logo.png" alt="" height="26"></span>
+                                    <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="26"></span>
                                 </a>
                             </h2>
 

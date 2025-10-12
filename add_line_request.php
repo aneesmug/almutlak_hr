@@ -93,14 +93,14 @@ if(isset($_POST['submit'])){
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - <?php echo $name_mach ?></title>
+        <title><?=$site_title ?> - <?=$name_mach ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -154,10 +154,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -192,10 +192,10 @@ if(isset($_POST['submit'])){
     <div class="container-fluid">											
         <div class="row">
         	<div class="col-12">
-                    <form action="add_line_request.php?id=<?php echo $_GET['id'] ?>" method="post" >
+                    <form action="add_line_request.php?id=<?=$_GET['id'] ?>" method="post" >
 
                         <div class="card-box">  
-                                <?php echo $msg ?>
+                                <?=$msg ?>
                                     <div class="row">
                                         <div class="col-6 ">
                                             <div class="mt-3 float-left">
@@ -203,13 +203,13 @@ if(isset($_POST['submit'])){
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Invoice Date:</div>
                                                     </div>
-                                                    <input class="form-control" type='text' value="<?php echo date("d F Y")?>" readonly />
+                                                    <input class="form-control" type='text' value="<?=date("d F Y")?>" readonly />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Sub. Type</div>
                                                     </div>
-                                                    <input class="form-control" type='text' name="sub_type" value="<?php echo $sub_type_get?>" readonly/>
+                                                    <input class="form-control" type='text' name="sub_type" value="<?=$sub_type_get?>" readonly/>
                                                 </div>
                                                
                                             </div>
@@ -220,14 +220,14 @@ if(isset($_POST['submit'])){
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Invoice No.:</div>
                                                     </div>
-                                                    <input class="form-control" type='text' name='inv_no' value="<?php echo $inv_no_get ?>" readonly />
+                                                    <input class="form-control" type='text' name='inv_no' value="<?=$inv_no_get ?>" readonly />
                                                 </div>                                               
                                                 
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
                                                         <div class="input-group-text">Tally ID.</div>
                                                     </div>
-                                                    <input class="form-control" type='text' id='tally_id' name='tally_id' value="<?php echo $tally_id_get ?>" />
+                                                    <input class="form-control" type='text' id='tally_id' name='tally_id' value="<?=$tally_id_get ?>" />
                                                 </div>
                                                 <div class="input-group mb-2">
                                                     <div class="input-group-prepend">
@@ -364,7 +364,7 @@ if(isset($_POST['submit'])){
 </div> <!-- content -->
 
 <footer class="footer">
-    <?php echo $site_footer ?>
+    <?=$site_footer ?>
 </footer>
 
 </div>

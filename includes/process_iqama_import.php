@@ -56,22 +56,19 @@ if (isset($_POST["import"])) {
                 // Start from row 2 to skip the header
                 for ($row = 2; $row <= $highestRow; $row++) {
                     $iqama = trim($sheet->getCell('A' . $row)->getValue());
-                    $iqama_exp_g_excel = $sheet->getCell('B' . $row)->getValue();
+                    $iqama_exp_hijri_excel = trim($sheet->getCell('B' . $row)->getValue());
 
-                    if (!empty($iqama) && !empty($iqama_exp_g_excel)) {
-                        // Convert Excel date to PHP DateTime object, then format it
-                        if (is_numeric($iqama_exp_g_excel)) {
-                            // It's an Excel timestamp
-                             $gregorianDateObj = Date::excelToDateTimeObject($iqama_exp_g_excel);
-                             $gregorianDateStr = $gregorianDateObj->format('Y-m-d');
-                        } else {
-                            // It's a string date, try to parse it
-                            $gregorianDateObj = new DateTime(trim($iqama_exp_g_excel));
-                            $gregorianDateStr = $gregorianDateObj->format('Y-m-d');
-                        }
+                    if (!empty($iqama) && !empty($iqama_exp_hijri_excel)) {
+                        // We expect the Hijri date to be a string in 'YYYY-MM-DD' format
+                        $hijriDateStr = $iqama_exp_hijri_excel;
                        
-                        // Convert Gregorian to Hijri
-                        $hijriDateStr = convertGregorianToHijri($gregorianDateStr);
+                        // Convert Hijri to Gregorian
+                        $gregorianDateStr = convertHijriToGregorian($hijriDateStr);
+
+                        if (empty($gregorianDateStr)) {
+                            // Skip if date conversion fails
+                            continue;
+                        }
 
                         // Check if employee exists with the given iqama
                         $checkStmt = $conDB->prepare("SELECT id FROM employees WHERE iqama = ?");
@@ -113,6 +110,47 @@ if (isset($_POST["import"])) {
 } else {
     header("Location../: import_iqama_exp.php");
     exit();
+}
+
+/**
+ * Converts a Hijri date string to a Gregorian date string.
+ *
+ * @param string $hijriDateStr The date in Hijri format 'YYYY-MM-DD'.
+ * @return string The date in Gregorian format 'Y-m-d'.
+ */
+function convertHijriToGregorian($hijriDateStr) {
+    if (!class_exists('IntlDateFormatter') || empty($hijriDateStr)) {
+        return '';
+    }
+
+    // Create a formatter to parse the Hijri date
+    $hijriParser = new IntlDateFormatter(
+        'en_US@calendar=islamic-umalqura',
+        IntlDateFormatter::FULL,
+        IntlDateFormatter::FULL,
+        'Asia/Riyadh',
+        IntlDateFormatter::TRADITIONAL,
+        'yyyy-MM-dd'
+    );
+
+    // Parse the Hijri date string to a timestamp
+    $timestamp = $hijriParser->parse($hijriDateStr);
+
+    if ($timestamp === false) {
+        return ''; // Return empty if parsing fails
+    }
+
+    // Create a formatter for the Gregorian calendar
+    $gregorianFormatter = new IntlDateFormatter(
+        'en_US@calendar=gregorian',
+        IntlDateFormatter::FULL,
+        IntlDateFormatter::FULL,
+        'Asia/Riyadh',
+        IntlDateFormatter::TRADITIONAL,
+        'yyyy-MM-dd'
+    );
+
+    return $gregorianFormatter->format($timestamp);
 }
 
 /**

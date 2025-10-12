@@ -49,14 +49,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - Add Location</title>
+        <title><?=$site_title ?> - Add Location</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -94,10 +94,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="index.html" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -137,8 +137,8 @@ if(isset($_POST['submit'])){
 				<div class="col-md-12">
 					<div class="card-box">
 						<h4 class="m-t-0 header-title">Register New Location</h4>
-						<form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-							<?php echo $msg ?>
+						<form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+							<?=$msg ?>
 							<div class="form-row">
                                 <div class="form-group col-md-3">
                                     <label for="section_name" class="col-form-label">Location Name<span class="text-danger">*</span></label>
@@ -165,7 +165,7 @@ if(isset($_POST['submit'])){
                                             while($rec = mysqli_fetch_assoc($query_sectin_nme)){
                                                 $brand_name = $rec["dep_nme"];
                                         ?>
-                                            <option value="<?php echo $brand_name ?>"><?php echo $brand_name ?></option>
+                                            <option value="<?=$brand_name ?>"><?=$brand_name ?></option>
                                         <?php } ?>
                                     </select>
                                 </div>
@@ -226,7 +226,7 @@ if(isset($_POST['submit'])){
 	</div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

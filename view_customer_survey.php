@@ -50,14 +50,14 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - Registerd Surveys</title>
+        <title><?=$site_title ?> - Registerd Surveys</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -108,10 +108,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -153,36 +153,36 @@
                                     <div class="row">
                                         <div class="col-sm-6">
                                             <div class="media-body text-white">
-                                                <h4 class="mt-1 mb-1 font-18">Customer Name: <?php echo $full_name ?></h4>
-                                                <p class="text-light mb-0">Email: <?php echo $email ?></p>
-                                                <p class="text-light mb-0">Age: <?php echo $age ?></p>
+                                                <h4 class="mt-1 mb-1 font-18">Customer Name: <?=$full_name ?></h4>
+                                                <p class="text-light mb-0">Email: <?=$email ?></p>
+                                                <p class="text-light mb-0">Age: <?=$age ?></p>
                                             </div>
                                         </div>
                                         <div class="col-sm-6">
                                             <div class="text-left text-white">
-                                                <h4 class="mt-1 mb-1 font-18">Mobile: <?php echo $mobile ?></h4>
-                                                <p class="text-light mb-0">Gender: <?php echo $gender ?></p>
-                                                <p class="text-light mb-0">Date of survey: <?php echo $date_reg ?></p>
+                                                <h4 class="mt-1 mb-1 font-18">Mobile: <?=$mobile ?></h4>
+                                                <p class="text-light mb-0">Gender: <?=$gender ?></p>
+                                                <p class="text-light mb-0">Date of survey: <?=$date_reg ?></p>
                                             </div>
 
                                             <div class="text-right">
                                             <?php if($status == "A"){ ?>
                                                 <div class="btn-group" role="group" aria-label="Edit Button">
                                                 
-                                                <a href="add_cust_card.php?id=<?php echo $id_cust ?>" class="btn btn-sm btn-dark waves-effect">
+                                                <a href="add_cust_card.php?id=<?=$id_cust ?>" class="btn btn-sm btn-dark waves-effect">
                                                     <i class="mdi mdi-credit-card-plus"></i> Add New Card
                                                 </a>
                                                 
                                                 <?php if ($injazat_no != 0 ) { ?>
-                                                <a href="update_cust_card.php?id=<?php echo $id_cust ?>" class="btn btn-sm btn-primary waves-effect">
+                                                <a href="update_cust_card.php?id=<?=$id_cust ?>" class="btn btn-sm btn-primary waves-effect">
                                                     <i class="mdi mdi-credit-card-multiple"></i> Update Card
                                                 </a>
-                                                <!-- <a href="print_customer_envp.php?id=<?php echo $id_cust ?>" class="btn btn-sm btn-purple waves-effect"> -->
-                                                <!-- <a href="./print_customer_envp.php?id=<?php echo $id_cust; ?>" class="btn btn-sm btn-purple waves-effect" target="_blank">
+                                                <!-- <a href="print_customer_envp.php?id=<?=$id_cust ?>" class="btn btn-sm btn-purple waves-effect"> -->
+                                                <!-- <a href="./print_customer_envp.php?id=<?=$id_cust; ?>" class="btn btn-sm btn-purple waves-effect" target="_blank">
                                                     <i class="mdi mdi-printer"></i> Print Envelope
                                                 </a> -->
                                                 <?php } ?>
-                                                <a href="edit_machine.php?id=<?php echo $id_cust ?>" class="btn btn-sm btn-light waves-effect">
+                                                <a href="edit_machine.php?id=<?=$id_cust ?>" class="btn btn-sm btn-light waves-effect">
                                                     <i class="fa fa-edit"></i> Edit
                                                 </a>
                                                 </div>
@@ -204,7 +204,7 @@
                                         <article class="timeline-item alt">
                                             <div class="text-right">
                                                 <div class="time-show first">
-                                                    <a href="javascript:void(0)" class="btn btn-custom w-lg">Survey from <b><?php echo $location ?></b></a>
+                                                    <a href="javascript:void(0)" class="btn btn-custom w-lg">Survey from <b><?=$location ?></b></a>
                                                 </div>
                                             </div>
                                         </article>
@@ -215,8 +215,8 @@
                                                         <span class="arrow-alt"></span>
                                                         <span class="timeline-icon bg-custom"><i class="mdi mdi-adjust"></i></span>
                                                         <h4 class="text-custom">How was the service provided?</h4>
-                                                        <p class="timeline-date text-muted"><?php echo $question_1 ?></p>
-                                                        <p><?php echo $add_msg_1 ?></p>
+                                                        <p class="timeline-date text-muted"><?=$question_1 ?></p>
+                                                        <p><?=$add_msg_1 ?></p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -228,8 +228,8 @@
                                                         <span class="arrow"></span>
                                                         <span class="timeline-icon bg-custom"><i class="mdi mdi-adjust"></i></span>
                                                         <h4 class="text-custom">Are you satisfied with the quality of the service provided?</h4>
-                                                        <p class="timeline-date text-muted"><?php echo $question_2 ?></p>
-                                                        <p><?php echo $add_msg_2 ?></p>
+                                                        <p class="timeline-date text-muted"><?=$question_2 ?></p>
+                                                        <p><?=$add_msg_2 ?></p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -250,8 +250,8 @@
                                                         <span class="arrow-alt"></span>
                                                         <span class="timeline-icon bg-custom"><i class="mdi mdi-adjust"></i></span>
                                                         <h4 class="text-custom">The speed of completion service? </h4>
-                                                        <p class="timeline-date text-muted"><?php echo $question_3 ?></p>
-                                                        <p><?php echo $add_msg_3 ?></p>
+                                                        <p class="timeline-date text-muted"><?=$question_3 ?></p>
+                                                        <p><?=$add_msg_3 ?></p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -264,8 +264,8 @@
                                                         <span class="arrow"></span>
                                                         <span class="timeline-icon bg-custom"><i class="mdi mdi-adjust"></i></span>
                                                         <h4 class="text-custom">Was this your first experience with us? </h4>
-                                                        <p class="timeline-date text-muted"><?php echo $question_4 ?></p>
-                                                        <p><?php echo $add_msg_4 ?></p>
+                                                        <p class="timeline-date text-muted"><?=$question_4 ?></p>
+                                                        <p><?=$add_msg_4 ?></p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -278,8 +278,8 @@
                                                         <span class="arrow-alt"></span>
                                                         <span class="timeline-icon bg-custom"><i class="mdi mdi-adjust"></i></span>
                                                         <h4 class="text-custom">Could your experience be better? If yes. How ? </h4>
-                                                        <p class="timeline-date text-muted"><?php echo $question_5 ?></p>
-                                                        <p><?php echo $add_msg_5 ?></p>
+                                                        <p class="timeline-date text-muted"><?=$question_5 ?></p>
+                                                        <p><?=$add_msg_5 ?></p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -292,7 +292,7 @@
                                                         <span class="arrow"></span>
                                                         <span class="timeline-icon bg-custom"><i class="mdi mdi-adjust"></i></span>
                                                         <h4 class="text-custom">What can we do to improve, add or change? What's your suggestion? </h4>
-                                                        <p><?php echo $add_msg_6 ?></p>
+                                                        <p><?=$add_msg_6 ?></p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -311,7 +311,7 @@
 
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

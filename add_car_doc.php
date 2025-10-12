@@ -62,14 +62,14 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -115,10 +115,10 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -160,17 +160,17 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']
                                     <div class="row">
                                         <div class="col-sm-6">
                                             <div class="media-body text-white">
-                                                <h4 class="mt-1 mb-1 font-18">Maker Name: <?php echo $maker_name ?></h4>
-                                                <p class="font-13 text-light">Model: <?php echo $model ?></p>
-                                                <p class="text-light mb-0">Made Year: <?php echo $made_year ?></p>
-                                                <p class="font-13 text-light">Remarks: <?php echo $remarks ?></p>
+                                                <h4 class="mt-1 mb-1 font-18">Maker Name: <?=$maker_name ?></h4>
+                                                <p class="font-13 text-light">Model: <?=$model ?></p>
+                                                <p class="text-light mb-0">Made Year: <?=$made_year ?></p>
+                                                <p class="font-13 text-light">Remarks: <?=$remarks ?></p>
                                             </div>
                                         </div>
                                         <div class="col-sm-6">
                                             <div class="text-left text-white">
-												<h4 class="mt-1 mb-1 font-18">Plate No: <?php echo $plate_no ?></h4>
-                                                <p class="font-13 text-light">Type: <?php echo $type ?></p>
-                                                <p class="text-light mb-0">Date Reg.: <?php echo $date_reg ?></p>
+												<h4 class="mt-1 mb-1 font-18">Plate No: <?=$plate_no ?></h4>
+                                                <p class="font-13 text-light">Type: <?=$type ?></p>
+                                                <p class="text-light mb-0">Date Reg.: <?=$date_reg ?></p>
                                             </div>
                                         </div>
                                     </div>
@@ -187,8 +187,8 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']
 				<div class="col-md-12">
 					<div class="card-box" style="height: 300px;">
 						<h4 class="m-t-0 header-title">Register New Car Licence</h4>
-						<form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-							<?php echo $msg ?>
+						<form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+							<?=$msg ?>
 							<div class="form-row">
 								<div class="form-group col-md-4">
 									<label for="doc_type" class="col-form-label">Type of car<span class="text-danger">*</span></label>
@@ -213,7 +213,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']
 								</div>
 							</div>
 							<div class="btn-group" role="group" aria-label="Edit Button">
-							<a href="./view_car.php?id=<?php echo $_GET['id'] ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+							<a href="./view_car.php?id=<?=$_GET['id'] ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
 							<button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-car"></i> Register</button>
 							</div>
 						</form>
@@ -227,7 +227,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

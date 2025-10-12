@@ -87,7 +87,7 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
         
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -159,10 +159,10 @@
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -190,7 +190,7 @@
                                 <div class="card-box" id="nodeToRenderAsPDF">
                                     <div class="clearfix mb-3">
                                         <div class="float-left">
-                                            <img src="assets/images/logo.png" alt="" height="120">
+                                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="120">
                                         </div>
 										<div class="float-right items-right text-right justify-content-center align-items-center">
                                             <h3 class="m-0"><?=__('personal_employment_details_header')?></h3>

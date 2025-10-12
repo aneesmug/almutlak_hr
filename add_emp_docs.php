@@ -157,14 +157,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -198,10 +198,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -243,12 +243,12 @@ if(isset($_POST['submit'])){
                                <?php include("./includes/emp_top_info.php"); ?>
                                 <div class="card-box">
                                     <h4 class="m-t-0 header-title">Register New Employee Documents</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
-										<?php echo $msg ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+										<?=$msg ?>
                                         <div class="form-row">
                                             <div class="form-group col-md-4">
 												<label for="emp_id">Employee ID.<span class="text-danger">*</span></label>
-												<input type="text" name="emp_id" value="<?php echo $emp_id_get ?>" required class="form-control" id="emp_id" readonly />
+												<input type="text" name="emp_id" value="<?=$emp_id_get ?>" required class="form-control" id="emp_id" readonly />
                                         	</div>
                                         	
                                         	<div class="form-group col-md-4">
@@ -260,7 +260,7 @@ if(isset($_POST['submit'])){
 												while($rec_con = mysqli_fetch_assoc($query_docu_type)){
 													$docnme = $rec_con["duc_type"];
 											?>
-												<option value="<?php echo $docnme ?>"><?php echo $docnme ?></option>
+												<option value="<?=$docnme ?>"><?=$docnme ?></option>
 											<?php } ?>
 												<option value="Others">Others</option>
 											</select>
@@ -271,7 +271,7 @@ if(isset($_POST['submit'])){
                                             </div>
                                         </div>
 										<div class="btn-group" role="group" aria-label="Edit Button">
-										<a href="view_employee.php?id=<?php echo $_GET['id']?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+										<a href="view_employee.php?id=<?=$_GET['id']?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
                                         <button type="submit" name="submit" class="btn btn-primary">
 											<i class="mdi mdi-cloud-upload"></i> Add Document file</button>
 										</div>
@@ -286,7 +286,7 @@ if(isset($_POST['submit'])){
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

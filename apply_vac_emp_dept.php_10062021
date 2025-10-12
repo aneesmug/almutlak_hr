@@ -171,14 +171,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -216,10 +216,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -262,20 +262,20 @@ if(isset($_POST['submit'])){
                                 <div class="card-box">
 
                                     <h4 class="m-t-0 header-title">Apply Vacation</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
-										<?php echo $error_1." ".$return_date_up ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+										<?=$error_1." ".$return_date_up ?>
                                         <div class="form-row">
 											<div class="form-group col-md-4">
 												<label for="name">Employee Name</label>
-												<input type="text" value="<?php echo $name_get ?>" class="form-control" readonly>
+												<input type="text" value="<?=$name_get ?>" class="form-control" readonly>
 											</div>
                                             <div class="form-group col-md-4">
 												<label for="emp_id">Employee ID.</label>
-												<input type="text" value="<?php echo $emp_id_get ?>" class="form-control" readonly>
+												<input type="text" value="<?=$emp_id_get ?>" class="form-control" readonly>
                                         	</div>
                                         	<div class="form-group col-md-4">
 												<label for="type">Department</label>
-												<input type="text" value="<?php echo $dept_get ?>" class="form-control" readonly>
+												<input type="text" value="<?=$dept_get ?>" class="form-control" readonly>
 											</div>
                                       		<div class="form-group col-md-4">
                                                 <label for="date_select" class="col-form-label">Vacation Date<span class="text-danger">*</span></label>
@@ -311,7 +311,7 @@ if(isset($_POST['submit'])){
 												while($rec = mysql_fetch_assoc($query_emp_apl_nme)){
 													$emp_apl_nme = $rec["name"];
 											?>
-												<option value="<?php echo $emp_apl_nme ?>"><?php echo $emp_apl_nme ?></option>
+												<option value="<?=$emp_apl_nme ?>"><?=$emp_apl_nme ?></option>
 											<?php } ?>
 											</select>
 											</div>
@@ -336,7 +336,7 @@ if(isset($_POST['submit'])){
 												while($rec = mysql_fetch_assoc($query_emp_apl_nme)){
 													$emp_apl_nme = $rec["name"];
 											?>
-												<option value="<?php echo $emp_apl_nme ?>"><?php echo $emp_apl_nme ?></option>
+												<option value="<?=$emp_apl_nme ?>"><?=$emp_apl_nme ?></option>
 											<?php } ?>
 											</select>
 											</div>
@@ -360,7 +360,7 @@ if(isset($_POST['submit'])){
 										
 										<div class="btn-group" role="group" aria-label="Edit Button">
                                         
-										<a href="view_employee.php?id=<?php echo $_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+										<a href="view_employee.php?id=<?=$_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
                                         <button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-near-me"></i> Apply Vacation</button>
 											
 										</div>
@@ -376,7 +376,7 @@ if(isset($_POST['submit'])){
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -398,11 +398,11 @@ if(isset($_POST['submit'])){
 			</div>
 			<div class="modal-body">
 				<h3>You need to Terminat!</h3>
-				<h4><strong style="font-size: 30px; "><?php echo $name_get ?></strong></h4>
+				<h4><strong style="font-size: 30px; "><?=$name_get ?></strong></h4>
 <div class="form-row" id="content" style="display:none;">
 <form action="./includes/terminat_emp.php" method="get">
 <!--	<a href="" class="btn btn-danger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-<input type="hidden" name="id" value="<?php echo $id_get ?>" >
+<input type="hidden" name="id" value="<?=$id_get ?>" >
 <input type="hidden" name="note" value="terminat" >
 	<div class="input-group">
 		<input type="text" id="ter_note" name="ter_note" class="form-control" aria-describedby="basic-addon2">
@@ -415,7 +415,7 @@ if(isset($_POST['submit'])){
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
-				<a href="./includes/terminat_emp.php?id=<?php echo $id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a>
+				<a href="./includes/terminat_emp.php?id=<?=$id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a>
 				<button type="button" id="terminat_emp" class="btn btn-danger waves-effect waves-light"><i class="mdi mdi-account-off"></i> Terminat</button>			
 				
 			</div>

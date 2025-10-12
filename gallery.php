@@ -106,14 +106,14 @@ if(isset($_POST['submit_item_edit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Locations</title>
+        <title><?=$site_title ?> - All Locations</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -170,10 +170,10 @@ if(isset($_POST['submit_item_edit'])){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -235,10 +235,10 @@ while ($rec = mysqli_fetch_array($query_loc)) {
     // $datevac = date('d, M Y', $times_reg);
 ?>
 
-    <tr <?php echo ($status != "1") ? "class='table-danger'" : false ; ?> >
+    <tr <?=($status != "1") ? "class='table-danger'" : false ; ?> >
   <th><img src="./assets/gallery/<?=$rec['image'];?>" class="rounded-circle bx-shadow-lg" width="100" height="100" /></th>
-        <th><?php echo $details?></th>
-  <td><?php echo ($status == "1") ? "<span class='badge-border badge-border-success'>Active</span>" : "<span class='badge-border badge-border-danger'>Inactive</span>" ; ?>
+        <th><?=$details?></th>
+  <td><?=($status == "1") ? "<span class='badge-border badge-border-success'>Active</span>" : "<span class='badge-border badge-border-danger'>Inactive</span>" ; ?>
         </td>
   <td>
 
@@ -268,7 +268,7 @@ while ($rec = mysqli_fetch_array($query_loc)) {
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

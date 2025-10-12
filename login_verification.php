@@ -140,11 +140,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 <head>
     <meta charset="utf-8" />
-    <title><?php echo isset($site_title) ? $site_title : 'OTP Verification'; ?></title>
+    <title><?=isset($site_title) ? $site_title : 'OTP Verification'; ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <link rel="shortcut icon" href="assets/images/favicon.ico">
+    <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 <div id="message-container" class="mb-4">
                     <?php if(!empty($error_message)): ?>
                         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
-                            <?php echo $error_message; ?>
+                            <?=$error_message; ?>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -207,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 </div>
 
             </div>
-            <p class="text-center text-gray-200 mt-8 text-sm"><?php echo isset($site_footer) ? $site_footer : date('Y') . ' &copy; Al Mutlak Co.'; ?></p>
+            <p class="text-center text-gray-200 mt-8 text-sm"><?=isset($site_footer) ? $site_footer : date('Y') . ' &copy; Al Mutlak Co.'; ?></p>
         </div>
     </div>
 

@@ -81,14 +81,14 @@ if(isset($_POST['submit'])){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -119,10 +119,10 @@ if(isset($_POST['submit'])){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -163,8 +163,8 @@ if(isset($_POST['submit'])){
                             <div class="col-md-12">
                                 <div class="card-box">
                                     <h4 class="m-t-0 header-title">Register New User</h4>
-                                    <form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
-										<?php echo $msg ?>
+                                    <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data">
+										<?=$msg ?>
                                         <div class="form-row">
 											<div class="form-group col-md-4">
 												<label for="name">ميلادي<span class="text-danger">*</span></label>
@@ -172,12 +172,12 @@ if(isset($_POST['submit'])){
 											</div>
 											<div class="form-group col-md-4">
 												<label for="dept" >هجري<span class="text-danger">*</span></label>
-												<input type="text" name="dept" id='pickCalHj' class="form-control" id="dept" value="<?php echo $dept_get ?>" readonly>
+												<input type="text" name="dept" id='pickCalHj' class="form-control" id="dept" value="<?=$dept_get ?>" readonly>
 											</div>
                                             <div class="form-group col-md-4">
                                                 <label for="mobile" >Mobile No.<span class="text-danger">*</span></label>
                                                 <input type="text" name="mobile" parsley-trigger="change" 
-                                                   value="<?php echo $mobile_get ?>" readonly class="form-control" id="mobile">
+                                                   value="<?=$mobile_get ?>" readonly class="form-control" id="mobile">
                                             </div>
                                             <div class="form-group col-md-4">
 												<label for="username">Username<span class="text-danger">*</span></label>
@@ -195,7 +195,7 @@ if(isset($_POST['submit'])){
                                             </div>
                                         </div>
 										<div class="btn-group" role="group" aria-label="Edit Button">
-										<a href="view_employee.php?id=<?php echo $_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+										<a href="view_employee.php?id=<?=$_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
                                         <button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-account-plus"></i> Register</button>
 										</div>
                                     </form>
@@ -209,7 +209,7 @@ if(isset($_POST['submit'])){
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>

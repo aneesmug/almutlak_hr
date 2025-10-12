@@ -128,14 +128,14 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - All Employees</title>
+        <title><?=$site_title ?> - All Employees</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -179,10 +179,10 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -222,50 +222,50 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 				<div class="col-md-12">
 					<div class="card-box">
 						<h4 class="m-t-0 header-title">Edit Location</h4>
-						<form action="<?php echo $_SERVER['PHP_SELF']; ?>" method="post">
-							<?php echo $error_1 ?>
+						<form action="<?=$_SERVER['PHP_SELF']; ?>" method="post">
+							<?=$error_1 ?>
 							<div class="form-row">
 								<div class="form-group col-md-3">
 									<label for="section_name" class="col-form-label">Location Name<span class="text-danger">*</span></label>
-									<input type="text" name="section_name" required placeholder="Enter section name" class="form-control" id="section_name" value="<?php echo $section_name_get ?>" >
+									<input type="text" name="section_name" required placeholder="Enter section name" class="form-control" id="section_name" value="<?=$section_name_get ?>" >
 								</div>
 								<div class="form-group col-md-2">
 									<label for="latitude" class="col-form-label">Latitude<span class="text-danger">*</span></label>
-									<input type="text" name="latitude" placeholder="Enter google latitude" class="form-control" id="latitude" required value="<?php echo $latitude_get ?>" >
+									<input type="text" name="latitude" placeholder="Enter google latitude" class="form-control" id="latitude" required value="<?=$latitude_get ?>" >
 								</div>
 								<div class="form-group col-md-2">
 									<label for="longitude" class="col-form-label">Longitude<span class="text-danger">*</span></label>
-									<input type="text" name="longitude" placeholder="Enter google longitude" class="form-control" id="longitude" required autocomplete="off" value="<?php echo $longitude_get ?>" >
+									<input type="text" name="longitude" placeholder="Enter google longitude" class="form-control" id="longitude" required autocomplete="off" value="<?=$longitude_get ?>" >
 								</div>
 								<div class="form-group col-md-2">
 									<label for="t_bulding_size" class="col-form-label">Total Bulding Size (M)</label>
-									<input type="text" name="t_bulding_size" placeholder="Enter total bulding base in metters" class="form-control" id="t_bulding_size" autocomplete="off" value="<?php echo $t_bulding_siz_get ?>" >
+									<input type="text" name="t_bulding_size" placeholder="Enter total bulding base in metters" class="form-control" id="t_bulding_size" autocomplete="off" value="<?=$t_bulding_siz_get ?>" >
 								</div>
 								<div class="form-group col-md-3">
 									<label for="dept" class="col-form-label">Select Department Name<span class="text-danger">*</span></label>
 									<select class="form-control selectpicker" data-live-search="true" data-style="btn-custom" name="dept" required>
-										<option value="<?php echo $dept_get ?>"><?php echo $dept_get ?></option>
+										<option value="<?=$dept_get ?>"><?=$dept_get ?></option>
 										<option value="">Select</option>
 										<?php
 											$query_sectin_nme = mysqli_query($conDB, "SELECT * FROM `department` ORDER BY `dep_nme` REGEXP '^[^A-Za-z]' ASC, dep_nme");
 											while($rec = mysqli_fetch_assoc($query_sectin_nme)){
 												$brand_name = $rec["dep_nme"];
 										?>
-											<option value="<?php echo $brand_name ?>"><?php echo $brand_name ?></option>
+											<option value="<?=$brand_name ?>"><?=$brand_name ?></option>
 										<?php } ?>
 									</select>
 								</div>
 								<div class="form-group col-md-2">
 									<label for="camera_in" class="col-form-label">Camera (IN)</label>
-									<input type="text" name="camera_in" placeholder="Enter camera Inside" class="form-control" id="camera_in"  autocomplete="off" value="<?php echo $camera_in_get ?>" >
+									<input type="text" name="camera_in" placeholder="Enter camera Inside" class="form-control" id="camera_in"  autocomplete="off" value="<?=$camera_in_get ?>" >
 								</div>
 								<div class="form-group col-md-2">
 									<label for="camera_out" class="col-form-label">Camera (OUT)</label>
-									<input type="text" name="camera_out" placeholder="Enter camera outside" class="form-control" id="camera_out"  autocomplete="off" value="<?php echo $camera_out_get ?>" >
+									<input type="text" name="camera_out" placeholder="Enter camera outside" class="form-control" id="camera_out"  autocomplete="off" value="<?=$camera_out_get ?>" >
 								</div>
 								<div class="form-group col-md-2">
 									<label for="bulding_base" class="col-form-label">Bulding Base</label>
-									<input type="text" name="bulding_base" placeholder="Enter bulding base" class="form-control" id="bulding_base" autocomplete="off" value="<?php echo $bulding_base_get ?>" >
+									<input type="text" name="bulding_base" placeholder="Enter bulding base" class="form-control" id="bulding_base" autocomplete="off" value="<?=$bulding_base_get ?>" >
 								</div>
 								<!-- <div class="form-group col-md-4">
 									<label for="bulding_base" class="col-form-label">Bulding Base<span class="text-danger">*</span></label>
@@ -282,7 +282,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 								</div> -->
 								<div class="form-group col-md-3">
 									<label for="bulding_size" class="col-form-label">Bulding Size (L * W)</label>
-									<input type="text" name="bulding_size" placeholder="Enter Bulding Size (L * W)" class="form-control" id="bulding_size" autocomplete="off" value="<?php echo $bulding_size_get ?>" >
+									<input type="text" name="bulding_size" placeholder="Enter Bulding Size (L * W)" class="form-control" id="bulding_size" autocomplete="off" value="<?=$bulding_size_get ?>" >
 								</div>
 								<!-- <div class="form-group col-md-4">
 									<label for="bulding_size" class="col-form-label">Bulding Size (L * W)<span class="text-danger">*</span></label>
@@ -299,33 +299,33 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 								</div> -->						
 								<div class="form-group col-md-3">
 									<label for="location_dist" class="col-form-label">District<span class="text-danger">*</span></label>
-									<input type="text" name="location_dist" placeholder="Enter District" class="form-control" id="location_dist" required autocomplete="off" value="<?php echo $location_dist_get ?>" >
+									<input type="text" name="location_dist" placeholder="Enter District" class="form-control" id="location_dist" required autocomplete="off" value="<?=$location_dist_get ?>" >
 								</div>						
 								<div class="form-group col-md-3">
 									<label for="b_license_no" class="col-form-label">Balady License No.<span class="text-danger">*</span></label>
-									<input type="text" name="b_license_no" placeholder="Enter Balady License No." class="form-control" id="b_license_no" required autocomplete="off" value="<?php echo $b_license_no_get ?>" >
+									<input type="text" name="b_license_no" placeholder="Enter Balady License No." class="form-control" id="b_license_no" required autocomplete="off" value="<?=$b_license_no_get ?>" >
 								</div>						
 								<div class="form-group col-md-3">
 									<label for="b_license_exp_hijri" class="col-form-label">Balady License Exp.<span class="text-danger">*</span></label>
-									<input type="text" name="b_license_exp" placeholder="Enter Balady License Exp." class="form-control" id="b_license_exp_hijri" required autocomplete="off" value="<?php echo $b_license_exp_get ?>" >
+									<input type="text" name="b_license_exp" placeholder="Enter Balady License Exp." class="form-control" id="b_license_exp_hijri" required autocomplete="off" value="<?=$b_license_exp_get ?>" >
 								</div>						
 								<div class="form-group col-md-3">
 									<label for="municipality" class="col-form-label">Municipality</label>
-									<input type="text" name="municipality" placeholder="Enter Municipality name" class="form-control" id="municipality" autocomplete="off" value="<?php echo $municipality_get ?>" >
+									<input type="text" name="municipality" placeholder="Enter Municipality name" class="form-control" id="municipality" autocomplete="off" value="<?=$municipality_get ?>" >
 								</div>						
 								<div class="form-group col-md-3">
 									<label for="sub_municipality" class="col-form-label">Sub-municipality</label>
-									<input type="text" name="sub_municipality" placeholder="Enter sub municipality name" class="form-control" id="sub_municipality"  autocomplete="off" value="<?php echo $sub_municipality_get ?>" >
+									<input type="text" name="sub_municipality" placeholder="Enter sub municipality name" class="form-control" id="sub_municipality"  autocomplete="off" value="<?=$sub_municipality_get ?>" >
 								</div>
 								<div class="form-group col-md-12">
 									<label for="loc_address" class="col-form-label">Location Address</label>
-									<textarea name="loc_address" placeholder="Enter location address" class="form-control" id="loc_address" rows="5"><?php echo $location_name_get ?></textarea>
+									<textarea name="loc_address" placeholder="Enter location address" class="form-control" id="loc_address" rows="5"><?=$location_name_get ?></textarea>
 								</div>
 								
 
 							</div>
 							<div class="btn-group" role="group" aria-label="Edit Button">
-							<a href="./view_location.php?id=<?php echo $_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+							<a href="./view_location.php?id=<?=$_GET['id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
 							<button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-source-commit-next-local"></i> Edit Save</button>
 							</div>
 						</form>
@@ -339,7 +339,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 	</div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -358,7 +358,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
 				<h4 class="modal-title" id="myLargeModalLabel">
 					<i class="mdi mdi-image-filter-tilt-shift "></i> 
-					Upload new Image for <?php echo $name_get ?>
+					Upload new Image for <?=$name_get ?>
 				</h4>
 			</div>
 			<div class="modal-body">
@@ -370,7 +370,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 	  		</div>
   		  	<div class="col-md-6">
 			  <div >
-				  <img src="<?php echo $in_img_get ?>" style="width:300px;padding:30px;height:300px;margin-top:30px" />
+				  <img src="<?=$in_img_get ?>" style="width:300px;padding:30px;height:300px;margin-top:30px" />
 			  </div>
 	  		</div>
 			<div class="col-md-6" style="padding-top:30px;">
@@ -398,7 +398,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
 				<h4 class="modal-title" id="myLargeModalLabel">
 					<i class="mdi mdi-image-filter-tilt-shift "></i> 
-					Upload new Image for <?php echo $name_get ?>
+					Upload new Image for <?=$name_get ?>
 				</h4>
 			</div>
 			<div class="modal-body">
@@ -410,7 +410,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 	  		</div>
   		  	<div class="col-md-6">
 			  <div >
-				  <img src="<?php echo $out_img_get ?>" style="width:300px;padding:30px;height:300px;margin-top:30px" />
+				  <img src="<?=$out_img_get ?>" style="width:300px;padding:30px;height:300px;margin-top:30px" />
 			  </div>
 	  		</div>
 			<div class="col-md-6" style="padding-top:30px;">
@@ -498,7 +498,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 <script type="text/javascript">
 
 $uploadCrop_in_img = $('#upload_loc_in_img').croppie({
-	url: "<?php echo substr($in_img_get, 2);?>",
+	url: "<?=substr($in_img_get, 2);?>",
 	enableExif: true,
     viewport: {
         width: 400,
@@ -532,7 +532,7 @@ $('.upload_result_in_img').on('click', function (ev) {
         $.ajax({
             url: "./includes/ajaxpro_locatio_in_img.php",
             type: "POST",
-            data: {"image": resp, "id": "<?php echo $id_get; ?>", "section_name_get": "<?php echo $section_name_get; ?>"},
+            data: {"image": resp, "id": "<?=$id_get; ?>", "section_name_get": "<?=$section_name_get; ?>"},
             success: function (data) {
                 if (data == 'Image Uploaded Successfully') {
                     html = '<img src="' + resp + '" />';
@@ -561,7 +561,7 @@ $('.upload_result_in_img').on('click', function (ev) {
 
 
 $uploadCrop_out_img = $('#upload_loc_out_img').croppie({
-	url: "<?php echo substr($out_img_get, 2);?>",
+	url: "<?=substr($out_img_get, 2);?>",
 	enableExif: true,
     viewport: {
         width: 400,
@@ -596,7 +596,7 @@ $('.upload_result_out_img').on('click', function (ev) {
         $.ajax({
             url: "./includes/ajaxpro_locatio_out_img.php",
             type: "POST",
-            data: {"image": resp, "id": "<?php echo $id_get; ?>", "section_name_get": "<?php echo $section_name_get; ?>"},
+            data: {"image": resp, "id": "<?=$id_get; ?>", "section_name_get": "<?=$section_name_get; ?>"},
             success: function (data) {
                 if (data == 'Image Uploaded Successfully') {
                     html = '<img src="' + resp + '" />';

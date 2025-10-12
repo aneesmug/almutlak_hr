@@ -374,7 +374,7 @@ color:rgb(27, 27, 27) !important;font:18px Arial, sans-serif !important;display:
           <table id="header" style="width:100% !important"> 
            <tbody>
             <tr> 
-             <td rowspan="2" class="logo"><img alt="https://en.mochachino.store" src="https://sys.mochachino.store/assets/images/logo.png" width="115" style="border:0; width:115px !important;"></td>
+             <td rowspan="2" class="logo"><img alt="https://en.mochachino.store" src="https://sys.mochachino.store/<?=get_setting($conDB, 'logo')?>" width="115" style="border:0; width:115px !important;"></td>
              <td class="navigation"> </td>
              <td style="width:100%;padding:7px 5px 0;" class="navigation"> <a target="_blank" href="https://en.mochachino.store/?page=account">Orders</a> </td> 
              <td class="navigation"> <span>&nbsp;|&nbsp;</span> <a target="_blank" href="https://en.mochachino.store/?page=account">Account</a> <span>&nbsp;|&nbsp;</span> <a target="_blank" href="https://en.mochachino.store/">Mochachino.store</a> </td>  

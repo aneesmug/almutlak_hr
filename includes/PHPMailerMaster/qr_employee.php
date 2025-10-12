@@ -113,7 +113,7 @@
                                    style="font-family: 'Helvetica Neue',Helvetica,Arial,sans-serif; box-sizing: border-box; font-size: 14px; margin: 0;">
                                 <tr>
                                     <td style="text-align: center">
-                                        <a href="#" style="display: block;margin-bottom: 10px;"> <img src="https://sys.mochachino.store/assets/images/logo_sm.png" height="80" alt="logo"/></a> <br/>
+                                        <a href="#" style="display: block;margin-bottom: 10px;"> <img src="https://sys.mochachino.store/<?=get_setting($conDB, 'white_logo')?>" height="80" alt="logo"/></a> <br/>
                                     </td>
                                 </tr>
                                 <tr style="font-family: 'Helvetica Neue',Helvetica,Arial,sans-serif; box-sizing: border-box; font-size: 14px; margin: 0;">

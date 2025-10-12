@@ -160,7 +160,7 @@ SELECT * FROM `admin_login` WHERE `id_iqama`
 
         <meta charset="utf-8" />
 
-        <title><?php echo $site_title ?> - All Locations</title>
+        <title><?=$site_title ?> - All Locations</title>
 
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
@@ -174,7 +174,7 @@ SELECT * FROM `admin_login` WHERE `id_iqama`
 
         <!-- App favicon -->
 
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
 
 
@@ -292,13 +292,13 @@ SELECT * FROM `admin_login` WHERE `id_iqama`
 
                             <span>
 
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
 
                             </span>
 
                             <i>
 
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
 
                             </i>
 
@@ -434,17 +434,17 @@ if ($handle = opendir("./file_manager")) {
 
         
 
-        <td><a href="./file_manager/<?php echo $file ?>"><?php echo ExtType(pathinfo("./file_manager/".$file, PATHINFO_EXTENSION) ) ?></a></td>
+        <td><a href="./file_manager/<?=$file ?>"><?=ExtType(pathinfo("./file_manager/".$file, PATHINFO_EXTENSION) ) ?></a></td>
 
-        <td><a href="./file_manager/<?php echo $file ?>"><?php echo $file ?></a></td>
+        <td><a href="./file_manager/<?=$file ?>"><?=$file ?></a></td>
 
-        <td><?php echo Size("./file_manager/".$file) ?></td>
+        <td><?=Size("./file_manager/".$file) ?></td>
 
         <td>
 
         <div class="btn-group" role="group" aria-label="Edit Button">
 
-        <a href="./file_manager/<?php echo $file ?>" class="btn btn-sm btn-dark waves-effect">
+        <a href="./file_manager/<?=$file ?>" class="btn btn-sm btn-dark waves-effect">
 
             <i class="mdi mdi-download"></i>
 
@@ -498,7 +498,7 @@ if ($handle = opendir("./file_manager")) {
 
                 <footer class="footer">
 
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
 
                 </footer>
 

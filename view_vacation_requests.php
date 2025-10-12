@@ -249,7 +249,7 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
     <div class="container my-5">
         <div class="text-center mb-4">
             <h1 class="header-title">Vacation Approval Center</h1>
-            <p class="lead header-subtitle">Your Role: <strong><?php echo htmlspecialchars($user_role); ?></strong></p>
+            <p class="lead header-subtitle">Your Role: <strong><?=htmlspecialchars($user_role); ?></strong></p>
         </div>
 
         <!-- Filter Controls -->
@@ -260,8 +260,8 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
                     <select class="form-control" id="statusFilter" onchange="applyFilters()">
                         <option value="all" <?php if ($current_filter == 'all') echo 'selected'; ?>>All Requests</option>
                         <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                            <option value="<?php echo $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                <?php echo htmlspecialchars($status_value); ?>
+                            <option value="<?=$status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
+                                <?=htmlspecialchars($status_value); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -271,7 +271,7 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
                 <div class="form-group">
                     <label for="searchFilter" class="font-weight-bold">Search by Name / ID</label>
                     <div class="input-group">
-                        <input type="search" class="form-control" id="searchFilter" placeholder="Enter search term..." value="<?php echo htmlspecialchars($search_term); ?>">
+                        <input type="search" class="form-control" id="searchFilter" placeholder="Enter search term..." value="<?=htmlspecialchars($search_term); ?>">
                         <div class="input-group-append">
                             <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
                         </div>
@@ -281,8 +281,8 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4 class="mb-0 text-muted">Showing: <?php echo htmlspecialchars($page_title); ?> Requests</h4>
-            <span class="badge badge-light p-2">Total Found: <?php echo $total_items; ?></span>
+            <h4 class="mb-0 text-muted">Showing: <?=htmlspecialchars($page_title); ?> Requests</h4>
+            <span class="badge badge-light p-2">Total Found: <?=$total_items; ?></span>
         </div>
 
 
@@ -292,29 +292,29 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
                     <div class="col-lg-4 col-md-6 mb-4">
                         <div class="card request-card h-100">
                             <div class="card-header">
-                                <?php echo parseName($req['employee_name']); ?>
-                                <span class="float-right">ID: <?php echo htmlspecialchars($req['emp_id']); ?></span>
+                                <?=parseName($req['employee_name']); ?>
+                                <span class="float-right">ID: <?=htmlspecialchars($req['emp_id']); ?></span>
                             </div>
                             <div class="card-body">
                                 <div class="detail-item">
                                     <i class="fas fa-paper-plane"></i>
-                                    <strong>Applied:</strong> <?php echo htmlspecialchars(date('d M Y', strtotime($req['created_at']))); ?>
+                                    <strong>Applied:</strong> <?=htmlspecialchars(date('d M Y', strtotime($req['created_at']))); ?>
                                 </div>
                                 <div class="detail-item">
                                     <i class="fas fa-suitcase-rolling"></i>
-                                    <strong>Type:</strong> <?php echo htmlspecialchars($req['vac_type']); ?>
+                                    <strong>Type:</strong> <?=htmlspecialchars($req['vac_type']); ?>
                                 </div>
                                 <div class="detail-item">
                                     <i class="fas fa-calendar-alt"></i>
-                                    <strong>Start:</strong> <?php echo htmlspecialchars($req['start_date'] ?? 'N/A'); ?>
+                                    <strong>Start:</strong> <?=htmlspecialchars($req['start_date'] ?? 'N/A'); ?>
                                 </div>
                                 <div class="detail-item">
                                     <i class="fas fa-calendar-check"></i>
-                                    <strong>Return:</strong> <?php echo htmlspecialchars($req['return_date'] ?? 'N/A'); ?>
+                                    <strong>Return:</strong> <?=htmlspecialchars($req['return_date'] ?? 'N/A'); ?>
                                 </div>
                                 <div class="detail-item">
                                     <i class="fas fa-sun"></i>
-                                    <strong>Days:</strong> <?php echo htmlspecialchars($req['vacdays']); ?>
+                                    <strong>Days:</strong> <?=htmlspecialchars($req['vacdays']); ?>
                                 </div>
                             </div>
                             <div class="card-footer text-right">
@@ -322,10 +322,10 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
                                 <?php if ($req['approval_status'] == 'pending' && $user_role == 'HR_Assistant' ||
                                           $req['approval_status'] == 'hr_assistant_approved' && $user_role == 'HR_Manager' ||
                                           $req['approval_status'] == 'hr_manager_approved' && $user_role == 'GM'): ?>
-                                    <button class="btn btn-danger" onclick="rejectVacationRequest(<?php echo $req['id']; ?>, '<?php echo $user_role; ?>')">
+                                    <button class="btn btn-danger" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$user_role; ?>')">
                                         <i class="fas fa-times"></i> Reject
                                     </button>
-                                    <button class="btn btn-success" onclick="approveRequest(<?php echo $req['id']; ?>, '<?php echo $user_role; ?>')">
+                                    <button class="btn btn-success" onclick="approveRequest(<?=$req['id']; ?>, '<?=$user_role; ?>')">
                                         <i class="fas fa-check"></i> Approve
                                     </button>
                                 <?php endif; ?>

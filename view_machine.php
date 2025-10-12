@@ -48,14 +48,14 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
 
     <head>
         <meta charset="utf-8" />
-        <title><?php echo $site_title ?> - <?php echo $name_mach ?></title>
+        <title><?=$site_title ?> - <?=$name_mach ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Modal -->
         <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -97,10 +97,10 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="assets/images/logo.png" alt="" height="22">
+                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="assets/images/logo_sm.png" alt="" height="28">
+                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -138,36 +138,36 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
 						<div class="row">
                             <div class="col-xl-12">
                                 <!-- meta -->
-                                <div class="profile-user-box card-box <?php echo ($status == "1") ? "bg-custom" : "bg-danger"; ?>">
+                                <div class="profile-user-box card-box <?=($status == "1") ? "bg-custom" : "bg-danger"; ?>">
                                     <div class="row">
                                         <div class="col-sm-6">
                                             <div class="media-body text-white">
-                                                <h4 class="mt-1 mb-1 font-18">Machine Name: <?php echo $name_mach ?></h4>
-                                                <p class="text-light mb-0">Location: <?php echo $old_location ?></p>
-                                                <p class="text-light mb-0">Remarks: <?php echo $remarks ?></p>
-                                                <p class="text-light mb-0">Machine ID: <?php echo $m_id ?></p>
+                                                <h4 class="mt-1 mb-1 font-18">Machine Name: <?=$name_mach ?></h4>
+                                                <p class="text-light mb-0">Location: <?=$old_location ?></p>
+                                                <p class="text-light mb-0">Remarks: <?=$remarks ?></p>
+                                                <p class="text-light mb-0">Machine ID: <?=$m_id ?></p>
                                             </div>
                                         </div>
                                         <div class="col-sm-6">
                                             <div class="text-left text-white">
-												<h4 class="mt-1 mb-1 font-18">Model: <?php echo $maker_name ?></h4>
-                                                <p class="text-light mb-0">Serial: <?php echo $serial ?></p>
-                                                <p class="text-light mb-0">Date Reg.: <?php echo $date_reg ?></p>
+												<h4 class="mt-1 mb-1 font-18">Model: <?=$maker_name ?></h4>
+                                                <p class="text-light mb-0">Serial: <?=$serial ?></p>
+                                                <p class="text-light mb-0">Date Reg.: <?=$date_reg ?></p>
                                             </div>
 
 											<div class="text-right">
 											<?php if($status == "1"){ ?>
 												<div class="btn-group" role="group" aria-label="Edit Button">
 											
-												<a href="add_replace_item.php?id=<?php echo $id_car ?>" class="btn btn-sm btn-primary waves-effect">
+												<a href="add_replace_item.php?id=<?=$id_car ?>" class="btn btn-sm btn-primary waves-effect">
                                                     <i class="mdi mdi-database-plus"></i> Add Replace Item
                                                 </a>
 											
-												<a href="add_mac_transfer.php?id=<?php echo $id_car ?>" class="btn btn-sm btn-primary waves-effect">
+												<a href="add_mac_transfer.php?id=<?=$id_car ?>" class="btn btn-sm btn-primary waves-effect">
                                                     <i class="mdi mdi-transfer"></i> Transfer
                                                 </a>
 											
-												<a href="edit_machine.php?id=<?php echo $id_car ?>" class="btn btn-sm btn-light waves-effect">
+												<a href="edit_machine.php?id=<?=$id_car ?>" class="btn btn-sm btn-light waves-effect">
                                                     <i class="fa fa-edit"></i> Edit
                                                 </a>
                                             	</div>
@@ -193,7 +193,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
                                             <i class="mdi mdi-car-sports float-right"></i>
                                             <h4 class="text-uppercase mt-0">Driver</h4>
                                             <h5 class="m-b-20" data-plugin="counterup"><?php if($cont_drv < 1){echo "<h2>No Driver</h2>";}else{echo $car_drv_nme;} ?></h5>
-											Receive Date: <div class="float-right"><?php echo $car_rcv_date ?></div>
+											Receive Date: <div class="float-right"><?=$car_rcv_date ?></div>
                                         </div>
                                     </div><!-- end col -->
 
@@ -202,7 +202,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
                                             <i class="dripicons-wallet float-right"></i>
                                             <h4 class="text-uppercase mt-0">Licence</h4>
                                             <h2 class="m-b-20" data-plugin="counterup"><?php if($exp_date_lic == ""){echo "0";}else{echo $licdays;} ?> Day(s)</h2>
-											Expiry Date: <div class="float-right"><?php echo $exp_lic ?></div>
+											Expiry Date: <div class="float-right"><?=$exp_lic ?></div>
                                         </div>
                                     </div><!-- end col -->
 
@@ -211,7 +211,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
                                             <i class="mdi mdi-clipboard-text float-right"></i>
                                             <h4 class="text-uppercase mt-0">Insurance</h4>
                                             <h2 class="m-b-20"><span data-plugin="counterup"><?php if($exp_date_inc == ""){echo "0";}else{echo $incdays;} ?> Day(s)</span></h2>
-											Expiry Date: <div class="float-right"><?php echo $exp_inc ?></div>
+											Expiry Date: <div class="float-right"><?=$exp_inc ?></div>
                                         </div>
                                     </div><!-- end col -->
 									
@@ -220,7 +220,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
                                             <i class="mdi mdi-autorenew float-right"></i>
                                             <h4 class="text-uppercase mt-0">MVPI</h4>
                                             <h2 class="m-b-20" data-plugin="counterup"><?php if($exp_date_mvpi == ""){echo "0";}else{echo $mvpidays;} ?> Day(s)</h2>
-											Expiry Date: <div class="float-right"><?php echo $exp_mvpi ?></div>
+											Expiry Date: <div class="float-right"><?=$exp_mvpi ?></div>
                                         </div>
                                     </div><!-- end col -->
 
@@ -232,11 +232,11 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['
 <div class="row">
 	<div class="col-12">
 		<div class="card-box table-responsive">
-			<h4 class="m-t-0 header-title"><?php echo $name_mach ?> Replaced Items Detail</h4>
+			<h4 class="m-t-0 header-title"><?=$name_mach ?> Replaced Items Detail</h4>
 <table id="cars_docu" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 	<thead>
         <tr>
-            <th colspan="7"><?php echo $serial ?></th>
+            <th colspan="7"><?=$serial ?></th>
         </tr>
 		<tr>
 			<th>Invoice No.</th>
@@ -268,15 +268,15 @@ while ($rec = mysqli_fetch_array($query_cardoc)) {
     $location_get = str_replace(' ', '', $location_get);
 ?>
 					<tr>
-						<th><?php echo $inv_no_inv_get; ?></th>
-						<th><?php echo $item_inv_get; ?></th>
-                        <th><?php echo $location_get ; ?></th>
-                        <th><?php echo $date_reg_inv_get; ?></th>
-						<th><?php echo $totalinvget ; ?></th>
-						<th><?php echo $id_inv_get; ?></th>
+						<th><?=$inv_no_inv_get; ?></th>
+						<th><?=$item_inv_get; ?></th>
+                        <th><?=$location_get ; ?></th>
+                        <th><?=$date_reg_inv_get; ?></th>
+						<th><?=$totalinvget ; ?></th>
+						<th><?=$id_inv_get; ?></th>
 						<th>
                             <div class="btn-group" role="group" aria-label="Edit Button">
-                                <a href="./view_invoice.php?invo=<?php echo $inv_no_inv_get."&id=".$mid_inv_get ?>" class="btn btn-sm btn-dark waves-effect">
+                                <a href="./view_invoice.php?invo=<?=$inv_no_inv_get."&id=".$mid_inv_get ?>" class="btn btn-sm btn-dark waves-effect">
                                     <i class="mdi mdi-eye-outline"></i>
                                 </a>
                                 <!-- <a href="./edit_car.php?id=<?php //echo $id_car ?>" class="btn btn-sm btn-custom waves-effect">
@@ -311,7 +311,7 @@ while ($rec = mysqli_fetch_array($query_cardoc)) {
 <div class="row">
 	<div class="col-12">
 		<div class="card-box table-responsive">
-			<h4 class="m-t-0 header-title"><?php echo $name_mach ?> Locations Details</h4>
+			<h4 class="m-t-0 header-title"><?=$name_mach ?> Locations Details</h4>
 <table id="mac_trans" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 	<thead>
 		<tr>
@@ -340,11 +340,11 @@ while ($rec = mysqli_fetch_array($query_mactrn)) {
 	
 ?>
 					<tr>
-					<th><?php echo ($new_location_trnt == $new_location_trn) ? "<span class='badge badge-success'>{$new_location_trnt} | Current location</span>" : $new_location_trnt; ?></th>
-						<th><?php echo $old_location_trn; ?></th>
-						<th><?php echo $date_reg_trn; ?></th>
-						<th><?php echo ($new_location_trnt == $new_location_trn) ? "<span class='badge badge-success'>Active</span>" : "<span class='badge badge-danger'>Transfred</span>" ?></th>
-						<th><?php echo $id_mac_trn; ?></th>
+					<th><?=($new_location_trnt == $new_location_trn) ? "<span class='badge badge-success'>{$new_location_trnt} | Current location</span>" : $new_location_trnt; ?></th>
+						<th><?=$old_location_trn; ?></th>
+						<th><?=$date_reg_trn; ?></th>
+						<th><?=($new_location_trnt == $new_location_trn) ? "<span class='badge badge-success'>Active</span>" : "<span class='badge badge-danger'>Transfred</span>" ?></th>
+						<th><?=$id_mac_trn; ?></th>
 						<?php if($user_type == $access1 ){ ?>
 						<th>
 							<a href="javascript:void(0);" class="btn btn-sm btn-danger waves-effect deleteAjax" data-id='<?=$id_mac_trn?>' data-tbl='machine_trans' data-file='0'>
@@ -367,7 +367,7 @@ while ($rec = mysqli_fetch_array($query_mactrn)) {
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?php echo $site_footer ?>
+                    <?=$site_footer ?>
                 </footer>
 
             </div>
@@ -435,8 +435,8 @@ while ($rec = mysqli_fetch_array($query_mactrn)) {
 			$(document).ready(function() {
 
         var buttonConfig = [];
-        var exportTitle = "Serial No.: <?php echo $serial ?> | ID.: <?php echo $m_id ?>"
-        var exportTitleP = "<h4>Serial No.: <?php echo $serial ?> | ID.: <?php echo $m_id ?></h4>"
+        var exportTitle = "Serial No.: <?=$serial ?> | ID.: <?=$m_id ?>"
+        var exportTitleP = "<h4>Serial No.: <?=$serial ?> | ID.: <?=$m_id ?></h4>"
         buttonConfig.push({extend:'excel',exportOptions: {columns: [ 0, 1, 2, 3, 4 ]} ,title: exportTitle,className: 'btn-success'});
         buttonConfig.push({extend:'pdf',exportOptions: {columns: [ 0, 1, 2, 3, 4 ]} ,title: exportTitle,className: 'btn-danger'});
         buttonConfig.push({extend:'print' ,exportOptions: {columns: [ 0, 1, 2, 3, 4 ]} ,title: exportTitleP,className: 'btn-dark'});
@@ -501,8 +501,8 @@ while ($rec = mysqli_fetch_array($query_mactrn)) {
 			$(document).ready(function() {
 
         var buttonConfig = [];
-        var exportTitle = "Serial No.: <?php echo $serial ?> | ID.: <?php echo $m_id ?>"
-        var exportTitleP = "<h4>Serial No.: <?php echo $serial ?> | ID.: <?php echo $m_id ?></h4>"
+        var exportTitle = "Serial No.: <?=$serial ?> | ID.: <?=$m_id ?>"
+        var exportTitleP = "<h4>Serial No.: <?=$serial ?> | ID.: <?=$m_id ?></h4>"
         buttonConfig.push({extend:'excel',exportOptions: {columns: [ 0, 1, 2, 3 ]} ,title: exportTitle,className: 'btn-success'});
         buttonConfig.push({extend:'pdf',exportOptions: {columns: [ 0, 1, 2, 3 ]} ,title: exportTitle,className: 'btn-danger'});
         buttonConfig.push({extend:'print' ,exportOptions: {columns: [ 0, 1, 2, 3 ]} ,title: exportTitleP,className: 'btn-dark'});

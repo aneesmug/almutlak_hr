@@ -36,7 +36,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST'){
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -66,7 +66,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST'){
                         <div class="card-box p-5">
                             <div class="text-center">
                                 <div class="mb-3">
-                                    <img src="assets/images/logo_sm.png" class="rounded-circle img-thumbnail thumb-lg" alt="thumbnail">
+                                    <img src="<?=get_setting($conDB, 'white_logo')?>" class="rounded-circle img-thumbnail thumb-lg" alt="thumbnail">
                                 </div>
 
                                 <p class="text-muted m-b-0 font-14">Enter required<span class="text-danger">*</span> fields for register in system. </p>
@@ -76,7 +76,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST'){
                             <form action="<?=$_SERVER['PHP_SELF']?>" class="form-horizontal" method="post">
 
                                 <?php if(isset($_SESSION['flashdata'])): ?>
-                                <div class="dynamic_alert alert alert-<?php echo $_SESSION['flashdata']['type'] ?> my-2 rounded-0">
+                                <div class="dynamic_alert alert alert-<?=$_SESSION['flashdata']['type'] ?> my-2 rounded-0">
                                     <div class="d-flex align-items-center">
                                         <div class="col-11"><?=$_SESSION['flashdata']['msg'] ?></div>
                                         <div class="col-1 text-end">

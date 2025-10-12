@@ -335,7 +335,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 		<meta content="Anees Afzal" name="author" />
 		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
-		<link rel="shortcut icon" href="assets/images/favicon.ico">
+		<link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 		<link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
@@ -368,8 +368,8 @@
 				<div class="slimscroll-menu" id="remove-scroll">
 					<div class="topbar-left">
 						<a href="dashboard.php" class="logo">
-							<span><img src="assets/images/logo.png" alt="" height="22"></span>
-							<i><img src="assets/images/logo_sm.png" alt="" height="28"></i>
+							<span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+							<i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
 						</a>
 					</div>
 					<?php include("./includes/main_menu.php"); ?>
@@ -385,7 +385,7 @@
                                 <?=$error_1 ?? ''?>
                                 <div class="card-box">
                                     <div class="text-center">
-                                        <img src="assets/images/logo.png" alt="" height="60">
+                                        <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="60">
                                         <h3 class="mt-2"><?=__('FINAL SETTLEMENT');?></h3>
                                         <h4><?=__('Final Settlement Subheading');?></h4>
                                     </div>
