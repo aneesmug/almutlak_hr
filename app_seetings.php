@@ -150,7 +150,7 @@
             </div> <!-- content -->
 
             <footer class="footer">
-                <?=$site_footer ?? '© 2024 Al-Mutlak'; ?>
+                <?=$site_footer ?>
             </footer>
         </div>
     </div>

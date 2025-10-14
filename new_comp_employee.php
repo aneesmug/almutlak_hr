@@ -43,7 +43,7 @@ if(isset($_POST['submit'])){
 	unset($data['submit']); // Remove submit button value
 	// Add auto-generated fields
 	$data['created_at'] = date('Y-m-d H:i:s');
-	$data['fly'] = 'no';
+	$data['fly'] = 0;
 	$data['dept'] = $data['department'] ?? null;
 	unset($data['department']);
 	$data['avatar'] = ($data['sex'] == 1)?"./assets/emp_pics/defult.png":"./assets/emp_pics/defultFemale.jpg";
