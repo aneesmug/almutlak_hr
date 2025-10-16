@@ -96,7 +96,6 @@ if($developer_mode == 1){
 
 $pgname = basename($_SERVER['REQUEST_URI'], '?' . $_SERVER['QUERY_STRING']);
 
-
 /*$url = "http://".$_SERVER['HTTP_HOST']."";
 $parsed = parse_url($url);
 $domain = explode('.', $parsed['host']);
