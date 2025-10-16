@@ -137,7 +137,6 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 				background-repeat: no-repeat;
 				height: 60px;
 				margin: 0 auto;
-				vertical-align: middle;
 				width: 130px !important;
 				background-position: 0px 60px;
 			}

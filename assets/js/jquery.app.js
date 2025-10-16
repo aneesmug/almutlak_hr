@@ -6,10 +6,11 @@
 
 
 //Sweet Alert v2.0
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.all.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.all.min.js"));
+$("head").append($("<script type='text/javascript'></script>").attr("src", "https://cdn.jsdelivr.net/npm/sweetalert2@11"));
+// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.js"));
+// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.min.js"));
+// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.all.js"));
+// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.all.min.js"));
 // Avatar Cropie
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/croppie/croppie.js"));
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/croppie/croppie.min.js"));

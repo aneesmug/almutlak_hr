@@ -67,7 +67,7 @@ if (mysqli_num_rows($query) == 1) {
 	}
 	// If we get here, access is granted
 
-	if(!isset($_GET['emp_id']) || empty($_GET['emp_id']) ){
+	if (!isset($_GET['emp_id']) || empty($_GET['emp_id'])) {
 		header("Location: ./reg_employee.php");
 		exit;
 	}
@@ -181,7 +181,7 @@ if (mysqli_num_rows($query) == 1) {
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
 		<!-- App favicon -->
-		<link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
+		<link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
 		<!-- Modal -->
 		<link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
@@ -253,10 +253,10 @@ if (mysqli_num_rows($query) == 1) {
 					<div class="topbar-left">
 						<a href="dashboard.php" class="logo">
 							<span>
-								<img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
+								<img src="<?= get_setting($conDB, 'logo') ?>" alt="" height="22">
 							</span>
 							<i>
-								<img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
+								<img src="<?= get_setting($conDB, 'white_logo') ?>" alt="" height="28">
 							</i>
 						</a>
 					</div>
@@ -337,12 +337,12 @@ if (mysqli_num_rows($query) == 1) {
 											<div class="card-box tilebox-one">
 												<i class="fad fa-truck-plane float-right duotone-info"></i>
 												<h6 class="text-uppercase mt-0 text-muted">
-													<?php 
-														if ($emprow["country"] == 191 or $emprow["country"] == 150) {
-															echo __('encashed');
-														} else {
-															echo __('flys');
-														} 
+													<?php
+													if ($emprow["country"] == 191 or $emprow["country"] == 150) {
+														echo __('encashed');
+													} else {
+														echo __('flys');
+													}
 													?>
 												</h6>
 												<h2 class="m-b-20" data-plugin="counterup"><?= $emprow['flystus'] ?></h2>
@@ -451,8 +451,8 @@ if (mysqli_num_rows($query) == 1) {
 														<td><span class="copyToClipboard"><?= $emprow['iqama']; ?></span> <i class="fa fa-clipboard"></i></td>
 														<th><?= __('id_expiry') ?>:</th>
 														<td>
-															<span class="date-batch-h" data-prefix="<?=__('hijri') ?>"><?= $emprow['iqama_exp']; ?></span>
-															<span class="date-batch-g float-right" data-prefix="<?=__('gregorian') ?>"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
+															<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $emprow['iqama_exp']; ?></span>
+															<span class="date-batch-g float-right" data-prefix="<?= __('gregorian') ?>"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
 														</td>
 													</tr>
 													<tr>
@@ -463,20 +463,20 @@ if (mysqli_num_rows($query) == 1) {
 														<th><?= __('passport_expiry') ?>:</th>
 														<td>
 															<?php if ($emprow['passport_exp']): ?>
-																<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
+																<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
 															<?php endif ?>
 															<!-- <span class="date-batch-h float-right"><? //=$DateConv->GregorianToHijri($emprow['passport_exp'], $format); 
 																										?></span> -->
 															<?php if ($emprow['passport_exp']): ?>
-																<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
+																<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
 															<?php endif ?>
 														</td>
 													</tr>
 													<tr>
 														<th><?= __('date_of_birth') ?>:</th>
 														<td>
-															<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow["dob"]; ?></span>
-															<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
+															<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["dob"]; ?></span>
+															<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
 														</td>
 														<th><?= __('age') ?>:</th>
 														<td><?= ($emprow["dob"] <> "") ? $years : "" ?></td>
@@ -502,8 +502,8 @@ if (mysqli_num_rows($query) == 1) {
 													<tr>
 														<th><?= __('joining_date') ?>:</th>
 														<td>
-															<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow["joining_date"]; ?></span>
-															<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
+															<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["joining_date"]; ?></span>
+															<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
 														</td>
 														<th><?= __('department') ?>:</th>
 														<td><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></td>
@@ -556,10 +556,10 @@ if (mysqli_num_rows($query) == 1) {
 														<th><?= __('insurance_expiry') ?>:</th>
 														<td>
 															<?php if ($emprow['insurance_exp']): ?>
-																<span class="date-batch-g" data-prefix="<?=__('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
+																<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
 															<?php endif ?>
 															<?php if ($emprow['insurance_exp']): ?>
-																<span class="date-batch-h float-right" data-prefix="<?=__('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
+																<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
 															<?php endif ?>
 														</td>
 													</tr>
@@ -583,23 +583,42 @@ if (mysqli_num_rows($query) == 1) {
 
 										<?php /*if($user_type <> "dept_user"){*/ ?>
 										<div class="tab-pane" id="home1">
+											<div class="card border-primary border mb-4">
+												<div class="card-header bg-primary text-white font-weight-bold"><?= __('vacation_balance_summary') ?></div>
+												<div class="card-body">
+													<div class="row text-center">
+														<div class="col-md-4">
+															<h6 class="text-muted text-uppercase"><?= __('total_vacation_days') ?></h6>
+															<h4><?= $emprow['total_vacation_days'] ?? 0 ?></h4>
+														</div>
+														<div class="col-md-4">
+															<h6 class="text-muted text-uppercase"><?= __('vacations_taken') ?></h6>
+															<h4><?= $emprow['vacations_taken'] ?? 0 ?></h4>
+														</div>
+														<div class="col-md-4">
+															<h6 class="text-muted text-uppercase"><?= __('remaining_balance') ?></h6>
+															<h4 class="text-success font-weight-bold"><?= ($emprow['total_vacation_days'] ?? 0) - ($emprow['vacations_taken'] ?? 0) ?></h4>
+														</div>
+													</div>
+												</div>
+											</div>
 											<div class="table-responsive">
 
 												<h4 class="m-t-0 header-title"></h4>
 												<table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
 														<tr>
-															<th><?= __('remarks') ?>
-															<th><?= __('fly_date') ?>
-															<th><?= __('return_date') ?>
-															<th><?= __('permit_no') ?>
-															<th><?= __('notes') ?>
-															<th><?= __('days') ?>
-															<th><?= __('arrived') ?>
-															<th><?= __('created_at') ?>
-															<th><?= __('id') ?>
-																<?php if ($user_type <> "dept_user") { ?>
-															<th><?= __('action') ?>
+															<th><?= __('remarks') ?></th>
+															<th><?= __('fly_date') ?></th>
+															<th><?= __('return_date') ?></th>
+															<th><?= __('permit_no') ?></th>
+															<th><?= __('notes') ?></th>
+															<th><?= __('days') ?></th>
+															<th><?= __('arrived') ?></th>
+															<th><?= __('created_at') ?></th>
+															<th><?= __('id') ?></th>
+															<?php if ($user_type <> "dept_user") { ?>
+																<th><?= __('action') ?></th>
 															<?php } ?>
 
 														</tr>
@@ -614,7 +633,6 @@ if (mysqli_num_rows($query) == 1) {
 															$date_emp = $rec["date"];
 															$note_emp = $rec["note"];
 															$user_update = $rec["user_update"];
-															$date_reg_emp = $rec["date_reg"];
 															$return_date_emp = $rec["return_date"];
 															$vacdays_emp = $rec["vacdays"];
 															$permit_no_emp = $rec["permit_no"];
@@ -622,32 +640,35 @@ if (mysqli_num_rows($query) == 1) {
 															$remarks_get = $rec["remarks"];
 															$arrived_date_get = $rec["arrived_date"];
 
+															$date_reg_emp = $rec["created_at"];
 															$timestamp_reg = strtotime("$date_reg_emp");
-															$new_date_format = date('d, M Y', $timestamp_reg);
+															$new_date_format = date('d, M Y H:i', $timestamp_reg);
 
 														?>
 															<tr>
-																<th><?= $note_emp; ?></th>
-																<th><?= $date_emp; ?></th>
-																<th><?= $return_date_emp; ?></th>
-																<th><?= $permit_no_emp; ?></th>
-																<th><?= $remarks_get; ?></th>
-																<th><?= $vacdays_emp; ?></th>
-																<th><?= ($arrived_date_get == "") ? "Not Yet" : $arrived_date_get; ?>
-																</th>
-																<th><?= $new_date_format; ?></th>
-																<th><?= $id_emp_reg; ?></th>
+																<td><?= $note_emp; ?></td>
+																<td><?= $date_emp; ?></td>
+																<td><?= $return_date_emp; ?></td>
+																<td><?= $permit_no_emp; ?></td>
+																<td><?= $remarks_get; ?></td>
+																<td><?= $vacdays_emp; ?></td>
+																<td><?= ($arrived_date_get == "") ? "Not Yet" : $arrived_date_get; ?>
+																</td>
+																<td><?= $new_date_format; ?></td>
+																<td><?= $id_emp_reg; ?></td>
 																<?php if ($user_type <> "dept_user") { ?>
-																	<th>
-																		<a href="./edit_vac.php?id=<?= $id_emp_reg ?>&emp_id=<?= "" . $_GET['id'] . "" ?>" class="btn btn-sm btn-primary waves-effect">
-																			<i class="fa fa-edit"></i>
-																		</a>
-																		<?php if ($user_type == $access1) { ?>
-																			<a href="./includes/delete_vac.php?id=<?= $id_emp_reg ?>" class="btn btn-sm btn-danger waves-effect">
-																				<i class="dripicons-tag-delete"></i>
+																	<td>
+																		<div class="btn-group" role="group">
+																			<a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect">
+																				<i class="fa fa-edit"></i>
 																			</a>
-																		<?php } ?>
-																	</th>
+																			<?php if ($user_type == $access1) { ?>
+																				<a href="javascript:void(0);" class="btn btn-sm btn-danger waves-effect">
+																					<i class="fa fa-solid fa-remove"></i>
+																				</a>
+																			<?php } ?>
+																		</div>
+																	</td>
 																<?php } ?>
 
 															</tr>
@@ -1000,7 +1021,7 @@ if (mysqli_num_rows($query) == 1) {
 			<!-- ============================================================== -->
 		</div>
 		<!-- END wrapper -->
-		 <?php /* ?>
+		<?php /* ?>
 		<div class="modal fade terminat" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
 			<form action="./includes/apply_vac_emp.php" method="get">
 				<div class="modal-dialog modal-dialog-centered">
@@ -1320,7 +1341,7 @@ if (mysqli_num_rows($query) == 1) {
 			// Global variable for the DataTable instance
 			let noteTable;
 			// Safely pass the PHP employee ID to a JavaScript variable.
-			const employeeId = <?=json_encode($emprow['empid']); ?>;
+			const employeeId = <?= json_encode($emprow['empid']); ?>;
 			$(document).ready(function() {
 				// 1. Initialize the DataTable with the correct columns for notes.
 				initializeNotesTable();
