@@ -1,84 +1,115 @@
 <?php
 	require_once __DIR__ . '/includes/db.php';
-
 	require_once __DIR__ . '/includes/session_check.php';
 
-	include("./includes/Hijri_GregorianConvert.php");
-	$DateConv=new Hijri_GregorianConvert;
-	$format="DD/MM/YYYY";
+	// This was included but never used. It can be removed if not needed for other logic.
+	// include("./includes/Hijri_GregorianConvert.php");
+	// $DateConv=new Hijri_GregorianConvert;
+	// $format="DD/MM/YYYY";
 
-	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
-		if(mysqli_num_rows($query) == 1){
-		include("./includes/avatar_select.php");
-	}
+	// This block is not relevant to adding a new employee, it's for the logged-in user.
+	// $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."');
+	// if(mysqli_num_rows($query) == 1){
+	// 	include("./includes/avatar_select.php");
+	// }
 
-if(isset($_POST['submit'])){
-	$name_emp = $_POST['name'];
-	$emp_id = $_POST['emp_id'];
-	$iqama = $_POST['iqama'];
-	$mobile = $_POST['mobile'];
-	$salary = $_POST['salary'];
-	$vacation_days = $_POST['vacation_days'];
-	$joining_date = $_POST['joining_date'];
-	$department = $_POST['department'];
-	$sectin_nme = $_POST['sectin_nme'];
-	$emptype = $_POST['emptype'];
-	$bank_name = $_POST['bank_name'];
-	$iban = $_POST['iban'];
-	$country = $_POST['country'];
-	$dob = $_POST['dob'];
-	$vac_period = $_POST['vac_period'];
-	$sex = $_POST['sex'];
-	$mar_status = $_POST['mar_status'];
-	$emp_sup_type = "man_power";
-	$date_reg = date("c");
-	
-	$iqama_exp_g = $_POST['iqama_exp_g'];
-	
-	/*****************/
-	
-	if(!empty($_FILES['avatar']['name'])){
-		$nameava = $_FILES['avatar']['name'];
-		$tmp_name = $_FILES['avatar']['tmp_name'];
-		$image = "./assets/emp_pics/".$iqama.".".$nameava." ";
-	} else {
-		if ($sex == "male") {
-			$image = "./assets/emp_pics/defult.png";
-		} else {
-			$image = "./assets/emp_pics/defultFemale.jpg";
-		}
-	}
-	
-//	$image_move = "./assets/emp_pics/".$iqama.".".$nameava." ";
-	move_uploaded_file($tmp_name, $image);
-	
-//	header( "Refresh:5; url= profile", true, 303);
-	
-	/*****************/
-	
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
+    // --- Input Validation and Sanitization ---
+    $name_emp = trim($_POST['name'] ?? '');
+    $emp_id = trim($_POST['emp_id'] ?? '');
+    $iqama = trim($_POST['iqama'] ?? '');
+    $mobile = trim($_POST['mobile'] ?? '');
+    $salary = filter_var($_POST['salary'] ?? 0, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
+    $joining_date = trim($_POST['joining_date'] ?? '');
+    $department = trim($_POST['department'] ?? '');
+    $sectin_nme = trim($_POST['sectin_nme'] ?? '');
+    $country = trim($_POST['country'] ?? '');
+    $dob = trim($_POST['dob'] ?? '');
+    $sex = trim($_POST['sex'] ?? 'male');
+    $iqama_exp_g = trim($_POST['iqama_exp_g'] ?? '');
+    $emp_sup_type = "man_power";
+    $date_reg = date("c");
+    $image_path = '';
 
-	if($name_emp){
-$queryckh = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `emp_id`='".$emp_id."' ");
-if(mysqli_num_rows($queryckh) > 0 ) { //check if there is already an entry for that appointment
-		$msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">This employee no. (\"$emp_id\") registerd already!</div>";
-	
-	}else{
-		$query = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `date_reg`, `status`, `avatar`,`fly`,`dept`,`sectin_nme`,`country`,`dob`,`sex`,`emp_sup_type`,`iqama_exp_g`) VALUES ('".$name_emp."', '".$emp_id."', '".$iqama."', '".$mobile."', '".$salary."', '".$joining_date."', '".$date_reg."', 'active', '$image','no','".$department."','".$sectin_nme."','".$country."','".$dob."','".$sex."','".$emp_sup_type."','".$iqama_exp_g."')";
-		mysqli_query($conDB, $query);
-		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['name']."','".date("c")."')") or die ();
-		/************log************/
-		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
-		";		
-//		 header( "refresh:2 ; url=dashboard.php" );
-	}
-		} else {
-			$msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Please fill out all required fields in this form!</div>";
-		}
+    // --- File Upload Handling ---
+    if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+        $file = $_FILES['avatar'];
+        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+        $file_type = mime_content_type($file['tmp_name']);
+        
+        if (in_array($file_type, $allowed_types)) {
+            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+            // Sanitize iqama to be used as a filename component
+            $safe_iqama = preg_replace('/[^a-zA-Z0-9_-]/', '', $iqama);
+            $image_path = "./assets/emp_pics/" . $safe_iqama . "_" . time() . "." . $extension;
+            
+            if (!move_uploaded_file($file['tmp_name'], $image_path)) {
+                $image_path = ''; // Reset path if move fails
+            }
+        }
+    }
 
-	
+    // Set default avatar if no file was uploaded or if the upload failed
+    if (empty($image_path)) {
+        $image_path = ($sex === "male") ? "./assets/emp_pics/defult.png" : "./assets/emp_pics/defultFemale.jpg";
+    }
+
+    // --- Form Validation ---
+    if (empty($name_emp) || empty($emp_id) || empty($iqama) || empty($department) || empty($sectin_nme) || empty($salary)) {
+        $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Please fill out all required fields in this form!</div>";
+    } else {
+        // --- Database Operations with Prepared Statements ---
+        
+        // Check if employee ID already exists
+        $stmt_check = $conDB->prepare("SELECT `emp_id` FROM `employees` WHERE `emp_id` = ?");
+        $stmt_check->bind_param("s", $emp_id);
+        $stmt_check->execute();
+        $stmt_check->store_result();
+
+        if ($stmt_check->num_rows > 0) {
+            $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">This employee no. (\"$emp_id\") is already registered!</div>";
+        } else {
+            // Insert new employee record
+            $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `date_reg`, `status`, `avatar`, `fly`, `dept`, `sectin_nme`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, 'no', ?, ?, ?, ?, ?, ?, ?)";
+            
+            $stmt_insert = $conDB->prepare($sql);
+            $stmt_insert->bind_param(
+                "ssssdssssssssss",
+                $name_emp,
+                $emp_id,
+                $iqama,
+                $mobile,
+                $salary,
+                $joining_date,
+                $date_reg,
+                $image_path,
+                $department,
+                $sectin_nme,
+                $country,
+                $dob,
+                $sex,
+                $emp_sup_type,
+                $iqama_exp_g
+            );
+
+            if ($stmt_insert->execute()) {
+                // Log the activity
+                $pgname = "new_mnpow_employee.php"; // Assuming pgname
+                $log_stmt = $conDB->prepare("INSERT INTO `activity_log` (`user_editor`, `page`, `pg_id`, `reg_date`) VALUES (?, ?, ?, ?)");
+                $log_stmt->bind_param("ssss", $_COOKIE['user'], $pgname, $name_emp, $date_reg);
+                $log_stmt->execute();
+                $log_stmt->close();
+
+                $msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Added Successfully!</div>";
+            } else {
+                $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Error: Could not add employee.</div>";
+            }
+            $stmt_insert->close();
+        }
+        $stmt_check->close();
+    }
 }
-
 ?>
 
 <!doctype html>
@@ -181,7 +212,7 @@ if(mysqli_num_rows($queryckh) > 0 ) { //check if there is already an entry for t
                                 <div class="card-box">
                                     <h4 class="m-t-0 header-title">Register New Employee</h4>
                                     <form action="<?=$_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data" id="registration">
-										<?=$msg ?>
+										<?=(isset($msg) ? $msg : '') ?>
                                         <div class="form-row">
 											<div class="form-group col-md-3">
 												<label for="name">Employee Name<span class="text-danger">*</span></label>
@@ -237,7 +268,7 @@ if(mysqli_num_rows($queryckh) > 0 ) { //check if there is already an entry for t
                                             </div>
 											<div class="form-group col-md-3">
                                                 <label for="salary" class="col-form-label">Salary<span class="text-danger">*</span></label>
-                                                <input type="text" name="salary" class="form-control autonumber" data-v-max="25000" data-v-min="0" id="salary">
+                                                <input type="text" name="salary" class="form-control autonumber" data-v-max="25000" data-v-min="0" id="salary" required>
                                             </div>
 											<div class="form-group col-md-3">
                                                 <label for="dob" class="col-form-label">Date of Birth</label>
@@ -260,7 +291,7 @@ if(mysqli_num_rows($queryckh) > 0 ) { //check if there is already an entry for t
                                             </div>
                                         </div>
 										
-										<input type="text" hidden="true" name="iqama_exp_g" id="iqama_exp_g" >
+										<input type="hidden" name="iqama_exp_g" id="iqama_exp_g" >
 										
 										<div class="btn-group" role="group" aria-label="Edit Button">
 										<a href="./add_new_employee.php" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>

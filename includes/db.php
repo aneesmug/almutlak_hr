@@ -84,9 +84,7 @@ mysqli_query($conDB,"SET NAMES utf8;");
 header('Content-Type: text/html; charset=utf-8');
 
 
-$developer_mode = get_setting($conDB, 'developer_mode');
-
-if($developer_mode == 1){
+if(get_setting($conDB, 'developer_mode') == 1){
     error_reporting(E_ALL ^ E_NOTICE);
     ini_set('display_errors', 0);
     ini_set('display_startup_errors', 0);
