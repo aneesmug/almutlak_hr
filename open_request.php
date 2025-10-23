@@ -536,7 +536,7 @@ if ($current_status_get == 'paid') {
                                                         // This block is for managers to submit their own requests
                                                         if ($empid == $emp_id_get && $creator_emptype == 'Manager' && $current_status_get == 'draft'): ?>
                                                             <div class="input-group mb-2">
-                                                                <div class="input-group-prepend"><div class="input-group-text"><?=__('finance_approver')?> <span class="text-danger ml-2">*</span></div></div>
+                                                                <div class="input-group-prepend"><div class="input-group-text"><?=__('select_finance_approver')?> <span class="text-danger ml-2">*</span></div></div>
                                                                 <select class="form-control" name="finance_approver_id" required>
                                                                     <option value=""><?=__('select_finance_approver')?></option>
                                                                     <?php

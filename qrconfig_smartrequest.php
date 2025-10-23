@@ -50,7 +50,7 @@ Parameters
 
 $param = $_GET['id'];
 
-QRcode::png('http://sys.almutlak.com/attach_smt_request.php?id='.$param, false, QR_ECLEVEL_L, 6, 1, false);
+QRcode::png('https://hr.almutlaksystem.com/attach_smt_request.php?id='.$param, false, QR_ECLEVEL_L, 6, 1, false);
 // QRcode::png('http://192.168.9.158/almutlak/system/attach_smt_request.php?id='.$param, false, QR_ECLEVEL_L, 6, 1, false);
 
 

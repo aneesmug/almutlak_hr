@@ -247,17 +247,23 @@ if(isset($_POST['submit'])){
 									$result=mysqli_query($conDB, "SELECT 
 									`e`.*, 
 									`d`.`dep_nme`,
-									`d`.`dep_nme_ar`
+									`d`.`dep_nme_ar`,
+									`c`.`name` AS `countryname_en`,
+									`c`.`name_ar` AS `countryname_ar`
 									FROM `employees` as `e`
 									LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+									LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
 									WHERE `e`.`status`=1 AND `e`.`iqama_exp_g` BETWEEN CURDATE() and DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND `e`.`dept`='".$user_dept."' ");
 								}else{
 									$result=mysqli_query($conDB, "SELECT 
 									`e`.*, 
 									`d`.`dep_nme`,
-									`d`.`dep_nme_ar`
+									`d`.`dep_nme_ar`,
+									`c`.`name` AS `countryname_en`,
+									`c`.`name_ar` AS `countryname_ar`
 									FROM `employees` as `e`
 									LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+									LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
 									WHERE `e`.`status`=1 AND `e`.`iqama_exp_g` BETWEEN CURDATE() and DATE_ADD(CURDATE(), INTERVAL 30 DAY) ");
 								}
 
@@ -305,12 +311,12 @@ if(isset($_POST['submit'])){
 									<td><?=$row['name']; ?></td>
 									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
 									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
-									<td><?=$row['country']; ?></td>
+									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>
 									<td><?=$row['iqama_exp']; ?></td>
 									<td align="center"><?=$daystoexp; ?> <?=__('days')?></td>
 									<td>
 										<div class="btn-group" role="group" aria-label="Edit Button">
-											<a href="view_employee.php?emp_id=<?=$row['emp_id'];?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm iqama_exp_hijri" data-id="<?=$row['id']?>" >
+											<a href="javascript:void(0);" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm iqama_exp_hijri" data-id="<?=$row['id']?>" >
 												<i class="mdi mdi-account-card-details"></i> <?=__('update_expiry')?>
 											</a>
 										</div>
@@ -326,17 +332,22 @@ if(isset($_POST['submit'])){
 									$result=mysqli_query($conDB, "SELECT 
 										`e`.*, 
 										`d`.`dep_nme`,
-										`d`.`dep_nme_ar`
-										FROM `employees` as `e`
+										`d`.`dep_nme_ar`,
+										`c`.`name` AS `countryname_en`,
+										`c`.`name_ar` AS `countryname_ar`
 										LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+										LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
 										WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1 AND `e`.`dept`='".$user_dept."' ");
 								}else{
 									$result=mysqli_query($conDB, "SELECT 
 										`e`.*, 
 										`d`.`dep_nme`,
-										`d`.`dep_nme_ar`
+										`d`.`dep_nme_ar`,
+										`c`.`name` AS `countryname_en`,
+										`c`.`name_ar` AS `countryname_ar`
 										FROM `employees` as `e`
 										LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+										LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
 										WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1
 									");
 								}
@@ -374,12 +385,12 @@ if(isset($_POST['submit'])){
 									<td><?=$row['name']; ?></td>
 									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
 									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
-									<td><?=$row['country']; ?></td>
+									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>
 									<td><?=date("d/m/Y", strtotime($row['iqama_exp_g'])); ?></td>
 									<td align="center"><?=$daystoexp; ?> <?=__('days') ?></td>
 									<td>
 										<div class="btn-group" role="group" aria-label="Edit Button">
-											<a href="view_employee.php?emp_id=<?=$row['emp_id'];?>" class="btn btn-danger m-t-20 btn-rounded waves-effect w-md waves-light btn-sm iqama_exp_hijri" data-id="<?=$row['id']?>" >
+											<a href="javascript:void(0);" class="btn btn-danger m-t-20 btn-rounded waves-effect w-md waves-light btn-sm iqama_exp_hijri" data-id="<?=$row['id']?>" >
 												<i class="fa fa-images-user"></i> <?=__('update_expiry') ?>
 											</a>
 										</div>
@@ -540,6 +551,89 @@ if(isset($_POST['submit'])){
                 table.buttons().container()
                         .appendTo('#datatable-buttons_wrapper .col-md-6:eq(0)');
             } );
+
+			$(document).on('click', '.iqama_exp_hijri', function (e) {
+				e.preventDefault();
+				var emid = $(this).data('id');
+				Swal.fire({
+					title: __('update_id_expiry_info'),
+					html: id_exp_HTML(),
+					showCancelButton: true,
+					confirmButtonColor: '#3085d6',
+					cancelButtonColor: '#d33',
+					cancelButtonText: __('cancel'),
+					confirmButtonText: __('yes_update'),
+					showLoaderOnConfirm: true,
+					allowOutsideClick: false,
+					willOpen: function() {
+						$('input[name="emid"]').val(emid);
+						$("#iq_id_exp_hijri").hijriDatePicker({
+							locale: "<?= ($is_rtl ?? false) ? 'ar-sa' : 'en-us' ?>",
+							hijri:true,
+							showSwitcher:false,
+							hijriFormat:"iYYYY-iMM-iDD",
+							hijriDayViewHeaderFormat: "iMMMM iYYYY",
+							// showTodayButton: true,
+							inline: true,
+							ignoreReadonly: true,
+						});
+						jQuery('#iq_id_exp_greg').hijriDatePicker({
+							locale: "<?= ($is_rtl ?? false) ? 'ar-sa' : 'en-us' ?>",
+							hijri: false,
+							format: "YYYY-MM-DD",
+							dayViewHeaderFormat: "MMMM YYYY",
+							// showTodayButton: true,
+							inline: true,
+							ignoreReadonly: true,
+							showSwitcher: false
+						});
+						$("input[name$='note']").click(function(){
+							var value = $(this).val();
+							if(value=='hijri') {
+								$("#hijriDiv").show();
+								$("#gregorianDiv").hide();
+								$("#iq_id_exp_hijri").attr('name', 'iqama_exp');
+								$("#iq_id_exp_greg").removeAttr('name');
+							} else if(value=='gregorian') {
+								$("#hijriDiv").hide();
+								$("#gregorianDiv").show();
+								$("#iq_id_exp_hijri").removeAttr('name');
+								$("#iq_id_exp_greg").attr('name', 'iqama_exp_g');
+							}
+						});
+					},
+					preConfirm: function() {
+						var iqama_exp = $('input[name="iqama_exp"]').val();
+						var iqama_exp_g = $('input[name="iqama_exp_g"]').val();
+						var inputCheck = $("input[name$='note']:checked").is(':checked');
+						if(inputCheck == false){
+							Swal.showValidationMessage(__("select_id_iqama_expiry_validation"))
+						}
+						return new Promise(function(reject, resolve) {
+							if( inputCheck == false ){
+								reject(__("fill_mandatory_fields"));
+								return false;
+							}
+							$.ajax({
+								url: './includes/ajaxFile/ajaxEmployee.php',
+								type: 'POST',
+								dataType: "JSON",
+								data: {'id': emid, 'iqama_exp':iqama_exp, 'iqama_exp_g':iqama_exp_g, ajaxType:'id_iqama_update' },
+							})
+							.done(function(response){
+								// console.log(response.title)
+								Swal.fire({
+									title:response.title,text:response.message,icon:response.type,allowOutsideClick:false, confirmButtonText: __("ok")
+								}).then(function(isConfirm){(isConfirm)?location.reload():""});
+							})
+							.fail(function(jqXHR, textStatus, errorThrown) {
+							
+								reject(handleAjaxFailure(jqXHR, textStatus).message);
+							});
+						});
+					},
+				})
+			});
 
         </script>
 
