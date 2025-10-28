@@ -329,15 +329,15 @@ if(isset($_POST['submit'])){
 						<?php } ?>
 						<?php
 							if($user_type == "dept_user"){
-									$result=mysqli_query($conDB, "SELECT 
-										`e`.*, 
-										`d`.`dep_nme`,
-										`d`.`dep_nme_ar`,
-										`c`.`name` AS `countryname_en`,
-										`c`.`name_ar` AS `countryname_ar`
-										LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
-										LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
-										WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1 AND `e`.`dept`='".$user_dept."' ");
+									// $result=mysqli_query($conDB, "SELECT 
+									// 	`e`.*, 
+									// 	`d`.`dep_nme`,
+									// 	`d`.`dep_nme_ar`,
+									// 	`c`.`name` AS `countryname_en`,
+									// 	`c`.`name_ar` AS `countryname_ar`
+									// 	LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+									// 	LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
+									// 	WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1 AND `e`.`dept`='".$user_dept."' ");
 								}else{
 									$result=mysqli_query($conDB, "SELECT 
 										`e`.*, 
@@ -474,8 +474,11 @@ if(isset($_POST['submit'])){
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js"></script>
 
+		<!-- Make sure this is on EVERY page -->
+    	<script src="assets/js/notifications.js"></script>
+
         <!-- Dashboard Init -->
-        <script src="assets/pages/jquery.dashboard.init.js"></script>
+        <!-- <script src="assets/pages/jquery.dashboard.init.js"></script> -->
 		
 		<script type="text/javascript">
 

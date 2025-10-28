@@ -1,5 +1,33 @@
 <?php
 
+/*
+    MODIFICATION SUMMARY:
+    - Added new SQL to create the `user_notifications` table. You must run this SQL in your database (e.g., phpMyAdmin) ONE TIME.
+    - Added new function `create_browser_notification()`: Inserts a new notification record into the database for a specific user.
+    - Added new function `get_unread_notifications()`: Fetches all unread notifications for a user.
+    - Added new function `mark_notifications_as_read()`: Marks specific notifications as read after they are fetched.
+*/
+
+/*
+    ---------------------------------------------------------------------------------
+    !!! IMPORTANT: DATABASE UPDATE - RUN THIS SQL ONCE IN PHPMYADMIN !!!
+    ---------------------------------------------------------------------------------
+    
+    CREATE TABLE IF NOT EXISTS `user_notifications` (
+      `id` INT AUTO_INCREMENT PRIMARY KEY,
+      `emp_id` INT NOT NULL,
+      `title` VARCHAR(255) NOT NULL,
+      `message` TEXT NOT NULL,
+      `url` VARCHAR(512) NOT NULL,
+      `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX `idx_emp_id_is_read` (`emp_id`, `is_read`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    ---------------------------------------------------------------------------------
+*/
+
+
 $formatter = new NumberFormatter('en_SA',  NumberFormatter::CURRENCY);
 
 function escape_string($param)
@@ -298,8 +326,7 @@ function console_log($data)
 
 /**
  * Redirect or refresh the page with optional delay and status messages.
- * 
- * @param string $path     URL to redirect to (empty = refresh current page)
+ * * @param string $path     URL to redirect to (empty = refresh current page)
  * @param int $delay       Delay in seconds (0 = immediate)
  * @param bool $exit       Terminate script after redirect? (Default: true)
  * @param string $message  Custom message to display during delay
@@ -615,4 +642,417 @@ function generate_pagination_controls($current_page, $total_pages, $total_items,
     $html .= '</div>';
     $html .= '</div></div>';
     return $html;
+}
+
+/*
+MODIFICATION SUMMARY:
+- This is a new file containing all the functions for the general approval system.
+- get_all_employees(): Fetches all employees to populate approver dropdowns.
+- save_approval_chain(): Saves the selected approvers into the new `request_approvers` table.
+- handle_approval_action(): The main logic engine. Handles an approver's "approve" or "reject" action.
+- get_approval_chain_status(): Fetches the complete status of a request's approval chain for display.
+- get_current_approver(): Finds the specific employee who needs to approve the request right now.
+- getMainRequestTable(): Helper to get the name of the main table associated with a request type.
+- getEmployeeDetailsForApproval(): Fetches employee details for sending notification emails.
+*/
+
+/**
+ * Fetches all active employees to populate approver dropdowns.
+ * @param mysqli $conDB Database connection
+ * @return array List of employees
+ */
+function get_all_employees($conDB) {
+    $employees = [];
+    $query = mysqli_query($conDB, "SELECT `emp_id`, `name` FROM `employees` WHERE `status` = 1 ORDER BY `name`");
+    if ($query) {
+        while ($row = mysqli_fetch_assoc($query)) {
+            $employees[] = $row;
+        }
+    }
+    return $employees;
+}
+
+/**
+ * Saves the chosen approval chain for a new request.
+ * @param mysqli $conDB Database connection
+ * @param string $inv_no The request's invoice number
+ * @param string $request_type The type of request (e.g., 'smart_request')
+ * @param array $approver_ids An array of emp_id strings, in order of approval
+ * @return bool True on success, false on failure
+ */
+function save_approval_chain($conDB, $inv_no, $request_type, $approver_ids) {
+    // 1. Get the request_type_id
+    $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
+    if (mysqli_num_rows($type_query) == 0) {
+        return false;
+    }
+    $type_row = mysqli_fetch_assoc($type_query);
+    $request_type_id = $type_row['id'];
+
+    // 2. Insert each approver into the `request_approvers` table
+    $level = 1;
+    foreach ($approver_ids as $approver_id) {
+        if (!empty($approver_id)) {
+            // Set the first approver to 'pending', others to 'awaiting'
+            $status = ($level == 1) ? 'pending' : 'awaiting';
+            $approver_id_safe = (int)$approver_id;
+            
+            $sql = "INSERT INTO `request_approvers` (`request_inv_no`, `request_type_id`, `approver_id`, `approval_level`, `status`) 
+                    VALUES ('" . escape_string($inv_no) . "', $request_type_id, $approver_id_safe, $level, '$status')";
+            
+            if (!mysqli_query($conDB, $sql)) {
+                // Handle insert error if needed
+                return false;
+            }
+            $level++;
+        }
+    }
+    return true;
+}
+
+/**
+ * Handles an approver's action (approve/reject).
+ * @param mysqli $conDB Database connection
+ * @param string $inv_no The request's invoice number
+ * @param string $request_type The type of request (e.g., 'smart_request')
+ * @param int $current_user_id The emp_id of the user taking the action
+ * @param string $action The action taken ('approve' or 'reject')
+ * @param string $note A note for the action
+ * @return array Status of the operation
+ */
+function handle_approval_action($conDB, $inv_no, $request_type, $current_user_id, $action, $note) {
+    global $userwel; // For logging status
+
+    // 1. Get Request Type ID and Main Table Name
+    $type_query = mysqli_query($conDB, "SELECT `id`, `main_table_name` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
+    if (mysqli_num_rows($type_query) == 0) {
+        return ['status' => 'error', 'message' => 'Invalid request type.'];
+    }
+    $type_row = mysqli_fetch_assoc($type_query);
+    $request_type_id = $type_row['id'];
+    $main_table_name = $type_row['main_table_name'];
+    $inv_no_safe = escape_string($inv_no);
+    $note_safe = escape_string($note);
+
+    // 2. Find the approver's pending task
+    $find_sql = "SELECT * FROM `request_approvers` 
+                 WHERE `request_inv_no` = '$inv_no_safe' 
+                   AND `request_type_id` = $request_type_id 
+                   AND `approver_id` = " . (int)$current_user_id . " 
+                   AND `status` = 'pending' 
+                 ORDER BY `approval_level` LIMIT 1";
+    $find_query = mysqli_query($conDB, $find_sql);
+
+    if (mysqli_num_rows($find_query) == 0) {
+        return ['status' => 'error', 'message' => 'No pending approval found for you on this request.'];
+    }
+    $current_task = mysqli_fetch_assoc($find_query);
+    $current_level = $current_task['approval_level'];
+    $current_task_id = $current_task['id'];
+
+    // 3. Update the current approver's task
+    $action_status = ($action == 'approve') ? 'approved' : 'rejected';
+    $update_sql = "UPDATE `request_approvers` 
+                   SET `status` = '$action_status', `note` = '$note_safe', `action_date` = NOW() 
+                   WHERE `id` = $current_task_id";
+    mysqli_query($conDB, $update_sql);
+
+    // 4. Handle next step based on action
+    if ($action == 'approve') {
+        // Find the next approver in the chain
+        $next_level = $current_level + 1;
+        $next_sql = "SELECT * FROM `request_approvers` 
+                     WHERE `request_inv_no` = '$inv_no_safe' 
+                       AND `request_type_id` = $request_type_id 
+                       AND `approval_level` = $next_level 
+                     LIMIT 1";
+        $next_query = mysqli_query($conDB, $next_sql);
+
+        if (mysqli_num_rows($next_query) > 0) {
+            // There is a next approver
+            $next_task = mysqli_fetch_assoc($next_query);
+            
+            // Set next approver's status to 'pending'
+            mysqli_query($conDB, "UPDATE `request_approvers` SET `status` = 'pending' WHERE `id` = " . $next_task['id']);
+            
+            // Update main request table status
+            mysqli_query($conDB, "UPDATE `$main_table_name` SET `current_status` = 'pending_approval', `current_approval_level` = $next_level WHERE `inv_no` = '$inv_no_safe'");
+            
+            // Log status
+            mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES ('$current_user_id', '$inv_no_safe', '$userwel', 'pending_approval', 'Approved at level $current_level. $note_safe')");
+
+            // Return details for email notification
+            $next_approver_details = getEmployeeDetailsForApproval($conDB, $next_task['approver_id']);
+            // --- NEW: Return next approver's ID for browser notification ---
+            return ['status' => 'success', 'next_approver' => $next_approver_details, 'next_approver_id' => $next_task['approver_id']];
+
+        } else {
+            // This was the final approval
+            mysqli_query($conDB, "UPDATE `$main_table_name` SET `current_status` = 'approved', `current_approval_level` = $current_level WHERE `inv_no` = '$inv_no_safe'");
+            mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES ('$current_user_id', '$inv_no_safe', '$userwel', 'approved', 'Final approval. $note_safe')");
+            return ['status' => 'success', 'next_approver' => null]; // Final approval
+        }
+
+    } else {
+        // Action was 'reject'
+        mysqli_query($conDB, "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = $current_level WHERE `inv_no` = '$inv_no_safe'");
+        mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES ('$current_user_id', '$inv_no_safe', '$userwel', 'rejected', '$note_safe')");
+        return ['status' => 'success', 'next_approver' => null]; // Rejected
+    }
+}
+
+/**
+ * Gets the full approval chain with names and statuses for display.
+ * @param mysqli $conDB Database connection
+ * @param string $inv_no The request's invoice number
+ * @param string $request_type The type of request (e.g., 'smart_request')
+ * @return array List of approval chain steps
+ */
+function get_approval_chain_status($conDB, $inv_no, $request_type) {
+    $chain = [];
+    $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
+    if (mysqli_num_rows($type_query) == 0) {
+        return $chain;
+    }
+    $type_row = mysqli_fetch_assoc($type_query);
+    $request_type_id = $type_row['id'];
+
+    $sql = "SELECT ra.*, e.name as approver_name 
+            FROM `request_approvers` ra
+            JOIN `employees` e ON ra.approver_id = e.emp_id
+            WHERE ra.`request_inv_no` = '" . escape_string($inv_no) . "' 
+              AND ra.`request_type_id` = $request_type_id
+            ORDER BY ra.`approval_level`";
+    
+    $query = mysqli_query($conDB, $sql);
+    if ($query) {
+        while ($row = mysqli_fetch_assoc($query)) {
+            $chain[] = $row;
+        }
+    }
+    return $chain;
+}
+
+/**
+ * Finds the current pending approver's ID.
+ * @param mysqli $conDB Database connection
+ * @param string $inv_no The request's invoice number
+ * @param string $request_type The type of request (e.g., 'smart_request')
+ * @return int|null The emp_id of the current approver, or null
+ */
+function get_current_approver($conDB, $inv_no, $request_type) {
+    $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
+    if (mysqli_num_rows($type_query) == 0) {
+        return null;
+    }
+    $type_row = mysqli_fetch_assoc($type_query);
+    $request_type_id = $type_row['id'];
+
+    $sql = "SELECT `approver_id` 
+            FROM `request_approvers` 
+            WHERE `request_inv_no` = '" . escape_string($inv_no) . "' 
+              AND `request_type_id` = $request_type_id 
+              AND `status` = 'pending' 
+            ORDER BY `approval_level` LIMIT 1";
+            
+    $query = mysqli_query($conDB, $sql);
+    if ($query && mysqli_num_rows($query) > 0) {
+        $row = mysqli_fetch_assoc($query);
+        return (int)$row['approver_id'];
+    }
+    return null;
+}
+
+/**
+ * --- NEW FUNCTION ---
+ * Gets the total count of pending approvals for a specific user.
+ * @param mysqli $conDB Database connection
+ * @param int $emp_id The employee's ID
+ * @return int The number of pending approvals
+ */
+function get_pending_approval_count($conDB, $emp_id) {
+    if (!$conDB || !$emp_id) return 0;
+
+    $emp_id_safe = (int)$emp_id;
+    $sql = "SELECT COUNT(*) as pending_count 
+            FROM `request_approvers`
+            WHERE `approver_id` = $emp_id_safe AND `status` = 'pending'";
+            
+    $query = mysqli_query($conDB, $sql);
+    if ($query && mysqli_num_rows($query) > 0) {
+        $row = mysqli_fetch_assoc($query);
+        return (int)$row['pending_count'];
+    }
+    return 0;
+}
+
+
+/**
+ * Helper to get employee details for email notifications.
+ * @param mysqli $conDB Database connection
+ * @param int $emp_id The employee's ID
+ * @return array|null Employee details or null
+ */
+function getEmployeeDetailsForApproval($conDB, $emp_id) {
+    $query = mysqli_query($conDB, "SELECT e.name, al.email 
+                                    FROM `employees` e 
+                                    LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id 
+                                    WHERE e.`emp_id`='" . (int)$emp_id . "' 
+                                    LIMIT 1");
+    return mysqli_num_rows($query) > 0 ? mysqli_fetch_assoc($query) : null;
+}
+
+
+/**
+ * Helper to get employee details for open request.
+ * @param mysqli $conDB Database connection
+ * @param int $emp_id The employee's ID
+ */
+
+
+if (!function_exists('getDeptManager')) {
+    function getDeptManager($conDB, $dept_id) {
+        if (!$conDB || !$dept_id) return null;
+        $query = mysqli_query($conDB, "SELECT e.emp_id, e.name, al.email FROM `employees` e LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id WHERE e.`dept`='".escape_string($dept_id)."' AND e.`emptype`='Manager' AND e.`status`=1 LIMIT 1");
+        return ($query && mysqli_num_rows($query) > 0) ? mysqli_fetch_assoc($query) : null;
+    }
+}
+
+if (!function_exists('getFinancePersonnel')) {
+    function getFinancePersonnel($conDB, $dept_id = 2) {
+        if (!$conDB) return [];
+        $query = mysqli_query($conDB, "SELECT e.emp_id, e.name, al.email FROM `employees` e LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id WHERE e.`dept`='".escape_string($dept_id)."' AND e.`status`=1 ORDER BY FIELD(e.emptype, 'Manager', 'Supporter'), e.name"); // Added ordering by name
+        $personnel = [];
+        if ($query) {
+            while ($row = mysqli_fetch_assoc($query)) { $personnel[] = $row; }
+        }
+        return $personnel;
+    }
+}
+
+// NEW Function to get HR Personnel
+if (!function_exists('getHRPersonnel')) {
+    // UPDATED: Default dept_id changed to 5
+    function getHRPersonnel($conDB, $dept_id = 5) { // ** HR Dept ID is now 5 **
+        if (!$conDB) return [];
+        $query = mysqli_query($conDB, "SELECT e.emp_id, e.name, al.email
+                                        FROM `employees` e
+                                        LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id
+                                        WHERE e.`dept`='" . escape_string($dept_id) . "' AND e.`status`=1
+                                        ORDER BY e.name");
+        $personnel = [];
+        if ($query) {
+            while ($row = mysqli_fetch_assoc($query)) { $personnel[] = $row; }
+        }
+        return $personnel;
+    }
+}
+
+
+if (!function_exists('getGeneralManager')) {
+    function getGeneralManager($conDB) {
+         if (!$conDB) return null;
+        $query = mysqli_query($conDB, "SELECT e.emp_id, e.name, al.email FROM `employees` e LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id WHERE e.`emp_id`='3928' AND e.`status`=1 LIMIT 1"); // Hardcoded GM ID might need review
+        return ($query && mysqli_num_rows($query) > 0) ? mysqli_fetch_assoc($query) : null;
+    }
+}
+
+// Modified helper function to get details for any employee - REQUIRES $conDB
+if (!function_exists('getEmployeeDetails')) {
+    function getEmployeeDetails($conDB, $emp_id) {
+        if (!$conDB || !$emp_id) return ['name' => 'N/A', 'email' => '']; // Basic validation
+        $emp_id_clean = (int)$emp_id; // Sanitize input
+        $query = mysqli_query($conDB, "SELECT e.name, al.email FROM `employees` e LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id WHERE e.`emp_id`='$emp_id_clean' LIMIT 1");
+        return ($query && mysqli_num_rows($query) > 0) ? mysqli_fetch_assoc($query) : ['name' => 'N/A', 'email' => ''];
+    }
+}
+
+
+// --- NEW FUNCTIONS FOR BROWSER NOTIFICATIONS ---
+
+/**
+ * Creates a browser notification entry in the database.
+ * @param mysqli $conDB Database connection
+ * @param int $emp_id The employee ID to notify
+ * @param string $title The notification title
+ * @param string $message The notification body
+ * @param string $url The URL to open on click
+ * @return bool True on success, false on failure
+ */
+if (!function_exists('create_browser_notification')) {
+    function create_browser_notification($conDB, $emp_id, $title, $message, $url) {
+        if (!$conDB || !$emp_id || empty($title) || empty($message) || empty($url)) {
+            return false;
+        }
+
+        $emp_id_safe = (int)$emp_id;
+        $title_safe = escape_string($title);
+        $message_safe = escape_string($message);
+        $url_safe = escape_string($url);
+
+        $sql = "INSERT INTO `user_notifications` (`emp_id`, `title`, `message`, `url`) 
+                VALUES ($emp_id_safe, '$title_safe', '$message_safe', '$url_safe')";
+        
+        if (mysqli_query($conDB, $sql)) {
+            return true;
+        } else {
+            // Optional: Log error
+            error_log("Failed to create browser notification: " . mysqli_error($conDB));
+            return false;
+        }
+    }
+}
+
+/**
+ * Fetches all unread notifications for a specific user.
+ * @param mysqli $conDB Database connection
+ * @param int $emp_id The employee's ID
+ * @return array List of unread notifications
+ */
+if (!function_exists('get_unread_notifications')) {
+    function get_unread_notifications($conDB, $emp_id) {
+        $notifications = [];
+        if (!$conDB || !$emp_id) return $notifications;
+
+        $emp_id_safe = (int)$emp_id;
+        $sql = "SELECT * FROM `user_notifications` 
+                WHERE `emp_id` = $emp_id_safe AND `is_read` = 0 
+                ORDER BY `created_at` DESC";
+        
+        $query = mysqli_query($conDB, $sql);
+        if ($query) {
+            while ($row = mysqli_fetch_assoc($query)) {
+                $notifications[] = $row;
+            }
+        }
+        return $notifications;
+    }
+}
+
+/**
+ * Marks a list of notification IDs as read.
+ * @param mysqli $conDB Database connection
+ * @param array $notification_ids An array of notification IDs to mark as read
+ * @return bool True on success, false on failure
+ */
+if (!function_exists('mark_notifications_as_read')) {
+    function mark_notifications_as_read($conDB, $notification_ids) {
+        if (!$conDB || empty($notification_ids)) {
+            return false;
+        }
+
+        // Sanitize all IDs to integers
+        $ids_safe = array_map('intval', $notification_ids);
+        $ids_list = implode(',', $ids_safe);
+
+        if (empty($ids_list)) {
+            return false;
+        }
+
+        $sql = "UPDATE `user_notifications` 
+                SET `is_read` = 1 
+                WHERE `id` IN ($ids_list)";
+        
+        return mysqli_query($conDB, $sql);
+    }
 }

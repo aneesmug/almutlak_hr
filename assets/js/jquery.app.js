@@ -41,6 +41,7 @@ $("head").append($("<script type='text/javascript'></script>").attr("src", "./pl
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/select2/js/select2.min.js"));
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-select/js/bootstrap-select.js"));
 
+$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/notifications.js"));
 
 
 
@@ -4327,12 +4328,12 @@ function toggleLeaveFields() {
         case 'Business Trip':
             $('#dateSection, #tripSection, #reasonSection').removeClass('d-none');
             break;
-        case 'Compensatory Leave':
+        /*case 'Compensatory Leave':
             $('#dateSection, #reasonSection').removeClass('d-none');
             $('#end_date').closest('.form-group').hide(); // Compensatory leave is usually for a single day
             $('#end_date').val($('#start_date').val()); // Set end date same as start date
             calculateTotalDays();
-            break;
+            break;*/
         default: // Casual Leave, Other Leave, Compassionate Leave
             $('#dateSection, #reasonSection').removeClass('d-none');
             break;
@@ -4797,7 +4798,7 @@ function add_noties() {
 
 
 ////////////////////////////////////////////////////////////////////
-////////////       End Employee vacation Handling      /////////////
+////////////       End Employee vacation /*Handling      /////////////
 ////////////////////////////////////////////////////////////////////
 
 /*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/
@@ -4805,7 +4806,7 @@ function add_noties() {
 
 function generateLeaveFormHTML() {
     const leaveTypes = [
-        'Sick Leave', 'Casual Leave', 'Maternity Leave', 
+        'Sick Leave', /*'Casual Leave',*/ 'Maternity Leave', 
         'Business Trip', 'Compensatory Leave', 'Other Leave'
     ];
 
@@ -6163,7 +6164,7 @@ function add_note_HTML(){
 
 /*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/
 
- $(document).ready(function() {
+    /*$(document).ready(function() {
         // Initialize DataTable
         const table = $('#settingsTable').DataTable({
             "ajax": {
@@ -6180,7 +6181,6 @@ function add_note_HTML(){
                 { "data": "description", "title": "Description" }
             ]
         });
-        
         // --- Event Listeners ---
         $('#editAllBtn').on('click', openSettingsModal);
 
@@ -6268,7 +6268,7 @@ function add_note_HTML(){
         } catch (error) {
             Swal.fire('Error!', `Could not load settings: ${error.message}`, 'error');
         }
-    }
+    }*/
 
 /*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/
 
@@ -7179,3 +7179,262 @@ function dateofbirth(selector){
         endDate: '+0d' // disable future dates
     });
 }
+
+
+/**
+* Theme: Highdmin - Responsive Bootstrap 4 Admin Dashboard
+* Author: Coderthemes
+* Module/App: Core js
+*/
+
+
+/**
+ * Components
+ */
+!function ($) {
+    "use strict";
+
+    var Components = function () { };
+
+    //initializing tooltip
+    Components.prototype.initTooltipPlugin = function () {
+        $.fn.tooltip && $('[data-toggle="tooltip"]').tooltip()
+    },
+
+        //initializing popover
+        Components.prototype.initPopoverPlugin = function () {
+            $.fn.popover && $('[data-toggle="popover"]').popover()
+        },
+
+        //initializing Slimscroll
+        Components.prototype.initSlimScrollPlugin = function () {
+            //You can change the color of scroll bar here
+            $.fn.slimScroll && $(".slimscroll").slimScroll({
+                height: 'auto',
+                position: 'right',
+                size: "8px",
+                touchScrollStep: 20,
+                color: '#9ea5ab'
+            });
+        },
+
+        //initializing form validation
+        Components.prototype.initFormValidation = function () {
+            $(".needs-validation").on('submit', function (event) {
+                $(this).addClass('was-validated');
+                if ($(this)[0].checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return false;
+                }
+                return true;
+            });
+        },
+
+        //initializing custom modal
+        Components.prototype.initCustomModalPlugin = function () {
+            $('[data-plugin="custommodal"]').on('click', function (e) {
+                e.preventDefault();
+                var modal = new Custombox.modal({
+                    content: {
+                        target: $(this).attr("href"),
+                        effect: $(this).attr("data-animation")
+                    },
+                    overlay: {
+                        color: $(this).attr("data-overlayColor")
+                    }
+                });
+                // Open
+                modal.open();
+            });
+        },
+
+        //initializing Slimscroll
+        Components.prototype.initCounterUp = function () {
+            var delay = $(this).attr('data-delay') ? $(this).attr('data-delay') : 100; //default is 100
+            var time = $(this).attr('data-time') ? $(this).attr('data-time') : 1200; //default is 1200
+            $('[data-plugin="counterup"]').each(function (idx, obj) {
+                $(this).counterUp({
+                    delay: delay,
+                    time: time
+                });
+            });
+        },
+
+
+        Components.prototype.initPeityCharts = function () {
+            $('[data-plugin="peity-pie"]').each(function (idx, obj) {
+                var colors = $(this).attr('data-colors') ? $(this).attr('data-colors').split(",") : [];
+                var width = $(this).attr('data-width') ? $(this).attr('data-width') : 20; //default is 20
+                var height = $(this).attr('data-height') ? $(this).attr('data-height') : 20; //default is 20
+                $(this).peity("pie", {
+                    fill: colors,
+                    width: width,
+                    height: height
+                });
+            });
+            //donut
+            $('[data-plugin="peity-donut"]').each(function (idx, obj) {
+                var colors = $(this).attr('data-colors') ? $(this).attr('data-colors').split(",") : [];
+                var width = $(this).attr('data-width') ? $(this).attr('data-width') : 20; //default is 20
+                var height = $(this).attr('data-height') ? $(this).attr('data-height') : 20; //default is 20
+                $(this).peity("donut", {
+                    fill: colors,
+                    width: width,
+                    height: height
+                });
+            });
+
+            $('[data-plugin="peity-donut-alt"]').each(function (idx, obj) {
+                $(this).peity("donut");
+            });
+
+            // line
+            $('[data-plugin="peity-line"]').each(function (idx, obj) {
+                $(this).peity("line", $(this).data());
+            });
+
+            // bar
+            $('[data-plugin="peity-bar"]').each(function (idx, obj) {
+                var colors = $(this).attr('data-colors') ? $(this).attr('data-colors').split(",") : [];
+                var width = $(this).attr('data-width') ? $(this).attr('data-width') : 20; //default is 20
+                var height = $(this).attr('data-height') ? $(this).attr('data-height') : 20; //default is 20
+                $(this).peity("bar", {
+                    fill: colors,
+                    width: width,
+                    height: height
+                });
+            });
+        },
+
+
+        Components.prototype.initKnob = function () {
+            $('[data-plugin="knob"]').each(function (idx, obj) {
+                $(this).knob();
+            });
+        },
+
+        Components.prototype.init = function () {
+            this.initTooltipPlugin();
+            this.initPopoverPlugin();
+            this.initSlimScrollPlugin();
+            this.initFormValidation();
+            this.initCustomModalPlugin();
+            this.initCounterUp();
+            this.initPeityCharts();
+            this.initKnob();
+        },
+
+        $.Components = new Components, $.Components.Constructor = Components
+
+}(window.jQuery);
+
+
+/**
+ * Portlets
+ */
+!function ($) {
+    "use strict";
+
+    var Portlet = function () {
+        this.$body = $("body"),
+            this.$portletIdentifier = ".card",
+            this.$portletCloser = '.card a[data-toggle="remove"]',
+            this.$portletRefresher = '.card a[data-toggle="reload"]'
+    };
+
+    //on init
+    Portlet.prototype.init = function () {
+        // Panel closest
+        var $this = this;
+        $(document).on("click", this.$portletCloser, function (ev) {
+            ev.preventDefault();
+            var $portlet = $(this).closest($this.$portletIdentifier);
+            var $portlet_parent = $portlet.parent();
+            $portlet.remove();
+            if ($portlet_parent.children().length == 0) {
+                $portlet_parent.remove();
+            }
+        });
+
+        // Panel Reload
+        $(document).on("click", this.$portletRefresher, function (ev) {
+            ev.preventDefault();
+            var $portlet = $(this).closest($this.$portletIdentifier);
+            // This is just a simulation, nothing is going to be reloaded
+            $portlet.append('<div class="card-disabled"><div class="card-portlets-loader"></div></div>');
+            var $pd = $portlet.find('.card-disabled');
+            setTimeout(function () {
+                $pd.fadeOut('fast', function () {
+                    $pd.remove();
+                });
+            }, 500 + 300 * (Math.random() * 5));
+        });
+    },
+        //
+        $.Portlet = new Portlet, $.Portlet.Constructor = Portlet
+
+}(window.jQuery);
+
+
+/**
+ * App
+ */
+!function ($) {
+    "use_strict";
+
+    var App = function () {
+        this.VERSION = "1.0.0",
+            this.AUTHOR = "Coderthemes",
+            this.SUPPORT = "coderthemes@gmail.com",
+            this.pageScrollElement = "html, body",
+            this.$body = $("body")
+    };
+
+    //initializing tooltip
+    App.prototype.initTooltipPlugin = function () {
+        $.fn.tooltip && $('[data-toggle="tooltip"]').tooltip()
+    },
+
+        //initializing popover
+        App.prototype.initPopoverPlugin = function () {
+            $.fn.popover && $('[data-toggle="popover"]').popover()
+        },
+
+        //initializing Slimscroll
+        App.prototype.initSlimScrollPlugin = function () {
+            //You can change the color of scroll bar here
+            $.fn.slimScroll && $(".slimscroll-alt").slimScroll({
+                position: 'right',
+                size: "5px",
+                color: '#98a6ad',
+                wheelStep: 10
+            });
+        },
+
+        //initilizing
+        App.prototype.init = function () {
+            this.initTooltipPlugin();
+            this.initPopoverPlugin();
+            this.initSlimScrollPlugin();
+            $.Portlet.init();
+
+            // initlayout
+            if ($.Layout) {
+                $.Layout.init();
+            }
+        },
+
+        $.App = new App, $.App.Constructor = App
+
+}(window.jQuery);
+
+//initializing main application module
+(function ($) {
+    "use_strict";
+    $.App.init();
+
+    // === ALL NOTIFICATION LOGIC HAS BEEN MOVED TO assets/js/notifications.js ===
+
+}(window.jQuery));
+

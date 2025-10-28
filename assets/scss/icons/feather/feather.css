@@ -5,7 +5,6 @@
   font-weight: normal;
   font-style: normal;
 }
-
 /* Character Mapping Method */
 [data-fi]:before {
   display: inline-block;
@@ -21,7 +20,7 @@
 }
 
 /* CSS Class Mapping Method */
-[class^="fi-"],
+[class^=fi-],
 [class*=" fi-"] {
   display: inline-block;
   font-family: "feather";
@@ -560,5 +559,4 @@
 
 .fi-ellipsis:before {
   content: "\e129";
-}
-/*# sourceMappingURL=feather.css.map */
+}/*# sourceMappingURL=feather.css.map */

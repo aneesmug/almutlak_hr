@@ -1,4 +1,11 @@
 <?php
+/*
+MODIFICATION SUMMARY (002-main_menu.php):
+- Providing the full and final code as requested.
+- REPLACED SMART REQUEST COUNT: The old, complex, role-based switch statement for counting smart requests has been removed.
+- ADDED GENERAL APPROVAL COUNT: Replaced with a new, simpler query that checks the `request_approvers` table. It now counts requests where the logged-in user (`$empid`) is the designated approver and the status is 'pending'.
+- ADMIN OVERRIDE: Kept the logic for the 'administrator' role to see a total count of all non-completed requests.
+*/
 /****************************************************************
  * MODIFICATION SUMMARY (005-main_menu.php):
  * 1. ADDED MANUAL LOAN LINK: A new menu item "Add Manual Loan" has been added to the "Employee's" group. This link provides direct access to the `add_manual_loan.php` page, making it easy to add historical loan records.
@@ -154,33 +161,39 @@ if (!empty($loan_count_query)) {
     }
 }
 
-// --- Fetch Smart Request Counts ---
+// --- Fetch Smart Request Counts (NEW GENERAL SYSTEM) ---
 $smart_request_count = 0;
-$smart_request_query = "";
-switch ($user_role) {
-    case 'DPT_Manager':
-        $smart_request_query = "SELECT COUNT(*) as count FROM smart_request WHERE dept_manager_status = 'pending' AND department = '" . mysqli_real_escape_string($conDB, $user_dept) . "'";
-        break;
-    case 'Finance_Manager':
-        $smart_request_query = "SELECT COUNT(*) as count FROM smart_request WHERE finance_manager_status = 'pending'";
-        break;
-    case 'GM':
-        $smart_request_query = "SELECT COUNT(*) as count FROM smart_request WHERE gm_status = 'pending'";
-        break;
-    case 'administrator':
-        $smart_request_query = "SELECT COUNT(*) as count FROM smart_request WHERE current_status != 'approved' AND current_status != 'rejected' AND current_status != 'paid'";
-        break;
-    case 'HR_Manager':
-    case 'HR_Assistant':
-         $smart_request_query = "SELECT COUNT(*) as count FROM smart_request WHERE dept_manager_status = 'approved' AND (finance_manager_status = 'pending' OR gm_status = 'pending')";
-        break;
-}
-if (!empty($smart_request_query)) {
-    $result = mysqli_query($conDB, $smart_request_query);
-    if ($row = mysqli_fetch_assoc($result)) {
-        $smart_request_count = $row['count'];
+if ($user_role == 'administrator') {
+    // Admin sees a count of ALL pending requests (excluding drafts)
+    $smart_request_query_admin = "SELECT COUNT(*) as count FROM smart_request WHERE current_status NOT IN ('approved', 'rejected', 'paid', 'draft')";
+    $result_admin = mysqli_query($conDB, $smart_request_query_admin);
+    if ($row_admin = mysqli_fetch_assoc($result_admin)) {
+       $smart_request_count = $row_admin['count'];
+   }
+} else {
+    // All other users see a count of requests pending *their* approval
+    $smart_request_type_id = 0;
+    $smt_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'smart_request' LIMIT 1");
+    if ($row = mysqli_fetch_assoc($smt_type_query)) {
+        $smart_request_type_id = (int)$row['id'];
+    }
+
+    if ($smart_request_type_id > 0) {
+        $smart_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
+                                FROM request_approvers ra
+                                WHERE ra.approver_id = " . (int)$empid . " 
+                                  AND ra.status = 'pending' 
+                                  AND ra.request_type_id = $smart_request_type_id";
+        
+        $result = mysqli_query($conDB, $smart_request_query);
+        if ($row = mysqli_fetch_assoc($result)) {
+            $smart_request_count = $row['count'];
+        }
     }
 }
+// --- END NEW SMART REQUEST COUNT ---
+
+
 // Initialize counts to 0
 $status_cont_vacapl = 0;
 $status_cont_vacaphr = 0;

@@ -1,6 +1,13 @@
 <?php
 /*
-MODIFICATION SUMMARY:
+MODIFICATION SUMMARY (001-all_requests.php):
+- UPDATED: Status filter dropdown options to use new general statuses ('draft', 'pending_approval', 'approved', 'rejected', 'paid'). Removed old specific statuses.
+- UPDATED: JavaScript `statusObj` keys and titles to match the new general statuses for badge rendering.
+- UPDATED: JavaScript default filter logic to use 'pending_approval' and 'approved' instead of old specific statuses.
+- NOTE: The corresponding server-side AJAX file (`includes/ajaxFile/smartRequestAjaxTbl.php`) also needs updating to filter by `current_status`.
+*/
+/*
+MODIFICATION SUMMARY (Previous Version):
 - Modified: The JavaScript for setting the default filter view.
 - Added: A new condition for Finance Assistants/Supporters (`emptypeget != 'Manager' && user_dept == 2`). Their view now defaults to 'approved' requests, which are ready for payment processing. This provides a more role-specific user experience.
 */
@@ -120,15 +127,14 @@ MODIFICATION SUMMARY:
 </div>
 <div class="col-2 float-right">
     <div class="form-group" style="margin-bottom: 0 !important">
+        <!-- UPDATED Status Options -->
         <select class="form-control" name="smt_status" id="smtStatus">
             <option value=""><?=__('all_statuses_option')?></option>
             <option value="draft"><?=__('draft_status')?></option>
-            <option value="pending_dept_manager_approval"><?=__('pending_dept_manager_status')?></option>
-            <option value="pending_finance_approval"><?=__('pending_finance_status')?></option>
-            <option value="pending_gm_approval"><?=__('pending_gm_status')?></option>
+            <option value="pending_approval"><?=__('pending_approval')?></option> 
             <option value="approved"><?=__('approved')?></option>
             <option value="rejected"><?=__('rejected')?></option>
-            <option value="Paid"><?=__('paid_status')?></option>
+            <option value="paid"><?=__('paid_status')?></option> 
         </select>
     </div>
 </div>
@@ -196,6 +202,9 @@ MODIFICATION SUMMARY:
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js"></script>
 
+    <!-- Make sure this is on EVERY page -->
+    <script src="assets/js/notifications.js"></script>
+
     <script type="text/javascript">
 
     $(document).ready(function(){
@@ -203,15 +212,20 @@ MODIFICATION SUMMARY:
         var buttonConfig = [];
         var exportTitle = "<?=__('all_requests')?>";
         var columnNum = [ 1, 2, 3, 4, 5, 6, 7 ];
+        
+        // UPDATED Status Object for Badges
         var statusObj = {
-            'draft':        { title: '<?=__('draft_status')?>', class: 'badge-secondary' },
-            'pending_dept_manager_approval':      { title: '<?=__('pending_dept_manager_status')?>', class: 'badge-custom' },
-            'pending_finance_approval':            { title: '<?=__('pending_finance_status')?>', class: 'badge-warning' },
-            'pending_gm_approval':   { title: '<?=__('pending_gm_status')?>', class: 'badge-primary' },
-            'approved':      { title: '<?=__('approved')?>', class: 'badge-success' },
-            'rejected':       { title: '<?=__('rejected')?>', class: 'badge-danger' },
-            'Paid':         { title: '<?=__('paid_status')?>', class: 'badge-purple' },
+            'draft':            { title: '<?=__('draft_status')?>', class: 'badge-secondary' },
+            'pending_approval': { title: '<?=__('pending_approval')?>', class: 'badge-warning' }, // Using warning color for pending
+            'approved':         { title: '<?=__('approved')?>', class: 'badge-success' },
+            'rejected':         { title: '<?=__('rejected')?>', class: 'badge-danger' },
+            'paid':             { title: '<?=__('paid_status')?>', class: 'badge-purple' },
+            // Old statuses kept for reference or potential fallback, might be removable later
+            'pending_dept_manager_approval': { title: '<?=__('pending_dept_manager_status')?>', class: 'badge-custom' },
+            'pending_finance_approval':      { title: '<?=__('pending_finance_status')?>', class: 'badge-warning' },
+            'pending_gm_approval':           { title: '<?=__('pending_gm_status')?>', class: 'badge-primary' }
         };
+
         buttonConfig.push({extend:'excel',exportOptions: {columns: columnNum} ,title: exportTitle,className: 'btn-success'});
         buttonConfig.push({extend:'pdf',exportOptions: {columns: columnNum} ,title: exportTitle,className: 'btn-danger'});
         buttonConfig.push({extend:'print' ,exportOptions: {columns: columnNum} ,title: exportTitle,className: 'btn-dark'});
@@ -237,9 +251,15 @@ MODIFICATION SUMMARY:
                             searchable: false
                         },
                         {
-                            targets: 7,
+                            targets: 7, // Assuming Status is the 8th column (index 7)
                             render: function ( data, type, row, meta ) {
-                                return (data in statusObj) ? (`<span class="badge ${statusObj[data].class}" text-capitalized>${statusObj[data].title}</span>`) : data;
+                                // Add logic to show level if pending_approval
+                                let title = (data in statusObj) ? statusObj[data].title : data;
+                                let className = (data in statusObj) ? statusObj[data].class : 'badge-secondary';
+                                if (data === 'pending_approval' && row.current_approval_level) {
+                                    title += ' (' + __('level') + ' ' + row.current_approval_level + ')';
+                                }
+                                return `<span class="badge ${className}" text-capitalized>${title}</span>`;
                             }
                         },
                     ],
@@ -247,13 +267,13 @@ MODIFICATION SUMMARY:
                 responsive: true,
                 ajax: {
                     type: "POST",
-                    url:'./includes/ajaxFile/smartRequestAjaxTbl.php',
+                    url:'./includes/ajaxFile/smartRequestAjaxTbl.php', // REMINDER: This file needs server-side update too
                     data: function (d) {
                         d.user_type = '<?=$user_type?>';
                         d.user_dept = '<?=$user_dept?>';
                         d.emptype   = '<?=$emptypeget?>';
                         d.emp_id    = '<?=$empid?>';
-                        d.smtStatus = $('#smtStatus').val();
+                        d.smtStatus = $('#smtStatus').val(); // Will now send 'draft', 'pending_approval', etc.
                         d.search    = $('#search').val();
                     },
                 },
@@ -265,8 +285,9 @@ MODIFICATION SUMMARY:
                     { data: 'department' },
                     { data: 'prep_by' },
                     { data: 'created_at' },
-                    { data: 'status' },
+                    { data: 'status' }, // Should map to 'current_status' in smartRequestAjaxTbl.php
                     { data: 'action' },
+                    { data: 'current_approval_level', visible: false, searchable: false } // Add level for rendering logic
                 ],
                 language: {
                     search: `<span>${__('search')}:</span> _INPUT_`,
@@ -296,18 +317,25 @@ MODIFICATION SUMMARY:
 
             $('#smartRequestTbl_filter').remove();
 
-            // Set default filter based on user role
+            // UPDATED: Set default filter based on user role using new statuses
+            // Finance Manager (dept 2, manager) -> show pending approval (for them)
             if('<?=$emptypeget?>' == "Manager" && '<?=$user_dept?>' == 2){
-                $('#smtStatus').val('pending_finance_approval');
+                $('#smtStatus').val('pending_approval'); // Changed from pending_finance_approval
                 table.draw();
-            } else if('<?=$emptypeget?>' != "Manager" && '<?=$user_dept?>' == 2){ // Finance Assistant/Supporter
-                $('#smtStatus').val('approved'); // Default to show items ready for payment
+            } 
+            // Finance Assistant/Supporter (dept 2, not manager) -> show approved (ready for payment)
+            else if('<?=$emptypeget?>' != "Manager" && '<?=$user_dept?>' == 2){ 
+                $('#smtStatus').val('approved'); 
                 table.draw();
-            } else if('<?=$user_type?>' == "gm"){
-                $('#smtStatus').val('pending_gm_approval');
+            } 
+            // GM -> show pending approval (for them)
+            else if('<?=$user_type?>' == "gm"){
+                $('#smtStatus').val('pending_approval'); // Changed from pending_gm_approval
                 table.draw();
-            } else if ('<?=$emptypeget?>' == "Manager"){
-                $('#smtStatus').val('pending_dept_manager_approval');
+            } 
+            // Department Manager (manager, not dept 2) -> show pending approval (for them)
+            else if ('<?=$emptypeget?>' == "Manager" && '<?=$user_dept?>' != 2){
+                $('#smtStatus').val('pending_approval'); // Changed from pending_dept_manager_approval
                 table.draw();
             };
 

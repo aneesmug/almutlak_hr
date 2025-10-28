@@ -14,6 +14,13 @@
  * and page title section, has been fully preserved.
  *
  **************************************************************************************************/
+/*
+    MODIFICATION SUMMARY (This update):
+    - Added new Notification Bell dropdown.
+    - Added a badge with id="notification-badge" to the bell icon for the JS to update.
+    - Added a dropdown menu with id="notification-dropdown-menu" for future population.
+    - Added "Enable Notifications" link in user dropdown with id="enable-notifications-link".
+*/
 ?>
 <div class="topbar">
     <nav class="navbar-custom">
@@ -51,6 +58,37 @@
                 </a>
             </li>
 
+            <!-- =================================== -->
+            <!-- == NEW Notification Dropdown     == -->
+            <!-- =================================== -->
+            <li class="dropdown notification-list">
+                <a class="nav-link dropdown-toggle arrow-none" data-toggle="dropdown" href="#" role="button"
+                   aria-haspopup="false" aria-expanded="false">
+                    <i class="fi-bell noti-icon"></i>
+                    <!-- Notification Badge -->
+                    <span class="badge badge-danger badge-pill noti-icon-badge" id="notification-badge" style="display: none;">0</span>
+                </a>
+                <div class="dropdown-menu dropdown-menu-right dropdown-menu-animated dropdown-lg" id="notification-dropdown-menu">
+                    <!-- item-->
+                    <div class="dropdown-item noti-title">
+                        <h6 class="m-0"><span class="float-right"><a href="#" class="text-dark" id="clear-all-notifications"><small><?=__('clear_all'); ?></small></a> </span><?=__('notifications'); ?></h6>
+                    </div>
+
+                    <div class="slimscroll" style="max-height: 230px;">
+                        <!-- Item -->
+                        <a href="javascript:void(0);" class="dropdown-item notify-item" id="notification-placeholder">
+                            <p class="notify-details mb-0"><?=__('no_new_notifications'); ?></p>
+                        </a>
+                        <!-- Items will be populated by JS -->
+                    </div>
+
+                    <!-- All-->
+                    <a href="all_notifications.php" class_name="dropdown-item text-center text-primary notify-item notify-all">
+                        <?=__('view_all'); ?> <i class="fi-arrow-right"></i>
+                    </a>
+                </div>
+            </li>
+
             
             <li class="dropdown notification-list">
                 <a class="nav-link dropdown-toggle nav-user" data-toggle="dropdown" href="#" role="button"
@@ -69,8 +107,15 @@
                     </a>
                     
                     <!-- item-->
+                     <?php if($is_system_admin){ ?>
                     <a href="app_seetings.php" target="_blank" id="editAllBtnX" class="dropdown-item notify-item">
                         <i class="fi-cog"></i> <span><?=__('settings'); ?></span>
+                    </a>
+                    <?php } ?>
+
+                    <!-- NEW Enable Notifications Link -->
+                    <a href="javascript:void(0);" class="dropdown-item notify-item" id="enable-notifications-link" style="display: none;">
+                        <i class="fi-bell"></i> <span><?=__('enable_notifications'); ?></span>
                     </a>
 
                     <!-- item-->

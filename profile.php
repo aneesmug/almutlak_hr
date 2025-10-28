@@ -291,7 +291,7 @@ $all_statuses = [
                                                             <i class="fa fa-chart-simple-horizontal font-18 vertical-middle"></i> <?= __('more') ?>
                                                         </button>
                                                         <div class="dropdown-menu">
-                                                            <?php if (empty($emprow['has_active_regular_loan'])) : ?>
+                                                            <?php /*if (empty($emprow['has_active_regular_loan'])) : ?>
                                                                 <a href="javascript:void(0);" class="text-warning dropdown-item applyLoan" data-emp_id="<?= $emprow['empid'] ?>">
                                                                     <i class="fa fa-money-bill-trend-up"></i> <?= __('apply_loan') ?>
                                                                 </a>
@@ -301,11 +301,13 @@ $all_statuses = [
                                                                     <i class="fa fa-money-bill-wheat"></i> <?= __('emergency_loan') ?>
                                                                 </a>
                                                             <?php endif; ?>
+                                                            <?php */ ?>
                                                             <?php if ($isEmployee || $isAssistant) : ?>
                                                                 <a href="javascript:void(0);" id="startUpdateRequest" data-avatar="<?= $emprow['avatar'] ?>" data-empid="<?= $emprow['empid'] ?>" class="text-primary dropdown-item">
                                                                     <i class="fa fa-user-pen"></i> <?= __('update_information') ?>
                                                                 </a>
                                                             <?php endif; ?>
+                                                            <?php /* ?>
                                                             <?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
                                                                 <a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter">
                                                                     <i class="fa fa-user-chart"></i> <?= __('apply_annual_vacation') ?>
@@ -336,7 +338,7 @@ $all_statuses = [
                                                                 <a class="text-warning dropdown-item">
                                                                     <i class="fa fa-user-check"></i> <?= htmlspecialchars($status_text) ?>
                                                                 </a>
-                                                            <?php endif; ?>
+                                                            <?php endif; */ ?>
                                                             <a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" class="text-info dropdown-item applyLeaveRequest">
                                                                 <i class="fa fa-user-clock"></i> <?= __('apply_leave') ?>
                                                             </a>

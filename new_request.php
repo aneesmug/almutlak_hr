@@ -18,8 +18,6 @@ if(isset($_POST['submit'])){
        !empty($_POST['item_name']) && !empty($_POST['quantity']) && !empty($_POST['product_price']) 
     ){
             $inv_no_po = $_POST['inv_no'];
-            $tally_id_po = $_POST['tally_id'];
-            $injazat_id_po = $_POST['injazat_id'];
             $location_array = $_POST['location'];
             $sub_type_po = $_POST['sub_type'];
             $sub_title_po = escape_string($_POST['sub_title']);
@@ -50,9 +48,9 @@ if(isset($_POST['submit'])){
             
             // Simplified SQL - All requests are now created as 'draft'
             $sql = "INSERT INTO `smart_request` 
-                        (`inv_no`,`tally_id`,`injazat_id`,`location`, `sub_type`, `sub_title`, `item_name`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by`, `remarks`, `emp_id`, `current_status`) 
+                        (`inv_no`,`location`, `sub_type`, `sub_title`, `item_name`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by`, `remarks`, `emp_id`, `current_status`) 
                     VALUES 
-                        ('".$inv_no_po."','".$tally_id_po."','".$injazat_id_po."','".$location_po."','".$sub_type_po."','".$sub_title_po."','".$item_name_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."','".$remarks_po."','".$empid."', 'draft')";
+                        ('".$inv_no_po."','".$location_po."','".$sub_type_po."','".$sub_title_po."','".$item_name_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."','".$remarks_po."','".$empid."', 'draft')";
             mysqli_query($conDB, $sql);
         }
             mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`) VALUES ('".$empid."', '".$inv_no_po."', '".$userwel."', 'draft' )");

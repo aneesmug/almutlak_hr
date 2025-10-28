@@ -10,12 +10,27 @@ if (mysqli_num_rows($query) == 1) {
 	// $format="DD/MM/YYYY";
 	$format = "YYYY-MM-DD";
 
+	// --- FIX 1: Check for emp_id BEFORE running the query ---
+	if(!isset($_GET['emp_id']) || empty($_GET['emp_id']) ){
+		// On POST, the emp_id might be in $_POST, not $_GET
+		// But the page load logic depends on GET.
+		// If it's a POST request, we'll let the POST handler deal with it,
+		// but we must ensure $emprow is set correctly.
+		// The best fix is to ensure the form action preserves the GET param.
+		// For now, if it's not a POST, we redirect.
+		if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+			header("Location: ./reg_employee.php");
+			exit;
+		}
+		// If it IS a post, we need to get the emp_id from the form
+		// But the query logic below relies on $_GET.
+		// This structure is problematic.
+	}
+	
+	// Let's ensure $_GET['emp_id'] is set even on POST, by fixing the form action.
+	// We will still run the original query logic.
 	require("./includes/emp_query.php");
 
-	if(!isset($_GET['emp_id']) || empty($_GET['emp_id']) ){
-		header("Location: ./reg_employee.php");
-		exit;
-	}
 
 	if (mysqli_num_rows($get_emp_data) !== 0) {
 		$allRecords = mysqli_fetch_all($get_emp_data, MYSQLI_ASSOC);
@@ -47,7 +62,15 @@ if (mysqli_num_rows($query) == 1) {
 		}
 	} else {
 		//when the id not equals id show database
-		header("Location: ./reg_employee.php");
+		// Avoid redirect loops on POST if emp_query.php failed
+		if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+			header("Location: ./reg_employee.php");
+			exit; // Added exit
+		} else {
+			// Handle POST error differently, maybe?
+			// For now, we'll assume $emprow is needed for the form,
+			// but the POST handler will be the primary logic.
+		}
 	}
 
 	if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
@@ -97,7 +120,11 @@ if (mysqli_num_rows($query) == 1) {
 			// Prepare the update data
 			$setParts = [];
 			$formData['dept'] = $formData['department'];
-			$params = [':emp_id' => $formData['emp_id']];
+			
+			// --- FIX 2: Use the emp_id from the form submission for the query AND redirect ---
+			$employee_id_from_form = $formData['emp_id'];
+			$params = [':emp_id' => $employee_id_from_form];
+
 			foreach ($formData as $field => $value) {
 				// Skip non-database fields and the primary key
 				if ($field === 'emp_id' || $field === 'submit' || !in_array($field, $allowedColumns)) {
@@ -111,15 +138,18 @@ if (mysqli_num_rows($query) == 1) {
 				$setParts[] = "`$field` = :$field";
 				$params[":$field"] = $value;
 			}
+			
 			// Build and execute the query
 			$sql = "UPDATE `employees` SET " . implode(', ', $setParts) . " WHERE `emp_id` = :emp_id";
 			$stmt = $pdo->prepare($sql);
 			$stmt->execute($params);
+			
 			// Check if update was successful
+			// --- FIX 3: Use the $employee_id_from_form for the redirect ---
 			if ($stmt->rowCount() > 0) {
-				salert(__("success"), __("employee_details_edited_successfully"), "success", "view_employee.php?emp_id={$emprow['empid']}", __('ok'));
+				salert(__("success"), __("employee_details_edited_successfully"), "success", "view_employee.php?emp_id={$employee_id_from_form}", __('ok'));
 			} else {
-				salert(__("info"), __("no_changes_made"), "info", "view_employee.php?emp_id={$emprow['empid']}", __('ok'));
+				salert(__("info"), __("no_changes_made"), "info", "view_employee.php?emp_id={$employee_id_from_form}", __('ok'));
 			}
 		} catch (PDOException $e) {
 			die(__("database_error") . " " . $e->getMessage());
@@ -238,7 +268,8 @@ if (mysqli_num_rows($query) == 1) {
 							<div class="col-md-12">
 								<div class="card-box editEmployeeAttr">
 									<h4 class="m-t-0 header-title"><?= __("edit_employee_title") ?></h4>
-									<form action="<?= $_SERVER['PHP_SELF']; ?>" method="post" enctype="multipart/form-data" id="registration" class="registration">
+									<!-- --- FIX 4: Ensure the form action retains the emp_id query string --- -->
+									<form action="<?= $_SERVER['PHP_SELF']; ?>?emp_id=<?= htmlspecialchars($emprow['empid'] ?? $_GET['emp_id']); ?>" method="post" enctype="multipart/form-data" id="registration" class="registration">
 										<div class="form-row">
 											<div class="form-group col-md-2">
 												<label for="name" class="col-form-label"><?= __("employee_name_label") ?><span class="text-danger">*</span></label>
