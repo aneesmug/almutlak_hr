@@ -19,4 +19,4 @@ if(strpos($link,'./login_verification.php') && !isset($_SESSION['otp_verify_user
 }
 */
 include("./includes/menu_active_class.php");
-include("./includes/custom_functions.php");
+include("./includes/helper_functions.php");

@@ -1,18 +1,7 @@
 <?php
-/*
-MODIFICATION SUMMARY (015-open_request.php):
-- FIXED: Finance Manager assigning payer not updating. The condition in the POST handler for 'assign_payer_submit' was checking `$emptypegetget` (related to the request *creator*), instead of the current logged-in user's type. Changed the condition to check `$emptypeget` (from session_check.php) to correctly identify if the *current* user is a Manager.
-- REMOVED: Extensive modification summary comments from the top of the file.
-- REMOVED: Redundant function definitions (getDeptManager, getFinancePersonnel, getGeneralManager, getEmployeeDetails) from the end of the file as they exist in custom_functions.php.
-- ADDED: Calls to `create_browser_notification()` in the POST handler to create a database notification whenever an email is sent to the next approver (on initial submission, approval, and payer assignment).
-- ADDED: CSS rules to fix Select2 badge overflow (Updated Rules v3).
-- ADDED: Fetch employee department ID for approver dropdown.
-- ADDED: Department ID to Name mapping array.
-- MODIFIED: Select2 JavaScript functions (`formatApprover`, `formatApproverSelection`) to display Department Name + Corrected Role (Manager/Assistant) in the badge.
-*/
 
 require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/session_check.php'; // Needed for user details & includes custom_functions.php now
+require_once __DIR__ . '/includes/session_check.php'; // Needed for user details & includes helper_functions.php now
 
 // Handle AJAX Payment Processing Separately
 if (isset($_POST['process_payment'])) {
@@ -173,7 +162,7 @@ if ($getquery && mysqli_num_rows($getquery) > 0) {
     }
     // Fetch assigned payer name if ID exists
     if ($payable_by_emp_id_get) {
-         require_once __DIR__ . '/includes/custom_functions.php'; // Ensure getEmployeeDetails is loaded
+         require_once __DIR__ . '/includes/helper_functions.php'; // Ensure getEmployeeDetails is loaded
         $payerDetails = getEmployeeDetails($conDB, $payable_by_emp_id_get);
         if ($payerDetails && $payerDetails['name'] !== 'N/A') {
             $assigned_payer_name = $payerDetails['name'];
@@ -201,7 +190,7 @@ if ($emp_id_get) {
 
 // --- GENERAL APPROVAL POST HANDLER ---
 if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combine checks
-     require_once __DIR__ . '/includes/custom_functions.php'; // Ensure approval functions are loaded
+     require_once __DIR__ . '/includes/helper_functions.php'; // Ensure approval functions are loaded
 
     $inv_no_po = $_POST['inv_no'];
     $note_po = mysqli_real_escape_string($conDB, $_POST['note'] ?? '');
@@ -249,11 +238,12 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
         $result = handle_approval_action($conDB, $inv_no_po, $request_type, $empid, $status_po, $note_po);
         if ($result['status'] == 'success') {
             if (isset($result['next_approver']) && $result['next_approver'] != null) {
+                // Approval went through, notify next approver
                 $next_approver_name = $result['next_approver']['name'];
                 $next_approver_email = $result['next_approver']['email'];
                 $next_approver_id = $result['next_approver_id']; // Get the ID from the result
 
-                // --- ADD BROWSER NOTIFICATION ---
+                // --- ADD BROWSER NOTIFICATION (for next approver) ---
                 if (isset($next_approver_id) && $next_approver_id) {
                     $notification_title = "Request for Approval";
                     $notification_message = "Request " . htmlspecialchars($inv_no_po) . " has been approved and is now waiting for your action.";
@@ -261,7 +251,46 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
                     create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
                 }
                 // --- END NOTIFICATION ---
+            } elseif ($status_po == 'reject') {
+                // --- REJECTION NOTIFICATION LOGIC ---
+                $notification_title = "Request Rejected";
+                $notification_message = "Request " . htmlspecialchars($inv_no_po) . " was rejected by " . htmlspecialchars($userwel) . ". Reason: " . htmlspecialchars($note_po);
+                $notification_url = "open_request.php?id=" . urlencode($inv_no_po);
+
+                // 1. Notify the Creator (ensure creator ID $emp_id_get exists)
+                if ($emp_id_get && $emp_id_get != $empid) { // Don't notify self
+                    create_browser_notification($conDB, $emp_id_get, $notification_title, $notification_message, $notification_url);
+                }
+
+                // 2. Notify Previous Approvers
+                // Get request_type_id first
+                 $type_query_reject = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
+                 if ($type_query_reject && mysqli_num_rows($type_query_reject) > 0) {
+                     $type_row_reject = mysqli_fetch_assoc($type_query_reject);
+                     $request_type_id_reject = $type_row_reject['id'];
+
+                     $prev_approvers_sql = "SELECT `approver_id` FROM `request_approvers`
+                                            WHERE `request_inv_no` = '" . escape_string($inv_no_po) . "'
+                                              AND `request_type_id` = $request_type_id_reject
+                                              AND `status` = 'approved'"; // Only those who already approved
+
+                     $prev_approvers_query = mysqli_query($conDB, $prev_approvers_sql);
+                     if ($prev_approvers_query) {
+                         while ($prev_approver_row = mysqli_fetch_assoc($prev_approvers_query)) {
+                             $prev_approver_id = $prev_approver_row['approver_id'];
+                             if ($prev_approver_id != $empid) { // Don't notify the rejector
+                                 create_browser_notification($conDB, $prev_approver_id, $notification_title, $notification_message, $notification_url);
+                             }
+                         }
+                     } else {
+                          error_log("Rejection Notification: Failed to query previous approvers for InvNo: $inv_no_po. Error: " . mysqli_error($conDB));
+                     }
+                 } else {
+                     error_log("Rejection Notification: Could not find request_type_id for '$request_type'.");
+                 }
+                // --- END REJECTION NOTIFICATION LOGIC ---
             }
+
             // Check if current user is HR (dept 5) and action was approve
             if ($user_dept == 5 && $status_po == 'approve' && isset($_POST['cc_hr_employees']) && is_array($_POST['cc_hr_employees'])) {
                 $cc_hr_employees = array_map('intval', $_POST['cc_hr_employees']); // Sanitize IDs
@@ -311,6 +340,7 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
     }
 
     // --- EMAIL LOGIC ---
+    // (Email logic remains unchanged, only browser notifications added for rejection)
     if (!empty($next_approver_email) || !empty($cc_hr_employees)) {
         $mail = new PHPMailer(true);
         try {
@@ -432,7 +462,7 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
 
          // --- If Finance Manager was NOT selected, send email ---
          if (!$finance_manager_selected && $current_status_get == 'draft' && isset($_POST['submit'])) { // Only on initial submission
-              require_once __DIR__ . '/includes/custom_functions.php'; // Ensure function is loaded
+              require_once __DIR__ . '/includes/helper_functions.php'; // Ensure function is loaded
              $finance_manager_details = getDeptManager($conDB, 2); // Get Finance Manager (Dept 2)
              if ($finance_manager_details && !empty($finance_manager_details['email'])) {
                  $mail_fm = new PHPMailer(true);
@@ -483,10 +513,11 @@ switch ($current_status_get) {
         break;
     case "approved":
         $status_text_approved = $assigned_payer_name ? __('approved_pending_payment') : __('approved_pending_assignment');
-        $status_get = "<input class='form-control bg-success border-success text-white' type='text' value='" . $status_text_approved . "' readonly />";
+        // --- MODIFIED: Changed from bg-success to bg-warning as requested ---
+        $status_get = "<input class='form-control bg-warning border-warning text-white' type='text' value='" . $status_text_approved . "' readonly />";
         break;
     case "rejected":
-        require_once __DIR__ . '/includes/custom_functions.php'; // Ensure get_approval_chain_status is loaded
+        require_once __DIR__ . '/includes/helper_functions.php'; // Ensure get_approval_chain_status is loaded
         $chain_status_for_reject = get_approval_chain_status($conDB, $invnoget, 'smart_request');
         $rejected_by = __('rejected');
         if($chain_status_for_reject){
@@ -501,6 +532,7 @@ switch ($current_status_get) {
         $status_get = "<input class='form-control bg-danger border-danger text-white' type='text' value='$rejected_by' readonly />";
         break;
     case "paid":
+        // --- This is now the only 'bg-success' status ---
         $status_get = "<input class='form-control bg-success border-success text-white' type='text' value='" . __('payment_paid') . "' readonly />";
         break;
     // --- Fallback for Old Statuses ---
@@ -529,16 +561,16 @@ if ($current_status_get == 'paid') {
 // Check who is the current approver
 $current_pending_approver_id = null;
 if ($current_status_get == 'pending_approval') {
-     require_once __DIR__ . '/includes/custom_functions.php'; // Ensure get_current_approver is loaded
+     require_once __DIR__ . '/includes/helper_functions.php'; // Ensure get_current_approver is loaded
     $current_pending_approver_id = get_current_approver($conDB, $invnoget, 'smart_request');
 }
 
 // Get Finance employees for the Payable By dropdown
- require_once __DIR__ . '/includes/custom_functions.php'; // Ensure getFinancePersonnel is loaded
+ require_once __DIR__ . '/includes/helper_functions.php'; // Ensure getFinancePersonnel is loaded
 $finance_employees = getFinancePersonnel($conDB);
 
 // Get HR employees for the CC dropdown
- require_once __DIR__ . '/includes/custom_functions.php'; // Ensure getHRPersonnel is loaded
+ require_once __DIR__ . '/includes/helper_functions.php'; // Ensure getHRPersonnel is loaded
 $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
 
 ?>
@@ -815,7 +847,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                         <div class="mt-4">
                                                             <h5><?=__('approval_status')?></h5>
                                                             <?php
-                                                                require_once __DIR__ . '/includes/custom_functions.php'; // Ensure get_approval_chain_status is loaded
+                                                                require_once __DIR__ . '/includes/helper_functions.php'; // Ensure get_approval_chain_status is loaded
                                                                 // PASS $conDB
                                                                 $approval_chain = get_approval_chain_status($conDB, $invnoget, 'smart_request');
                                                                 if (empty($approval_chain) && $current_status_get == 'draft') {
@@ -842,8 +874,8 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
 
                                                         <!-- NEW: Show Assigned Payer on Left Side -->
                                                          <?php if ($assigned_payer_name): ?>
-                                                         <div class="approval-status approved"> <!-- Use approval-status class for consistent layout -->
-                                                            <strong><?=__('payable_assigned_to')?>: <?= htmlspecialchars($assigned_payer_name) ?></strong>
+                                                         <div class="approval-status pending"> <!-- MODIFIED: Changed from approved to pending for warning color -->
+                                                            <strong><?=__('payable_assigned_to')?>: <?= parseName($assigned_payer_name) ?></strong>
                                                             <!-- Optionally add assignment date here if you fetch it -->
                                                          </div>
                                                          <?php endif; ?>
@@ -872,7 +904,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
 
                                                         <!-- Display Current Status -->
                                                          <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('current_status')?>:</div></div>
+                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('current_status_label')?>:</div></div>
                                                             <?= $status_get ?>
                                                          </div>
 
@@ -1702,7 +1734,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                          return false;
                      }
 
-                    // Simple check for negative numbers where they shouldn't be
+                    // Simple check for negative numbers where they shouldn'T be
                     if (parseFloat($('.quantity').val()) < 0 || parseFloat($('.product_price').val()) < 0 || parseFloat($('.idiscount').val()) < 0) {
                          Swal.showValidationMessage(`<?=__('negative_values_not_allowed')?>`);
                          return false;

@@ -1,7 +1,7 @@
 <?php
 
 require_once __DIR__ . '/includes/db.php';
-include("./includes/custom_functions.php");
+include("./includes/helper_functions.php");
 
 // Start session only once at the beginning
 if (session_status() === PHP_SESSION_NONE) {

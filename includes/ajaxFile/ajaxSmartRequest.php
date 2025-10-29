@@ -1,6 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
-	include("./../../includes/custom_functions.php");
+	include("./../../includes/helper_functions.php");
 
 $ajaxType = $_POST['ajaxType'];
 

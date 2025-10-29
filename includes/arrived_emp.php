@@ -2,7 +2,7 @@
 	require_once __DIR__ . '/db.php';
 //	include("./admin/includes/TimeStamp.php");
 	include("./session_check.php");
-	include("./custom_functions.php");
+	include("./helper_functions.php");
 /*********session start**********/
 	//session_start();
 	// set time-out period (in seconds)

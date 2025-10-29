@@ -1,7 +1,7 @@
 <?php
 // This is a special test file to prove your catch block works.
 header('Content-Type: application/json');
-include("./../../includes/custom_functions.php"); // --- Helper Function ---
+include("./../../includes/helper_functions.php"); // --- Helper Function ---
 
 try {
         ini_set('display_errors', 1);

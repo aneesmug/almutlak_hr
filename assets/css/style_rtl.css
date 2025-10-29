@@ -741,3 +741,80 @@ input[type="file"]::file-selector-button:hover {
 [dir="rtl"] .form-control {
   text-align: right;
 }
+
+/* RTL Specific Styles for Notification Dropdown */
+
+/* --- Add Height and Vertical Alignment --- */
+.notify-link {
+    min-height: 100px; /* Set minimum height for each item */
+    align-items: center; /* Vertically center icon and content block */
+}
+
+.notify-icon {
+    margin-left: 0.75rem; /* Space between icon (now on right) and text */
+    margin-right: 0;
+}
+
+.notify-title {
+    margin-left: 0.5rem; /* Space between title and time (time is now on left) */
+    margin-right: 0;
+    text-align: right; /* Align title text to the right */
+}
+
+.notify-details {
+     text-align: right; /* Align details text to the right */
+}
+
+.notify-time {
+    margin-right: 0.5rem; /* Space between time (now on left) and edge */
+    margin-left: 0;
+}
+
+/* Ensure the main link container respects RTL flow */
+/* .notify-link { */
+    /* Flex direction is row by default, which is correct */
+/* } */
+
+/* Adjust flexbox alignment for the title/time row in RTL */
+/* This might be redundant if text-align covers it, but can help enforce */
+.notify-content .d-flex {
+     /* justify-content: space-between; -- Usually okay */
+     /* If needed, uncomment below, but test space-between first */
+     /* flex-direction: row-reverse; */
+}
+
+/* --- Fix Dropdown Position in RTL --- */
+/* Target the specific dropdown menu within its list item parent */
+.topbar .topbar-right-menu > .notification-list .dropdown-menu {
+    right: auto !important; /* Override Bootstrap's positioning */
+    left: 0 !important; /* Align dropdown to the left edge of the parent */
+}
+
+/* --- Fix Header Alignment in RTL Dropdown --- */
+/* Target the title and clear all link within the dropdown header */
+.dropdown-item.noti-title {
+    display: flex;
+    justify-content: space-between; /* Push title right, clear left */
+    align-items: center;
+}
+
+[dir="rtl"] .dropdown-item.noti-title h6 {
+    text-align: right; /* Align "Notifications" title to the right */
+    /* Ensure float doesn't interfere */
+    /* float: none !important; */
+}
+
+[dir="rtl"] .dropdown-item.noti-title .float-right {
+    float: left !important; /* Move "Clear All" link to the left */
+}
+
+/* --- Fix View All Link Alignment --- */
+[dir="rtl"] .dropdown-item.notify-all {
+    text-align: right; /* Align "View All" text to the right */
+}
+
+[dir="rtl"] .dropdown-item.notify-all i.fi-arrow-right::before {
+    content: "\\e91b"; /* Replace with the correct content code for fi-arrow-left if available */
+    /* If Font Awesome or similar, use the appropriate class/content code for a left arrow */
+    /* Example for Font Awesome: content: "\f060"; */
+}

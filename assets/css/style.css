@@ -6534,3 +6534,132 @@ i.fa-clipboard{
   position: relative;*/
   cursor: pointer;
 }
+
+/* Styles for the LTR notification dropdown */
+
+#notification-dropdown-menu .slimscroll {
+    padding: 0; /* Remove padding from slimscroll container */
+}
+
+.notify-item {
+    /* Base styling for each item's container */
+    padding: 0 !important; /* Override default dropdown item padding */
+    border-bottom: 1px solid #e9ecef; /* Separator line */
+}
+.notify-item:last-child {
+    border-bottom: none; /* No border on the last item */
+}
+
+/* Styling for the link wrapping the content */
+.notify-link {
+    display: flex; /* Use flexbox for icon and content alignment */
+    align-items: flex-start; /* Align icon to the top of the text block */
+    padding: 0.75rem 1rem; /* Padding inside the link */
+    text-decoration: none;
+    color: #495057; /* Default text color */
+    transition: background-color 0.15s ease-in-out;
+}
+
+.notify-link:hover {
+    background-color: #f8f9fa; /* Light hover effect */
+    color: #495057;
+    text-decoration: none;
+}
+
+/* Circular icon container */
+.notify-icon {
+    flex-shrink: 0; /* Prevent icon from shrinking */
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%; /* Make icon background circular */
+    color: #fff; /* Icon color (usually white on colored background) */
+    margin-right: 0.75rem; /* Space between icon and text content (LTR) */
+    background-color: #007bff; /* Default background - used by JS bg-primary */
+}
+
+.notify-icon i {
+    font-size: 1.1rem; /* Icon size */
+}
+
+/* Container for title, message, and time */
+.notify-content {
+    flex-grow: 1; /* Allow content to take remaining space */
+    overflow: hidden; /* Prevent content from overflowing */
+    display: flex; /* Use flexbox internally for title/time alignment */
+    flex-direction: column; /* Stack title/message vertically */
+}
+
+/* Top row containing title and time */
+.notify-content .d-flex { /* Target the inner div added in JS */
+    display: flex;
+    justify-content: space-between; /* Push title left, time right */
+    align-items: center; /* Align items vertically in the center */
+    margin-bottom: 0.1rem; /* Small space below title/time row */
+}
+
+
+/* Notification Title */
+.notify-title {
+    font-size: 0.9rem;
+    font-weight: 600; /* Make title slightly bolder */
+    white-space: nowrap; /* Prevent title wrapping */
+    overflow: hidden; /* Hide overflow */
+    text-overflow: ellipsis; /* Add ... for long titles */
+    margin-bottom: 0; /* Remove default margin */
+    flex-grow: 1; /* Allow title to take available space */
+    margin-right: 0.5rem; /* Add space between title and time (LTR) */
+    text-align: left; /* Explicitly set LTR alignment */
+}
+
+/* Notification Message/Details */
+.notify-details {
+    font-size: 0.8rem;
+    color: #6c757d; /* Muted color for details */
+    margin-bottom: 0;
+    white-space: normal; /* Allow message to wrap */
+    line-height: 1.4; /* Adjust line height for readability */
+    /* Optional: Limit message lines */
+     display: -webkit-box;
+     -webkit-line-clamp: 2; /* Show max 2 lines */
+     -webkit-box-orient: vertical;
+     overflow: hidden;
+     text-align: left; /* Explicitly set LTR alignment */
+}
+
+/* Notification Timestamp */
+.notify-time {
+    font-size: 0.7rem;
+    color: #adb5bd; /* Lighter muted color */
+    white-space: nowrap; /* Prevent time from wrapping */
+    flex-shrink: 0; /* Prevent time from shrinking */
+    margin-left: 0.5rem; /* Space before time (LTR) */
+}
+
+/* Style for the 'View All' link */
+.notify-all {
+    border-top: 1px solid #e9ecef;
+    padding-top: 0.75rem !important; /* More padding for the link */
+    padding-bottom: 0.75rem !important;
+    font-weight: 500;
+}
+
+/* Placeholder specific style */
+#notification-placeholder {
+    padding: 1.5rem 1rem; /* More padding for placeholder */
+    font-style: italic;
+    color: #6c757d;
+}
+
+/* LTR Dropdown Position (Default - may not be strictly necessary if Bootstrap handles it) */
+.topbar .topbar-right-menu > .notification-list .dropdown-menu {
+    left: auto; /* Default Bootstrap LTR alignment */
+    right: 0;
+}
+
+#notification-dropdown-menu > .slimScrollDiv > .slimscroll {
+    height: 100px !important; /* Set max height for scrollable area */
+    overflow-y: auto; /* Enable vertical scrolling */
+}

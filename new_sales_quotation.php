@@ -2,7 +2,7 @@
     require_once __DIR__ . '/includes/db.php';
     require_once __DIR__ . '/includes/session_check.php';
     include("./includes/convertNumbersToWords.php");
-    // include("./includes/custom_functions.php");
+    // include("./includes/helper_functions.php");
     
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
         if(mysqli_num_rows($query) == 1){

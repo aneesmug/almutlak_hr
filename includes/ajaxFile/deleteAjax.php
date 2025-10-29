@@ -9,7 +9,7 @@ header('Content-Type: application/json');
 // $pdo = new PDO("mysql:host=localhost;dbname=your_db", "username", "password");
 // Using PDO is crucial for security.
 require_once __DIR__ . '/../../includes/db.php'; // This should provide the $pdo object.
-include("./../../includes/custom_functions.php"); // --- Helper Function ---
+include("./../../includes/helper_functions.php"); // --- Helper Function ---
 // 2. File Path Mapping:
 // Maps a table name to its corresponding file directory for tables WITH attachments.
 const PATH_MAP = [

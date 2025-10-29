@@ -1,7 +1,7 @@
 <?php
 include './../../includes/db.php';
 include './../../includes/init.php';
-include './../../includes/custom_functions.php';
+include './../../includes/helper_functions.php';
 
 ## Read value
 $draw = $_POST['draw'];

@@ -1,31 +1,26 @@
 <?php
 // File: includes/topbar.php (Updated)
-// This file contains the top navigation bar with the new language switcher.
+// This file contains the top navigation bar with the new language switcher
+// and the structure for the redesigned notification dropdown.
 
 /**************************************************************************************************
  * MODIFICATION SUMMARY
  *
- * 1.  **Language Switcher Integrated**: The dynamic language switcher button has been added to your
- * top navigation bar, allowing users to toggle between English and Arabic.
- * 2.  **Full Translation**: All static text elements in the top bar have been replaced with the `__()`
- * function to make them multilingual. This includes the search placeholder, dropdown menu items
- * (My Account, Settings, etc.), and the page title/breadcrumb.
- * 3.  **Preserved Structure**: Your original layout, including the search bar, user dropdown items,
- * and page title section, has been fully preserved.
+ * 1.  **Language Switcher Integrated**: Dynamic language switcher button added.
+ * 2.  **Full Translation**: Static text elements use `__()` for multilingual support.
+ * 3.  **Notification Dropdown Added**: Includes bell icon, badge (`#notification-badge`),
+ * and dropdown menu (`#notification-dropdown-menu`).
+ * 4.  **Redesigned Notification Structure**: The `.slimscroll` div inside the notification
+ * dropdown now contains only the placeholder (`#notification-placeholder`), ready for
+ * `notifications.js` to populate with styled items.
+ * 5.  **Enable Notifications Link**: Link added in user dropdown (`#enable-notifications-link`).
  *
  **************************************************************************************************/
-/*
-    MODIFICATION SUMMARY (This update):
-    - Added new Notification Bell dropdown.
-    - Added a badge with id="notification-badge" to the bell icon for the JS to update.
-    - Added a dropdown menu with id="notification-dropdown-menu" for future population.
-    - Added "Enable Notifications" link in user dropdown with id="enable-notifications-link".
-*/
 ?>
 <div class="topbar">
     <nav class="navbar-custom">
         <ul class="list-unstyled topbar-right-menu float-right mb-0">
-            
+
             <li class="hide-phone app-search d-none d-sm-block">
                 <form action="search.php" method="get">
                     <input type="text" name="search" placeholder="<?=__('search'); ?>" class="form-control" required>
@@ -34,7 +29,7 @@
             </li>
 
             <!-- =================================== -->
-            <!-- == NEW Language Switcher Button  == -->
+            <!-- == Language Switcher Button      == -->
             <!-- =================================== -->
             <li class="notification-list">
                 <?php
@@ -59,37 +54,44 @@
             </li>
 
             <!-- =================================== -->
-            <!-- == NEW Notification Dropdown     == -->
+            <!-- == Notification Dropdown         == -->
             <!-- =================================== -->
             <li class="dropdown notification-list">
                 <a class="nav-link dropdown-toggle arrow-none" data-toggle="dropdown" href="#" role="button"
                    aria-haspopup="false" aria-expanded="false">
-                    <i class="fi-bell noti-icon"></i>
+                    <i class="fa fa-light fa-bell noti-icon"></i>
                     <!-- Notification Badge -->
                     <span class="badge badge-danger badge-pill noti-icon-badge" id="notification-badge" style="display: none;">0</span>
                 </a>
                 <div class="dropdown-menu dropdown-menu-right dropdown-menu-animated dropdown-lg" id="notification-dropdown-menu">
                     <!-- item-->
                     <div class="dropdown-item noti-title">
-                        <h6 class="m-0"><span class="float-right"><a href="#" class="text-dark" id="clear-all-notifications"><small><?=__('clear_all'); ?></small></a> </span><?=__('notifications'); ?></h6>
+                        <h6 class="m-0">
+                            <span class="float-right"><a href="#" class="text-dark" id="clear-all-notifications">
+                                <small><?=__('clear_all'); ?></small></a>
+                            </span><?=__('notifications'); ?>
+                        </h6>
                     </div>
 
                     <div class="slimscroll" style="max-height: 230px;">
-                        <!-- Item -->
-                        <a href="javascript:void(0);" class="dropdown-item notify-item" id="notification-placeholder">
-                            <p class="notify-details mb-0"><?=__('no_new_notifications'); ?></p>
-                        </a>
-                        <!-- Items will be populated by JS -->
+
+                        <!-- Placeholder for when there are no notifications -->
+                        <div class="text-center text-muted p-3" id="notification-placeholder" style="display: none;">
+                            <?=__('no_new_notifications'); ?>
+                        </div>
+
+                        <!-- Notification items will be dynamically inserted here by notifications.js -->
+
                     </div>
 
                     <!-- All-->
-                    <a href="all_notifications.php" class_name="dropdown-item text-center text-primary notify-item notify-all">
-                        <?=__('view_all'); ?> <i class="fi-arrow-right"></i>
+                    <a href="all_notifications.php" class="dropdown-item text-center text-primary notify-item notify-all border-top pt-2">
+                        <?=__('view_all'); ?>
                     </a>
                 </div>
             </li>
 
-            
+
             <li class="dropdown notification-list">
                 <a class="nav-link dropdown-toggle nav-user" data-toggle="dropdown" href="#" role="button"
                    aria-haspopup="false" aria-expanded="false">
@@ -105,9 +107,9 @@
                     <a href="profile.php" class="dropdown-item notify-item">
                         <i class="fi-head"></i> <span><?=__('my_account'); ?></span>
                     </a>
-                    
+
                     <!-- item-->
-                     <?php if($is_system_admin){ ?>
+                     <?php if($is_system_admin ?? false){ // Added check if variable exists ?>
                     <a href="app_seetings.php" target="_blank" id="editAllBtnX" class="dropdown-item notify-item">
                         <i class="fi-cog"></i> <span><?=__('settings'); ?></span>
                     </a>
@@ -122,7 +124,7 @@
                     <a href="javascript:void(0);" class="dropdown-item notify-item">
                         <i class="fi-help"></i> <span><?=__('supporter_option'); ?></span>
                     </a>
-                    
+
                     <!-- item-->
                     <a href="javascript:void(0);" class="dropdown-item notify-item signout" data-action="signout">
                         <i class="fi-power"></i> <span><?=__('logout_button'); ?></span>
@@ -130,7 +132,7 @@
 
                 </div>
             </li>
-        </ul>       
+        </ul>
 
         <ul class="list-inline menu-left mb-0">
             <li class="float-left">

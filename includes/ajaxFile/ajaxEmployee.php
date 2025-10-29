@@ -1,7 +1,7 @@
 <?php
     header('Content-Type: application/json');
 	require_once __DIR__ . '/../../includes/db.php';
-    include("./../../includes/custom_functions.php"); // --- Helper Function ---
+    include("./../../includes/helper_functions.php"); // --- Helper Function ---
 
 /****************************************************************
  * MODIFICATION SUMMARY (012-ajaxEmployee.php):

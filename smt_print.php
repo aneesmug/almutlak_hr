@@ -8,9 +8,11 @@ MODIFICATION SUMMARY (001-smt_print.php):
 - ADDED: "Payable Assigned To" block now displays below the approval trail, matching the style.
 - ADDED: "Payment Information" section now appears if the request status is 'paid', querying the `smt_payment` table for details.
 - FIXED: All item and total costs in the table and summary now use `number_format($val, 2)` to correctly display decimal values.
+- MODIFIED: Changed main 'approved' status badge to warning color (yellow).
+- MODIFIED: Changed 'payable_assigned_to' display section to use pending color (yellow) for print.
 */
  require_once __DIR__ . '/includes/db.php';
- require_once __DIR__ . '/includes/session_check.php'; // This should include custom_functions.php
+ require_once __DIR__ . '/includes/session_check.php'; // This should include helper_functions.php
  include("./includes/convertNumbersToWords.php");
  $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
  if(mysqli_num_rows($query) == 1){
@@ -75,7 +77,7 @@ MODIFICATION SUMMARY (001-smt_print.php):
   
 } else {
  //when the id not equals id show database
- header("Location: ./reg_employee.php"); // Consider redirecting to all_requests.php
+ header("Location: ./all_requests.php"); // Consider redirecting to all_requests.php
  exit; // Add exit
 }
 
@@ -94,13 +96,15 @@ MODIFICATION SUMMARY (001-smt_print.php):
             } else {
                 $status_text_approved = __('approved_pending_assignment');
             }
-            $status_get_display = "<span class='badge badge-success font-14'>" . $status_text_approved . "</span>";
+            // --- MODIFIED: Changed badge-success to badge-warning ---
+            $status_get_display = "<span class='badge badge-warning font-14'>" . $status_text_approved . "</span>";
             break;
         case "rejected":
             $status_get_display = "<span class='badge badge-danger font-14'>" . __('rejected') . "</span>";
             break;
         case "paid":
-            $status_get_display = "<span class='badge badge-purple font-14'>" . __('payment_paid') . "</span>";
+             // Using badge-success now for paid status consistency
+            $status_get_display = "<span class='badge badge-success font-14'>" . __('payment_paid') . "</span>";
             break;
         default:
             $status_get_display = "<span class='badge badge-danger font-14'>" . __('unknown_status') . "</span>";
@@ -151,9 +155,10 @@ MODIFICATION SUMMARY (001-smt_print.php):
             }
             .badge-secondary { border-color: #6c757d; color: #6c757d; }
             .badge-custom { border-color: #4351b0; color: #4351b0; }
-            .badge-success, .badge-purple { border-color: #28a745; color: #28a745; }
+            .badge-success { border-color: #28a745; color: #28a745; } /* Used for Paid */
             .badge-danger { border-color: #dc3545; color: #dc3545; }
-            .badge-warning { border-color: #ffc107; color: #ffc107; }
+            .badge-warning { border-color: #ffc107; color: #ffc107; } /* Used for Approved */
+            .badge-purple { border-color: #6658dd; color: #6658dd; } /* Fallback, maybe remove */
             
             @media print {
                 .hidden-print { display: none !important; }
@@ -250,7 +255,7 @@ MODIFICATION SUMMARY (001-smt_print.php):
 
                                             <!-- NEW: Show Assigned Payer -->
                                             <?php if ($assigned_payer_name): ?>
-                                            <div class="approval-status approved">
+                                            <div class="approval-status pending"> <!-- MODIFIED: Changed approved to pending for warning color -->
                                                 <strong><?=__('payable_assigned_to')?>: <?= htmlspecialchars($assigned_payer_name) ?></strong>
                                             </div>
                                             <?php endif; ?>
@@ -364,8 +369,6 @@ MODIFICATION SUMMARY (001-smt_print.php):
                                     </div>
                                     <?php endif; ?>
                                     <!-- END Payment Information Section -->
-
-
                                     <div class="hidden-print mt-4 mb-4">
                                         <div class="text-right">
                                             <a href="javascript:window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print m-r-5"></i> <?=__('print')?></a>

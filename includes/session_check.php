@@ -35,7 +35,7 @@ $_SESSION['last_activity'] = time();
 // --- 3. Fetch Full User & Employee Record ---
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/init.php';
-include_once __DIR__ . '/custom_functions.php';
+include_once __DIR__ . '/helper_functions.php';
 
 $user_id_for_query = $_SESSION['auth_user']['user_id'];
 

@@ -1,28 +1,18 @@
 <?php
 /*
+MODIFICATION SUMMARY (008-smartRequestAjaxTbl.php):
+- UPDATED: Role-based filtering ($additionalConditions) for Management (dept 10) to see all requests, same as Admin and Finance (dept 2).
+- UPDATED: Role-based filtering for Department Managers (Non-Finance/Mgmt) to include requests they created OR are in the approval chain for.
+- UPDATED: Default role-based filtering (Employee/Assistant) to show requests they created OR any request where they are included in the approval chain.
+- ADDED: A new `LEFT JOIN` to `request_approvers` as `ra_any` to check if the user is in the approval chain at *any* level.
+*/
+/*
 MODIFICATION SUMMARY (007-smartRequestAjaxTbl.php):
 - FIXED: Fatal Error "Unknown column 'ra.your_actual_request_type_column_name' / 'ra.request_type'". Changed the LEFT JOIN condition to use the correct column `ra`.`request_type_id` and compare it against the ID `1` (representing 'smart_request' based on the `approval_request_types` table).
 */
 /*
 MODIFICATION SUMMARY (006-smartRequestAjaxTbl.php):
 - FIXED: Fatal Error "Unknown column 'ra.approver_emp_id'". Replaced `ra`.`approver_emp_id` with the correct column name `ra`.`approver_id` in the `$additionalConditions` logic for GM and Manager roles, based on the provided table schema.
-*/
-/*
-MODIFICATION SUMMARY (005-smartRequestAjaxTbl.php):
-- ACTION REQUIRED: Replaced `ra`.`request_type` with a placeholder `ra`.`your_actual_request_type_column_name` in the LEFT JOIN condition. The user MUST replace this placeholder with the actual column name from their `request_approvers` database table that stores the request type (e.g., 'smart_request'). This is necessary to fix the persistent "Unknown column 'ra.request_type'" error.
-*/
-/*
-MODIFICATION SUMMARY (004-smartRequestAjaxTbl.php):
-- ADDED: Comments near the `ra`.`request_type` condition in the LEFT JOIN, highlighting the location of the new fatal error ("Unknown column 'ra.request_type'") and advising to verify this column name in the database.
-*/
-/*
-MODIFICATION SUMMARY (003-smartRequestAjaxTbl.php):
-- FIXED: Fatal Error "Unknown column 'ra.request_id'". Changed the LEFT JOIN condition from `ra`.`request_id` to `ra`.`request_inv_no`.
-- NOTE: If the column in the `request_approvers` table storing the invoice number is named differently, `ra`.`request_inv_no` must be replaced with the actual column name.
-*/
-/*
-MODIFICATION SUMMARY (002-smartRequestAjaxTbl.php):
-- ADDED: Comments near the LEFT JOIN to 'request_approvers' highlighting the location of the reported fatal error ("Unknown column 'ra.request_id'") and advising to verify the column name in the database table structure. No functional code changes made as the query syntax appears correct based on the previously defined schema.
 */
 /*
 MODIFICATION SUMMARY (001-smartRequestAjaxTbl.php):
@@ -34,12 +24,6 @@ MODIFICATION SUMMARY (001-smartRequestAjaxTbl.php):
 - ADDED: `LEFT JOIN` to `request_approvers` table to facilitate the new role-based filtering.
 - ADDED: Selection of `sr.current_approval_level` for use in the front-end status badge.
 - MAINTAINED: `GROUP BY sr.inv_no` to prevent potential duplicates from the main `smart_request` table query structure.
-*/
-/*
-MODIFICATION SUMMARY (Previous):
-- Modified: The role-based filtering logic (`$additionalConditions`) for Department Managers and the Finance Department.
-- New Logic for Finance: Users in the Finance department (`$user_dept == 2`) will now see ALL requests from ALL departments, regardless of status, similar to an administrator.
-- New Logic for Department Managers: Non-finance managers (`$emptype == 'Manager'`) will now see ALL requests where the request's department matches their own department, allowing them to track all activity within their team.
 */
 
 include './../../includes/db.php';
@@ -84,35 +68,41 @@ $baseSql = "FROM `smart_request` `sr`
             LEFT JOIN `request_approvers` `ra` ON `sr`.`inv_no` = `ra`.`request_inv_no`
                 AND `ra`.`request_type_id` = 1 -- <<< FIXED HERE
                 AND `sr`.`current_approval_level` = `ra`.`approval_level`
+            LEFT JOIN `request_approvers` `ra_any` ON `sr`.`inv_no` = `ra_any`.`request_inv_no` -- NEW JOIN
+                AND `ra_any`.`request_type_id` = 1 -- NEW JOIN
             WHERE 1 {$searchQuery} {$typeSearchQuery}";
 
 // UPDATED: Role-based filtering conditions
-$additionalConditions = " AND `sr`.`emp_id` = " . (int)$emp_id; // Default: Employee sees their own
+$additionalConditions = ""; // Start empty
 
-switch (true) {
-    // Admin & Finance see everything
-    case ($user_type == 'administrator' || $user_dept == 2):
-        $additionalConditions = '';
-        break;
-
-    // GM sees requests pending their approval
-    case ($user_type == 'gm'):
-        // Show requests only if they are the current approver AND status is pending
-        // FIXED: Use ra.approver_id instead of ra.approver_emp_id
-        $additionalConditions = " AND `ra`.`approver_id` = ".(int)$emp_id." AND `sr`.`current_status` = 'pending_approval'";
-        break;
-
-    // Department Manager (Non-Finance) sees requests pending their approval OR from their dept
-    case ($emptype == 'Manager' && $user_dept != 2):
-         // FIXED: Use ra.approver_id instead of ra.approver_emp_id
-        $additionalConditions = " AND (
-                                    (`ra`.`approver_id` = ".(int)$emp_id." AND `sr`.`current_status` = 'pending_approval')
+// Admin, Finance (2), and Management (10) see everything
+if ($user_type == 'administrator' || $user_dept == 2 || $user_dept == 10) {
+    $additionalConditions = ''; // See all
+}
+// GM (who is NOT in dept 2 or 10)
+else if ($user_type == 'gm') {
+    // Show requests only if they are the current approver AND status is pending
+    $additionalConditions = " AND `ra`.`approver_id` = ".(int)$emp_id." AND `sr`.`current_status` = 'pending_approval'";
+}
+// Department Manager (Non-Finance/Mgmt)
+else if ($emptype == 'Manager') {
+    $additionalConditions = " AND (
+                                    (`ra`.`approver_id` = ".(int)$emp_id." AND `sr`.`current_status` = 'pending_approval') -- Pending their action
                                     OR
-                                    (`sr`.`department` = " . (int)$user_dept . ")
+                                    (`sr`.`department` = " . (int)$user_dept . ") -- From their department
+                                    OR
+                                    (`ra_any`.`approver_id` = ".(int)$emp_id.") -- In their approval chain
+                                    OR
+                                    (`sr`.`emp_id` = " . (int)$emp_id . ") -- Created by them
                                 )";
-        break;
-
-    // Default case (Employee/Assistant etc.) is handled by the initial $additionalConditions
+}
+// Default case (Employee/Assistant etc.)
+else {
+    $additionalConditions = " AND (
+                                    `sr`.`emp_id` = " . (int)$emp_id . " -- Created by them
+                                    OR
+                                    `ra_any`.`approver_id` = ".(int)$emp_id." -- In their approval chain
+                                )";
 }
 
 

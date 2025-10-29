@@ -202,9 +202,6 @@ MODIFICATION SUMMARY (Previous Version):
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js"></script>
 
-    <!-- Make sure this is on EVERY page -->
-    <script src="assets/js/notifications.js"></script>
-
     <script type="text/javascript">
 
     $(document).ready(function(){
