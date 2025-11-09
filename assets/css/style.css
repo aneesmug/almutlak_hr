@@ -604,20 +604,60 @@ body.enlarged.bg-transparent {
 }
 
 .notification-list .profile-dropdown .notify-item {
-  padding: 7px 20px;
+  padding: 12px 20px !important;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.2s ease;
+  line-height: 1.5;
+}
+
+.notification-list .profile-dropdown .notify-item:hover {
+  background-color: #f1f3f5;
 }
 
 .profile-dropdown {
-  width: 170px;
+  min-width: 200px;
+  padding: 0;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  border: 1px solid #e9ecef;
+}
+
+.profile-dropdown .noti-title {
+  padding: 12px 20px;
+  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 0;
+  background-color: #f8f9fa;
+}
+
+.profile-dropdown .noti-title h6 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0;
 }
 
 .profile-dropdown i {
-  vertical-align: middle;
-  margin-right: 5px;
+  font-size: 18px;
+  width: 24px;
+  text-align: left;
+  margin-right: 14px;
+  color: #495057;
+  flex-shrink: 0;
 }
 
 .profile-dropdown span {
-  vertical-align: middle;
+  font-size: 15px;
+  color: #2c3e50;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* RTL Support for Profile Dropdown */
+[dir="rtl"] .profile-dropdown i {
+  margin-right: 0;
+  margin-left: 14px;
+  text-align: right;
 }
 
 .nav-user {
@@ -3917,6 +3957,42 @@ input[type="color"] {
 .select2-container .select2-selection--single .select2-selection__rendered {
   line-height: 36px;
   padding-left: 12px;
+  padding-right: 40px;
+}
+
+/* Select2 Clear Button (X) Styling */
+.select2-container .select2-selection--single .select2-selection__clear {
+  position: absolute;
+  right: 35px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  font-weight: 400;
+  color: #98a6ad;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 5px;
+  z-index: 10;
+}
+
+.select2-container .select2-selection--single .select2-selection__clear:hover {
+  color: #f1556c;
+}
+
+/* RTL Support for Select2 */
+[dir="rtl"] .select2-container .select2-selection--single .select2-selection__rendered {
+  padding-left: 40px;
+  padding-right: 12px;
+}
+
+[dir="rtl"] .select2-container .select2-selection--single .select2-selection__clear {
+  right: auto;
+  left: 35px;
+}
+
+[dir="rtl"] .select2-container .select2-selection--single .select2-selection__arrow {
+  right: auto;
+  left: 3px;
 }
 
 .select2-container .select2-selection--single .select2-selection__arrow {
@@ -6338,7 +6414,7 @@ label.radioalign{
 .mb-1.carinfo > span{
   font-weight: normal !important;
 }
-.noneDIV { display:none !important; },
+.noneDIV { display:none !important; }
 .showDIV { display:block !important; }
 
 

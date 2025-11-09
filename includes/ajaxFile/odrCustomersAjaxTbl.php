@@ -1,6 +1,6 @@
 <?php
 include './../../includes/db.php';
-session_start();
+if (session_status() == PHP_SESSION_NONE) session_start();
 
 ## Read value
 $draw = $_POST['draw'];

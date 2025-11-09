@@ -2,6 +2,7 @@
 // File: includes/topbar.php (Updated)
 // This file contains the top navigation bar with the new language switcher
 // and the structure for the redesigned notification dropdown.
+// Added: Server-side unread notification count initialization.
 
 /**************************************************************************************************
  * MODIFICATION SUMMARY
@@ -56,31 +57,53 @@
             <!-- =================================== -->
             <!-- == Notification Dropdown         == -->
             <!-- =================================== -->
+            <?php
+                // Prepare unread notification count (server-side fallback / initial state)
+                $unread_notifications = [];
+                $unread_count = 0;
+                if (function_exists('get_unread_notifications') && isset($empid) && $empid) {
+                    $unread_notifications = get_unread_notifications($conDB, $empid);
+                    $unread_count = is_array($unread_notifications) ? count($unread_notifications) : 0;
+                }
+                $badge_style = ($unread_count > 0) ? '' : 'display: none;';
+            ?>
             <li class="dropdown notification-list">
                 <a class="nav-link dropdown-toggle arrow-none" data-toggle="dropdown" href="#" role="button"
                    aria-haspopup="false" aria-expanded="false">
                     <i class="fa fa-light fa-bell noti-icon"></i>
                     <!-- Notification Badge -->
-                    <span class="badge badge-danger badge-pill noti-icon-badge" id="notification-badge" style="display: none;">0</span>
+                    <span class="badge badge-danger badge-pill noti-icon-badge" id="notification-badge" style="<?= $badge_style ?>"><?= (int)$unread_count ?></span>
                 </a>
                 <div class="dropdown-menu dropdown-menu-right dropdown-menu-animated dropdown-lg" id="notification-dropdown-menu">
                     <!-- item-->
                     <div class="dropdown-item noti-title">
                         <h6 class="m-0">
                             <span class="float-right"><a href="#" class="text-dark" id="clear-all-notifications">
-                                <small><?=__('clear_all'); ?></small></a>
+                                <small><?= (function_exists('__') ? __('mark_all_read') : 'Mark all read') ?></small></a>
                             </span><?=__('notifications'); ?>
                         </h6>
                     </div>
 
                     <div class="slimscroll" style="max-height: 230px;">
 
-                        <!-- Placeholder for when there are no notifications -->
-                        <div class="text-center text-muted p-3" id="notification-placeholder" style="display: none;">
+                        <!-- Placeholder for when there are no notifications (initial server state) -->
+                        <div class="text-center text-muted p-3" id="notification-placeholder" style="<?= ($unread_count === 0 ? '' : 'display: none;') ?>">
                             <?=__('no_new_notifications'); ?>
                         </div>
 
-                        <!-- Notification items will be dynamically inserted here by notifications.js -->
+                        <!-- Notification items are dynamically inserted by notifications.js.
+                             Server-side pre-render (optional): -->
+                        <?php if ($unread_count > 0): ?>
+                            <?php foreach ($unread_notifications as $notif): ?>
+                                <a href="<?= $notif['url'] ?>" class="dropdown-item notify-item" data-id="<?= (int)$notif['id'] ?>">
+                                    <div class="notify-icon bg-primary"> <i class="fa fa-info"></i> </div>
+                                    <p class="notify-details">
+                                        <strong><?= $notif['title'] ?></strong>
+                                        <small class="text-muted mb-0 d-block" style="white-space: normal;"><?= $notif['message'] ?></small>
+                                    </p>
+                                </a>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
 
                     </div>
 

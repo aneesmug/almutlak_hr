@@ -1,5 +1,27 @@
 <?php
 /*
+MODIFICATION SUMMARY (026-main_menu.php):
+- DEPARTMENT-BASED ROLE SYSTEM: Replaced all IT_Assistant, HR_Assistant, Finance_Assistant 
+  references with department-based team roles (IT_Team, IT_Team_Manager, HR_Team, HR_Team_Manager, 
+  Finance_Team, Finance_Team_Manager, Executive_Team, Executive_Team_Manager)
+- LEGACY ROLE SUPPORT: Maintained HR_Manager and Finance_Manager for backward compatibility
+- TEAM ROLE ACCESS: Updated all page_roles arrays and permission arrays to include new team roles
+- CONSISTENT PERMISSIONS: IT_Team, HR_Team, and Finance_Team members now have appropriate 
+  access based on their department assignment
+*/
+/*
+MODIFICATION SUMMARY (025-main_menu.php):
+- COMPREHENSIVE ROLE SYSTEM OVERHAUL: Updated all role-based permissions to use the new
+  employee ID-based role system with specific HR, Finance, and management positions.
+- NEW SPECIFIC ROLES: Added support for HR_Senior_BP, HR_Operations, HR_Supervisor, 
+  HR_Recruitment, HR_Payroll, Finance_Officer, Auditor, GR_Officer, and Administrator roles.
+- UPDATED PAGE ACCESS: All page_roles arrays updated to include new specific roles with
+  appropriate permissions for each page.
+- MENU VISIBILITY: Updated all can_see_* permission arrays to include new roles.
+- APPROVAL COUNTS: Modified loan and smart request count queries to support new role structure.
+- BACKWARD COMPATIBILITY: Maintains support for legacy HR_Manager, Finance_Manager roles.
+*/
+/*
 MODIFICATION SUMMARY (002-main_menu.php):
 - Providing the full and final code as requested.
 - REPLACED SMART REQUEST COUNT: The old, complex, role-based switch statement for counting smart requests has been removed.
@@ -59,6 +81,7 @@ $logActivityLink = 'log_activity.php';
 $manualVacationLink = 'import_vacation_balance.php';
 $processIqamaImportLink = 'import_iqama_exp.php';
 $addManualLoanLink = 'add_manual_loan.php';
+$employeeSalaryReportLink = 'employee_salary_report.php';
 
 
 // =================================================================================
@@ -66,30 +89,31 @@ $addManualLoanLink = 'add_manual_loan.php';
 // =================================================================================
 
 $page_roles = [
-    'dashboard.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'GM', 'Employee','IT_Assistant'],
+    'dashboard.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Executive_Team', 'Executive_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'dashboardgm.php' => ['GM'],
-    'add_new_employee.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
-    'reg_employee.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager','IT_Assistant'],
-    'emp_temp_contant.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
-    'employee_audit_gen.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'],
-    'generate_payroll.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
-    'all_applied_vac.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'GM','Employee','IT_Assistant'],
-    'all_applied_loan.php' => ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'Employee'],
-    'add_manual_loan.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'],
-    'all_cars.php' => ['administrator'],
-    'all_locations.php' => ['administrator'],
-    'all_machines.php' => ['administrator'],
-    'all_menu_item.php' => ['administrator'],
-    'all_requests.php' => ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager'],
-    'vouchers.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'],
-    'all_user_invoices.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager', 'Employee'],
-    'all_users.php' => ['administrator'],
-    'file_manager.php' => ['administrator'],
-    'gallery.php' => ['administrator'],
-    'language.php' => ['administrator'],
-    'log_activity.php' => ['administrator'],
-    'manual_vacation.php' => ['administrator', 'HR_Manager', 'HR_Assistant', 'IT_Assistant'],
-    'import_iqama_exp.php' => ['administrator', 'HR_Manager', 'HR_Assistant'],
+    'add_new_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'reg_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    'emp_temp_contant.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'employee_audit_gen.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    'employee_salary_report.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
+    'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
+    'add_manual_loan.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    'all_cars.php' => ['Administrator', 'GR_Officer'],
+    'all_locations.php' => ['Administrator', 'GR_Officer'],
+    'all_machines.php' => ['Administrator', 'GR_Officer'],
+    'all_menu_item.php' => ['Administrator'],
+    'all_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    'vouchers.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    'all_user_invoices.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
+    'all_users.php' => ['Administrator'],
+    'file_manager.php' => ['Administrator'],
+    'gallery.php' => ['Administrator'],
+    'language.php' => ['Administrator'],
+    'log_activity.php' => ['Administrator'],
+    'manual_vacation.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'import_iqama_exp.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -104,17 +128,65 @@ if ($user_type != 'administrator') {
 }
 
 // --- Role lists for menu visibility ---
-$can_see_employees_group_main = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'];
-$can_see_all_employees_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager','IT_Assistant'];
-$can_see_employees_bank_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'];
-$can_see_applied_vac_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'DPT_Manager','IT_Assistant'];
-$can_see_loan_approvals_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager'];
-$can_see_content_approvals_page = ['administrator', 'HR_Manager', 'HR_Assistant'];
-$can_see_smart_requests_page = ['administrator', 'GM', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant', 'DPT_Manager'];
-$can_see_vouchers_page = ['administrator', 'HR_Manager', 'HR_Assistant', 'Finance_Manager', 'Finance_Assistant'];
+// Updated to include all new specific roles and department-based team roles
+$can_see_employees_group_main = [
+    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
+
+$can_see_all_employees_page = [
+    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
+
+$can_see_employees_bank_page = [
+    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
+
+$can_see_applied_vac_page = [
+    // Core leadership & HR
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Manager', 'HR_Team', 'HR_Team_Manager',
+    // Department & functional approvers
+    'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Finance_Officer', 'Finance_Manager',
+    // Asset / compliance related
+    'GR_Officer', 'Auditor'
+];
+
+$can_see_loan_approvals_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor', 'DPT_Manager',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
+
+$can_see_content_approvals_page = [
+    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'HR_Team', 'HR_Team_Manager',
+    'HR_Manager'
+];
+
+$can_see_smart_requests_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
+
+$can_see_vouchers_page = [
+    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
 
 $is_admin = $is_system_admin; 
-$is_gm = $user_role == 'GM';
+$is_gm = ($user_role == 'GM' || $isGM);
 
 $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see_employees_group_main)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_all_employees_page)) ||
@@ -138,9 +210,16 @@ switch ($user_role) {
         $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE l.status = 'dept_manager_pending' AND e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'";
         break;
     case 'HR_Manager':
+    case 'HR_Senior_BP':
+    case 'HR_Operations':
+    case 'HR_Supervisor':
+    case 'HR_Recruitment':
+    case 'HR_Payroll':
         $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status = 'hr_manager_pending'";
         break;
     case 'Finance_Manager':
+    case 'Finance_Officer':
+    case 'Auditor':
         $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status = 'finance_manager_pending'";
         break;
     case 'GM':
@@ -149,7 +228,7 @@ switch ($user_role) {
     case 'Finance_Assistant':
         $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status = 'finance_assistant_pending'";
         break;
-    case 'administrator':
+    case 'Administrator':
         $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status NOT IN ('approved', 'paid', 'rejected')";
         break;
 }
@@ -163,7 +242,7 @@ if (!empty($loan_count_query)) {
 
 // --- Fetch Smart Request Counts (NEW GENERAL SYSTEM) ---
 $smart_request_count = 0;
-if ($user_role == 'administrator') {
+if ($user_role == 'Administrator') {
     // Admin sees a count of ALL pending requests (excluding drafts)
     $smart_request_query_admin = "SELECT COUNT(*) as count FROM smart_request WHERE current_status NOT IN ('approved', 'rejected', 'paid', 'draft')";
     $result_admin = mysqli_query($conDB, $smart_request_query_admin);
@@ -192,6 +271,38 @@ if ($user_role == 'administrator') {
     }
 }
 // --- END NEW SMART REQUEST COUNT ---
+
+// --- Fetch Vacation Pending Approval Count (NEW) ---
+$vacation_pending_count = 0;
+$vacation_type_id = 0;
+$vac_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'vacation_request' LIMIT 1");
+if ($row = mysqli_fetch_assoc($vac_type_query)) {
+    $vacation_type_id = (int)$row['id'];
+}
+if ($vacation_type_id > 0) {
+    if ($user_role == 'Administrator') {
+        // Admin: count all distinct vacation requests still pending anywhere
+        $vacation_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                         FROM request_approvers ra
+                                         WHERE ra.status = 'pending' AND ra.request_type_id = $vacation_type_id";
+        $res_vac_admin = mysqli_query($conDB, $vacation_pending_query_admin);
+        if ($res_vac_admin && ($rva = mysqli_fetch_assoc($res_vac_admin))) {
+            $vacation_pending_count = (int)$rva['count'];
+        }
+    } else {
+        // Regular user: count requests awaiting THIS user's approval
+        $vacation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                   FROM request_approvers ra
+                                   WHERE ra.approver_id = " . (int)$empid . "
+                                     AND ra.status = 'pending'
+                                     AND ra.request_type_id = $vacation_type_id";
+        $res_vac = mysqli_query($conDB, $vacation_pending_query);
+        if ($res_vac && ($rv = mysqli_fetch_assoc($res_vac))) {
+            $vacation_pending_count = (int)$rv['count'];
+        }
+    }
+}
+// --- END NEW VACATION PENDING COUNT ---
 
 
 // Initialize counts to 0
@@ -262,6 +373,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (in_array($user_role, $can_see_employees_bank_page) || in_array($user_type, $can_see_employees_bank_page)): ?>
                     <li><a href="<?= $yearlyEOSLink ?>"><i class="fa fa-calendar-time"></i><span><?=__('employees_bank') ?></span></a></li>
                 <?php endif; ?>
+                <?php if ($isHR || $is_system_admin || $isDeptHr): ?>
+                    <li><a href="<?= $employeeSalaryReportLink ?>"><i class="fa fa-money-bill"></i><span>Salary Report</span></a></li>
+                <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $payrollLink ?>"><i class="fa fa-money-bill-transfer"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
@@ -291,7 +405,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             <a href="javascript:void(0);"><i class="fa fa-check-to-slot"></i><span><?=__('approvals')?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="false">
                 <?php if (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)): ?>
-                    <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($status_cont_vacapl > 0) ? "<span class='badgez badge-danger'>$status_cont_vacapl</span>" : "" ?></span></a></li>
+                    <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)): ?>
                     <li><a href="<?= $appliedLoanLink ?>"><i class="fa fa-money-bill-trend-up"></i><span><?=__('loans') ?></span><?= ($loan_pending_count > 0) ? "<span class='badgez badge-danger'>$loan_pending_count</span>" : "" ?></a></li>

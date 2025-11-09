@@ -1,22 +1,20 @@
 <?php
 /********************************************************************************
- * MODIFICATION SUMMARY
- * - Restored the full login logic to handle three cases:
- * 1. New employee registration (setting a password).
- * 2. Existing employee login (verifying a password).
- * 3. Admin/HR/GM login (sending an OTP).
- * - For the OTP login flow, it now checks for the 'remember_me' checkbox.
- * - If 'remember_me' is checked, a flag is set in the session:
- * `$_SESSION['otp_verification']['remember_me'] = true;`
- * - This flag will be used by `login_verification.php` to create the cookie
- * AFTER the OTP is successfully verified.
- * - FIXED: Language is now determined and saved to the session BEFORE redirecting
- * to the OTP page, preventing translation race conditions.
- * - ADDED: session_write_close() to ensure data is saved before the redirect.
- * - UPDATED: Email logic now populates a fully dynamic and translatable HTML
- * template, including the company logo URL.
- * - ROBUSTNESS: Made the language loading for emails more robust to prevent
- * intermittent language inconsistencies.
+ * MODIFICATION SUMMARY (v016-login.php - Nov 5, 2025)
+ * - DEPARTMENT-BASED ROLE SYSTEM: Updated to work with new user_type values
+ * - PASSWORD vs OTP LOGIN:
+ *   → user_type = 'employee' → Password authentication ONLY
+ *   → All other user_types → OTP authentication (administrator, gm, hr_senior_bp,
+ *     hr_operations, hr_supervisor, hr_recruitment, hr_payroll, finance_officer,
+ *     auditor, gr_officer, dept_user, etc.)
+ * - Removed hardcoded $admin_roles array, now uses simple check: if not 'employee', send OTP
+ * - Three login flows:
+ *   1. New employee registration (setting a password)
+ *   2. Employee login (password verification)
+ *   3. Admin/HR/Finance/GM login (OTP to email)
+ * - OTP flow respects 'remember_me' checkbox for persistent sessions
+ * - Language is determined and saved to session BEFORE OTP redirect
+ * - Email templates are fully dynamic and translatable with company logo
  ********************************************************************************/
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/translation_functions.php'; // Added for email translation
@@ -83,9 +81,9 @@ try {
         if (!$user) { throw new Exception('This ID is not registered. Please contact support.'); }
         if ($user['status'] != 1) { throw new Exception('Your account is inactive. Please contact support.'); }
 
-        $admin_roles = ['administrator', 'hr', 'gm', 'dept_user', 'assistant'];
-        
-        if (in_array($user['user_type'], $admin_roles)) {
+        // Only 'employee' user_type requires password authentication
+        // All other user types (administrator, gm, hr_senior_bp, hr_operations, etc.) use OTP
+        if ($user['user_type'] !== 'employee') {
             // ---> START: LANGUAGE LOADING <---
             // Determine user's preferred language for the email and the next page.
             $user_lang = 'en'; // Default

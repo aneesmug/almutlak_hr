@@ -187,7 +187,12 @@ if (!empty($notifications) && isset($empid) && $empid > 0) {
                         <div class="col-lg-12">
                             <div class="card">
                                 <div class="card-body">
-                                    <h4 class="m-t-0 header-title mb-4"><?= __('your_notifications') ?> <small>(<?= __('current_week_only') ?>)</small></h4>
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h4 class="m-t-0 header-title mb-0"><?= __('your_notifications') ?> <small>(<?= __('current_week_only') ?>)</small></h4>
+                                        <button type="button" id="mark-all-read-page" class="btn btn-sm btn-outline-primary">
+                                            <i class="fa fa-check-double mr-1"></i><?= function_exists('__') ? __('mark_all_read') : 'Mark all read' ?>
+                                        </button>
+                                    </div>
 
                                     <div class="notification-list-wrapper">
                                         <?php if (empty($notifications)): ?>
@@ -304,6 +309,41 @@ if (!empty($notifications) && isset($empid) && $empid > 0) {
                  // Allow default navigation for already read items
                  console.log("Clicked on an already read notification, navigating directly.");
              });
+
+            // Mark all read button (page-level)
+            $('#mark-all-read-page').on('click', function(e){
+                e.preventDefault();
+                var $btn = $(this);
+                $btn.prop('disabled', true).text('...');
+                $.ajax({
+                    url: 'includes/notification.php',
+                    method: 'POST',
+                    dataType: 'json',
+                    data: { action: 'mark_all_read' },
+                    success: function(resp){
+                        if(resp && resp.status === 'success') {
+                            // Remove unread styling from all items and optionally fade
+                            $('a.notification-item.unread').removeClass('unread');
+                            // Provide lightweight feedback
+                            $btn.removeClass('btn-outline-primary').addClass('btn-success').html('<i class="fa fa-check"></i> '+(function_exists('__') ? __('marked_all_read') : 'Marked')); // translation fallback
+                            setTimeout(function(){
+                                $btn.prop('disabled', false).removeClass('btn-success').addClass('btn-outline-primary').html('<i class="fa fa-check-double mr-1"></i>'+ (function_exists('__') ? __('mark_all_read') : 'Mark all read') );
+                            }, 2500);
+                        } else {
+                            $btn.removeClass('btn-outline-primary').addClass('btn-danger').text((function_exists('__') ? __('error_short') : 'Error'));
+                            setTimeout(function(){
+                                $btn.prop('disabled', false).removeClass('btn-danger').addClass('btn-outline-primary').html('<i class="fa fa-check-double mr-1"></i>'+ (function_exists('__') ? __('mark_all_read') : 'Mark all read') );
+                            }, 2500);
+                        }
+                    },
+                    error: function(){
+                        $btn.removeClass('btn-outline-primary').addClass('btn-danger').text((function_exists('__') ? __('error_short') : 'Error'));
+                        setTimeout(function(){
+                            $btn.prop('disabled', false).removeClass('btn-danger').addClass('btn-outline-primary').html('<i class="fa fa-check-double mr-1"></i>'+ (function_exists('__') ? __('mark_all_read') : 'Mark all read') );
+                        }, 2500);
+                    }
+                });
+            });
         });
     </script>
     <!-- END NEW SCRIPT -->

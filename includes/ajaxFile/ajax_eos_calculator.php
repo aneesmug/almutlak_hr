@@ -83,12 +83,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ContractEndReasonCode' => $selectedReasonCode
         ];
         $calc_url = "https://knowledge-center-be.qiwa.sa/api/v1/end-of-service-lookup?" . http_build_query($api_params);
+        
+        // Log the request for debugging
+        error_log("EOS API Request URL: " . $calc_url);
+        error_log("EOS API Params: " . json_encode($api_params));
+        
         $calcApiResult = makeCurlRequest($calc_url, 'POST', []);
+        
+        // Log the response for debugging
+        error_log("EOS API Response: " . json_encode($calcApiResult));
 
         if ($calcApiResult['error'] || $calcApiResult['http_code'] !== 200 || !isset($calcApiResult['data']['RewardAmount'])) {
             $response['message'] = 'Could not calculate the reward via API. Please check the reason and dates.';
+            error_log("EOS API Error: " . ($calcApiResult['error'] ?? 'Unknown error'));
         } else {
             $eos_amount = $calcApiResult['data']['RewardAmount'] ?? 0;
+            
+            error_log("EOS API Returned Amount: " . $eos_amount);
+            
             $vacation_salary = ($salary_get / 30) * $anul_vac_days;
             $net_payment = ($eos_amount + $vacation_salary) - $deduct;
 

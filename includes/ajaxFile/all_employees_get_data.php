@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (session_status() == PHP_SESSION_NONE) session_start();
 ob_start();
 //process_data.php
 if(isset($_POST["query"])){

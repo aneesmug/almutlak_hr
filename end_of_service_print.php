@@ -1,7 +1,14 @@
 <?php
 /*********************************************************************************
- * MODIFICATION SUMMARY (006-end_of_service_print.php):
+ * MODIFICATION SUMMARY (007-end_of_service_print.php):
  *
+ * RECENT CHANGES (007):
+ * - OVERTIME FIELDS ADDED: Added support for overtime hours and overtime days
+ *   in the EOS print report. Overtime hours calculated at 1.5x hourly rate,
+ *   overtime days at regular daily rate. Total overtime earnings included in
+ *   final settlement calculation and displayed in Financial Settlement section.
+ *
+ * PREVIOUS CHANGES (006):
  * 1. STANDARDIZED DAILY RATE: The daily rate used for calculating the last
  * month's salary and any absence-related deductions is now consistently based
  * on a 30-day month to match the calculation form.
@@ -80,6 +87,9 @@
         $years = $diff->y . " Years";
     }
 
+    // Initialize basic_salary outside the block for later use
+    $basic_salary = 0;
+    
     // Calculate Total Salary for EOS Amount (including provisional housing)
     $total_salary_for_eos = 0;
     if (!empty($salaryrow)) {
@@ -142,7 +152,23 @@
 
 
     // Recalculate total earnings and deductions for clarity
-    $total_earnings = (float)($eosrow['eos_amount'] ?? 0) + (float)($eosrow['anul_vac_salry'] ?? 0) + (float)($eosrow['curt_month_salry'] ?? 0);
+    $overtime_hours = (float)($eosrow['overtime_hours'] ?? 0);
+    $overtime_days = (float)($eosrow['overtime_days'] ?? 0);
+    
+    // Calculate overtime earnings per new rule:
+    // per-hour overtime rate = (basic/240)/2 + (contractBase/240)
+    // contractBase = $actual_salary_base (actual benefits without calculated housing)
+    // hours amount = overtimeHourlyRate * overtime_hours
+    // days amount  = overtimeHourlyRate * 8 * overtime_days
+    $overtime_earnings = 0;
+    if ($actual_salary_base > 0 && ($overtime_hours > 0 || $overtime_days > 0)) {
+        $overtime_hourly_rate = (($basic_salary / 240) / 2) + ($actual_salary_base / 240);
+        $overtime_hours_amount = $overtime_hourly_rate * $overtime_hours;
+        $overtime_days_amount = $overtime_hourly_rate * 8 * $overtime_days;
+        $overtime_earnings = $overtime_hours_amount + $overtime_days_amount;
+    }
+    
+    $total_earnings = (float)($eosrow['eos_amount'] ?? 0) + (float)($eosrow['anul_vac_salry'] ?? 0) + (float)($eosrow['curt_month_salry'] ?? 0) + $overtime_earnings;
     $loan_deduction = (float)($eosrow['deduct'] ?? 0);
     $net_payment = (float)($eosrow['net_payment'] ?? 0);
 
@@ -369,6 +395,13 @@
                                                             <td><span class="label-pair"><span>Salary for Last Month (<?=($eosrow['curt_month_days'] ?? 'N/A')?> days)</span><span class="arabic-label">(أيام <?=($eosrow['curt_month_days'] ?? 'N/A')?>) راتب الشهر الأخير</span></span></td>
                                                             <td class="text-right"><?=number_format($potential_last_month_salary, 2)?></td>
                                                         </tr>
+                                                        
+                                                            <?php if ($overtime_earnings > 0): ?>
+                                                            <tr>
+                                                                <td><span class="label-pair"><span>Overtime Earnings<?php if ($overtime_hours > 0): ?> (<?=number_format($overtime_hours, 2)?> hrs)<?php endif; ?><?php if ($overtime_days > 0): ?><?php if ($overtime_hours > 0): ?> + <?php endif; ?>(<?=number_format($overtime_days, 2)?> days)<?php endif; ?></span><span class="arabic-label">أجر العمل الإضافي<?php if ($overtime_hours > 0): ?> (ساعات <?=number_format($overtime_hours, 2)?>)<?php endif; ?><?php if ($overtime_days > 0): ?><?php if ($overtime_hours > 0): ?> + <?php endif; ?>(أيام <?=number_format($overtime_days, 2)?>)<?php endif; ?></span></span></td>
+                                                                <td class="text-right text-success">+<?=number_format($overtime_earnings, 2)?></td>
+                                                            </tr>
+                                                            <?php endif; ?>
                                                         
                                                         <tr style="background-color: #f8f9fa !important;">
                                                             <td colspan="2"><span class="label-pair"><span><strong>Deductions</strong></span><span class="arabic-label"><strong>الخصومات</strong></span></span></td>

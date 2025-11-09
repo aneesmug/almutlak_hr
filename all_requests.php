@@ -214,9 +214,10 @@ MODIFICATION SUMMARY (Previous Version):
         var statusObj = {
             'draft':            { title: '<?=__('draft_status')?>', class: 'badge-secondary' },
             'pending_approval': { title: '<?=__('pending_approval')?>', class: 'badge-warning' }, // Using warning color for pending
-            'approved':         { title: '<?=__('approved')?>', class: 'badge-success' },
+            'approved':         { title: '<?=__('approved')?>', class: 'badge-warning' }, // Changed to warning (yellow) for approved without payer
+            'pending_payment':  { title: '<?=__('ready_for_payment', 'Ready for Payment')?>', class: 'badge-info' }, // New status: blue for ready to pay
             'rejected':         { title: '<?=__('rejected')?>', class: 'badge-danger' },
-            'paid':             { title: '<?=__('paid_status')?>', class: 'badge-purple' },
+            'paid':             { title: '<?=__('paid_status')?>', class: 'badge-success' }, // Success (green) only for paid
             // Old statuses kept for reference or potential fallback, might be removable later
             'pending_dept_manager_approval': { title: '<?=__('pending_dept_manager_status')?>', class: 'badge-custom' },
             'pending_finance_approval':      { title: '<?=__('pending_finance_status')?>', class: 'badge-warning' },

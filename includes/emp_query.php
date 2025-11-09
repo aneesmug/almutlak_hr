@@ -3,6 +3,9 @@
  * MODIFICATION SUMMARY (015-emp_query.php):
  *
  * 1. ENHANCED `lastVacIdGet` FUNCTION: Modified the `lastVacIdGet` function to also select the `start_date` of the last completed vacation. This provides the necessary data to the front-end to correctly configure the date picker for recording an employee's return, allowing for early returns to be processed.
+ * 2. CHAIN APPROVAL UPDATE:
+ * - Changed `approved_vacations`.`approval_status` to `approved_vacations`.`current_status` to match new DB schema.
+ * - Changed `approved_vacations` subquery from `SELECT *` to explicitly select columns (`id`, `emp_id`, `review`, `current_status`) to avoid errors from deleted columns.
  *******************************************************************************************************************/
 
 	$empidget = (isset($_GET['emp_id'])? $_GET['emp_id'] : $_SESSION['empid']);
@@ -52,7 +55,11 @@
 		COALESCE(`doc_count`.`docu`, 0) AS `docu`,
 		COALESCE(`supemp_count`.`supemp`, 0) AS `supemp`,
 		COALESCE(`noteemp_count`.`empnote`, 0) AS `empnote`,
-		`approved_vacations`.`approval_status` AS `apd_status`,
+		
+        /* === MODIFIED FOR CHAIN APPROVAL === */
+        `approved_vacations`.`current_status` AS `apd_status`, 
+        /* =================================== */
+
 		`approved_vacations`.`review` AS `apd_review`,
 		`approved_vacations`.`id` AS `lastvacid`,
 		COALESCE(`emp_documents`.`docs_count`, 0) AS `docs_count`,
@@ -93,7 +100,11 @@
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `encashstus` FROM `emp_vacation` WHERE `note`='Encashed' GROUP BY `emp_id`) AS `encashed_status` ON `encashed_status`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `docu` FROM `emp_docu` GROUP BY `emp_id`) AS `doc_count` ON `doc_count`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `dept`, COUNT(*) AS `supemp` FROM `employees` WHERE `status`=1 AND `emp_id` <> `employees`.`emp_id` GROUP BY `dept`) AS `supemp_count` ON `supemp_count`.`dept` = `employees`.`dept`
-	LEFT JOIN (SELECT * FROM `emp_vacation` WHERE `review`='A' ORDER BY `id` DESC LIMIT 1) AS `approved_vacations` ON `approved_vacations`.`emp_id` = `employees`.`emp_id`
+	
+    /* === MODIFIED FOR CHAIN APPROVAL === */
+    LEFT JOIN (SELECT `id`, `emp_id`, `review`, `current_status` FROM `emp_vacation` WHERE `review`='A' ORDER BY `id` DESC LIMIT 1) AS `approved_vacations` ON `approved_vacations`.`emp_id` = `employees`.`emp_id`
+    /* =================================== */
+
 	LEFT JOIN (SELECT * FROM `emp_vacation_balance`) AS `vacation_balance` ON `vacation_balance`.`emp_id` = `employees`.`emp_id` AND `vacation_balance`.`period_end` = (SELECT MAX(`period_end`) FROM `emp_vacation_balance` WHERE `emp_id` = `employees`.`emp_id`)
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `docs_count` FROM `emp_docu` WHERE `status`='A' GROUP BY `emp_id`) AS `emp_documents` ON `emp_documents`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT * FROM `cars_drv` WHERE `status`=1 ORDER BY `id` DESC LIMIT 1) AS `cars_drv` ON `cars_drv`.`car_user` = `employees`.`emp_id`
@@ -143,7 +154,7 @@
 			`id` AS `vacid`,
 			`return_date` AS `returndate`
 			FROM `emp_vacation`
-			WHERE `emp_id` = {$empidget} AND `review`='C' 
+			WHERE `emp_id` = {$empidget} AND `current_status` = 'approved'
 			ORDER BY `id` DESC 
 			LIMIT 1";
 		$result = mysqli_query($conDB, $query);

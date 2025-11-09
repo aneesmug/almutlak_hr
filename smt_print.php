@@ -99,6 +99,10 @@ MODIFICATION SUMMARY (001-smt_print.php):
             // --- MODIFIED: Changed badge-success to badge-warning ---
             $status_get_display = "<span class='badge badge-warning font-14'>" . $status_text_approved . "</span>";
             break;
+        case "pending_payment":
+            // When payer is assigned, show this status
+            $status_get_display = "<span class='badge badge-info font-14'>" . __('ready_for_payment', 'Ready for Payment') . "</span>";
+            break;
         case "rejected":
             $status_get_display = "<span class='badge badge-danger font-14'>" . __('rejected') . "</span>";
             break;

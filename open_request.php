@@ -305,7 +305,8 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
     } elseif (isset($_POST['assign_payer_submit']) && $current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2) {
         $payable_by_emp_id_assign = isset($_POST['payable_by_emp_id']) ? (int)$_POST['payable_by_emp_id'] : 0;
         if ($payable_by_emp_id_assign > 0) {
-            $update_payer_sql = "UPDATE `smart_request` SET `payable_by_emp_id` = $payable_by_emp_id_assign WHERE `inv_no` = '" . escape_string($inv_no_po) . "'";
+            // Update both payable_by_emp_id AND current_status to 'pending_payment'
+            $update_payer_sql = "UPDATE `smart_request` SET `payable_by_emp_id` = $payable_by_emp_id_assign, `current_status` = 'pending_payment' WHERE `inv_no` = '" . escape_string($inv_no_po) . "'";
             if (mysqli_query($conDB, $update_payer_sql)) {
                 mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES ('$empid', '".escape_string($inv_no_po)."', '".escape_string($userwel)."', 'payment_assigned', 'Assigned for payment processing.')");
                 $assignee_details = getEmployeeDetails($conDB, $payable_by_emp_id_assign);
@@ -323,6 +324,10 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
                     // --- END NOTIFICATION ---
                     
                 }
+                // Refresh the page data after assignment
+                $current_status_get = 'pending_payment';
+                $payable_by_emp_id_get = $payable_by_emp_id_assign;
+                $msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">".__('payer_assigned_successfully')."</div>";
             } else {
                  $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">".__('failed_to_assign_payer')." Error: ".mysqli_error($conDB)."</div>";
             }
@@ -477,7 +482,6 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
                      $mail_fm->Port = get_setting($conDB, 'smtp_port');
                      $mail_fm->CharSet = 'UTF-8';
                      $mail_fm->setFrom(get_setting($conDB, 'smtp_user'), get_setting($conDB, 'application_name'));
-
                      $mail_fm->addAddress($finance_manager_details['email'], $finance_manager_details['name']);
                      $mail_fm->isHTML(true);
                      $mail_fm->Subject = 'Smart Request Requires Payer Assignment - ' . $inv_no_po;
@@ -515,6 +519,10 @@ switch ($current_status_get) {
         $status_text_approved = $assigned_payer_name ? __('approved_pending_payment') : __('approved_pending_assignment');
         // --- MODIFIED: Changed from bg-success to bg-warning as requested ---
         $status_get = "<input class='form-control bg-warning border-warning text-white' type='text' value='" . $status_text_approved . "' readonly />";
+        break;
+    case "pending_payment":
+        // When payer is assigned, show this status
+        $status_get = "<input class='form-control bg-info border-info text-white' type='text' value='" . __('ready_for_payment', 'Ready for Payment') . "' readonly />";
         break;
     case "rejected":
         require_once __DIR__ . '/includes/helper_functions.php'; // Ensure get_approval_chain_status is loaded
@@ -918,17 +926,15 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                         $show_assign_payer_box = false; // For Finance Manager to assign
                                                         $show_process_payment_button = false; // For assigned payer
 
-                                                        if ($current_status_get == "draft" && $empid == $emp_id_get) {
-                                                            $show_submit_button = true;
-                                                        } elseif ($current_status_get == 'pending_approval' && $empid == $current_pending_approver_id) {
-                                                            $show_action_box = true;
-                                                        } elseif ($current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2 && !$payable_by_emp_id_get) { // Only Finance Manager can assign
-                                                            $show_assign_payer_box = true;
-                                                        } elseif ($current_status_get == 'approved' && $empid == $payable_by_emp_id_get) { // Only assigned user can pay
-                                                            $show_process_payment_button = true;
-                                                        }
-
-                                                        // This block is for creators to submit their draft and define the approval chain
+                                        if ($current_status_get == "draft" && $empid == $emp_id_get) {
+                                            $show_submit_button = true;
+                                        } elseif ($current_status_get == 'pending_approval' && $empid == $current_pending_approver_id) {
+                                            $show_action_box = true;
+                                        } elseif ($current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2 && !$payable_by_emp_id_get) { // Only Finance Manager can assign
+                                            $show_assign_payer_box = true;
+                                        } elseif (($current_status_get == 'approved' || $current_status_get == 'pending_payment') && $empid == $payable_by_emp_id_get) { // Only assigned user can pay
+                                            $show_process_payment_button = true;
+                                        }                                                        // This block is for creators to submit their draft and define the approval chain
                                                         if ($show_submit_button): ?>
 
                                                             <!-- NEW DYNAMIC APPROVER UI -->

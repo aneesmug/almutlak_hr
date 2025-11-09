@@ -5,16 +5,20 @@
 
 /****************************************************************
  * MODIFICATION SUMMARY (012-ajaxEmployee.php):
- * 1. ADDED `unassign_asset`: A new block to handle the un-assigning of an asset. It updates the `status` to 'Returned' and sets the `return_date` to the current date for the specified asset ID.
+ * 1. ADDED `mysqli_free_result()` after all `mysqli_query` loops to prevent "Commands out of sync" errors.
+ * 2. This is critical for stabilizing the $conDB connection.
+ * 3. [FIXED] ADDED `get_hr_assistants` ajaxType block, which was missing and causing an error in `all_applied_vac.php`.
  ****************************************************************/
 
 $ajaxType = $_POST['ajaxType'];
 
 if($ajaxType == 'emp_search') {
     $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
+    $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
     }
+    mysqli_free_result($stmt); // <-- FIX
     $data = [
         'data'      => $name,
         'status'    => 200
@@ -26,10 +30,12 @@ if($ajaxType == 'emp_search') {
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`emp_id`={$_POST['empid']} ");
+    WHERE `e`.`status`=1 AND `e`.`emp_id`=".(int)$_POST['empid']." "); // Cast to int
+    $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
     }
+    mysqli_free_result($stmt); // <-- FIX
     $data = [
         'data'      => $name,
         'status'    => 200
@@ -41,16 +47,790 @@ if($ajaxType == 'emp_search') {
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`dept`={$_POST['dept']} ");
+    WHERE `e`.`status`=1 AND `e`.`dept`=".(int)$_POST['dept']." "); // Cast to int
+    $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
     }
+    mysqli_free_result($stmt); // <-- FIX
     $data = [
         'data'      => $name,
         'status'    => 200
     ];
     echo json_encode($data);
-} elseif($ajaxType == 'unassign_asset') {
+} 
+// =================================================================
+// == NEW BLOCK TO FETCH ASSIGNED ASSETS FOR AN EMPLOYEE
+// =================================================================
+elseif($ajaxType == 'get_assigned_assets') {
+    $emp_id = $_POST['emp_id'] ?? null;
+    if (!$emp_id) {
+        echo json_encode(['status' => 400, 'message' => 'Employee ID is required.']);
+        exit;
+    }
+    $sql = "SELECT ea.id, a.name AS asset_name, ea.serial_number, ea.description, ea.assigned_date 
+            FROM employee_assets ea 
+            JOIN assets a ON ea.asset_id = a.id 
+            WHERE ea.emp_id = ? AND ea.status = 'Assigned' 
+            ORDER BY ea.assigned_date DESC";
+    $stmt = mysqli_prepare($conDB, $sql);
+    if (!$stmt) {
+        echo json_encode(['status' => 500, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        exit;
+    }
+    mysqli_stmt_bind_param($stmt, "s", $emp_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $assets = [];
+    while($row = mysqli_fetch_assoc($result)) {
+        $assets[] = $row;
+    }
+    if ($result) mysqli_free_result($result);
+    mysqli_stmt_close($stmt);
+    echo json_encode(['status' => 200, 'assets' => $assets]);
+    exit;
+}
+// =================================================================
+// == NEW BLOCK TO FETCH POTENTIAL APPROVERS FOR CHAIN APPROVAL
+// =================================================================
+elseif($ajaxType == 'get_potential_approvers') {
+    $approvers = get_potential_approvers($conDB);
+    if (!empty($approvers)) {
+        $data = [
+            'data'      => $approvers,
+            'status'    => 200
+        ];
+    } else {
+        $data = [
+            'data'      => [],
+            'status'    => 404,
+            'message'   => 'No potential approvers found.'
+        ];
+    }
+    echo json_encode($data);
+}
+// =================================================================
+// == NEW BLOCK TO FETCH DEPARTMENT-SPECIFIC APPROVERS
+// =================================================================
+elseif($ajaxType == 'get_department_approvers') {
+    if (empty($_POST['dept_id'])) {
+        send_json_response("Error", "Department ID is required.", "error");
+        exit;
+    }
+    $dept_id = (int)$_POST['dept_id'];
+    $approvers = get_department_approvers($conDB, $dept_id); // This function is in helper_functions.php
+    
+    if (!empty($approvers)) {
+        $data = [
+            'data'      => $approvers,
+            'status'    => 200
+        ];
+    } else {
+        $data = [
+            'data'      => [],
+            'status'    => 404,
+            'message'   => 'No potential approvers found for this department.'
+        ];
+    }
+    echo json_encode($data);
+}
+// =================================================================
+// == [FIX] ADDED THIS BLOCK, IT WAS MISSING
+// =================================================================
+elseif($ajaxType == 'get_hr_assistants') {
+    // This function is defined in helper_functions.php
+    $data = get_hr_assistants($conDB);
+    echo json_encode(['data' => $data, 'status' => 200]);
+    exit;
+}
+// =================================================================
+elseif($ajaxType == 'get_hr_senior_bp') {
+    // Get all HR Senior BP users for simple leave approval
+    $sql = "SELECT e.emp_id, e.name, al.user_type 
+            FROM employees e 
+            JOIN admin_login al ON e.emp_id = al.emp_id 
+            WHERE al.user_type = 'hr_senior_bp' AND e.status = 1
+            ORDER BY e.name ASC";
+    
+    $result = mysqli_query($conDB, $sql);
+    $data = [];
+    
+    if ($result && mysqli_num_rows($result) > 0) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $data[] = [
+                'emp_id' => $row['emp_id'],
+                'name' => $row['name'],
+                'user_type' => $row['user_type']
+            ];
+        }
+    }
+    
+    echo json_encode(['data' => $data, 'status' => 200]);
+    exit;
+}
+
+elseif($ajaxType == 'get_hr_team_members') {
+    // Get all HR team members (ALL employees in HR department - dept_id = 5)
+    // These are employees who can receive CC notifications
+    $sql = "SELECT DISTINCT e.emp_id, e.name, e.email, d.dep_nme, al.user_type 
+            FROM employees e 
+            LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
+            WHERE e.status = 1 
+            AND e.dept = 5
+            ORDER BY e.name ASC";
+    
+    $result = mysqli_query($conDB, $sql);
+    $data = [];
+    
+    if ($result && mysqli_num_rows($result) > 0) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $data[] = [
+                'emp_id' => $row['emp_id'],
+                'name' => $row['name'],
+                'email' => $row['email'],
+                'dept_name' => $row['dep_nme'],
+                'user_type' => $row['user_type'] ?? 'hr_staff'
+            ];
+        }
+    }
+    
+    echo json_encode(['data' => $data, 'status' => 200]);
+    exit;
+}
+
+// =================================================================
+// == WRAPPER: Get Asset Clearance Chain (for backward compatibility)
+// == This endpoint wraps build_vacation_approval_chain
+// == Takes vacation_id and fetches employee details automatically
+// =================================================================
+elseif($ajaxType == 'get_asset_clearance_chain') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        // Check if exclude_level1 is set and true (handles both boolean and string)
+        $exclude_level1 = (isset($_POST['exclude_level1']) && ($_POST['exclude_level1'] === true || $_POST['exclude_level1'] === 'true' || $_POST['exclude_level1'] === 1 || $_POST['exclude_level1'] === '1'));
+        
+        error_log("get_asset_clearance_chain: vacation_id=$vacation_id, exclude_level1=" . ($exclude_level1 ? 'true' : 'false'));
+        
+        if (empty($vacation_id)) {
+            throw new Exception("Vacation ID is required");
+        }
+        
+        // Get vacation details
+        $sql_vac = "SELECT emp_id, vacation_salary_type, fly_type, remarks 
+                    FROM emp_vacation 
+                    WHERE id = ? LIMIT 1";
+        $stmt_vac = mysqli_prepare($conDB, $sql_vac);
+        
+        if (!$stmt_vac) {
+            throw new Exception("Database error: " . mysqli_error($conDB));
+        }
+        
+        mysqli_stmt_bind_param($stmt_vac, "i", $vacation_id);
+        if (!mysqli_stmt_execute($stmt_vac)) {
+            mysqli_stmt_close($stmt_vac);
+            throw new Exception("Failed to fetch vacation details");
+        }
+        
+        $result_vac = mysqli_stmt_get_result($stmt_vac);
+        if (!$result_vac || mysqli_num_rows($result_vac) == 0) {
+            mysqli_stmt_close($stmt_vac);
+            throw new Exception("Vacation request not found");
+        }
+        
+        $vac_data = mysqli_fetch_assoc($result_vac);
+        mysqli_free_result($result_vac);
+        mysqli_stmt_close($stmt_vac);
+        
+        $emp_id = (int)$vac_data['emp_id'];
+        $vacation_salary_type = $vac_data['vacation_salary_type'] ?? 'end_of_service';
+        $fly_type = $vac_data['fly_type'] ?? '';
+        $remarks = strtolower(trim($vac_data['remarks'] ?? ''));
+        
+        // Now call the main chain builder logic (inline to avoid code duplication)
+        // We'll reuse the build_vacation_approval_chain logic below
+        
+        // Build the approval chain
+        $chain = [];
+        $chain_details = [];
+        
+        // STEP 1: Get employee's supervisor and department
+        $sql_emp = "SELECT supervisor_id, dept FROM employees WHERE emp_id = ? LIMIT 1";
+        $stmt_emp = mysqli_prepare($conDB, $sql_emp);
+        if (!$stmt_emp) {
+            throw new Exception("Database error");
+        }
+        
+        mysqli_stmt_bind_param($stmt_emp, "i", $emp_id);
+        mysqli_stmt_execute($stmt_emp);
+        $res_emp = mysqli_stmt_get_result($stmt_emp);
+        
+        if (!$res_emp || mysqli_num_rows($res_emp) == 0) {
+            mysqli_stmt_close($stmt_emp);
+            throw new Exception("Employee not found");
+        }
+        
+        $emp_row = mysqli_fetch_assoc($res_emp);
+        $supervisor_id = $emp_row['supervisor_id'];
+        $emp_dept_id = $emp_row['dept'];
+        mysqli_free_result($res_emp);
+        mysqli_stmt_close($stmt_emp);
+        
+        // STEP 2: Add Supervisor OR Department Manager as Level 1
+        if (!empty($supervisor_id) && $supervisor_id != '0') {
+            $sql_sup = "SELECT emp_id, name FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
+            $stmt_sup = mysqli_prepare($conDB, $sql_sup);
+            if ($stmt_sup) {
+                mysqli_stmt_bind_param($stmt_sup, "s", $supervisor_id);
+                mysqli_stmt_execute($stmt_sup);
+                $res_sup = mysqli_stmt_get_result($stmt_sup);
+                if ($row_sup = mysqli_fetch_assoc($res_sup)) {
+                    $chain[] = $row_sup['emp_id'];
+                    $chain_details[] = [
+                        'emp_id' => $row_sup['emp_id'],
+                        'name' => $row_sup['name'],
+                        'label' => 'Direct Supervisor',
+                        'level' => 1
+                    ];
+                }
+                if ($res_sup) mysqli_free_result($res_sup);
+                mysqli_stmt_close($stmt_sup);
+            }
+        } else if (!empty($emp_dept_id) && function_exists('getDeptManager')) {
+            $dept_mgr = getDeptManager($conDB, $emp_dept_id);
+            if ($dept_mgr && !empty($dept_mgr['emp_id'])) {
+                $chain[] = $dept_mgr['emp_id'];
+                $chain_details[] = [
+                    'emp_id' => $dept_mgr['emp_id'],
+                    'name' => $dept_mgr['name'],
+                    'label' => 'Department Manager',
+                    'level' => 1
+                ];
+            }
+        }
+        
+        // STEP 3: Check if supervisor has their own supervisor
+        if (!empty($supervisor_id) && $supervisor_id != '0') {
+            $sql_sup_mgr = "SELECT supervisor_id, name FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
+            $stmt_sup_mgr = mysqli_prepare($conDB, $sql_sup_mgr);
+            if ($stmt_sup_mgr) {
+                mysqli_stmt_bind_param($stmt_sup_mgr, "s", $supervisor_id);
+                mysqli_stmt_execute($stmt_sup_mgr);
+                $res_sup_mgr = mysqli_stmt_get_result($stmt_sup_mgr);
+                if ($row_sup_mgr = mysqli_fetch_assoc($res_sup_mgr)) {
+                    $supervisor_mgr_id = $row_sup_mgr['supervisor_id'];
+                    if (!empty($supervisor_mgr_id) && $supervisor_mgr_id != '0' && !in_array($supervisor_mgr_id, $chain)) {
+                        $sql_mgr = "SELECT emp_id, name FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
+                        $stmt_mgr = mysqli_prepare($conDB, $sql_mgr);
+                        if ($stmt_mgr) {
+                            mysqli_stmt_bind_param($stmt_mgr, "s", $supervisor_mgr_id);
+                            mysqli_stmt_execute($stmt_mgr);
+                            $res_mgr = mysqli_stmt_get_result($stmt_mgr);
+                            if ($row_mgr = mysqli_fetch_assoc($res_mgr)) {
+                                $chain[] = $row_mgr['emp_id'];
+                                $chain_details[] = [
+                                    'emp_id' => $row_mgr['emp_id'],
+                                    'name' => $row_mgr['name'],
+                                    'label' => "Supervisor's Manager",
+                                    'level' => count($chain)
+                                ];
+                            }
+                            if ($res_mgr) mysqli_free_result($res_mgr);
+                            mysqli_stmt_close($stmt_mgr);
+                        }
+                    }
+                }
+                if ($res_sup_mgr) mysqli_free_result($res_sup_mgr);
+                mysqli_stmt_close($stmt_sup_mgr);
+            }
+        }
+        
+        // STEP 4: Add HR Senior BP
+        $sql_hr_bp = "SELECT e.emp_id, e.name FROM employees e 
+                      JOIN admin_login al ON e.emp_id = al.emp_id 
+                      WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 
+                      ORDER BY e.emp_id ASC LIMIT 1";
+        $res_hr_bp = mysqli_query($conDB, $sql_hr_bp);
+        if ($res_hr_bp && ($row_hr_bp = mysqli_fetch_assoc($res_hr_bp))) {
+            if (!in_array($row_hr_bp['emp_id'], $chain)) {
+                $chain[] = $row_hr_bp['emp_id'];
+                $chain_details[] = [
+                    'emp_id' => $row_hr_bp['emp_id'],
+                    'name' => $row_hr_bp['name'],
+                    'label' => 'HR Senior BP',
+                    'level' => count($chain)
+                ];
+            }
+        }
+        if ($res_hr_bp) mysqli_free_result($res_hr_bp);
+        
+        // STEP 5: Add Asset Clearance Teams
+        $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea 
+                       JOIN assets a ON ea.asset_id = a.id 
+                       WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
+        $stmt_assets = mysqli_prepare($conDB, $sql_assets);
+        if ($stmt_assets) {
+            mysqli_stmt_bind_param($stmt_assets, "s", $emp_id);
+            mysqli_stmt_execute($stmt_assets);
+            $res_assets = mysqli_stmt_get_result($stmt_assets);
+            
+            $needs_it = false;
+            $needs_admin = false;
+            $needs_transport = false;
+            
+            while ($asset_row = mysqli_fetch_assoc($res_assets)) {
+                $asset_name = strtolower(trim($asset_row['asset_name']));
+                // Mapping by asset name keywords → departments:
+                //  IT: laptop, computer
+                //  Administration: mobile, phone, sim card
+                //  Transportation: car, vehicle
+                if (strpos($asset_name, 'laptop') !== false || strpos($asset_name, 'computer') !== false) {
+                    $needs_it = true;
+                }
+                if (strpos($asset_name, 'mobile') !== false || strpos($asset_name, 'phone') !== false || strpos($asset_name, 'sim') !== false) {
+                    $needs_admin = true;
+                }
+                if (strpos($asset_name, 'car') !== false || strpos($asset_name, 'vehicle') !== false) {
+                    $needs_transport = true;
+                }
+            }
+            mysqli_free_result($res_assets);
+            mysqli_stmt_close($stmt_assets);
+            
+            if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
+                // Department name normalization mapping to actual dep_nme values in DB
+                $deptLookup = [
+                    'IT' => 'Information Technology',
+                    'Administration' => 'Administration',
+                    'Transportation' => 'Transportation'
+                ];
+                if ($needs_it) {
+                    $it_dept_id = get_department_id_by_name($conDB, $deptLookup['IT']);
+                    if ($it_dept_id) {
+                        $it_mgr = getDeptManager($conDB, $it_dept_id);
+                        if ($it_mgr && !empty($it_mgr['emp_id']) && !in_array($it_mgr['emp_id'], $chain)) {
+                            $chain[] = $it_mgr['emp_id'];
+                            $chain_details[] = [
+                                'emp_id' => $it_mgr['emp_id'],
+                                'name' => $it_mgr['name'],
+                                'label' => 'IT Team (Asset Clearance)',
+                                'level' => count($chain)
+                            ];
+                        }
+                    }
+                }
+                
+                if ($needs_admin) {
+                    $admin_dept_id = get_department_id_by_name($conDB, $deptLookup['Administration']);
+                    if ($admin_dept_id) {
+                        $admin_mgr = getDeptManager($conDB, $admin_dept_id);
+                        if ($admin_mgr && !empty($admin_mgr['emp_id']) && !in_array($admin_mgr['emp_id'], $chain)) {
+                            $chain[] = $admin_mgr['emp_id'];
+                            $chain_details[] = [
+                                'emp_id' => $admin_mgr['emp_id'],
+                                'name' => $admin_mgr['name'],
+                                'label' => 'Administration Team (Asset Clearance)',
+                                'level' => count($chain)
+                            ];
+                        }
+                    }
+                }
+                
+                if ($needs_transport) {
+                    $transport_dept_id = get_department_id_by_name($conDB, $deptLookup['Transportation']);
+                    if ($transport_dept_id) {
+                        $transport_mgr = getDeptManager($conDB, $transport_dept_id);
+                        if ($transport_mgr && !empty($transport_mgr['emp_id']) && !in_array($transport_mgr['emp_id'], $chain)) {
+                            $chain[] = $transport_mgr['emp_id'];
+                            $chain_details[] = [
+                                'emp_id' => $transport_mgr['emp_id'],
+                                'name' => $transport_mgr['name'],
+                                'label' => 'Transportation Team (Asset Clearance)',
+                                'level' => count($chain)
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+        
+        // STEP 6: Add HR Payroll (ONLY if vacation_salary_type = 'payroll')
+        if ($vacation_salary_type === 'payroll') {
+            $sql_hr_payroll = "SELECT e.emp_id, e.name FROM employees e 
+                               JOIN admin_login al ON e.emp_id = al.emp_id 
+                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
+                               ORDER BY e.emp_id ASC LIMIT 1";
+            $res_hr_payroll = mysqli_query($conDB, $sql_hr_payroll);
+            if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
+                if (!in_array($row_hr_payroll['emp_id'], $chain)) {
+                    $chain[] = $row_hr_payroll['emp_id'];
+                    $chain_details[] = [
+                        'emp_id' => $row_hr_payroll['emp_id'],
+                        'name' => $row_hr_payroll['name'],
+                        'label' => 'HR Payroll',
+                        'level' => count($chain)
+                    ];
+                }
+            }
+            if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
+        }
+        
+        // STEP 7: Add GR Officer (ONLY if vac_type = 'Fly' AND fly_type = 'annual')
+        // GR Officer handles ticket payments and exit-reentry permits for annual fly vacations
+        // Note: vac_type is fetched from emp_vacation.vac_type column
+        $sql_vac_type = "SELECT vac_type FROM emp_vacation WHERE id = ? LIMIT 1";
+        $stmt_vac_type = mysqli_prepare($conDB, $sql_vac_type);
+        $vac_type = null;
+        if ($stmt_vac_type) {
+            mysqli_stmt_bind_param($stmt_vac_type, "i", $vacation_id);
+            mysqli_stmt_execute($stmt_vac_type);
+            $res_vac_type = mysqli_stmt_get_result($stmt_vac_type);
+            if ($row_vac_type = mysqli_fetch_assoc($res_vac_type)) {
+                $vac_type = $row_vac_type['vac_type'];
+            }
+            if ($res_vac_type) mysqli_free_result($res_vac_type);
+            mysqli_stmt_close($stmt_vac_type);
+        }
+        
+        $is_fly_vacation = ($fly_type === 'annual' && strtolower($vac_type) === 'fly');
+        if ($is_fly_vacation) {
+            $sql_gr_officer = "SELECT e.emp_id, e.name FROM employees e 
+                               JOIN admin_login al ON e.emp_id = al.emp_id 
+                               WHERE al.user_type = 'gr_officer' AND e.status = 1 
+                               ORDER BY e.emp_id ASC LIMIT 1";
+            $res_gr_officer = mysqli_query($conDB, $sql_gr_officer);
+            if ($res_gr_officer && ($row_gr_officer = mysqli_fetch_assoc($res_gr_officer))) {
+                if (!in_array($row_gr_officer['emp_id'], $chain)) {
+                    $chain[] = $row_gr_officer['emp_id'];
+                    $chain_details[] = [
+                        'emp_id' => $row_gr_officer['emp_id'],
+                        'name' => $row_gr_officer['name'],
+                        'label' => 'GR Officer (Final - Ticket & Exit Fee)',
+                        'level' => count($chain),
+                        'is_final' => true
+                    ];
+                }
+            }
+            if ($res_gr_officer) mysqli_free_result($res_gr_officer);
+        }
+        
+        // Log the chain BEFORE exclusion
+        error_log("get_asset_clearance_chain: Chain BEFORE exclude_level1: " . json_encode([
+            'chain' => $chain,
+            'chain_details' => array_map(function($d) { return $d['emp_id'] . ':' . $d['label']; }, $chain_details)
+        ]));
+        
+        // If exclude_level1 is true, remove the first approver from the chain
+        // This is used when Level 1 approver is approving and needs to pass the rest of the chain
+        if ($exclude_level1 && count($chain) > 0) {
+            array_shift($chain); // Remove first element
+            array_shift($chain_details); // Remove first element from details
+            
+            // Renumber levels in chain_details
+            foreach ($chain_details as $index => &$detail) {
+                $detail['level'] = $index + 1;
+            }
+            unset($detail);
+            
+            // Log for debugging
+            error_log("get_asset_clearance_chain: Chain AFTER excluding Level 1: " . json_encode([
+                'chain' => $chain,
+                'chain_details' => array_map(function($d) { return $d['emp_id'] . ':' . $d['label']; }, $chain_details)
+            ]));
+        }
+        
+        // Log the final chain being returned
+        error_log("get_asset_clearance_chain: FINAL chain for vacation_id $vacation_id: " . count($chain) . " approvers: " . json_encode($chain));
+        
+        // Return the chain
+        echo json_encode([
+            'status' => 200,
+            'chain' => $chain,
+            'chain_details' => $chain_details,
+            'total_levels' => count($chain),
+            'flow_type' => $is_fly_vacation ? 'with_gr_officer' : 'standard'
+        ]);
+        exit;
+        
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 500,
+            'message' => $e->getMessage(),
+            'chain' => []
+        ]);
+        exit;
+    }
+}
+
+// =================================================================
+// == COMPLETE VACATION APPROVAL CHAIN BUILDER
+// == Implements the full approval flow:
+// == 1. Supervisor → 2. Supervisor's Manager (if exists) → 3. HR Senior BP → 
+// == 4. Asset Clearance Teams → 5. HR Payroll (if payroll salary) → 6. GR Officer (if fly)
+// =================================================================
+elseif($ajaxType == 'build_vacation_approval_chain') {
+    try {
+        $emp_id = (int)($_POST['emp_id'] ?? 0);
+        $vacation_salary_type = $_POST['vacation_salary_type'] ?? 'payroll'; // payroll or end_of_service
+        $fly_type = $_POST['fly_type'] ?? 'annual'; // annual or emergency
+        $vac_type = $_POST['vac_type'] ?? ''; // Fly, Local Vacation, etc.
+        $remarks = strtolower($_POST['remarks'] ?? '');
+
+        if ($emp_id <= 0) {
+            send_json_response('Error', 'Invalid employee ID.', 'error', 400);
+            exit;
+        }
+
+        $chain = [];
+        $chain_details = [];
+        
+        // STEP 1: Get employee's supervisor and department info
+        $sql_emp = "SELECT supervisor_id, dept FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
+        $stmt_emp = mysqli_prepare($conDB, $sql_emp);
+        mysqli_stmt_bind_param($stmt_emp, "i", $emp_id);
+        mysqli_stmt_execute($stmt_emp);
+        $res_emp = mysqli_stmt_get_result($stmt_emp);
+        $emp_data = mysqli_fetch_assoc($res_emp);
+        mysqli_free_result($res_emp);
+        mysqli_stmt_close($stmt_emp);
+
+        if (!$emp_data) {
+            send_json_response('Error', 'Employee not found.', 'error', 404);
+            exit;
+        }
+
+        $supervisor_id = $emp_data['supervisor_id'];
+        $emp_dept_id = $emp_data['dept'];
+
+        // STEP 2: Add Supervisor or Department Manager as first approver
+        if (!empty($supervisor_id)) {
+            // Has assigned supervisor
+            $sql_sup = "SELECT emp_id, name, supervisor_id FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
+            $stmt_sup = mysqli_prepare($conDB, $sql_sup);
+            mysqli_stmt_bind_param($stmt_sup, "s", $supervisor_id);
+            mysqli_stmt_execute($stmt_sup);
+            $res_sup = mysqli_stmt_get_result($stmt_sup);
+            $supervisor_data = mysqli_fetch_assoc($res_sup);
+            mysqli_free_result($res_sup);
+            mysqli_stmt_close($stmt_sup);
+
+            if ($supervisor_data) {
+                $chain[] = $supervisor_data['emp_id'];
+                $chain_details[] = [
+                    'emp_id' => $supervisor_data['emp_id'],
+                    'name' => $supervisor_data['name'],
+                    'label' => 'Direct Supervisor',
+                    'level' => 1
+                ];
+
+                // STEP 3: Check if supervisor has a direct manager
+                if (!empty($supervisor_data['supervisor_id'])) {
+                    $sql_mgr = "SELECT emp_id, name FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
+                    $stmt_mgr = mysqli_prepare($conDB, $sql_mgr);
+                    mysqli_stmt_bind_param($stmt_mgr, "s", $supervisor_data['supervisor_id']);
+                    mysqli_stmt_execute($stmt_mgr);
+                    $res_mgr = mysqli_stmt_get_result($stmt_mgr);
+                    $manager_data = mysqli_fetch_assoc($res_mgr);
+                    mysqli_free_result($res_mgr);
+                    mysqli_stmt_close($stmt_mgr);
+
+                    if ($manager_data) {
+                        $chain[] = $manager_data['emp_id'];
+                        $chain_details[] = [
+                            'emp_id' => $manager_data['emp_id'],
+                            'name' => $manager_data['name'],
+                            'label' => 'Supervisor\'s Manager',
+                            'level' => 2
+                        ];
+                    }
+                }
+            }
+        } else {
+            // No supervisor - use department manager
+            if (function_exists('getDeptManager') && $emp_dept_id) {
+                $dept_mgr = getDeptManager($conDB, $emp_dept_id);
+                if ($dept_mgr && !empty($dept_mgr['emp_id'])) {
+                    $chain[] = $dept_mgr['emp_id'];
+                    $chain_details[] = [
+                        'emp_id' => $dept_mgr['emp_id'],
+                        'name' => $dept_mgr['name'],
+                        'label' => 'Department Manager',
+                        'level' => 1
+                    ];
+                }
+            }
+        }
+
+        // STEP 4: Add HR Senior BP
+        $sql_hr_bp = "SELECT e.emp_id, e.name FROM employees e 
+                      JOIN admin_login al ON e.emp_id = al.emp_id 
+                      WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 
+                      ORDER BY e.emp_id ASC LIMIT 1";
+        $res_hr_bp = mysqli_query($conDB, $sql_hr_bp);
+        if ($res_hr_bp && ($row_hr_bp = mysqli_fetch_assoc($res_hr_bp))) {
+            $chain[] = $row_hr_bp['emp_id'];
+            $chain_details[] = [
+                'emp_id' => $row_hr_bp['emp_id'],
+                'name' => $row_hr_bp['name'],
+                'label' => 'HR Senior BP',
+                'level' => count($chain)
+            ];
+        }
+        if ($res_hr_bp) mysqli_free_result($res_hr_bp);
+
+        // STEP 5: Add Asset Clearance Teams (IT, Administration, Transportation)
+        $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea 
+                       JOIN assets a ON ea.asset_id = a.id 
+                       WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
+        $stmt_assets = mysqli_prepare($conDB, $sql_assets);
+        if ($stmt_assets) {
+            mysqli_stmt_bind_param($stmt_assets, "s", $emp_id);
+            mysqli_stmt_execute($stmt_assets);
+            $res_assets = mysqli_stmt_get_result($stmt_assets);
+            
+            $needs_it = false;
+            $needs_admin = false;
+            $needs_transport = false;
+            
+            while ($asset_row = mysqli_fetch_assoc($res_assets)) {
+                $asset_name = strtolower(trim($asset_row['asset_name']));
+                // Mapping by asset name keywords → departments:
+                //  IT: laptop, computer
+                //  Administration: mobile, phone, sim card
+                //  Transportation: car, vehicle
+                if (strpos($asset_name, 'laptop') !== false || strpos($asset_name, 'computer') !== false) {
+                    $needs_it = true;
+                }
+                if (strpos($asset_name, 'mobile') !== false || strpos($asset_name, 'phone') !== false || strpos($asset_name, 'sim') !== false) {
+                    $needs_admin = true;
+                }
+                if (strpos($asset_name, 'car') !== false || strpos($asset_name, 'vehicle') !== false) {
+                    $needs_transport = true;
+                }
+            }
+            mysqli_free_result($res_assets);
+            mysqli_stmt_close($stmt_assets);
+
+            // Add asset team managers
+            if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
+                // Department name normalization mapping to actual dep_nme values in DB
+                $deptLookup = [
+                    'IT' => 'Information Technology',
+                    'Administration' => 'Administration',
+                    'Transportation' => 'Transportation'
+                ];
+                if ($needs_it) {
+                    $it_dept_id = get_department_id_by_name($conDB, $deptLookup['IT']);
+                    if ($it_dept_id) {
+                        $it_mgr = getDeptManager($conDB, $it_dept_id);
+                        if ($it_mgr && !empty($it_mgr['emp_id']) && !in_array($it_mgr['emp_id'], $chain)) {
+                            $chain[] = $it_mgr['emp_id'];
+                            $chain_details[] = [
+                                'emp_id' => $it_mgr['emp_id'],
+                                'name' => $it_mgr['name'],
+                                'label' => 'IT Team (Asset Clearance)',
+                                'level' => count($chain)
+                            ];
+                        }
+                    }
+                }
+                
+                if ($needs_admin) {
+                    $admin_dept_id = get_department_id_by_name($conDB, $deptLookup['Administration']);
+                    if ($admin_dept_id) {
+                        $admin_mgr = getDeptManager($conDB, $admin_dept_id);
+                        if ($admin_mgr && !empty($admin_mgr['emp_id']) && !in_array($admin_mgr['emp_id'], $chain)) {
+                            $chain[] = $admin_mgr['emp_id'];
+                            $chain_details[] = [
+                                'emp_id' => $admin_mgr['emp_id'],
+                                'name' => $admin_mgr['name'],
+                                'label' => 'Administration Team (Asset Clearance)',
+                                'level' => count($chain)
+                            ];
+                        }
+                    }
+                }
+                
+                if ($needs_transport) {
+                    $transport_dept_id = get_department_id_by_name($conDB, $deptLookup['Transportation']);
+                    if ($transport_dept_id) {
+                        $transport_mgr = getDeptManager($conDB, $transport_dept_id);
+                        if ($transport_mgr && !empty($transport_mgr['emp_id']) && !in_array($transport_mgr['emp_id'], $chain)) {
+                            $chain[] = $transport_mgr['emp_id'];
+                            $chain_details[] = [
+                                'emp_id' => $transport_mgr['emp_id'],
+                                'name' => $transport_mgr['name'],
+                                'label' => 'Transportation Team (Asset Clearance)',
+                                'level' => count($chain)
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        // STEP 6: Add HR Payroll (ONLY if vacation_salary_type = 'payroll')
+        if ($vacation_salary_type === 'payroll') {
+            $sql_hr_payroll = "SELECT e.emp_id, e.name FROM employees e 
+                               JOIN admin_login al ON e.emp_id = al.emp_id 
+                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
+                               ORDER BY e.emp_id ASC LIMIT 1";
+            $res_hr_payroll = mysqli_query($conDB, $sql_hr_payroll);
+            if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
+                if (!in_array($row_hr_payroll['emp_id'], $chain)) {
+                    $chain[] = $row_hr_payroll['emp_id'];
+                    $chain_details[] = [
+                        'emp_id' => $row_hr_payroll['emp_id'],
+                        'name' => $row_hr_payroll['name'],
+                        'label' => 'HR Payroll',
+                        'level' => count($chain)
+                    ];
+                }
+            }
+            if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
+        }
+
+        // STEP 7: Add GR Officer (ONLY if fly_type = 'annual' AND vac_type = 'Fly')
+        // GR Officer handles ticket payments and exit-reentry permits for annual fly vacations
+        $is_fly_vacation = ($fly_type === 'annual' && strtolower($vac_type) === 'fly');
+        if ($is_fly_vacation) {
+            $sql_gr_officer = "SELECT e.emp_id, e.name FROM employees e 
+                               JOIN admin_login al ON e.emp_id = al.emp_id 
+                               WHERE al.user_type = 'gr_officer' AND e.status = 1 
+                               ORDER BY e.emp_id ASC LIMIT 1";
+            $res_gr_officer = mysqli_query($conDB, $sql_gr_officer);
+            if ($res_gr_officer && ($row_gr_officer = mysqli_fetch_assoc($res_gr_officer))) {
+                if (!in_array($row_gr_officer['emp_id'], $chain)) {
+                    $chain[] = $row_gr_officer['emp_id'];
+                    $chain_details[] = [
+                        'emp_id' => $row_gr_officer['emp_id'],
+                        'name' => $row_gr_officer['name'],
+                        'label' => 'GR Officer (Final - Ticket & Exit Fee)',
+                        'level' => count($chain),
+                        'is_final' => true
+                    ];
+                }
+            }
+            if ($res_gr_officer) mysqli_free_result($res_gr_officer);
+        }
+
+        // Return the complete chain
+        echo json_encode([
+            'status' => 200,
+            'chain' => $chain,
+            'chain_details' => $chain_details,
+            'total_levels' => count($chain),
+            'flow_type' => $is_fly_vacation ? 'with_gr_officer' : 'standard'
+        ]);
+        exit;
+
+    } catch (Exception $e) {
+        send_json_response('Error', $e->getMessage(), 'error', 500);
+        exit;
+    }
+}
+// =================================================================
+elseif($ajaxType == 'unassign_asset') {
     try {
         if (empty($_POST['asset_record_id']) || empty($_POST['return_date']) || empty($_POST['return_status'])) {
             throw new Exception('Required fields are missing.');
@@ -105,6 +885,7 @@ if($ajaxType == 'emp_search') {
     while($row = mysqli_fetch_assoc($stmt)) {
         $assets[] = $row;
     }
+    mysqli_free_result($stmt); // <-- FIX
     echo json_encode(['success' => true, 'assets' => $assets]);
     exit;
 
@@ -180,7 +961,9 @@ if($ajaxType == 'emp_search') {
     $link_up = $_POST['link'];
     $social_id_up = $_POST['social_id'];
     $socquery = mysqli_query($conDB, "SELECT * FROM `social` WHERE `emp_id`='".$emp_id_up."' AND `social_id`='".$social_id_up."' ");
-    if(mysqli_num_rows($socquery) == 0){
+    $num_rows = mysqli_num_rows($socquery);
+    mysqli_free_result($socquery); // <-- FIX
+    if($num_rows == 0){
         $query="INSERT INTO `social` (`emp_id`,`s_link`, `social_id`, `created_at`) VALUES ('".$emp_id_up."', '".$link_up."', '".$social_id_up."', '".date('Y-m-d H:i:s')."')";
         if(mysqli_query($conDB, $query)){
             send_json_response("Success!", "This social link has been added successfully.", "success");
@@ -198,9 +981,11 @@ if($ajaxType == 'emp_search') {
             WHERE `social`.`emp_id`='".$_POST['emp_id']."'
         )"
     );
+    $section_name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $section_name[] = $row;
     }
+    mysqli_free_result($stmt); // <-- FIX
     $data = [
         'data'      => $section_name,
         'status'    => 200
@@ -210,6 +995,7 @@ if($ajaxType == 'emp_search') {
     $emp_id = $_POST['emp_id'];
     $title_up = $_POST['title'];
     $description_up = mysqli_real_escape_string($conDB, $_POST['description']);
+    $filename_po = null; // Initialize
     if (file_exists($_FILES['file']['tmp_name']) || is_uploaded_file($_FILES['file']['tmp_name'])) {
         $uploadDir = "./../../assets/emp_documents/";
         $fileName = basename($_FILES['file']['name']);
@@ -259,9 +1045,11 @@ if($ajaxType == 'emp_search') {
     }
 } elseif($ajaxType == 'emp_doc_type'){
     $stmt = mysqli_query($conDB, "SELECT * FROM `docu_type` ORDER BY `duc_type` REGEXP '^[^A-Za-z]' ASC, `duc_type`");
+    $sub_type = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $sub_type[] = $row;
     }
+    mysqli_free_result($stmt); // <-- FIX
     $data = [
         'data'      => $sub_type,
         'status'    => 200
@@ -336,39 +1124,43 @@ if($ajaxType == 'emp_search') {
         send_json_response("Error", $e->getMessage(), "error");
     }
 } elseif($ajaxType == 'emp_temp_contannt'){
-    $ckh = "SELECT * FROM `employee_temp_contants` WHERE `status` = 'A' AND `emp_id` = '".$_POST['empid']."' AND `id` = '".$_POST['id']."' ";
-    // "INSERT INTO `employee_temp_contants` (`emp_id`,`type`,`path`) SELECT `emp_id`,`iqama`,`mobile` FROM `employees` WHERE `emp_id` = '152'"
-    $datackh = mysqli_fetch_assoc(mysqli_query($conDB, $ckh));
+    $ckh_query = mysqli_query($conDB, "SELECT * FROM `employee_temp_contants` WHERE `status` = 'A' AND `emp_id` = '".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
+    $datackh = mysqli_fetch_assoc($ckh_query);
+    mysqli_free_result($ckh_query); // <-- FIX
+
     if ($_POST['notes'] == 'approve') {
         if ($datackh['type'] == 'Profile Picture' ) {
-            mysqli_query($conDB, "UPDATE `employees` SET `avatar`='".$datackh['path']."' WHERE `emp_id`='".$_POST['empid']."' ");
-            mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".$_POST['empid']."' AND `id` = '".$_POST['id']."' ");
+            mysqli_query($conDB, "UPDATE `employees` SET `avatar`='".$datackh['path']."' WHERE `emp_id`='".(int)$_POST['empid']."' ");
+            mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
             send_json_response("Approved!", "Record has been approve successfully.", "success");
         } elseif($datackh['type'] == 'Employee Documents'){
-            mysqli_query($conDB, "UPDATE `emp_docu` SET `status`='A' WHERE `emp_id`='".$_POST['empid']."' AND '".$_POST['id']."' ");
-            mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".$_POST['empid']."' AND `id` = '".$_POST['id']."' ");
+            mysqli_query($conDB, "UPDATE `emp_docu` SET `status`='A' WHERE `emp_id`='".(int)$_POST['empid']."' AND `pgid` = '".(int)$_POST['id']."' "); // Corrected WHERE clause
+            mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
             send_json_response("Approved!", "Record has been approve successfully.", "success");
         } else {
-            mysqli_query($conDB, "UPDATE `employees` SET `$_POST[type]` ='".$_POST['path']."' WHERE `emp_id`='".$_POST['empid']."'");
-            mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".$_POST['empid']."' AND `id` = '".$_POST['id']."' ");
+            mysqli_query($conDB, "UPDATE `employees` SET `".$datackh['type']."` ='".$datackh['path']."' WHERE `emp_id`='".(int)$_POST['empid']."'"); // Used $datackh['type']
+    
+            mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
             send_json_response("Approved!", "Record has been approve successfully.", "success");
         }
     } else {
-        mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = '".$_POST['notes']."' WHERE `emp_id`='".$_POST['empid']."' AND `id` = '".$_POST['id']."' ");
+        mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = '".$_POST['notes']."' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
         send_json_response("Rejected!", "Record not approve.", "error");
     }
 }elseif ($ajaxType == "bank_list") {
     $stmt = mysqli_query($conDB, "SELECT * FROM `bank_list` ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name`");
+    $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
     }
+    mysqli_free_result($stmt); // <-- FIX
     $data = [
         'data'      => $name,
         'status'    => 200
     ];
     echo json_encode($data);  
 }elseif ($ajaxType == "emp_edit_contannt") {
-    $sql = "INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES ('".$_POST['empid']."', '".$_POST['edit_contant_check']."', '".$_POST[$_POST['edit_contant_check']]."')";
+    $sql = "INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES ('".(int)$_POST['empid']."', '".$_POST['edit_contant_check']."', '".$_POST[$_POST['edit_contant_check']]."')";
     if(mysqli_query($conDB, $sql)){
          send_json_response("Added!", "Record has been added successfully.", "success");
     } else {
@@ -402,7 +1194,7 @@ if($ajaxType == 'emp_search') {
     // This will now correctly return an empty 'notes' array if no records are found
     echo json_encode(['status' => 'success', 'notes' => $notes]);
     exit; // Good practice to exit after an AJAX response
-} elseif(isset($ajaxType) && $ajaxType == 'emp_temp_contant'){
+} elseif(isset($ajaxType) && $ajaxType == 'emp_temp_contant'){ // Duplicate ajaxType
     header('Content-Type: application/json');
     $requestId = $_POST['id'];
     $empId = $_POST['empid'];
@@ -543,6 +1335,7 @@ if($ajaxType == 'emp_search') {
         $stmt = mysqli_prepare($conDB, $sql);
         mysqli_stmt_bind_param($stmt, 'isss', $empId, $type, $newValue, $path);
         mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt); // <-- FIX
 
         // Send a success response back to the browser
         echo json_encode([
@@ -576,8 +1369,10 @@ if($ajaxType == 'emp_search') {
     if ($result->num_rows > 0) {
         $data = $result->fetch_assoc();
         $data['emp_id'] = $empid;
+        $result->free(); // <-- FIX
         echo json_encode(['status' => 200, 'data' => $data]);
     } else {
+        $result->free(); // <-- FIX
         echo json_encode(['status' => 404, 'message' => 'Employee not found or has no vacation contract assigned.']);
     }
     $stmt->close();
@@ -593,6 +1388,8 @@ if($ajaxType == 'emp_search') {
     while($row = $result->fetch_assoc()) {
         $employees[] = $row;
     }
+    $result->free(); // <-- FIX
+    $stmt->close(); // <-- FIX
     echo json_encode(['data' => $employees]);
     exit;
 }

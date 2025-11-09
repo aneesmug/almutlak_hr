@@ -508,6 +508,33 @@ if (mysqli_num_rows($query) == 1) {
 														<th><?= __('department') ?>:</th>
 														<td><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></td>
 													</tr>
+													<tr>
+														<th><?= __('employee_type') ?? "Employee Type" ?>:</th>
+														<td><?= $emprow['emptype'] ?? 'N/A' ?></td>
+														<th><?= __('direct_supervisor') ?? "Direct Supervisor" ?>:</th>
+														<td>
+															<?php 
+															if (!empty($emprow['supervisor_id'])) {
+																$supervisor_query = mysqli_query($conDB, "
+																	SELECT `name`, `emp_id`, `emptype` 
+																	FROM `employees` 
+																	WHERE `emp_id` = '{$emprow['supervisor_id']}' 
+																	LIMIT 1
+																");
+																$supervisor = mysqli_fetch_assoc($supervisor_query);
+																if ($supervisor) {
+																	echo '<a href="view_employee.php?emp_id=' . $supervisor['emp_id'] . '" class="text-primary">' . 
+																		 htmlspecialchars($supervisor['name']) . ' (' . $supervisor['emp_id'] . ')</a>' .
+																		 ' <span class="badge badge-soft-info">' . $supervisor['emptype'] . '</span>';
+																} else {
+																	echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
+																}
+															} else {
+																echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
+															}
+															?>
+														</td>
+													</tr>
 
 													<?php if (car_get_info($emprow["car_id"])) { ?>
 														<tr class="table-info">
@@ -1152,6 +1179,7 @@ if (mysqli_num_rows($query) == 1) {
 
 		<!-- App js -->
 		<script src="assets/js/jquery.app.js"></script>
+		<script src="assets/js/empVacationHandle.js"></script>
 
 		<script src="./plugins/summernote/summernote.min.js"></script>
 		<!-- <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-bs4.min.js"></script> -->

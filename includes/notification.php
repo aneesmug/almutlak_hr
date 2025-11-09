@@ -14,8 +14,7 @@ header('Content-Type: application/json; charset=utf-8'); // Specify charset
 // Include necessary files
 require_once __DIR__ . '/db.php'; // Assuming db.php is in the same directory (includes/)
 require_once __DIR__ . '/session_check.php'; // Assuming session_check.php is in the same directory (includes/)
-// helper_functions.php should be included via session_check.php or db.php, or include it explicitly:
-// require_once __DIR__ . '/helper_functions.php';
+require_once __DIR__ . '/helper_functions.php'; // <-- [FIX] Explicitly include helper functions
 
 
 // Ensure user is logged in
@@ -38,10 +37,41 @@ $response_data = []; // Prepare response data array
 try {
     // Ensure helper function exists before calling
     if (!function_exists('get_unread_notifications')) {
-        throw new Exception("Helper function 'get_unread_notifications' not found.");
+        throw new Exception("Helper function 'get_unread_notifications' not found. (Check helper_functions.php inclusion)");
     }
 
-    // 1. Fetch unread notifications for the logged-in user
+    // Support "mark all read" action via POST (idempotent) before fetching
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $action = $_POST['action'] ?? '';
+        if ($action === 'mark_all_read') {
+            if (!function_exists('mark_notifications_as_read')) {
+                // Provide a graceful error
+                ob_clean();
+                http_response_code(500);
+                echo json_encode(['status' => 'error', 'message' => 'Mark read helper missing']);
+                exit;
+            }
+            // Fetch current unread to get their IDs, then mark them read
+            $current_unread = get_unread_notifications($conDB, $empid);
+            $ids_to_mark = array_column($current_unread, 'id');
+            if (!empty($ids_to_mark)) {
+                $mark_ok = mark_notifications_as_read($conDB, $empid, $ids_to_mark);
+                ob_clean();
+                echo json_encode([
+                    'status' => $mark_ok ? 'success' : 'error',
+                    'message' => $mark_ok ? 'All notifications marked as read.' : 'Failed to mark notifications as read.',
+                    'marked_count' => $mark_ok ? count($ids_to_mark) : 0
+                ]);
+                exit;
+            } else {
+                ob_clean();
+                echo json_encode(['status' => 'success', 'message' => 'No unread notifications to mark.', 'marked_count' => 0]);
+                exit;
+            }
+        }
+    }
+
+    // 1. Fetch unread notifications for the logged-in user (default GET behavior)
     $notifications = get_unread_notifications($conDB, $empid); // Function from helper_functions.php
 
     // --- Log the result of the fetch (optional) ---
@@ -72,6 +102,4 @@ try {
 }
 
 exit; // Explicitly exit
-
-
 ?>

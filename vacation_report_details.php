@@ -6,7 +6,9 @@
  * 3. IMPROVED STATUS VISUALS: Corrected the timeline rendering to properly show completed steps as 'approved', the current step as 'pending', and future steps with a neutral style.
  * 4. ENHANCED LABELS & ICONS: Updated the map of approval steps with clearer labels and more distinct icons for each stage of the process.
  * 5. EMERGENCY LEAVE: Financial details are not calculated and the "Payment Details" section is hidden if the fly_type is 'emergency'.
+ * 6. END OF SERVICE SALARY: Payment Details section is hidden when vacation_salary_type is 'end_of_service', showing info message instead.
  ****************************************************************/
+
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
@@ -21,11 +23,12 @@ if (mysqli_num_rows($query) == 1) {
         die("Invalid request parameters.");
     }
 
-    // 2. MODIFIED: Fetch all data with a single query
+    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type)
     $sql = "SELECT 
                 v.*, 
                 v.fly_type as raw_fly_type,
                 v.attachment_path,
+                v.vacation_salary_type,
                 e.name as employee_name,
                 e.avatar,
                 e.joining_date,
@@ -99,9 +102,11 @@ if (mysqli_num_rows($query) == 1) {
     // If fly_type is emergency, it is not payable.
     if (isset($request['raw_fly_type']) && $request['raw_fly_type'] === 'emergency') {
         $is_payable_leave = false;
-    }
+    }    // NEW: Check vacation_salary_type - if 'end_of_service', don't calculate vacation salary in payroll
+    $vacation_salary_type = $request['vacation_salary_type'] ?? 'payroll';
+    $show_vacation_salary = ($vacation_salary_type === 'payroll');
 
-    if ($is_payable_leave) {
+    if ($is_payable_leave && $show_vacation_salary) {
         if ($salary) {
             $total_monthly_salary = ($salary['basic'] ?? 0) + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
             $daily_rate = $total_monthly_salary / 30;
@@ -114,7 +119,7 @@ if (mysqli_num_rows($query) == 1) {
                 $vacation_salary = $daily_rate * $applied_days;
             }
             
-            // Calculate working days salary
+            // Calculate working days salary (from 1st day of month until last day)
             $start_date_obj = new DateTime($request['start_date']);
             $working_days = (int)$start_date_obj->format('d');
             $working_days_salary = $daily_rate * $working_days;
@@ -128,6 +133,27 @@ if (mysqli_num_rows($query) == 1) {
             $ticket_fee = $request['ticket_pay'] ?? 0;
             $permit_fee = $request['permit_fee'] ?? 0;
         }
+    } elseif ($is_payable_leave && !$show_vacation_salary) {
+        // NEW: If salary type is 'end_of_service', only calculate working days salary (1st to last day of month)
+        if ($salary) {
+            $total_monthly_salary = ($salary['basic'] ?? 0) + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
+            $daily_rate = $total_monthly_salary / 30;
+
+            // Calculate working days salary (from 1st day of month until last day before vacation)
+            $start_date_obj = new DateTime($request['start_date']);
+            $working_days = (int)$start_date_obj->format('d') - 1; // Days before vacation starts
+            $working_days_salary = $daily_rate * $working_days;
+
+            if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
+                $gosi_percentage = (float)$request['gosi'];
+                $gosi_deduction = ($working_days_salary * $gosi_percentage) / 100;
+            }
+        }
+        // Still show ticket and permit fees
+        if (($request['vac_type'] === 'Fly' || $request['vac_type'] === 'Local Vacation') && $request['country_id'] != 191) {
+            $ticket_fee = $request['ticket_pay'] ?? 0;
+            $permit_fee = $request['permit_fee'] ?? 0;
+        }
     }
 
 
@@ -137,49 +163,53 @@ if (mysqli_num_rows($query) == 1) {
         $total_payable = $vacation_salary + $ticket_fee + $permit_fee - $gosi_deduction;
     }
 
-    // Approval Timeline Logic
-    $approval_steps_map = [
-        'apply'                 => ['label' => 'Dept. Manager Approval', 'icon' => 'fa-user-tie'],
-        'pending'               => ['label' => 'HR Assistant Approval', 'icon' => 'fa-user-cog'],
-        'hr_assistant_approved' => ['label' => 'HR Manager Approval', 'icon' => 'fa-user-shield'],
-        'it_pending'            => ['label' => 'IT Clearance', 'icon' => 'fa-laptop'],
-        'hr_manager_approved'   => ['label' => 'General Manager Approval', 'icon' => 'fa-crown'],
-        'gm_approved'           => ['label' => 'Approved', 'icon' => 'fa-check-circle'],
-        'rejected'              => ['label' => 'Request Rejected', 'icon' => 'fa-times'],
-    ];
+    // Approval Timeline Logic - NEW CHAIN APPROVAL SYSTEM
+    // Fetch approval chain for this request
+    $request_inv_no = $request['request_inv_no'] ?? '';
+    $current_status = $request['current_status'] ?? 'pending_approval';
     
-    // Determine if the employee is HR
-    $employee_dept_sql = "SELECT dept FROM employees WHERE emp_id = ?";
-    $stmt_dept = $conDB->prepare($employee_dept_sql);
-    $stmt_dept->bind_param("s", $emp_id);
-    $stmt_dept->execute();
-    $employee_dept_result = $stmt_dept->get_result()->fetch_assoc();
-    $stmt_dept->close();
-    $is_hr_employee = ($employee_dept_result && $employee_dept_result['dept'] == 5);
+    // Initialize approval chain array
+    $approval_chain = [];
     
-    // Customize the flow based on employee type and assets
-    if ($is_hr_employee) {
-        // HR employees skip Dept Manager and HR Assistant
-        $approval_flow = ['hr_assistant_approved', 'it_pending', 'hr_manager_approved', 'gm_approved'];
-    } else {
-        // Standard flow
-        $approval_flow = ['apply', 'pending', 'hr_assistant_approved', 'it_pending', 'hr_manager_approved', 'gm_approved'];
-    }
-    
-    // If employee has no assets, skip IT step
-    if (empty($assigned_assets)) {
-        $approval_flow = array_filter($approval_flow, function($step) {
-            return $step !== 'it_pending';
-        });
-    }
-    
-    $current_status_index = array_search($request['approval_status'], $approval_flow);
-    // If status not in flow (e.g., rejected), it won't be found
-    if ($current_status_index === false) {
-        $current_status_index = -1; 
+    // Only fetch chain if we have a request_inv_no (new system)
+    if (!empty($request_inv_no)) {
+        // Get the request type ID for vacation_request
+        $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'vacation_request' LIMIT 1");
+        if ($type_query && mysqli_num_rows($type_query) > 0) {
+            $request_type_row = mysqli_fetch_assoc($type_query);
+            $request_type_id = (int)$request_type_row['id'];
+            mysqli_free_result($type_query);
+            
+            // Fetch the approval chain
+            if ($request_type_id > 0) {
+          // Include approver's department to classify clearance by department (more reliable than user_type)
+          $chain_sql = "SELECT ra.*, 
+                       e.name AS approver_name, 
+                       e.emp_id AS approver_emp_id, 
+                       al.user_type AS approver_role,
+                       d2.dep_nme AS approver_dept_name
+                   FROM request_approvers ra
+                   LEFT JOIN employees e ON ra.approver_id = e.emp_id
+                   LEFT JOIN admin_login al ON e.emp_id = al.emp_id
+                   LEFT JOIN department d2 ON e.dept = d2.id
+                   WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
+                   ORDER BY ra.approval_level ASC";
+                $stmt_chain = $conDB->prepare($chain_sql);
+                if ($stmt_chain) {
+                    $stmt_chain->bind_param("si", $request_inv_no, $request_type_id);
+                    $stmt_chain->execute();
+                    $chain_result = $stmt_chain->get_result();
+                    while ($chain_row = $chain_result->fetch_assoc()) {
+                        $approval_chain[] = $chain_row;
+                    }
+                    $stmt_chain->close();
+                }
+            }
+        }
     }
 
 ?>
+
     <!doctype html>
     <html lang="en">
 
@@ -341,7 +371,79 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 </div>
 
-                                <?php if ($request['raw_fly_type'] !== 'emergency'): ?>
+                                <?php 
+                                // Hide payment details if:
+                                // 1. Emergency vacation, OR
+                                    // 2. Vacation salary type is 'end_of_service', OR
+                                    // 3. Encashment request (will show separate section)
+                                    $is_encashment_request = (trim(strtolower($request['remarks'] ?? '')) === 'encashment');
+                                    $hide_payment_details = ($request['raw_fly_type'] === 'emergency') || ($vacation_salary_type === 'end_of_service') || $is_encashment_request;
+                                ?>
+                                
+                                    <?php if ($is_encashment_request): ?>
+                                    <div class="report-section">
+                                        <h5 class="section-title"><i class="fa fa-coins"></i>Encashment Payment Details</h5>
+                                        <div class="alert alert-success mb-3">
+                                            <i class="fa fa-info-circle"></i> <strong>Vacation Balance Encashment</strong>
+                                            <p class="mb-0 mt-2">The employee has opted to encash their remaining vacation balance instead of taking time off.</p>
+                                        </div>
+                                        <div class="payment-summary">
+                                            <ul>
+                                                <li>
+                                                    <div>
+                                                        <span class="label">Encashed Vacation Days</span>
+                                                        <small class="text-muted d-block">Based on available balance</small>
+                                                    </div>
+                                                    <span class="value"><?= htmlspecialchars($effective_remaining ?? $request['vacdays'] ?? 0); ?> day(s)</span>
+                                                </li>
+                                                <li>
+                                                    <div>
+                                                        <span class="label">Daily Salary Rate</span>
+                                                        <small class="text-muted d-block">Monthly salary ÷ 30</small>
+                                                    </div>
+                                                    <span class="value">
+                                                        <?php 
+                                                        $encashment_amount = $request['encashment_amount'] ?? 0;
+                                                        $days_encashed = $effective_remaining ?? $request['vacdays'] ?? 1;
+                                                        $daily_rate_display = ($days_encashed > 0) ? ($encashment_amount / $days_encashed) : 0;
+                                                        echo number_format($daily_rate_display, 2); 
+                                                        ?> SAR
+                                                    </span>
+                                                </li>
+                                                <?php if ($gosi_deduction > 0): ?>
+                                                <li>
+                                                    <span class="label text-danger">GOSI Deduction</span>
+                                                    <span class="value text-danger">-<?= number_format($gosi_deduction, 2); ?> SAR</span>
+                                                </li>
+                                                <?php endif; ?>
+                                                <li class="total-payable">
+                                                    <span class="label">Total Encashment Payment</span>
+                                                    <span class="value"><?= number_format($encashment_amount - $gosi_deduction, 2); ?> SAR</span>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <div class="alert alert-warning mt-3 mb-0">
+                                            <i class="fa fa-exclamation-triangle"></i> <strong>Note:</strong> After this encashment, your vacation balance will be set to <strong>0 days</strong>.
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                
+                                <?php if ($vacation_salary_type === 'end_of_service'): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-piggy-bank"></i>Salary Payment Information</h5>
+                                    <div class="alert alert-info mb-0">
+                                        <i class="fa fa-info-circle"></i> <strong>Vacation Salary Deferred to End of Service</strong>
+                                        <p class="mb-2 mt-2">The employee has chosen to receive their vacation salary (<?= htmlspecialchars($applied_days); ?> days) at the time of End of Service settlement.</p>
+                                        <ul class="mb-0 pl-4">
+                                            <li>Vacation Days: <strong><?= htmlspecialchars($applied_days); ?> day(s)</strong></li>
+                                            <li>Payment: <strong>End of Service Settlement</strong></li>
+                                            <li>This amount will be calculated and added to the final settlement upon termination of employment.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                                
+                                <?php if (!$hide_payment_details): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i>Payment Details</h5>
                                     <?php if (!$is_payable_leave): ?>
@@ -380,29 +482,77 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="report-section">
                                             <h5 class="section-title"><i class="fa fa-tasks"></i>Approval Status</h5>
                                             <div class="approval-timeline">
-                                                <?php if ($request['approval_status'] == 'rejected'): ?>
+                                                <?php if ($current_status == 'rejected'): ?>
                                                     <div class="timeline-item rejected">
-                                                        <div class="icon"><i class="fa <?= $approval_steps_map['rejected']['icon'] ?>"></i></div>
-                                                        <span class="status ml-3"><?= $approval_steps_map['rejected']['label'] ?></span>
+                                                        <div class="icon"><i class="fa fa-times-circle"></i></div>
+                                                        <span class="status ml-3"><strong>Request Rejected</strong></span>
                                                     </div>
-                                                <?php else: ?>
-                                                    <?php foreach ($approval_flow as $index => $status_key): 
-                                                        $item_class = ''; // Default for future steps
-                                                        if ($request['approval_status'] == 'gm_approved') {
+                                                <?php elseif ($current_status == 'approved'): ?>
+                                                    <div class="timeline-item approved">
+                                                        <div class="icon"><i class="fa fa-check-circle"></i></div>
+                                                        <span class="status ml-3"><strong>Request Approved</strong></span>
+                                                    </div>
+                                                    <?php if (!empty($approval_chain)): ?>
+                                                        <div class="mt-3">
+                                                            <small class="text-muted"><i class="fa fa-info-circle"></i> Approved by:</small>
+                                                            <?php foreach ($approval_chain as $approver): ?>
+                                                                <?php if ($approver['status'] == 'approved'): ?>
+                                                                    <div class="ml-3 mt-1">
+                                                                        <small><i class="fa fa-user-check text-success"></i> <?= htmlspecialchars($approver['approver_name']) ?> (<?= __($approver['approver_role']) ?>)</small>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                            <?php endforeach; ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                <?php elseif (!empty($approval_chain)): ?>
+                                                    <?php // NEW SYSTEM: Show approval chain ?>
+                                                    <?php foreach ($approval_chain as $index => $approver): 
+                                                        $item_class = '';
+                                                        if ($approver['status'] == 'approved') {
                                                             $item_class = 'approved';
+                                                            $icon = 'fa-check-circle';
+                                                        } elseif ($approver['status'] == 'pending') {
+                                                            $item_class = 'pending';
+                                                            $icon = 'fa-clock';
+                                                        } elseif ($approver['status'] == 'rejected') {
+                                                            $item_class = 'rejected';
+                                                            $icon = 'fa-times-circle';
                                                         } else {
-                                                            if ($current_status_index > $index) {
-                                                                $item_class = 'approved';
-                                                            } elseif ($current_status_index == $index) {
-                                                                $item_class = 'pending';
-                                                            }
+                                                            $item_class = 'future';
+                                                            $icon = 'fa-circle';
+                                                        }
+                                                        
+                                                        $role_icon = 'fa-user';
+                                                                    if (!empty($approver['approver_role']) && stripos($approver['approver_role'], 'hr') !== false) {
+                                                            $role_icon = 'fa-user-shield';
+                                                                    } elseif (!empty($approver['approver_role']) && (stripos($approver['approver_role'], 'manager') !== false || stripos($approver['approver_role'], 'administrator') !== false)) {
+                                                            $role_icon = 'fa-user-tie';
                                                         }
                                                     ?>
-                                                        <div class="timeline-item <?= $item_class ?>">
-                                                            <div class="icon"><i class="fa <?= $approval_steps_map[$status_key]['icon'] ?>"></i></div>
-                                                            <span class="status ml-3"><?= $approval_steps_map[$status_key]['label'] ?></span>
-                                                        </div>
+                                                            <div class="timeline-item <?= $item_class ?>">
+                                                                <div class="icon"><i class="fa <?= $icon ?>"></i></div>
+                                                                <span class="status ml-3">
+                                                                    <i class="fa <?= $role_icon ?>"></i>
+                                                                    <?= htmlspecialchars($approver['approver_name']) ?> 
+                                                                    <small class="text-muted">(Level <?= $approver['approval_level'] ?>: <?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : ucfirst($approver['approver_role'])) ?>)</small>
+                                                                </span>
+                                                            </div>
                                                     <?php endforeach; ?>
+                                                <?php else: ?>
+                                                    <?php // OLD SYSTEM or PENDING: Show simple status ?>
+                                                    <div class="timeline-item pending">
+                                                        <div class="icon"><i class="fa fa-clock"></i></div>
+                                                        <span class="status ml-3">
+                                                            <?php 
+                                                            // Check for old approval_status field
+                                                            if (isset($request['approval_status'])) {
+                                                                echo "Status: " . htmlspecialchars(ucfirst(str_replace('_', ' ', $request['approval_status'])));
+                                                            } else {
+                                                                echo "Pending Approval";
+                                                            }
+                                                            ?>
+                                                        </span>
+                                                    </div>
                                                 <?php endif; ?>
                                             </div>
                                         </div>
@@ -411,7 +561,7 @@ if (mysqli_num_rows($query) == 1) {
                                         <?php if(!empty($request['remarks']) || !empty($request['note'])): ?>
                                         <div class="report-section">
                                              <h5 class="section-title"><i class="fa fa-comments"></i>Remarks</h5>
-                                             <?php if($request['approval_status'] == 'rejected'): ?>
+                                             <?php if($current_status == 'rejected'): ?>
                                                 <div class="alert alert-danger mb-0"><?=nl2br(htmlspecialchars($request['note'])); ?></div>
                                              <?php elseif(!empty($request['remarks'])): ?>
                                                 <div class="notes-section"><p class="mb-0"><?=nl2br(htmlspecialchars($request['remarks'])); ?></p></div>
@@ -421,52 +571,211 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 </div>
 
-                                <?php // NEW IT CLEARANCE SECTION
-                                if ($request['it_approval_status'] === 'cleared' && !empty($assigned_assets)): ?>
+                                <?php // ASSET CLEARANCE SECTION - Only show if employee has assets
+                                if (!empty($assigned_assets)): 
+                                    // Check if any asset clearance approver has acted on this request
+                                    $asset_clearance_happened = false;
+                                    $asset_clearance_approvers = [];
+                                    
+                                    if (!empty($approval_chain)) {
+                                        foreach ($approval_chain as $approver) {
+                                            $role_lower = strtolower($approver['approver_role'] ?? '');
+                                            $dept_lower = strtolower($approver['approver_dept_name'] ?? '');
+                                            // Normalize dept names into categories (handles synonyms/abbreviations)
+                                            $dept_is_it = (
+                                                $dept_lower === 'it' ||
+                                                stripos($dept_lower, 'information technology') !== false ||
+                                                stripos($dept_lower, 'technology') !== false ||
+            	                                stripos($dept_lower, 'technical support') !== false
+                                            );
+                                            $dept_is_admin = (
+                                                $dept_lower === 'admin' ||
+                                                stripos($dept_lower, 'administration') !== false ||
+                                                stripos($dept_lower, 'general admin') !== false ||
+                                                stripos($dept_lower, 'general administration') !== false
+                                            );
+                                            $dept_is_transport = (
+                                                stripos($dept_lower, 'transportation') !== false ||
+                                                stripos($dept_lower, 'transport') !== false ||
+                                                stripos($dept_lower, 'fleet') !== false ||
+                                                stripos($dept_lower, 'garage') !== false
+                                            );
+                                            // Consider either role keywords OR department categories
+                                            $is_asset_clearance_role = (
+                                                stripos($role_lower, 'it') !== false || $dept_is_it ||
+                                                stripos($role_lower, 'admin') !== false || $dept_is_admin ||
+                                                stripos($role_lower, 'transport') !== false || $dept_is_transport
+                                            );
+                                            if ($is_asset_clearance_role) {
+                                                $asset_clearance_approvers[] = $approver;
+                                                if ($approver['status'] == 'approved') {
+                                                    $asset_clearance_happened = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    if ($asset_clearance_happened):
+                                ?>
                                 <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-laptop"></i>IT Clearance Details</h5>
+                                    <h5 class="section-title"><i class="fa fa-laptop"></i>Asset Clearance Details</h5>
+                                    
+                                    <?php if (!empty($asset_clearance_approvers)): ?>
+                                    <div class="mb-3">
+                                        <small class="text-muted"><i class="fa fa-info-circle"></i> Cleared by:</small>
+                                        <?php foreach ($asset_clearance_approvers as $approver): ?>
+                                            <?php if ($approver['status'] == 'approved'): ?>
+                                                <div class="ml-3 mt-1">
+                                                    <small>
+                                                        <i class="fa fa-user-check text-success"></i> 
+                                                        <?= htmlspecialchars($approver['approver_name']) ?> 
+                                                        (<?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : ucfirst($approver['approver_role'])) ?>)
+                                                        <?php if (!empty($approver['action_date'])): ?>
+                                                            - <?= date('d M Y, h:i A', strtotime($approver['action_date'])) ?>
+                                                        <?php endif; ?>
+                                                    </small>
+                                                </div>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <?php endif; ?>
+                                    
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-sm">
                                             <thead>
                                                 <tr>
                                                     <th>Asset Name</th>
                                                     <th>Serial Number</th>
-                                                    <th>Status</th>
+                                                    <th>Asset Type</th>
+                                                    <th>Clearance Status</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($assigned_assets as $asset): 
-                                                    $it_notes_lower = strtolower($request['it_notes'] ?? '');
-                                                    $status = __('received');
-                                                    $badge = 'success';
+                                                    // Determine asset type for better categorization
+                                                    $asset_name_lower = strtolower($asset['asset_name']);
+                                                    $asset_type = 'Other';
+                                                    $clearance_dept = 'General';
                                                     
-                                                    // Check for keywords indicating the asset was not returned
-                                                    if (
-                                                        strpos($it_notes_lower, 'cleared') !== false ||
-                                                        strpos($it_notes_lower, 'received') !== false ||
-                                                        strpos($it_notes_lower, 'not received') !== false
-                                                    ) {
-                                                        $status = __('not_received');
-                                                        $badge = 'warning';
+                                                    if (stripos($asset_name_lower, 'laptop') !== false || 
+                                                        stripos($asset_name_lower, 'computer') !== false || 
+                                                        stripos($asset_name_lower, 'pc') !== false) {
+                                                        $asset_type = 'IT Equipment';
+                                                        $clearance_dept = 'IT';
+                                                    } elseif (stripos($asset_name_lower, 'mobile') !== false || 
+                                                               stripos($asset_name_lower, 'phone') !== false || 
+                                                               stripos($asset_name_lower, 'sim') !== false) {
+                                                        $asset_type = 'Communication';
+                                                        $clearance_dept = 'Administration';
+                                                    } elseif (stripos($asset_name_lower, 'car') !== false || 
+                                                               stripos($asset_name_lower, 'vehicle') !== false) {
+                                                        $asset_type = 'Vehicle';
+                                                        $clearance_dept = 'Transportation';
                                                     }
+                                                    
+                                                    // Check if this asset type's department has cleared
+                                                    $cleared_by_dept = false;
+                                                    foreach ($asset_clearance_approvers as $approver) {
+                                                        $role_lower = strtolower($approver['approver_role'] ?? '');
+                                                        $dept_lower = strtolower($approver['approver_dept_name'] ?? '');
+                                                        $dept_is_it = (
+                                                            $dept_lower === 'it' ||
+                                                            stripos($dept_lower, 'information technology') !== false ||
+                                                            stripos($dept_lower, 'technology') !== false ||
+                                                            stripos($dept_lower, 'technical support') !== false
+                                                        );
+                                                        $dept_is_admin = (
+                                                            $dept_lower === 'admin' ||
+                                                            stripos($dept_lower, 'administration') !== false ||
+                                                            stripos($dept_lower, 'general admin') !== false ||
+                                                            stripos($dept_lower, 'general administration') !== false
+                                                        );
+                                                        $dept_is_transport = (
+                                                            stripos($dept_lower, 'transportation') !== false ||
+                                                            stripos($dept_lower, 'transport') !== false ||
+                                                            stripos($dept_lower, 'fleet') !== false ||
+                                                            stripos($dept_lower, 'garage') !== false
+                                                        );
+                                                        if ($approver['status'] == 'approved') {
+                                                            $match_it = ($clearance_dept == 'IT' && (stripos($role_lower, 'it') !== false || $dept_is_it));
+                                                            $match_admin = ($clearance_dept == 'Administration' && (stripos($role_lower, 'admin') !== false || $dept_is_admin));
+                                                            $match_transport = ($clearance_dept == 'Transportation' && (stripos($role_lower, 'transport') !== false || $dept_is_transport));
+                                                            if ($match_it || $match_admin || $match_transport) {
+                                                                $cleared_by_dept = true;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    $status = $cleared_by_dept ? 'Cleared' : 'Pending';
+                                                    $badge = $cleared_by_dept ? 'success' : 'warning';
                                                 ?>
                                                 <tr>
                                                     <td><?= htmlspecialchars($asset['asset_name']); ?></td>
                                                     <td><?= htmlspecialchars($asset['serial_number']); ?></td>
-                                                    <td><span class="badge badge-<?= $badge ?>"><?= $status ?></span></td>
+                                                    <td><span class="badge badge-secondary"><?= $asset_type ?></span></td>
+                                                    <td>
+                                                        <span class="badge badge-<?= $badge ?>"><?= $status ?></span>
+                                                        <small class="text-muted d-block"><?= $clearance_dept ?></small>
+                                                    </td>
                                                 </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
                                         </table>
                                     </div>
-                                    <?php /*if (!empty($request['it_notes'])): ?>
-                                    <div class="notes-section mt-2">
-                                        <strong>IT Notes:</strong>
-                                        <p class="mb-0"><?=__(nl2br(htmlspecialchars($request['it_notes']))); ?></p>
-                                    </div>
-                                    <?php endif; */ ?>
                                 </div>
-                                <?php endif; ?>
+                                <?php elseif ($current_status == 'pending_approval' || $current_status == 'approved'): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-laptop"></i>Assigned Assets</h5>
+                                    <div class="alert alert-info mb-3">
+                                        <i class="fa fa-info-circle"></i> <strong>Asset Clearance Required</strong>
+                                        <p class="mb-0 mt-2">The following assets are assigned to this employee and must be cleared before final approval:</p>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Asset Name</th>
+                                                    <th>Serial Number</th>
+                                                    <th>Asset Type</th>
+                                                    <th>Clearance Department</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($assigned_assets as $asset): 
+                                                    $asset_name_lower = strtolower($asset['asset_name']);
+                                                    $asset_type = 'Other';
+                                                    $clearance_dept = 'General';
+                                                    
+                                                    if (stripos($asset_name_lower, 'laptop') !== false || 
+                                                        stripos($asset_name_lower, 'computer') !== false || 
+                                                        stripos($asset_name_lower, 'pc') !== false) {
+                                                        $asset_type = 'IT Equipment';
+                                                        $clearance_dept = 'IT';
+                                                    } elseif (stripos($asset_name_lower, 'mobile') !== false || 
+                                                               stripos($asset_name_lower, 'phone') !== false || 
+                                                               stripos($asset_name_lower, 'sim') !== false) {
+                                                        $asset_type = 'Communication';
+                                                        $clearance_dept = 'Administration';
+                                                    } elseif (stripos($asset_name_lower, 'car') !== false || 
+                                                               stripos($asset_name_lower, 'vehicle') !== false) {
+                                                        $asset_type = 'Vehicle';
+                                                        $clearance_dept = 'Transportation';
+                                                    }
+                                                ?>
+                                                <tr>
+                                                    <td><?= htmlspecialchars($asset['asset_name']); ?></td>
+                                                    <td><?= htmlspecialchars($asset['serial_number']); ?></td>
+                                                    <td><span class="badge badge-secondary"><?= $asset_type ?></span></td>
+                                                    <td><span class="badge badge-primary"><?= $clearance_dept ?></span></td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <?php endif; // End if ($asset_clearance_happened) ?>
+                                <?php endif; // End if (!empty($assigned_assets)) ?>
                             </div>
                             
                             <div class="report-footer">

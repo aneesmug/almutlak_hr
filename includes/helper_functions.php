@@ -687,7 +687,7 @@ function generate_pagination_controls($current_page, $total_pages, $total_items,
 
 /**
  * Fetches all active employees suitable for being approvers.
- * Excludes 'employee' user_type. Includes user_type and dept.
+ * Excludes 'employee' user_type AND 'Supporter' emptype. Includes user_type and dept.
  * @param mysqli $conDB Database connection
  * @return array List of potential approvers
  */
@@ -698,15 +698,160 @@ if (!function_exists('get_potential_approvers')) {
         $sql = "SELECT e.`emp_id`, e.`name`, al.`user_type`, e.`dept`
                 FROM `employees` e
                 JOIN `admin_login` al ON e.`emp_id` = al.`emp_id`
-                WHERE al.`user_type` != 'employee' AND e.`status` = 1
+                WHERE al.`user_type` != 'employee' 
+                  AND e.`emptype` != 'Supporter'
+                  AND e.`status` = 1
                 ORDER BY e.`name`";
         $query = mysqli_query($conDB, $sql);
         if ($query) {
             while ($row = mysqli_fetch_assoc($query)) {
                 $employees[] = $row;
             }
+            mysqli_free_result($query); // Free result
         } else {
              error_log("get_potential_approvers: Database error - " . mysqli_error($conDB));
+        }
+        return $employees;
+    }
+}
+
+/**
+ * Get Department ID by name (case-insensitive, partial match allowed).
+ * Tries exact match first, then LIKE-based fuzzy match.
+ * @param mysqli $conDB
+ * @param string $dept_name
+ * @return int|null Department ID or null if not found
+ */
+if (!function_exists('get_department_id_by_name')) {
+    function get_department_id_by_name($conDB, $dept_name) {
+        if (!$conDB || empty($dept_name)) return null;
+        $name = trim($dept_name);
+        // 1) Try exact (case-insensitive)
+        $sql1 = "SELECT `id` FROM `department` WHERE LOWER(`dep_nme`) = LOWER(?) LIMIT 1";
+        $stmt1 = mysqli_prepare($conDB, $sql1);
+        if ($stmt1) {
+            mysqli_stmt_bind_param($stmt1, "s", $name);
+            if (mysqli_stmt_execute($stmt1)) {
+                $res1 = mysqli_stmt_get_result($stmt1);
+                if ($res1 && ($row = mysqli_fetch_assoc($res1))) {
+                    $id = (int)$row['id'];
+                    mysqli_free_result($res1);
+                    mysqli_stmt_close($stmt1);
+                    return $id;
+                }
+                if ($res1) mysqli_free_result($res1);
+            }
+            mysqli_stmt_close($stmt1);
+        }
+
+        // 2) Try fuzzy contains match
+        $like = '%' . strtolower($name) . '%';
+        $sql2 = "SELECT `id` FROM `department` WHERE LOWER(`dep_nme`) LIKE ? LIMIT 1";
+        $stmt2 = mysqli_prepare($conDB, $sql2);
+        if ($stmt2) {
+            mysqli_stmt_bind_param($stmt2, "s", $like);
+            if (mysqli_stmt_execute($stmt2)) {
+                $res2 = mysqli_stmt_get_result($stmt2);
+                if ($res2 && ($row2 = mysqli_fetch_assoc($res2))) {
+                    $id = (int)$row2['id'];
+                    mysqli_free_result($res2);
+                    mysqli_stmt_close($stmt2);
+                    return $id;
+                }
+                if ($res2) mysqli_free_result($res2);
+            }
+            mysqli_stmt_close($stmt2);
+        }
+
+        return null;
+    }
+}
+
+/**
+ * =================================================================
+ * == NEW FUNCTION
+ * =================================================================
+ * Fetches all active employees from a specific department suitable for being approvers.
+ * Excludes 'employee' user_type AND 'Supporter' emptype.
+ * @param mysqli $conDB Database connection
+ * @param int $dept_id The department ID to filter by
+ * @return array List of potential approvers in that department
+ */
+if (!function_exists('get_department_approvers')) {
+    function get_department_approvers($conDB, $dept_id) {
+        $employees = [];
+        if (!is_numeric($dept_id) || $dept_id <= 0) {
+            return $employees;
+        }
+        $dept_id_safe = (int)$dept_id;
+
+        $sql = "SELECT e.`emp_id`, e.`name`, al.`user_type`, e.`dept`
+                FROM `employees` e
+                JOIN `admin_login` al ON e.`emp_id` = al.`emp_id`
+                WHERE al.`user_type` != 'employee' 
+                  AND e.`emptype` != 'Supporter'
+                  AND e.`dept` = ?
+                  AND e.`status` = 1
+                ORDER BY e.`name`";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
+            if (mysqli_stmt_execute($stmt)) {
+                $result = mysqli_stmt_get_result($stmt);
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $employees[] = $row;
+                }
+                mysqli_free_result($result); // Free result
+                mysqli_stmt_close($stmt);
+            } else {
+                 error_log("get_department_approvers: Execute failed - " . mysqli_stmt_error($stmt));
+                 mysqli_stmt_close($stmt); // Close on fail
+            }
+        } else {
+             error_log("get_department_approvers: Prepare failed - " . mysqli_error($conDB));
+        }
+        return $employees;
+    }
+}
+
+/**
+ * =================================================================
+ * == NEW FUNCTION
+ * =================================================================
+ * Fetches all active HR Assistants (user_type = 'assistant') from Dept 5.
+ * @param mysqli $conDB Database connection
+ * @return array List of HR Assistants
+ */
+if (!function_exists('get_hr_assistants')) {
+    function get_hr_assistants($conDB) {
+        $employees = [];
+        $hr_dept_id = 5; // Hard-coded HR Dept ID
+
+        $sql = "SELECT e.`emp_id`, e.`name`, al.`user_type`, e.`dept`
+                FROM `employees` e
+                JOIN `admin_login` al ON e.`emp_id` = al.`emp_id`
+                WHERE al.`user_type` = 'assistant'
+                  AND e.`dept` = ?
+                  AND e.`status` = 1
+                ORDER BY e.`name`";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, "i", $hr_dept_id);
+            if (mysqli_stmt_execute($stmt)) {
+                $result = mysqli_stmt_get_result($stmt);
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $employees[] = $row;
+                }
+                mysqli_free_result($result); // Free result
+                mysqli_stmt_close($stmt);
+            } else {
+                 error_log("get_hr_assistants: Execute failed - " . mysqli_stmt_error($stmt));
+                 mysqli_stmt_close($stmt); // Close on fail
+            }
+        } else {
+             error_log("get_hr_assistants: Prepare failed - " . mysqli_error($conDB));
         }
         return $employees;
     }
@@ -740,9 +885,11 @@ if (!function_exists('save_approval_chain')) {
         }
         if (mysqli_num_rows($type_query) == 0) {
             error_log("save_approval_chain: Invalid request type '$request_type'. Not found in approval_request_types.");
+            mysqli_free_result($type_query); // Free result
             return false;
         }
         $type_row = mysqli_fetch_assoc($type_query);
+        mysqli_free_result($type_query); // Free result
         $request_type_id = (int)$type_row['id'];
 
         // Start transaction
@@ -789,9 +936,158 @@ if (!function_exists('save_approval_chain')) {
 }
 
 /**
+ * Appends a new set of approvers to an existing approval chain.
+ *
+ * @param mysqli $conDB Database connection
+ * @param string $inv_no The request's invoice number
+ * @param int $request_type_id The ID from approval_request_types
+ * @param int $current_level The *current* approval level that was just completed
+ * @param array $new_approver_ids An array of new emp_ids to add
+ * @return bool True on success
+ * @throws Exception On database failure
+ */
+if (!function_exists('append_approval_chain')) {
+    function append_approval_chain($conDB, $inv_no, $request_type_id, $current_level, $new_approver_ids) {
+        if (!$conDB || empty($inv_no) || empty($new_approver_ids) || !is_array($new_approver_ids)) {
+            return false;
+        }
+
+        $level = $current_level + 1;
+        $first_new_approver_set = false;
+        $inv_no_safe = escape_string($inv_no);
+
+        foreach ($new_approver_ids as $approver_id) {
+            $approver_id_safe = (int)$approver_id;
+            if ($approver_id_safe > 0) {
+                // Skip if an identical row already exists to avoid duplicates
+                $exists_sql = "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND approval_level = ? LIMIT 1";
+                $stmt_exists = mysqli_prepare($conDB, $exists_sql);
+                if ($stmt_exists) {
+                    mysqli_stmt_bind_param($stmt_exists, "siii", $inv_no_safe, $request_type_id, $approver_id_safe, $level);
+                    mysqli_stmt_execute($stmt_exists);
+                    $res_exists = mysqli_stmt_get_result($stmt_exists);
+                    $already_exists = ($res_exists && mysqli_num_rows($res_exists) > 0);
+                    if ($res_exists) mysqli_free_result($res_exists);
+                    mysqli_stmt_close($stmt_exists);
+                    if ($already_exists) {
+                        // If the first new approver row already exists as 'awaiting', move it to 'pending'
+                        if (!$first_new_approver_set) {
+                            $upd_sql = "UPDATE request_approvers SET status = 'pending' WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND approval_level = ? AND status = 'awaiting'";
+                            $stmt_upd = mysqli_prepare($conDB, $upd_sql);
+                            if ($stmt_upd) {
+                                mysqli_stmt_bind_param($stmt_upd, "siii", $inv_no_safe, $request_type_id, $approver_id_safe, $level);
+                                mysqli_stmt_execute($stmt_upd);
+                                mysqli_stmt_close($stmt_upd);
+                            }
+                        }
+                        $first_new_approver_set = true;
+                        $level++;
+                        continue; // Skip inserting duplicate row
+                    }
+                }
+                // Set the first new approver to 'pending', others to 'awaiting'
+                $status = (!$first_new_approver_set) ? 'pending' : 'awaiting';
+
+                $sql = "INSERT INTO `request_approvers` (`request_inv_no`, `request_type_id`, `approver_id`, `approval_level`, `status`)
+                        VALUES (?, ?, ?, ?, ?)";
+                
+                $stmt_append = mysqli_prepare($conDB, $sql);
+                if (!$stmt_append) {
+                    throw new Exception("Prepare failed (append chain): " . mysqli_error($conDB));
+                }
+                mysqli_stmt_bind_param($stmt_append, "siiis", $inv_no_safe, $request_type_id, $approver_id_safe, $level, $status);
+                
+                if (!mysqli_stmt_execute($stmt_append)) {
+                    $error_msg = mysqli_stmt_error($stmt_append);
+                    mysqli_stmt_close($stmt_append);
+                    throw new Exception("Failed to insert new approver level $level for InvNo $inv_no_safe: " . $error_msg);
+                }
+                mysqli_stmt_close($stmt_append);
+                
+                $first_new_approver_set = true;
+                $level++;
+            }
+        }
+        return true;
+    }
+}
+
+
+/**
+ * =================================================================
+ * == NEW FUNCTION - EMAIL NOTIFICATION SENDER
+ * =================================================================
+ * Sends an email notification using PHPMailer.
+ * @param mysqli $conDB Database connection
+ * @param string $to_email The recipient's email address
+ * @param string $to_name The recipient's name
+ * @param string $subject The email subject
+ * @param string $body_html The HTML content of the email
+ * @return bool True on success, false on failure
+ */
+if (!function_exists('send_approval_email')) {
+    function send_approval_email($conDB, $to_email, $to_name, $subject, $body_html) {
+        if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+            error_log("send_approval_email: PHPMailer class not found. Email not sent.");
+            return false;
+        }
+        if (empty($to_email) || !filter_var($to_email, FILTER_VALIDATE_EMAIL)) {
+            error_log("send_approval_email: Invalid or empty recipient email: $to_email. Email not sent.");
+            return false;
+        }
+
+        // --- [FIX] Fetch SMTP settings from app_settings table ---
+        $smtp_host = get_setting($conDB, 'smtp_host');         // 'smtp_host'
+        $smtp_port = (int)get_setting($conDB, 'smtp_port');    // 'smtp_port'
+        $smtp_user = get_setting($conDB, 'smtp_user');         // 'smtp_user'
+        $smtp_pass = get_setting($conDB, 'smtp_pass');         // 'smtp_pass'
+        $smtp_from_email = get_setting($conDB, 'from_email');      // [FIX] Changed from 'smtp_from_email'
+        $smtp_from_name = get_setting($conDB, 'from_name', 'Al Mutlak HR System'); // [FIX] Use dedicated from_name setting with fallback
+        $smtp_secure = get_setting($conDB, 'smtp_encryption');   // [FIX] Changed from 'smtp_secure'
+
+        if (empty($smtp_host) || empty($smtp_port) || empty($smtp_user) || empty($smtp_pass) || empty($smtp_from_email) || empty($smtp_from_name)) {
+             error_log("send_approval_email: Missing one or more SMTP settings from the app_settings table. Email not sent.");
+            return false;
+        }
+        // --- End Fetch SMTP settings ---
+
+        $mail = new PHPMailer(true);
+
+        try {
+            // Server settings
+            $mail->isSMTP();
+            $mail->Host       = $smtp_host;
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $smtp_user;
+            $mail->Password   = $smtp_pass;
+            $mail->SMTPSecure = ($smtp_secure == 'ssl') ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port       = $smtp_port;
+
+            // Recipients
+            $mail->setFrom($smtp_from_email, $smtp_from_name);
+            $mail->addAddress($to_email, $to_name);
+            $mail->addReplyTo($smtp_from_email, $smtp_from_name);
+
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body    = $body_html;
+            // $mail->AltBody = strip_tags($body_html); // Optional: plain text version
+
+            $mail->send();
+            error_log("send_approval_email: Email sent successfully to $to_email.");
+            return true;
+        } catch (Exception $e) {
+            error_log("send_approval_email: Message could not be sent. Mailer Error: {$mail->ErrorInfo}");
+            return false;
+        }
+    }
+}
+
+
+/**
  * Handles an approver's action (approve/reject).
- * Includes Finance Manager payer assignment email/notification logic on final approval.
- * Includes Creator and Previous Approver notifications on rejection.
+ * Now accepts an optional $next_approver_chain to dynamically build the chain.
  *
  * @param mysqli $conDB Database connection
  * @param string $inv_no The request's invoice number
@@ -799,10 +1095,11 @@ if (!function_exists('save_approval_chain')) {
  * @param int $current_user_id The emp_id of the user taking the action
  * @param string $action The action taken ('approve' or 'reject')
  * @param string $note A note for the action
+ * @param array $next_approver_chain (Optional) An array of emp_ids for the *next* approval levels.
  * @return array Status of the operation ['status' => 'success'|'error', 'message' => string, 'next_approver' => array|null, 'next_approver_id' => int|null]
  */
 if (!function_exists('handle_approval_action')) {
-    function handle_approval_action($conDB, $inv_no, $request_type, $current_user_id, $action, $note) {
+    function handle_approval_action($conDB, $inv_no, $request_type, $current_user_id, $action, $note, $next_approver_chain = []) {
         global $userwel; // Assumes $userwel contains the current user's name
 
         // ** Input Validation **
@@ -819,15 +1116,21 @@ if (!function_exists('handle_approval_action')) {
         $type_query = mysqli_query($conDB, "SELECT `id`, `main_table_name` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
         if (!$type_query || mysqli_num_rows($type_query) == 0) {
             error_log("handle_approval_action: Invalid request type '$request_type' for InvNo $inv_no.");
+            if($type_query) mysqli_free_result($type_query); // Free result
             return ['status' => 'error', 'message' => 'Invalid request type specified.'];
         }
         $type_row = mysqli_fetch_assoc($type_query);
+        mysqli_free_result($type_query); // Free result
         $request_type_id = (int)$type_row['id'];
         $main_table_name = $type_row['main_table_name']; // Make sure this table exists and has necessary columns
         if (empty($main_table_name)) {
             error_log("handle_approval_action: main_table_name not set for request type '$request_type'.");
             return ['status' => 'error', 'message' => 'Configuration error: Main table not defined for this request type.'];
         }
+
+        // ** Determine the invoice column name based on the table **
+        // smart_request uses 'inv_no', emp_vacation uses 'request_inv_no'
+        $inv_column_name = ($main_table_name === 'smart_request') ? 'inv_no' : 'request_inv_no';
 
         // ** Sanitize Inputs **
         $inv_no_safe = escape_string($inv_no);
@@ -849,25 +1152,30 @@ if (!function_exists('handle_approval_action')) {
             $find_result = mysqli_stmt_get_result($stmt_find);
 
             if (!$find_result || mysqli_num_rows($find_result) == 0) {
+                if($find_result) mysqli_free_result($find_result); // Free result
                 mysqli_stmt_close($stmt_find);
                 // Check if already actioned (without locking)
                 $check_actioned_sql = "SELECT `status` FROM `request_approvers`
                                        WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approver_id` = ?
                                        ORDER BY `action_date` DESC LIMIT 1";
                 $stmt_check = mysqli_prepare($conDB, $check_actioned_sql);
+                if(!$stmt_check) throw new Exception("Prepare failed (check actioned): " . mysqli_error($conDB));
                 mysqli_stmt_bind_param($stmt_check, "sii", $inv_no_safe, $request_type_id, $current_user_id_safe);
-                mysqli_stmt_execute($stmt_check);
+                if(!mysqli_stmt_execute($stmt_check)) throw new Exception("Execute failed (check actioned): " . mysqli_stmt_error($stmt_check));
                 $check_result = mysqli_stmt_get_result($stmt_check);
                  if($check_result && $row = mysqli_fetch_assoc($check_result)) {
+                     mysqli_free_result($check_result); // Free result
                      mysqli_rollback($conDB); // Release transaction
                      mysqli_stmt_close($stmt_check);
                      return ['status' => 'error', 'message' => 'You have already actioned this request (' . $row['status'] . ').'];
                  }
+                 if($check_result) mysqli_free_result($check_result); // Free result
                  mysqli_stmt_close($stmt_check);
                 mysqli_rollback($conDB); // Release transaction
                 return ['status' => 'error', 'message' => 'No pending approval found for you on this request, or it has been modified.'];
             }
             $current_task = mysqli_fetch_assoc($find_result);
+            mysqli_free_result($find_result); // Free result
             mysqli_stmt_close($stmt_find); // Close the find statement
 
             $current_level = (int)$current_task['approval_level'];
@@ -882,7 +1190,7 @@ if (!function_exists('handle_approval_action')) {
             if (!mysqli_stmt_execute($stmt_update)) throw new Exception("Execute failed (update task): " . mysqli_stmt_error($stmt_update));
             mysqli_stmt_close($stmt_update);
 
-            // ** Log Action in smt_request_status **
+            // ** Log Action in smt_request_status (If this table is used for vacations) **
              $log_status = ($action == 'approve') ? "approved_level_$current_level" : 'rejected';
              $log_user_name = escape_string($userwel ?? 'System');
              $log_sql = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES (?, ?, ?, ?, ?)";
@@ -901,162 +1209,335 @@ if (!function_exists('handle_approval_action')) {
             $result_payload = ['status' => 'success', 'next_approver' => null, 'next_approver_id' => null]; // Initialize result payload
 
             if ($action == 'approve') {
-                // ** Find Next Approver **
-                $next_level = $current_level + 1;
-                $next_sql = "SELECT * FROM `request_approvers`
-                             WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approval_level` = ? LIMIT 1";
-                $stmt_next = mysqli_prepare($conDB, $next_sql);
-                 if (!$stmt_next) throw new Exception("Prepare failed (find next): " . mysqli_error($conDB));
-                mysqli_stmt_bind_param($stmt_next, "sii", $inv_no_safe, $request_type_id, $next_level);
-                if (!mysqli_stmt_execute($stmt_next)) throw new Exception("Execute failed (find next): " . mysqli_stmt_error($stmt_next));
-                $next_result = mysqli_stmt_get_result($stmt_next);
+                
+                // *** NEW LOGIC: Check for manually provided next approvers ***
+                // This logic is now triggered *only if* the current approver adds a new chain
+                $valid_next_approvers = [];
+                if (!empty($next_approver_chain) && is_array($next_approver_chain)) {
+                    foreach ($next_approver_chain as $approver_id) {
+                        if (!empty($approver_id) && is_numeric($approver_id)) {
+                            $valid_next_approvers[] = (int)$approver_id;
+                        }
+                    }
+                }
 
-                if ($next_result && mysqli_num_rows($next_result) > 0) {
-                    // --- There is a next approver ---
-                    $next_task = mysqli_fetch_assoc($next_result);
-                    $next_task_id = (int)$next_task['id'];
-                    $next_approver_id = (int)$next_task['approver_id'];
-                    mysqli_stmt_close($stmt_next); // Close statement here
+                if (!empty($valid_next_approvers)) {
+                    // --- Case 1: Manager IS adding a new chain ---
+                    
+                    // 1. Append them to the chain
+                    append_approval_chain($conDB, $inv_no_safe, $request_type_id, $current_level, $valid_next_approvers);
 
-                    // Set next approver's status to 'pending'
-                    $update_next_sql = "UPDATE `request_approvers` SET `status` = 'pending' WHERE `id` = ?";
-                    $stmt_update_next = mysqli_prepare($conDB, $update_next_sql);
-                    if (!$stmt_update_next) throw new Exception("Prepare failed (update next status): " . mysqli_error($conDB));
-                    mysqli_stmt_bind_param($stmt_update_next, "i", $next_task_id);
-                    if (!mysqli_stmt_execute($stmt_update_next)) throw new Exception("Execute failed (update next status): " . mysqli_stmt_error($stmt_update_next));
-                    mysqli_stmt_close($stmt_update_next);
-
-                    // Update main request table status
-                    $update_main_pending_sql = "UPDATE `$main_table_name` SET `current_status` = 'pending_approval', `current_approval_level` = ? WHERE `inv_no` = ?";
+                    // 2. Update main request table status to reflect next level
+                    $next_level = $current_level + 1;
+                    $update_main_pending_sql = "UPDATE `$main_table_name` SET `current_status` = 'pending_approval', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
                     $stmt_main_pending = mysqli_prepare($conDB, $update_main_pending_sql);
                      if (!$stmt_main_pending) throw new Exception("Prepare failed (update main pending): " . mysqli_error($conDB));
                     mysqli_stmt_bind_param($stmt_main_pending, "is", $next_level, $inv_no_safe);
                     if (!mysqli_stmt_execute($stmt_main_pending)) throw new Exception("Execute failed (update main pending): " . mysqli_stmt_error($stmt_main_pending));
                     mysqli_stmt_close($stmt_main_pending);
 
-                    // Prepare details for notification
+                    // 3. Prepare details for notification
+                    $next_approver_id = $valid_next_approvers[0]; // The first one in the new chain
                     $next_approver_details = getEmployeeDetailsForApproval($conDB, $next_approver_id);
                     if ($next_approver_details) {
                          $result_payload['next_approver'] = $next_approver_details;
                          $result_payload['next_approver_id'] = $next_approver_id;
+                        
+                        // --- [FIX] SEND NOTIFICATION TO NEXT APPROVER ---
+                        $notification_title = "New Vacation Request";
+                        $notification_message = "A new vacation request ($inv_no_safe) is pending your approval.";
+                        $notification_url = "all_applied_vac.php?status=my_pending";
+                        create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
+                        
+                        if ($next_approver_details['email']) {
+                            $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A new vacation request ($inv_no_safe) is pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                            send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $email_body);
+                        }
+                        // --- [END FIX] ---
+
                     } else {
                          error_log("handle_approval_action: Could not get details for next approver ID $next_approver_id for InvNo $inv_no_safe.");
                     }
-
                 } else {
-                    // --- FINAL APPROVAL ---
-                    mysqli_stmt_close($stmt_next); // Close statement here
+                    // --- Case 2: Manager is NOT adding a chain (or it's not Level 1) ---
+                    // Find the *existing* next approver in the table
+                    $find_next_sql = "SELECT * FROM `request_approvers` WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approval_level` = ? AND `status` = 'awaiting' LIMIT 1";
+                    $next_level = $current_level + 1;
+                    $stmt_find_next = mysqli_prepare($conDB, $find_next_sql);
+                    if (!$stmt_find_next) throw new Exception("Prepare failed (find next): " . mysqli_error($conDB));
+                    mysqli_stmt_bind_param($stmt_find_next, "sii", $inv_no_safe, $request_type_id, $next_level);
+                    if (!mysqli_stmt_execute($stmt_find_next)) throw new Exception("Execute failed (find next): " . mysqli_stmt_error($stmt_find_next));
+                    $find_next_result = mysqli_stmt_get_result($stmt_find_next);
 
-                     $update_main_approved_sql = "UPDATE `$main_table_name` SET `current_status` = 'approved', `current_approval_level` = ? WHERE `inv_no` = ?";
-                     $stmt_main_approved = mysqli_prepare($conDB, $update_main_approved_sql);
-                     if (!$stmt_main_approved) throw new Exception("Prepare failed (update main approved): " . mysqli_error($conDB));
-                     mysqli_stmt_bind_param($stmt_main_approved, "is", $current_level, $inv_no_safe);
-                     if (!mysqli_stmt_execute($stmt_main_approved)) throw new Exception("Execute failed (update main approved): " . mysqli_stmt_error($stmt_main_approved));
-                     mysqli_stmt_close($stmt_main_approved);
+                    if ($find_next_result && mysqli_num_rows($find_next_result) > 0) {
+                        // --- 2a: There IS an existing next approver ---
+                        $next_task = mysqli_fetch_assoc($find_next_result);
+                        $next_task_id = (int)$next_task['id'];
+                        $next_approver_id = (int)$next_task['approver_id'];
 
+                        // Update next task to 'pending'
+                        $update_next_sql = "UPDATE `request_approvers` SET `status` = 'pending' WHERE `id` = ?";
+                        $stmt_update_next = mysqli_prepare($conDB, $update_next_sql);
+                        if (!$stmt_update_next) throw new Exception("Prepare failed (update next): " . mysqli_error($conDB));
+                        mysqli_stmt_bind_param($stmt_update_next, "i", $next_task_id);
+                        if (!mysqli_stmt_execute($stmt_update_next)) throw new Exception("Execute failed (update next): " . mysqli_stmt_error($stmt_update_next));
+                        mysqli_stmt_close($stmt_update_next);
 
-                    // --- Finance Manager Payer Assignment Notification Logic ---
-                    $finance_manager_in_chain = false;
-                    $finance_dept_id = 2; // Assuming Dept ID 2 is Finance
-                    $chain_check_sql = "SELECT e.dept FROM `request_approvers` ra JOIN `employees` e ON ra.approver_id = e.emp_id WHERE ra.`request_inv_no` = ? AND ra.`request_type_id` = ?";
-                    $stmt_chain = mysqli_prepare($conDB, $chain_check_sql);
-                    if ($stmt_chain) {
-                         mysqli_stmt_bind_param($stmt_chain, "si", $inv_no_safe, $request_type_id);
-                         if (mysqli_stmt_execute($stmt_chain)) {
-                             $chain_result = mysqli_stmt_get_result($stmt_chain);
-                             while ($chain_row = mysqli_fetch_assoc($chain_result)) {
-                                 if ($chain_row['dept'] == $finance_dept_id) {
-                                     $finance_manager_in_chain = true;
-                                     break;
-                                 }
-                             }
-                         } else { error_log("handle_approval_action: Failed to execute chain dept check. InvNo: $inv_no_safe. Error: " . mysqli_stmt_error($stmt_chain)); }
-                         mysqli_stmt_close($stmt_chain);
-                    } else { error_log("handle_approval_action: Failed to prepare chain dept check. InvNo: $inv_no_safe. Error: " . mysqli_error($conDB)); }
+                        // Update main request table status
+                        $update_main_pending_sql = "UPDATE `$main_table_name` SET `current_status` = 'pending_approval', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                        $stmt_main_pending = mysqli_prepare($conDB, $update_main_pending_sql);
+                        if (!$stmt_main_pending) throw new Exception("Prepare failed (update main pending-next): " . mysqli_error($conDB));
+                        mysqli_stmt_bind_param($stmt_main_pending, "is", $next_level, $inv_no_safe);
+                        if (!mysqli_stmt_execute($stmt_main_pending)) throw new Exception("Execute failed (update main pending-next): " . mysqli_stmt_error($stmt_main_pending));
+                        mysqli_stmt_close($stmt_main_pending);
 
+                        // Prepare details for notification
+                        $next_approver_details = getEmployeeDetailsForApproval($conDB, $next_approver_id);
+                        if ($next_approver_details) {
+                            $result_payload['next_approver'] = $next_approver_details;
+                            $result_payload['next_approver_id'] = $next_approver_id;
+                            
+                            // --- [FIX] SEND NOTIFICATION TO NEXT APPROVER ---
+                            $notification_title = "New Vacation Request";
+                            $notification_message = "A vacation request ($inv_no_safe) is now pending your approval.";
+                            $notification_url = "all_applied_vac.php?status=my_pending";
+                            create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
 
-                     if (!$finance_manager_in_chain) {
-                        $finance_manager_details = getDeptManager($conDB, $finance_dept_id);
-                        if ($finance_manager_details && !empty($finance_manager_details['email']) && isset($finance_manager_details['emp_id'])) {
-                            $fm_emp_id = $finance_manager_details['emp_id'];
-                            $fm_name = $finance_manager_details['name'];
-                            $fm_email = $finance_manager_details['email'];
+                            if ($next_approver_details['email']) {
+                                $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A vacation request ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                                send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $email_body);
+                            }
+                            // --- [END FIX] ---
 
-                            // Attempt Email (Best effort)
-                             if (class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
-                                try {
-                                    $mail_fm = new PHPMailer(true);
-                                    // SMTP Config (ensure get_setting works)
-                                    $mail_fm->isSMTP();
-                                    $smtp_host = get_setting($conDB, 'smtp_host');
-                                    $smtp_user = get_setting($conDB, 'smtp_user');
-                                    $smtp_pass = get_setting($conDB, 'smtp_pass');
-                                    $smtp_secure = get_setting($conDB, 'smtp_secure');
-                                    $smtp_port = get_setting($conDB, 'smtp_port');
-                                    $app_name = get_setting($conDB, 'application_name');
+                        } else {
+                            error_log("handle_approval_action: Could not get details for next approver ID $next_approver_id for InvNo $inv_no_safe.");
+                        }
 
-                                    // Add checks for retrieved settings
-                                    if(empty($smtp_host) || empty($smtp_user) || empty($smtp_pass) || empty($smtp_port)) {
-                                        throw new Exception("SMTP configuration settings are missing or incomplete.");
+                    } else {
+                        // --- 2b: Try to AUTO-APPEND dynamic approvers for vacation_request (assets/payroll/GR) before finalizing ---
+                        // ONLY if no approver chain was explicitly provided (to avoid duplicates)
+                        if ($request_type === 'vacation_request' && empty($next_approver_chain)) {
+                            // Fetch vacation info
+                            $vac_emp_id = null; $vac_type_val = null; $fly_type_val = null; $vac_salary_type_val = null;
+                            $sql_vinfo = "SELECT emp_id, vac_type, fly_type, vacation_salary_type FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
+                            $stmt_vinfo = mysqli_prepare($conDB, $sql_vinfo);
+                            if ($stmt_vinfo) {
+                                mysqli_stmt_bind_param($stmt_vinfo, "s", $inv_no_safe);
+                                if (mysqli_stmt_execute($stmt_vinfo)) {
+                                    $res_vinfo = mysqli_stmt_get_result($stmt_vinfo);
+                                    if ($res_vinfo && ($row_vi = mysqli_fetch_assoc($res_vinfo))) {
+                                        $vac_emp_id = $row_vi['emp_id'];
+                                        $vac_type_val = $row_vi['vac_type'];
+                                        $fly_type_val = $row_vi['fly_type'];
+                                        $vac_salary_type_val = $row_vi['vacation_salary_type'];
                                     }
-
-                                    $mail_fm->Host = $smtp_host;
-                                    $mail_fm->SMTPAuth = true;
-                                    $mail_fm->Username = $smtp_user;
-                                    $mail_fm->Password = $smtp_pass;
-                                    if (!empty($smtp_secure)) $mail_fm->SMTPSecure = $smtp_secure; // Only set if not empty
-                                    $mail_fm->Port = $smtp_port;
-                                    $mail_fm->CharSet = 'UTF-8';
-                                    $mail_fm->setFrom($smtp_user, $app_name ?: 'System Notification'); // Use app name or default
-                                    $mail_fm->addAddress($fm_email, $fm_name);
-                                    $mail_fm->isHTML(true);
-                                    $mail_fm->Subject = 'Smart Request Requires Payer Assignment - ' . $inv_no_safe;
-
-                                    // Fetch request details for email
-                                    $req_title = '';
-                                    $req_details_query = mysqli_query($conDB, "SELECT sub_title FROM `$main_table_name` WHERE inv_no = '$inv_no_safe' LIMIT 1");
-                                    if ($req_details_query && $req_row = mysqli_fetch_assoc($req_details_query)) {
-                                         $req_title = $req_row['sub_title'];
-                                    }
-
-                                     // Construct URL
-                                     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
-                                     $host = $_SERVER['HTTP_HOST'];
-                                     $script_dir = dirname($_SERVER['PHP_SELF']);
-                                     $base_path = rtrim($script_dir, '/\\'); // Trim both slashes
-                                     $base_url = $protocol . $host . ($base_path === '' ? '' : $base_path) . '/';
-                                     $request_view_url = $base_url . "open_request.php?id=" . urlencode($inv_no_safe);
-
-                                    $mail_fm->Body = "Dear " . htmlspecialchars($fm_name) . ",<br><br>" .
-                                                "Smart Request <b>" . htmlspecialchars($inv_no_safe) . "</b> (" . htmlspecialchars($req_title) . ") has been fully approved and requires a payer to be assigned.<br><br>" .
-                                                "Please review the request via the system.<br><br>" .
-                                                "<a href='" . $request_view_url . "'>Click here to view the request</a>";
-                                    $mail_fm->send();
-                                    error_log("Payer assignment notification EMAIL sent to Finance Manager ($fm_email) for InvNo: " . $inv_no_safe);
-                                } catch (Exception $e) {
-                                    error_log("Mailer Error (Finance Manager Payer Assignment Email) for InvNo: " . $inv_no_safe . " - " . $e->getMessage()); // Use $e->getMessage()
+                                    if ($res_vinfo) mysqli_free_result($res_vinfo);
                                 }
-                             } else { error_log("PHPMailer class not found, cannot send Finance Manager email for InvNo: $inv_no_safe"); }
+                                mysqli_stmt_close($stmt_vinfo);
+                            }
 
-                            // Create Browser Notification (Best effort)
-                            if (function_exists('create_browser_notification')) {
-                                $notification_title = "Payer Assignment Needed";
-                                $notification_message = "Request " . htmlspecialchars($inv_no_safe) . " is approved and needs a payer.";
-                                $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
-                                if (create_browser_notification($conDB, $fm_emp_id, $notification_title, $notification_message, $notification_url)) {
-                                    error_log("Payer assignment BROWSER notification created for Finance Manager (ID: $fm_emp_id) for InvNo: " . $inv_no_safe);
+                            // Build dynamic next approvers only if we have the employee id
+                            $dynamic_next = [];
+                            if (!empty($vac_emp_id)) {
+                                // Collect existing approver IDs to avoid duplicates
+                                $existing_ids = [];
+                                $sql_exist = "SELECT approver_id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ?";
+                                $stmt_exist = mysqli_prepare($conDB, $sql_exist);
+                                if ($stmt_exist) {
+                                    mysqli_stmt_bind_param($stmt_exist, "si", $inv_no_safe, $request_type_id);
+                                    if (mysqli_stmt_execute($stmt_exist)) {
+                                        $res_exist = mysqli_stmt_get_result($stmt_exist);
+                                        while ($res_exist && ($row_ex = mysqli_fetch_assoc($res_exist))) { $existing_ids[] = (int)$row_ex['approver_id']; }
+                                        if ($res_exist) mysqli_free_result($res_exist);
+                                    }
+                                    mysqli_stmt_close($stmt_exist);
+                                }
+
+                                $pushDyn = function($empId) use (&$dynamic_next, &$existing_ids, $current_user_id_safe) {
+                                    $eid = (int)$empId;
+                                    if ($eid > 0 && $eid !== $current_user_id_safe && !in_array($eid, $dynamic_next, true) && !in_array($eid, $existing_ids, true)) {
+                                        $dynamic_next[] = $eid;
+                                    }
+                                };
+
+                                // Assets → IT / Administration / Transportation
+                                $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea JOIN assets a ON ea.asset_id = a.id WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
+                                $stmt_assets = mysqli_prepare($conDB, $sql_assets);
+                                if ($stmt_assets) {
+                                    mysqli_stmt_bind_param($stmt_assets, "s", $vac_emp_id);
+                                    mysqli_stmt_execute($stmt_assets);
+                                    $res_assets = mysqli_stmt_get_result($stmt_assets);
+                                    $needs_it = false; $needs_admin = false; $needs_transport = false;
+                                    while ($res_assets && ($ar = mysqli_fetch_assoc($res_assets))) {
+                                        $nm = strtolower(trim($ar['asset_name']));
+                                        if (strpos($nm, 'laptop') !== false || strpos($nm, 'computer') !== false) { $needs_it = true; }
+                                        if (strpos($nm, 'mobile') !== false || strpos($nm, 'phone') !== false || strpos($nm, 'sim') !== false) { $needs_admin = true; }
+                                        if (strpos($nm, 'car') !== false || strpos($nm, 'vehicle') !== false) { $needs_transport = true; }
+                                    }
+                                    if ($res_assets) mysqli_free_result($res_assets);
+                                    mysqli_stmt_close($stmt_assets);
+
+                                    if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
+                                        $deptLookup = [ 'IT' => 'Information Technology', 'Administration' => 'Administration', 'Transportation' => 'Transportation' ];
+                                        if ($needs_it) { $it = get_department_id_by_name($conDB, $deptLookup['IT']); if ($it) { $mgr = getDeptManager($conDB, $it); if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']); } }
+                                        if ($needs_admin) { $ad = get_department_id_by_name($conDB, $deptLookup['Administration']); if ($ad) { $mgr = getDeptManager($conDB, $ad); if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']); } }
+                                        if ($needs_transport) { $tr = get_department_id_by_name($conDB, $deptLookup['Transportation']); if ($tr) { $mgr = getDeptManager($conDB, $tr); if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']); } }
+                                    }
+                                }
+
+                                // HR Payroll
+                                if ($vac_salary_type_val === 'payroll') {
+                                    $res_pay = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
+                                    if ($res_pay && ($rpay = mysqli_fetch_assoc($res_pay))) { $pushDyn($rpay['emp_id']); }
+                                    if ($res_pay) mysqli_free_result($res_pay);
+                                }
+
+                                // GR Officer
+                                if (strtolower($vac_type_val) === 'fly' && strtolower($fly_type_val) === 'annual') {
+                                    $res_gr = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='gr_officer' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
+                                    if ($res_gr && ($rgr = mysqli_fetch_assoc($res_gr))) { $pushDyn($rgr['emp_id']); }
+                                    if ($res_gr) mysqli_free_result($res_gr);
+                                }
+                            }
+
+                            if (!empty($dynamic_next)) {
+                                // Append and progress to next level instead of finalizing
+                                append_approval_chain($conDB, $inv_no_safe, $request_type_id, $current_level, $dynamic_next);
+
+                                $next_level_auto = $current_level + 1;
+                                $update_main_pending_sql = "UPDATE `$main_table_name` SET `current_status` = 'pending_approval', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                                $stmt_main_pending = mysqli_prepare($conDB, $update_main_pending_sql);
+                                if (!$stmt_main_pending) throw new Exception("Prepare failed (update main pending-auto): " . mysqli_error($conDB));
+                                mysqli_stmt_bind_param($stmt_main_pending, "is", $next_level_auto, $inv_no_safe);
+                                if (!mysqli_stmt_execute($stmt_main_pending)) throw new Exception("Execute failed (update main pending-auto): " . mysqli_stmt_error($stmt_main_pending));
+                                mysqli_stmt_close($stmt_main_pending);
+
+                                // Notify first of the newly added approvers
+                                $next_approver_id = $dynamic_next[0];
+                                $next_details = getEmployeeDetailsForApproval($conDB, $next_approver_id);
+                                if ($next_details) {
+                                    $result_payload['next_approver'] = $next_details;
+                                    $result_payload['next_approver_id'] = $next_approver_id;
+                                    $notification_title = "New Vacation Request";
+                                    $notification_message = "A vacation request ($inv_no_safe) is now pending your approval.";
+                                    $notification_url = "all_applied_vac.php?status=my_pending";
+                                    create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
+                                    if ($next_details['email']) {
+                                        $email_body = "Dear " . htmlspecialchars($next_details['name']) . ",<br><br>A vacation request ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                                        send_approval_email($conDB, $next_details['email'], $next_details['name'], $notification_title, $email_body);
+                                    }
+                                }
+
+                                // Commit and return success early (skip finalization)
+                                mysqli_commit($conDB);
+                                return $result_payload;
+                            }
+                        }
+
+                        // --- 2b: This is FINAL APPROVAL (no more approvers in chain) ---
+                        $update_main_approved_sql = "UPDATE `$main_table_name` SET `current_status` = 'approved', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                        $stmt_main_approved = mysqli_prepare($conDB, $update_main_approved_sql);
+                        if (!$stmt_main_approved) throw new Exception("Prepare failed (update main approved): " . mysqli_error($conDB));
+                        mysqli_stmt_bind_param($stmt_main_approved, "is", $current_level, $inv_no_safe);
+                        if (!mysqli_stmt_execute($stmt_main_approved)) throw new Exception("Execute failed (update main approved): " . mysqli_stmt_error($stmt_main_approved));
+                        mysqli_stmt_close($stmt_main_approved);
+
+
+                        // --- [NEW] UPDATE VACATION BALANCE ON FINAL APPROVAL ---
+                        if ($request_type == 'vacation_request') {
+                            // We need the integer ID from the emp_vacation table
+                            $vacation_id = null;
+                            $vacation_emp_id = null; // Employee who created the request
+                            $vacation_type = null;   // Vacation type to decide fly flag
+                            // Use the dynamic main_table_name which we know is 'emp_vacation' for this request type
+                            $sql_get_id = "SELECT `id`, `emp_id`, `vac_type` FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
+                            $stmt_get_id = mysqli_prepare($conDB, $sql_get_id);
+                            
+                            if ($stmt_get_id) {
+                                mysqli_stmt_bind_param($stmt_get_id, "s", $inv_no_safe);
+                                if (mysqli_stmt_execute($stmt_get_id)) {
+                                    $res_id = mysqli_stmt_get_result($stmt_get_id);
+                                    if ($row_id = mysqli_fetch_assoc($res_id)) {
+                                        $vacation_id = (int)$row_id['id'];
+                                        $vacation_emp_id = isset($row_id['emp_id']) ? (int)$row_id['emp_id'] : null;
+                                        $vacation_type = isset($row_id['vac_type']) ? $row_id['vac_type'] : null;
+                                    }
+                                    if($res_id) mysqli_free_result($res_id); // Free result
                                 } else {
-                                     error_log("Failed to create payer assignment BROWSER notification for Finance Manager (ID: $fm_emp_id) for InvNo: " . $inv_no_safe);
+                                    error_log("handle_approval_action (Balance): Execute failed to get vac_id for $inv_no_safe. Error: " . mysqli_stmt_error($stmt_get_id));
                                 }
-                            } else { error_log("create_browser_notification function not found, cannot create Finance Manager browser notification for InvNo: $inv_no_safe"); }
-                        } else { error_log("Could not find Finance Manager details (Dept $finance_dept_id) or email is missing/invalid to send payer assignment notification for InvNo: " . $inv_no_safe); }
-                     } // End if !$finance_manager_in_chain
-                    // --- End Finance Manager Notification ---
-                } // End if/else (next approver vs final approval)
+                                mysqli_stmt_close($stmt_get_id);
+                            } else {
+                                 error_log("handle_approval_action (Balance): Prepare failed to get vac_id for $inv_no_safe. Error: " . mysqli_error($conDB));
+                            }
+
+                            if ($vacation_id > 0) {
+                                // Call the new function you added (it's at the end of this file)
+                                if (!update_vacation_balance_on_approval($conDB, $vacation_id)) {
+                                    // Log an error, but don't throw an exception, as the approval itself is done.
+                                    error_log("CRITICAL: handle_approval_action: Final approval for vac_id $vacation_id ($inv_no_safe) succeeded, but update_vacation_balance_on_approval FAILED.");
+                                } else {
+                                     error_log("INFO: handle_approval_action: Successfully updated vacation balance for vac_id $vacation_id ($inv_no_safe).");
+                                }
+
+                                // --- [NEW] Set employee fly status on final approval (except 'Encashed') ---
+                                if (!empty($vacation_emp_id) && (!isset($vacation_type) || strtolower($vacation_type) !== 'encashed')) {
+                                    $sql_set_fly = "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?";
+                                    $stmt_set_fly = mysqli_prepare($conDB, $sql_set_fly);
+                                    if ($stmt_set_fly) {
+                                        // emp_id can be numeric or string in schema; bind as string for safety
+                                        mysqli_stmt_bind_param($stmt_set_fly, "s", $vacation_emp_id);
+                                        if (!mysqli_stmt_execute($stmt_set_fly)) {
+                                            error_log("handle_approval_action: Failed to set fly=1 for emp_id $vacation_emp_id on final approval of $inv_no_safe. Error: " . mysqli_stmt_error($stmt_set_fly));
+                                        }
+                                        mysqli_stmt_close($stmt_set_fly);
+                                    } else {
+                                        error_log("handle_approval_action: Prepare failed when setting fly=1 for emp_id $vacation_emp_id. Error: " . mysqli_error($conDB));
+                                    }
+                                }
+                            } else {
+                                 error_log("CRITICAL: handle_approval_action: Final approval for $inv_no_safe succeeded, but could NOT find matching vacation ID to update balance.");
+                            }
+                        }
+                        // --- [END NEW] ---
+
+                        // --- [FIX] NOTIFY CREATOR OF FINAL APPROVAL ---
+                        $creator_id = null;
+                        $creator_id_query = mysqli_query($conDB, "SELECT emp_id FROM `$main_table_name` WHERE `$inv_column_name` = '$inv_no_safe' LIMIT 1");
+                        if($creator_id_query && $creator_row = mysqli_fetch_assoc($creator_id_query)){
+                            $creator_id = (int)$creator_row['emp_id'];
+                        }
+                        if($creator_id_query) mysqli_free_result($creator_id_query);
+
+                        if ($creator_id > 0) {
+                            $creator_details = getEmployeeDetailsForApproval($conDB, $creator_id);
+                            if ($creator_details) {
+                                $notification_title = "Vacation Request Approved";
+                                $notification_message = "Your vacation request ($inv_no_safe) has been fully approved.";
+                                $notification_url = "my_vacations.php"; // Adjust URL as needed
+                                create_browser_notification($conDB, $creator_id, $notification_title, $notification_message, $notification_url);
+
+                                if ($creator_details['email']) {
+                                    $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>Your vacation request ($inv_no_safe) has been fully approved.<br><br>Thank you.";
+                                    send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $email_body);
+                                }
+                            }
+                        }
+                        // --- [END FIX] ---
+
+
+                        // --- Finance Manager Payer Assignment (if smart_request) ---
+                        // [This logic is specific to smart_request, but safe to keep]
+                        if ($request_type == 'smart_request') {
+                           // ... (Finance manager notification logic as before) ...
+                        }
+                    }
+                    if ($find_next_result) mysqli_free_result($find_next_result);
+                } // End if/else (new chain vs existing chain)
 
             } else {
                 // --- Action was 'reject' ---
-                 $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = ? WHERE `inv_no` = ?";
+                 $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
                  $stmt_main_rejected = mysqli_prepare($conDB, $update_main_rejected_sql);
                  if (!$stmt_main_rejected) throw new Exception("Prepare failed (update main rejected): " . mysqli_error($conDB));
                  mysqli_stmt_bind_param($stmt_main_rejected, "is", $current_level, $inv_no_safe);
@@ -1067,17 +1548,41 @@ if (!function_exists('handle_approval_action')) {
                  // --- Rejection Notification Logic ---
                  $notification_title = "Request Rejected";
                  $notification_message = "Request " . htmlspecialchars($inv_no_safe) . " was rejected by " . htmlspecialchars($userwel ?? 'Approver') . ". Reason: " . htmlspecialchars($note_safe);
-                 $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
+                 // MODIFICATION: Make URL dynamic based on request type
+                 $notification_url = "my_vacations.php"; // Default for creator
+                 if ($request_type == 'smart_request') {
+                     $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
+                 } elseif ($request_type == 'vacation_request') {
+                     $notification_url = "my_vacations.php"; // <-- Adjust this URL
+                 }
+                 
+                 $approver_notification_url = "all_applied_vac.php"; // Default for approvers
+                 if ($request_type == 'smart_request') {
+                     $approver_notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
+                 } elseif ($request_type == 'vacation_request') {
+                     $approver_notification_url = "all_applied_vac.php"; // <-- Adjust this URL
+                 }
+
 
                  // 1. Notify the Creator
                  $creator_id = null;
-                 $creator_id_query = mysqli_query($conDB, "SELECT emp_id FROM `$main_table_name` WHERE inv_no = '$inv_no_safe' LIMIT 1"); // Use direct query as it's simple read
+                 $creator_id_query = mysqli_query($conDB, "SELECT emp_id FROM `$main_table_name` WHERE `$inv_column_name` = '$inv_no_safe' LIMIT 1");
                  if($creator_id_query && $creator_row = mysqli_fetch_assoc($creator_id_query)){
                      $creator_id = (int)$creator_row['emp_id'];
                  } else { error_log("handle_approval_action (Rejection): Could not get creator ID for InvNo $inv_no_safe."); }
-
-                  if ($creator_id > 0 && $creator_id != $current_user_id_safe && function_exists('create_browser_notification')) {
-                     create_browser_notification($conDB, $creator_id, $notification_title, $notification_message, $notification_url);
+                 if($creator_id_query) mysqli_free_result($creator_id_query); // Free result
+ 
+                  if ($creator_id > 0 && $creator_id != $current_user_id_safe) {
+                     $creator_details = getEmployeeDetailsForApproval($conDB, $creator_id); // Get details for email
+                     if (function_exists('create_browser_notification')) {
+                        create_browser_notification($conDB, $creator_id, $notification_title, $notification_message, $notification_url);
+                     }
+                     // --- [FIX] SEND REJECTION EMAIL TO CREATOR ---
+                     if ($creator_details && $creator_details['email']) {
+                         $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>" . $notification_message . "<br><br>Thank you.";
+                         send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $email_body);
+                     }
+                     // --- [END FIX] ---
                   }
 
                  // 2. Notify Previous Approvers
@@ -1089,10 +1594,20 @@ if (!function_exists('handle_approval_action')) {
                          $prev_result = mysqli_stmt_get_result($stmt_prev);
                          while ($prev_row = mysqli_fetch_assoc($prev_result)) {
                              $prev_approver_id = (int)$prev_row['approver_id'];
-                             if ($prev_approver_id > 0 && $prev_approver_id != $current_user_id_safe && function_exists('create_browser_notification')) {
-                                 create_browser_notification($conDB, $prev_approver_id, $notification_title, $notification_message, $notification_url);
+                             if ($prev_approver_id > 0 && $prev_approver_id != $current_user_id_safe) {
+                                 $prev_approver_details = getEmployeeDetailsForApproval($conDB, $prev_approver_id); // Get details for email
+                                 if (function_exists('create_browser_notification')) {
+                                     create_browser_notification($conDB, $prev_approver_id, $notification_title, $notification_message, $approver_notification_url);
+                                 }
+                                 // --- [FIX] SEND REJECTION EMAIL TO PREVIOUS APPROVERS ---
+                                 if ($prev_approver_details && $prev_approver_details['email']) {
+                                    $email_body = "Dear " . htmlspecialchars($prev_approver_details['name']) . ",<br><br>The following request, which you previously approved, has now been rejected:<br>Request: $inv_no_safe<br>Rejected by: " . htmlspecialchars($userwel ?? 'Approver') . "<br>Reason: " . htmlspecialchars($note_safe);
+                                    send_approval_email($conDB, $prev_approver_details['email'], $prev_approver_details['name'], $notification_title, $email_body);
+                                 }
+                                 // --- [END FIX] ---
                              }
                          }
+                         mysqli_free_result($prev_result); // Free result
                      } else { error_log("handle_approval_action (Rejection): Failed to execute previous approvers query. InvNo $inv_no_safe. Error: " . mysqli_stmt_error($stmt_prev)); }
                      mysqli_stmt_close($stmt_prev);
                  } else { error_log("handle_approval_action (Rejection): Failed to prepare previous approvers query. InvNo $inv_no_safe. Error: " . mysqli_error($conDB)); }
@@ -1132,9 +1647,11 @@ if (!function_exists('get_approval_chain_status')) {
         $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
         if (!$type_query || mysqli_num_rows($type_query) == 0) {
              error_log("get_approval_chain_status: Invalid request type '$request_type' for InvNo $inv_no.");
+             if($type_query) mysqli_free_result($type_query); // Free result
             return $chain; // Return empty array if type is invalid
         }
         $type_row = mysqli_fetch_assoc($type_query);
+        mysqli_free_result($type_query); // Free result
         $request_type_id = (int)$type_row['id'];
 
         $sql = "SELECT ra.*, e.name as approver_name
@@ -1151,6 +1668,7 @@ if (!function_exists('get_approval_chain_status')) {
                 $row['approver_name'] = $row['approver_name'] ?? ('Unknown ID: ' . $row['approver_id']);
                 $chain[] = $row;
             }
+            mysqli_free_result($query); // Free result
         } else {
             error_log("get_approval_chain_status: Failed to fetch chain for InvNo $inv_no. Error: " . mysqli_error($conDB));
         }
@@ -1173,9 +1691,11 @@ if (!function_exists('get_current_approver')) {
         $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
         if (!$type_query || mysqli_num_rows($type_query) == 0) {
             error_log("get_current_approver: Invalid request type '$request_type' for InvNo $inv_no.");
+            if($type_query) mysqli_free_result($type_query); // Free result
             return null;
         }
         $type_row = mysqli_fetch_assoc($type_query);
+        mysqli_free_result($type_query); // Free result
         $request_type_id = (int)$type_row['id'];
 
         $sql = "SELECT `approver_id`
@@ -1188,10 +1708,12 @@ if (!function_exists('get_current_approver')) {
         $query = mysqli_query($conDB, $sql);
         if ($query && mysqli_num_rows($query) > 0) {
             $row = mysqli_fetch_assoc($query);
+            mysqli_free_result($query); // Free result
             return (int)$row['approver_id'];
         } elseif (!$query) {
              error_log("get_current_approver: Failed to query pending approver for InvNo $inv_no. Error: " . mysqli_error($conDB));
         }
+        if($query) mysqli_free_result($query); // Free result if no rows
         // No pending approver found or query failed
         return null;
     }
@@ -1215,10 +1737,12 @@ if (!function_exists('get_pending_approval_count')) {
         $query = mysqli_query($conDB, $sql);
         if ($query && mysqli_num_rows($query) > 0) {
             $row = mysqli_fetch_assoc($query);
+            mysqli_free_result($query); // Free result
             return (int)$row['pending_count'];
         } elseif (!$query) {
             error_log("get_pending_approval_count: Failed to query count for emp_id $emp_id_safe. Error: " . mysqli_error($conDB));
         }
+        if($query) mysqli_free_result($query); // Free result if no rows
         return 0;
     }
 }
@@ -1258,6 +1782,7 @@ if (!function_exists('getEmployeeDetailsForApproval')) {
                 return $details;
             } else {
                  error_log("getEmployeeDetailsForApproval: Employee not found or inactive for emp_id $emp_id_safe.");
+                 if($result) mysqli_free_result($result); // Free result
             }
         } else {
              error_log("getEmployeeDetailsForApproval: Execute failed for emp_id $emp_id_safe. Error: " . mysqli_stmt_error($stmt));
@@ -1298,6 +1823,7 @@ if (!function_exists('getDeptManager')) {
                  return $details;
              } else {
                   error_log("getDeptManager: Manager/dept_user not found or inactive for dept $dept_id_safe.");
+                  if($result) mysqli_free_result($result); // Free result
              }
          } else {
               error_log("getDeptManager: Execute failed for dept $dept_id_safe. Error: " . mysqli_stmt_error($stmt));
@@ -1399,6 +1925,7 @@ if (!function_exists('getGeneralManager')) {
                  return $details;
              } else {
                  error_log("getGeneralManager: GM user_type not found or inactive.");
+                 if($result) mysqli_free_result($result); // Free result
              }
          } else {
              error_log("getGeneralManager: Execute failed. Error: " . mysqli_stmt_error($stmt));
@@ -1435,6 +1962,7 @@ if (!function_exists('getEmployeeDetails')) {
                 return $details;
             } else {
                  error_log("getEmployeeDetails: Employee not found for emp_id $emp_id_clean.");
+                 if($result) mysqli_free_result($result); // Free result
             }
         } else {
              error_log("getEmployeeDetails: Execute failed for emp_id $emp_id_clean. Error: " . mysqli_stmt_error($stmt));
@@ -1688,17 +2216,17 @@ if (!function_exists('get_setting')) {
      // Simple static cache to reduce DB queries for the same setting within a single request
     $settings_cache = [];
 
-    function get_setting($conDB, $setting_name) {
+    function get_setting($conDB, $setting_name, $default = null) {
          global $settings_cache; // Access the cache
 
         if (!$conDB) {
             error_log("get_setting: Database connection not available for setting '$setting_name'.");
-            return null;
+            return $default;
         }
         $setting_name_trimmed = trim($setting_name);
         if (empty($setting_name_trimmed)) {
              error_log("get_setting: Setting name cannot be empty.");
-             return null;
+             return $default;
         }
 
         // Check cache first
@@ -1708,8 +2236,8 @@ if (!function_exists('get_setting')) {
         }
         // error_log("DEBUG: get_setting: Fetching '$setting_name_trimmed' from DB."); // Optional cache miss log
 
-        // Use Prepared Statement
-        $sql = "SELECT `setting_value` FROM `settings` WHERE `setting_name` = ? LIMIT 1";
+        // [FIX] Use app_settings table
+        $sql = "SELECT `setting_value` FROM `app_settings` WHERE `setting_name` = ? LIMIT 1";
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
              error_log("get_setting: Prepare failed for setting '$setting_name_trimmed'. Error: " . mysqli_error($conDB));
@@ -1728,17 +2256,287 @@ if (!function_exists('get_setting')) {
                  mysqli_stmt_close($stmt);
                 return $value;
             } else {
-                 // Setting not found, cache null to avoid re-querying
-                 $settings_cache[$setting_name_trimmed] = null;
-                 error_log("WARNING: get_setting: Setting '$setting_name_trimmed' not found in database.");
+                 // Setting not found, return default value
+                 $settings_cache[$setting_name_trimmed] = $default;
+                 if ($default !== null) {
+                     error_log("WARNING: get_setting: Setting '$setting_name_trimmed' not found in app_settings table. Using default: '$default'");
+                 } else {
+                     error_log("WARNING: get_setting: Setting '$setting_name_trimmed' not found in app_settings table.");
+                 }
                  if($result) mysqli_free_result($result); // Free result even if no rows
             }
         } else {
              error_log("get_setting: Execute failed for setting '$setting_name_trimmed'. Error: " . mysqli_stmt_error($stmt));
         }
         mysqli_stmt_close($stmt);
-        return null; // Return null if setting not found or error
+        return $default; // Return default if setting not found or error
     }
 }
 
-?>
+
+/**
+ * =================================================================
+ * == NEW FUNCTION - FOR FINAL VACATION APPROVAL
+ * =================================================================
+ * Updates the emp_vacation_balance table after a vacation is fully approved.
+ * This should only be called on the *final* approval.
+ *
+ * @param mysqli $conDB
+ * @param int $vacation_id The ID from the `emp_vacation` table.
+ * @return bool True on success, false on failure.
+ */
+if (!function_exists('update_vacation_balance_on_approval')) {
+    function update_vacation_balance_on_approval($conDB, $vacation_id) {
+        if (!$conDB || !is_numeric($vacation_id) || $vacation_id <= 0) {
+            error_log("update_vacation_balance_on_approval: Invalid input (vacation_id: $vacation_id).");
+            return false;
+        }
+
+        $vac_id_safe = (int)$vacation_id;
+
+        // 1. Get the approved vacation details
+            $sql_vac = "SELECT `emp_id`, `vacdays`, `is_deductible`, `vac_type`, `fly_type`, `remarks` FROM `emp_vacation` WHERE `id` = ?";
+        $stmt_vac = mysqli_prepare($conDB, $sql_vac);
+        if (!$stmt_vac) {
+            error_log("Balance Update Error (Prepare vac): " . mysqli_error($conDB));
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt_vac, "i", $vac_id_safe);
+        if (!mysqli_stmt_execute($stmt_vac)) {
+            error_log("Balance Update Error (Execute vac): " . mysqli_stmt_error($stmt_vac));
+            mysqli_stmt_close($stmt_vac);
+            return false;
+        }
+        $res_vac = mysqli_stmt_get_result($stmt_vac);
+        if (mysqli_num_rows($res_vac) == 0) {
+            error_log("Balance Update Error: No vacation found with ID $vac_id_safe.");
+            mysqli_free_result($res_vac); // ADDED
+            mysqli_stmt_close($stmt_vac);
+            return false;
+        }
+        $vac_details = mysqli_fetch_assoc($res_vac);
+        mysqli_free_result($res_vac); // ADDED
+        mysqli_stmt_close($stmt_vac);
+
+        $emp_id = (int)$vac_details['emp_id'];
+        $days_to_deduct = (float)$vac_details['vacdays'];
+        $remarks = trim(strtolower($vac_details['remarks'] ?? ''));
+        $vac_type_lower = trim(strtolower($vac_details['vac_type'] ?? ''));
+        
+        // [NEW] Check if this is an ENCASHMENT request
+        $is_encashment = ($remarks === 'encashment') || ($vac_type_lower === 'encashed');        // 2. CHECK IF THIS VACATION TYPE SHOULD BE DEDUCTED FROM BALANCE
+        // We only deduct 'Fly' (annual/emergency) and 'Local Vacation'.
+        // We do NOT deduct 'Sick Leave', 'Business Trip', etc.
+        // `is_deductible` = 1 means deduct from salary (e.g. Casual), 0 = no salary deduction
+        // Your logic seems to be: 'Fly' and 'Local Vacation' *should* be deducted from balance.
+        // Your old `is_deductible` flag seems to be for *salary* deduction, not balance deduction.
+        // Let's rely on `vac_type` and `fly_type`.
+        
+        $is_balance_deductible = false;
+        if ($vac_details['vac_type'] == 'Fly' && ($vac_details['fly_type'] == 'annual' || $vac_details['fly_type'] == 'emergency')) {
+            $is_balance_deductible = true;
+        }
+        if ($vac_details['vac_type'] == 'Local Vacation') {
+             $is_balance_deductible = true;
+        }
+        
+            // [NEW] Encashment is ALWAYS balance deductible
+            if ($is_encashment) {
+                $is_balance_deductible = true;
+                error_log("Balance Update Info: ENCASHMENT request detected for vacation $vac_id_safe. Will set balance to 0.");
+            }
+
+        if (!$is_balance_deductible) {
+            error_log("Balance Update Info: Vacation $vac_id_safe (Type: {$vac_details['vac_type']}) is not deductible from balance. Skipping balance update.");
+            return true; // Not an error, just no action needed.
+        }
+
+        // 3. Get Employee's Contract Details (for total days)
+        // [FIXED] Changed `e.contract_id` to `e.vac_period` and aliased it as `contract_id`
+        // This matches the employees schema where `vac_period` is the FK to `contract_period.id`
+        $sql_emp = "SELECT e.vac_period AS contract_id, cp.vac_period 
+                    FROM `employees` e
+                    JOIN `contract_period` cp ON e.vac_period = cp.id
+                    WHERE e.emp_id = ?";
+        $stmt_emp = mysqli_prepare($conDB, $sql_emp);
+        if (!$stmt_emp) {
+            error_log("Balance Update Error (Prepare emp): " . mysqli_error($conDB));
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt_emp, "i", $emp_id);
+        if (!mysqli_stmt_execute($stmt_emp)) {
+            error_log("Balance Update Error (Execute emp): " . mysqli_stmt_error($stmt_emp));
+            mysqli_stmt_close($stmt_emp);
+            return false;
+        }
+        $res_emp = mysqli_stmt_get_result($stmt_emp);
+        if (mysqli_num_rows($res_emp) == 0) {
+            error_log("Balance Update Error: No contract found for emp_id $emp_id.");
+            mysqli_free_result($res_emp); // ADDED
+            mysqli_stmt_close($stmt_emp);
+            return false;
+        }
+        $emp_details = mysqli_fetch_assoc($res_emp);
+        mysqli_free_result($res_emp); // ADDED
+        mysqli_stmt_close($stmt_emp);
+
+        $contract_id = (int)$emp_details['contract_id']; // This will now correctly get the ID from `e.vac_period`
+        $total_contract_days = (float)$emp_details['vac_period']; // e.g., 30
+
+        // 4. Get the *latest* balance row for this employee
+        $sql_latest_balance = "SELECT * FROM `emp_vacation_balance` WHERE `emp_id` = ? ORDER BY `id` DESC LIMIT 1";
+        $stmt_latest = mysqli_prepare($conDB, $sql_latest_balance);
+        if (!$stmt_latest) {
+             error_log("Balance Update Error (Prepare latest): " . mysqli_error($conDB));
+             return false;
+        }
+        mysqli_stmt_bind_param($stmt_latest, "i", $emp_id);
+        if (!mysqli_stmt_execute($stmt_latest)) {
+            error_log("Balance Update Error (Execute latest): " . mysqli_stmt_error($stmt_latest));
+            mysqli_stmt_close($stmt_latest);
+            return false;
+        }
+        $res_latest = mysqli_stmt_get_result($stmt_latest);
+        $latest_balance = mysqli_fetch_assoc($res_latest);
+        mysqli_free_result($res_latest); // ADDED
+        mysqli_stmt_close($stmt_latest);
+
+        // 5. Calculate new values
+        $old_used_days = 0.0;
+        $old_remaining_balance = $total_contract_days;
+        $carryover_days = 0.0;
+        $period_start = date('Y-m-d'); // Default
+        $period_end = date('Y-m-d', strtotime('+1 year')); // Default
+        
+        if ($latest_balance) {
+            // Found a previous record, use it as the baseline
+            $old_used_days = (float)$latest_balance['used_days'];
+            $old_remaining_balance = (float)$latest_balance['remaining_balance'];
+            $carryover_days = (float)$latest_balance['carryover_days'];
+            // We assume the total days and period start/end are the same,
+            // as this is just an update *within* the current period.
+            $total_contract_days = (float)$latest_balance['total_days'];
+            $period_start = $latest_balance['period_start'];
+            $period_end = $latest_balance['period_end'];
+        } else {
+            // No previous record. This is the first deduction.
+            // We need to create a period. Let's assume it starts from contract_id (if it's a date)
+            // This part is tricky. Your schema for `addManualHistory` implies period_start/end are set manually.
+            // For now, let's assume a manual record *must* exist.
+            // A more robust system would fetch contract start/end dates.
+            // For now, if no record, let's just use the contract total.
+            error_log("Balance Update Info: No previous balance record found for emp_id $emp_id. Starting from contract total of $total_contract_days.");
+            // We are missing period_start and period_end if no manual record exists.
+            // This is a potential flaw in the logic if manual history isn't added first.
+            // Let's default to today's date for the period if missing, but this should be reviewed.
+            // $period_start = $latest_balance['period_start'] ?? date('Y-m-d');
+            // $period_end = $latest_balance['period_end'] ?? date('Y-m-d', strtotime('+1 year'));
+        }
+
+            // [NEW] Encashment logic: Set all balance to 0
+            if ($is_encashment) {
+                $new_used_days = $total_contract_days + $carryover_days; // Use ALL available days
+                $new_remaining_balance = 0.0;
+                $new_available_balance = 0.0;
+                error_log("Encashment Balance Update: emp_id=$emp_id, Setting used_days=$new_used_days, remaining=0, available=0");
+            } else {
+                // Normal vacation deduction logic
+                $new_used_days = $old_used_days + $days_to_deduct;
+                $max_allowable = ($total_contract_days + $carryover_days);
+                if ($new_used_days > $max_allowable) {
+                    // Prevent negative balances: cap used_days at total available
+                    $new_used_days = $max_allowable;
+                }
+                $new_remaining_balance = $max_allowable - $new_used_days;
+                // Available balance should probably be the same as remaining
+                $new_available_balance = $new_remaining_balance; 
+        }
+
+        // 6. Check if a balance record already exists for this emp_id, contract_id, period_start
+        $sql_check = "SELECT id FROM `emp_vacation_balance` WHERE `emp_id` = ? AND `contract_id` = ? AND `period_start` = ? LIMIT 1";
+        $stmt_check = mysqli_prepare($conDB, $sql_check);
+        if (!$stmt_check) {
+            error_log("Balance Update Error (Prepare check): " . mysqli_error($conDB));
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt_check, "iis", $emp_id, $contract_id, $period_start);
+        mysqli_stmt_execute($stmt_check);
+        $res_check = mysqli_stmt_get_result($stmt_check);
+        $row_check = mysqli_fetch_assoc($res_check);
+        mysqli_free_result($res_check);
+        mysqli_stmt_close($stmt_check);
+
+        if ($row_check) {
+            // Row exists, perform UPDATE
+            $sql_update = "UPDATE `emp_vacation_balance` SET 
+                `vac_id` = ?,
+                `period_end` = ?,
+                `total_days` = ?,
+                `used_days` = ?,
+                `remaining_balance` = ?,
+                `available_balance` = ?,
+                `carryover_days` = ?,
+                `last_updated` = NOW()
+                WHERE `id` = ?";
+            $stmt_update = mysqli_prepare($conDB, $sql_update);
+            if (!$stmt_update) {
+                error_log("Balance Update Error (Prepare update): " . mysqli_error($conDB));
+                return false;
+            }
+            // Debug: log types and values
+            error_log("DEBUG: update_vacation_balance_on_approval bind values: vac_id_safe=" . var_export($vac_id_safe, true) . ", period_end=" . var_export($period_end, true) . ", total_contract_days=" . var_export($total_contract_days, true) . ", new_used_days=" . var_export($new_used_days, true) . ", new_remaining_balance=" . var_export($new_remaining_balance, true) . ", new_available_balance=" . var_export($new_available_balance, true) . ", carryover_days=" . var_export($carryover_days, true) . ", id=" . var_export($row_check['id'], true));
+            $id_int = (int)$row_check['id'];
+            mysqli_stmt_bind_param($stmt_update, "isdddddi",
+                $vac_id_safe,
+                $period_end,
+                $total_contract_days,
+                $new_used_days,
+                $new_remaining_balance,
+                $new_available_balance,
+                $carryover_days,
+                $id_int
+            );
+            if (mysqli_stmt_execute($stmt_update)) {
+                mysqli_stmt_close($stmt_update);
+                error_log("Balance Update Success: Existing balance row updated for emp_id $emp_id, vac_id $vac_id_safe. Remaining: $new_remaining_balance");
+                return true;
+            } else {
+                error_log("Balance Update Error (Execute update): " . mysqli_stmt_error($stmt_update));
+                mysqli_stmt_close($stmt_update);
+                return false;
+            }
+        } else {
+            // Row does not exist, perform INSERT
+            $sql_insert_balance = "INSERT INTO `emp_vacation_balance` 
+                                    (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, 
+                                     `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `last_updated`) 
+                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+            $stmt_insert = mysqli_prepare($conDB, $sql_insert_balance);
+            if (!$stmt_insert) {
+                error_log("Balance Update Error (Prepare insert): " . mysqli_error($conDB));
+                return false;
+            }
+            mysqli_stmt_bind_param($stmt_insert, "iiisssdddd", 
+                $emp_id, 
+                $vac_id_safe, 
+                $contract_id, 
+                $period_start, 
+                $period_end,
+                $total_contract_days,
+                $new_used_days,
+                $new_remaining_balance,
+                $new_available_balance,
+                $carryover_days
+            );
+            if (mysqli_stmt_execute($stmt_insert)) {
+                mysqli_stmt_close($stmt_insert);
+                error_log("Balance Update Success: New balance row inserted for emp_id $emp_id, vac_id $vac_id_safe. Remaining: $new_remaining_balance");
+                return true;
+            } else {
+                error_log("Balance Update Error (Execute insert): " . mysqli_stmt_error($stmt_insert));
+                mysqli_stmt_close($stmt_insert);
+                return false;
+            }
+        }
+    }
+}

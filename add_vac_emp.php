@@ -127,9 +127,10 @@ if(isset($_POST['submit'])){
 			$query = "INSERT INTO `emp_vacation` (`emp_id`, `date`, `return_date`, `user_update`, `note`, `date_reg`,`permit_no`,`vacdays`,`remarks`,`review`) VALUES ('".$emprow['empid']."', '".$date."', '".$return_date."', '".$userwel."', '".$emprow['av_vac_type']."', '".$date_reg."', '".$permit_no."', '".$vacdays."', '".$remarks."', 'A')";
 		}
 		mysqli_query($conDB, $query);
-		if($emprow['av_vac_type'] <> "Encashed"){
-			mysqli_query($conDB, "UPDATE `employees` SET `fly`='yes' WHERE `emp_id`='".$emprow['empid']."' ") or die ();
-		}
+        // IMPORTANT: Do NOT set employees.fly at application time.
+        // Fly status must be applied only after final approval (handled in helper_functions::handle_approval_action).
+        // Previously, we were hiding the employee immediately upon applying, which is incorrect.
+        // If needed, final approval will set `employees.fly = 1` and return flow will reset to 0.
 		/************log************/
 		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$emprow['empid']."','".date("c")."')") or die ();
 		/************log************/

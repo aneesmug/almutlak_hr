@@ -92,6 +92,7 @@ if (mysqli_num_rows($query) == 1) {
 				'dept',
 				'sectin_nme',
 				'emptype',
+				'supervisor_id',
 				'joining_date',
 				'dob',
 				'dob_h',
@@ -368,6 +369,34 @@ if (mysqli_num_rows($query) == 1) {
 												<option value="Supervisor" <?= ($emprow['emptype'] == 'Supervisor' ? 'selected' : '') ?>><?= __("supervisor_option") ?></option>
 												<option value="Supporter" <?= ($emprow['emptype'] == 'Supporter' ? 'selected' : '') ?>><?= __("supporter_option") ?></option>
 												</select>
+											</div>
+											<div class="form-group col-md-2">
+												<label for="supervisor_id" class="col-form-label"><?= __("direct_supervisor_label") ?? "Direct Supervisor" ?></label>
+												<select class="form-control select2" name="supervisor_id" id="supervisor_id">
+													<option value=""><?= __("no_supervisor") ?? "No Direct Supervisor" ?></option>
+													<?php
+													// Get list of potential supervisors (Managers and Supervisors)
+													$supervisor_query = mysqli_query($conDB, "
+														SELECT `emp_id`, `name`, `emptype`, `dept` 
+														FROM `employees` 
+														WHERE `status` = 1 
+														AND `emptype` IN ('Manager', 'Supervisor')
+														AND `emp_id` != '{$emprow['emp_id']}'
+														ORDER BY `dept`, `emptype` = 'Manager' DESC, `name` ASC
+													");
+													while ($supervisor = mysqli_fetch_assoc($supervisor_query)) {
+														$selected = (isset($emprow['supervisor_id']) && $emprow['supervisor_id'] == $supervisor['emp_id']) ? 'selected' : '';
+														$dept_name = '';
+														$dept_q = mysqli_query($conDB, "SELECT `dep_nme` FROM `department` WHERE `id` = '{$supervisor['dept']}' LIMIT 1");
+														if ($dept_r = mysqli_fetch_assoc($dept_q)) {
+															$dept_name = ' - ' . $dept_r['dep_nme'];
+														}
+														echo "<option value='{$supervisor['emp_id']}' {$selected}>" . 
+															 htmlspecialchars($supervisor['name']) . " ({$supervisor['emp_id']}) - {$supervisor['emptype']}{$dept_name}</option>";
+													}
+													?>
+												</select>
+												<small class="form-text text-muted"><?= __("supervisor_help_text") ?? "Assign direct supervisor for leave approvals" ?></small>
 											</div>
 											<div class="form-group col-md-2">
 												<label for="joining_date" class="col-form-label"><?= __("joining_date_label") ?>

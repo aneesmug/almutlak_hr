@@ -109,7 +109,7 @@ if ($emprow['user_type'] !== 'employee') {
 											<i class="fa fa-solid fa-project-diagram mr-2"></i> <?= __('assign_asset') ?>
 										</a>
 										<?php endif; ?>
-										<?php /* if (empty($emprow['has_active_regular_loan']) && $is_system_admin || $isDeptHr || $isHR) : ?>
+										<?php if (empty($emprow['has_active_regular_loan']) && $is_system_admin || $isDeptHr || $isHR) : ?>
 											<a href="javascript:void(0);" class="text-warning dropdown-item applyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 												<i class="fa fa-money-bill-trend-up mr-2"></i> <?= __('apply_loan') ?>
 											</a>
@@ -118,7 +118,7 @@ if ($emprow['user_type'] !== 'employee') {
 											<a href="javascript:void(0);" class="text-info dropdown-item applyEmergencyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 												<i class="fa fa-money-bill-wheat mr-2"></i> <?= __('emergency_loan') ?>
 											</a>
-										<?php endif; */ ?>
+										<?php endif; ?>
 										<?php if ($is_system_admin && $emprow['c_email']) : ?>
 											<a class="text-info dropdown-item d-flex align-items-center" href="./qrsend.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>">
 												<i class="fa fa-solid fa-qrcode-read mr-2"></i> <?= __('send_qr') ?>
@@ -127,7 +127,7 @@ if ($emprow['user_type'] !== 'employee') {
 										<?php if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) : ?>
 
 											<?php if ($emprow['emp_sup_type'] != "man_power") : ?>
-												<?php /* if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
+												<?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
 													<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter d-flex align-items-center">
 														<i class="fa fa-user-chart mr-2"></i> <?= __('apply_annual_vacation') ?>
 													</a>
@@ -157,7 +157,7 @@ if ($emprow['user_type'] !== 'employee') {
 													<a class="text-warning dropdown-item d-flex align-items-center">
 														<i class="fa fa-user-check mr-2"></i> <?= htmlspecialchars($status_text) ?>
 													</a>
-												<?php endif; */?>
+												<?php endif; ?>
 												<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" class="text-info dropdown-item applyLeaveRequest d-flex align-items-center">
 													<i class="fa fa-solid fa-house-person-leave mr-2"></i> <?= __('apply_leave') ?>
 												</a>
@@ -170,7 +170,7 @@ if ($emprow['user_type'] !== 'employee') {
 											<?php endif; ?>
 
 											<?php if ($emprow["fly"] == 1) : ?>
-												<?php if ($user_type != "dept_user") : ?>
+												<?php if ($isHR || $is_system_admin || $isDeptHr) : ?>
 													<a href="javascript:void(0);" class="text-dark dropdown-item d-flex align-items-center" onclick="returnVacationRequest(<?= lastVacIdGet($emprow['empid'])['vacid'] ?>, '<?= lastVacIdGet($emprow['empid'])['returndate'] ?>')">
 														<i class="fa fa-plane-arrival mr-2"></i> <?= __('arrived') ?>
 													</a>

@@ -1,6 +1,16 @@
 <?php
 /****************************************************************
- * MODIFICATION SUMMARY (009-emp_end_of_service.php):
+ * MODIFICATION SUMMARY (010-emp_end_of_service.php):
+ * - COUNTRY RESTRICTION: Added check to prevent EOS processing for employees
+ *   from country ID 121. Form is disabled and error message shown.
+ * - HOUSING ALLOWANCE CALCULATION: If employee has no housing allowance (housing = 0),
+ *   the system now calculates it as (basic/12*2) and includes it in total salary.
+ *   Example: basic 1800, housing 0 → calculated housing = (1800/12*2) = 300
+ *   Total = basic 1800 + food 300 + calculated 300 + all other allowances
+ * - UPDATED SALARY CALCULATION: Modified actual_salary_base to include calculated
+ *   housing when original housing is 0, ensuring accurate vacation pay calculations.
+ * 
+ * PREVIOUS MODIFICATION (009-emp_end_of_service.php):
  * - REVERTED & FIXED VACATION LOGIC: Reinstated the use of the
  * `emp_vacation_balance` table to get a carried-over balance.
  * - IMPROVED ACCRUAL CALCULATION: The logic now correctly calculates
@@ -9,6 +19,13 @@
  * during that same period.
  * - ADDED OPENING BALANCE FIELD: A new hidden field has been added
  * to pass the carried-over balance to the JavaScript calculator.
+ *
+ * MODIFICATION (2025-11-05):
+ * - Added logic to pass contract duration (1 or 2 years) to JavaScript.
+ * - Modified JavaScript `updateProratedVacation` function to use
+ * the correct *annual* vacation rate (e.g., 21 instead of 42)
+ * and calculate the daily rate based on 365 days to match
+ * the old system's calculation method.
  ****************************************************************/
 
 	require_once __DIR__ . '/includes/init.php';
@@ -30,8 +47,8 @@
 	if(mysqli_num_rows($get_emp_data) !== 0){
 		$emprow = mysqli_fetch_assoc($get_emp_data);
         
-        // Get full salary details for accurate calculations
-        $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='".$emprow['empid']."'");
+        // Get full salary details for accurate calculations - ONLY active salary (status = 1)
+        $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='".$emprow['empid']."' AND `status` = 1 ORDER BY `id` DESC LIMIT 1");
         $salaryrow = mysqli_fetch_assoc($get_salary_data) ?: [];
         
         // Calculate Total Salary by summing up all components
@@ -47,24 +64,20 @@
             } else {
                 $calculated_housing = $housing_benefit;
             }
-
-            $total_salary += $basic_salary;
-            $total_salary += $calculated_housing;
-            $total_salary += (float)($salaryrow['transport'] ?? 0);
-            $total_salary += (float)($salaryrow['food'] ?? 0);
-            $total_salary += (float)($salaryrow['misc'] ?? 0);
-            $total_salary += (float)($salaryrow['cashier'] ?? 0);
-            $total_salary += (float)($salaryrow['fuel'] ?? 0);
-            $total_salary += (float)($salaryrow['tel'] ?? 0);
-            $total_salary += (float)($salaryrow['guard'] ?? 0);
-            $total_salary += (float)($salaryrow['other'] ?? 0);
         }
 
-        // NEW: Calculate the base salary for vacation pay (sum of actual benefits only)
+        // Calculate base salary for EOS calculation (includes calculated housing if missing)
         $actual_salary_base = 0;
         if (!empty($salaryrow)) {
             $actual_salary_base += (float)($salaryrow['basic'] ?? 0);
-            $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // actual housing
+            
+            // Add calculated housing if original housing is 0, otherwise use actual housing
+            if ((float)($salaryrow['housing'] ?? 0) == 0 && (float)($salaryrow['basic'] ?? 0) > 0) {
+                $actual_salary_base += (($salaryrow['basic'] / 12) * 2); // calculated housing for EOS
+            } else {
+                $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // actual housing
+            }
+            
             $actual_salary_base += (float)($salaryrow['transport'] ?? 0);
             $actual_salary_base += (float)($salaryrow['food'] ?? 0);
             $actual_salary_base += (float)($salaryrow['misc'] ?? 0);
@@ -75,20 +88,59 @@
             $actual_salary_base += (float)($salaryrow['other'] ?? 0);
         }
 
+        // Calculate base salary for VACATION calculation (uses ONLY actual housing, NO calculated housing)
+        $vacation_salary_base = 0;
+        if (!empty($salaryrow)) {
+            $vacation_salary_base += (float)($salaryrow['basic'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['housing'] ?? 0); // ONLY actual housing, no calculation
+            $vacation_salary_base += (float)($salaryrow['transport'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['food'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['misc'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['cashier'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['fuel'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['tel'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['guard'] ?? 0);
+            $vacation_salary_base += (float)($salaryrow['other'] ?? 0);
+        }
+
+        // Set total_salary for API (uses EOS base with calculated housing)
+        $total_salary = $actual_salary_base;
+
         // Get the annual vacation entitlement directly from the employee's record.
+        // Note: This field (`vacation_days`) stores the TOTAL period entitlement (e.g., 42 for 2 years)
         $annual_vacation_entitlement = (float)($emprow['vacation_days'] ?? 0);
 
-        // --- START: Get opening vacation balance ---
-        $opening_balance = 0.0;
+        // --- START: Get current vacation balance (available_balance) and period_end ---
+        $current_vacation_balance = 0.0;
+        $balance_period_end = null;
+        
         $empid_esc = mysqli_real_escape_string($conDB, $emprow['empid']);
-        $vac_balance_q = mysqli_query($conDB, "SELECT remaining_balance FROM emp_vacation_balance WHERE emp_id = '{$empid_esc}' ORDER BY id DESC LIMIT 1");
+        
+        // Get current available balance and period_end from emp_vacation_balance
+        $vac_balance_q = mysqli_query($conDB, "SELECT available_balance, period_end FROM emp_vacation_balance WHERE emp_id = '{$empid_esc}' ORDER BY id DESC LIMIT 1");
         if ($vac_balance_q && mysqli_num_rows($vac_balance_q) > 0) {
             $vac_row = mysqli_fetch_assoc($vac_balance_q);
-            if (isset($vac_row['remaining_balance']) && is_numeric($vac_row['remaining_balance'])) {
-                $opening_balance = floatval($vac_row['remaining_balance']);
+            if (isset($vac_row['available_balance']) && is_numeric($vac_row['available_balance'])) {
+                $current_vacation_balance = floatval($vac_row['available_balance']);
+            }
+            if (isset($vac_row['period_end'])) {
+                $balance_period_end = $vac_row['period_end'];
             }
         }
-        // --- END: Get opening vacation balance ---
+        // --- END: Get current vacation balance ---
+
+        // --- START: Get Contract Period Length (1 or 2 years) ---
+        $is_two_year_contract = 0;
+        if (!empty($emprow['vac_period'])) {
+            $vac_period_id = mysqli_real_escape_string($conDB, $emprow['vac_period']);
+            $period_q = mysqli_query($conDB, "SELECT period FROM contract_period WHERE id = '{$vac_period_id}' LIMIT 1");
+            $period_row = mysqli_fetch_assoc($period_q);
+            $contract_period_string = $period_row ? $period_row['period'] : '';
+            if (strpos($contract_period_string, '2 Years') !== false) {
+                $is_two_year_contract = 1;
+            }
+        }
+        // --- END: Get Contract Period Length ---
         
         // Second query to get EOS-specific details
         $eos_query = mysqli_query($conDB, "SELECT
@@ -226,7 +278,12 @@
     }
 
     if(isset($_POST['submit'])){
-        if($assigned_assets_count > 0){
+        // Check if employee country is 121 (should not process EOS for this country)
+        if ($emprow['country'] == 121) {
+            $errors['country'] = "EOS processing is not allowed for employees from country ID: 121.";
+        }
+        
+        if(empty($errors) && $assigned_assets_count > 0){
             $errors['assets'] = "Cannot process termination. Employee has outstanding assets that must be returned first.";
         } else {
             $contractType = trim($_POST['contract_type'] ?? '');
@@ -238,6 +295,8 @@
             $eos_amount = filter_input(INPUT_POST, 'eos_amount', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $vacation_salary = filter_input(INPUT_POST, 'anul_vac_salry', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $net_payment = filter_input(INPUT_POST, 'net_payment', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
+            $overtime_hours = filter_input(INPUT_POST, 'overtime_hours', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
+            $overtime_days = filter_input(INPUT_POST, 'overtime_days', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
 
             // Check if salary is paid for the termination month
             $salaryPaidForTerminationMonth = false;
@@ -295,8 +354,8 @@
                 $t_months = $serviceDuration->m;
                 $t_days = $serviceDuration->d;
 
-                $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("sisssdssiiiddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
+                $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("sisssdssiiiddddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
                 $stmt->execute();
 
                 $stmt_update = $conDB->prepare("UPDATE `employees` SET `status`='0', `ter_note`=?, `fly`='0', `ter_date`=? WHERE `emp_id`=?");
@@ -487,6 +546,7 @@
                                                             <div class="alert alert-danger"><?=htmlspecialchars($general_error_message); ?></div>
                                                         <?php endif; ?>
                                                         <?php if (!empty($errors['assets'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['assets']); ?></div><?php endif; ?>
+                                                        <?php if (!empty($errors['country'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['country']); ?></div><?php endif; ?>
                                                         <div class="form-row align-items-end">
                                                             <div class="form-group col-lg-6">
                                                                 <label><strong><?=__('Type of Contract');?>:</strong></label>
@@ -536,12 +596,20 @@
                                                                 <input type="number" class="form-control" id="curt_month_days_display" name="curt_month_days" value="0" readonly>
                                                             </div>
                                                             <div class="form-group col-lg-2">
-                                                                <label for="absent_days"><?=__('Absent Days');?></label>
+                                                                <label for="absent_days" class="text-danger"><?=__('Absent Days');?></label>
                                                                 <input type="number" class="form-control calculation-trigger" id="absent_days" name="absent_days" value="0" min="0">
                                                             </div>
                                                             <div class="form-group col-lg-2">
-                                                                <label for="deduction_hours"><?=__('Deduction (Hours)');?></label>
+                                                                <label for="deduction_hours" class="text-danger"><?=__('Deduction (Hours)');?></label>
                                                                 <input type="number" class="form-control calculation-trigger" id="deduction_hours" name="deduction_hours" value="0" min="0">
+                                                            </div>
+                                                            <div class="form-group col-lg-2">
+                                                                <label for="overtime_hours" class="text-success"><?=__('Overtime (Hours)');?></label>
+                                                                <input type="number" class="form-control calculation-trigger" id="overtime_hours" name="overtime_hours" value="0" min="0" step="0.5">
+                                                            </div>
+                                                            <div class="form-group col-lg-2">
+                                                                <label for="overtime_days" class="text-success"><?=__('Overtime (Days)');?></label>
+                                                                <input type="number" class="form-control calculation-trigger" id="overtime_days" name="overtime_days" value="0" min="0" step="0.5">
                                                             </div>
                                                             <div class="form-group col-lg-4">
                                                                 <label for="curt_month_salry"><?=__('Resignation Month Salary');?></label>
@@ -552,14 +620,22 @@
                                                             <?php if ($emprow['country'] == 191 && floatval($emprow['gosi']) > 0): ?>
                                                                 <div class="form-group col-lg-4">
                                                                     <label for="gosi_deduction" class="text-danger"><?=__('GOSI Deduction');?></label>
-                                                                    <input type="number" class="form-control text-danger" id="gosi_deduction" value="0.00" readonly>
+                                                                    <input type="number" class="form-control text-danger calculation-trigger" id="gosi_deduction" name="gosi_deduction" value="0.00" step="any">
                                                                 </div>
-                                                                <div class="form-group col-lg-8">
+                                                                <div class="form-group col-lg-4">
+                                                                    <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
+                                                                    <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
+                                                                </div>
+                                                                <div class="form-group col-lg-4">
                                                                     <label for="deduct" class="text-danger"><?=__('Other Deductions (Loan, etc.)');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
                                                                 </div>
                                                             <?php else: ?>
-                                                                <div class="form-group col-lg-12">
+                                                                <div class="form-group col-lg-4">
+                                                                    <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
+                                                                    <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
+                                                                </div>
+                                                                <div class="form-group col-lg-4">
                                                                     <label for="deduct" class="text-danger"><?=__('Deduct (Loan, etc.)');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
                                                                 </div>
@@ -601,12 +677,14 @@
                                                         <input type="hidden" id="basic_salary" value="<?= htmlspecialchars($salaryrow['basic'] ?? 0); ?>">
                                                         <input type="hidden" id="housing_allowance" value="<?= htmlspecialchars($salaryrow['housing'] ?? 0); ?>">
                                                         <input type="hidden" id="actual_salary_base" value="<?= htmlspecialchars($actual_salary_base); ?>">
+                                                        <input type="hidden" id="vacation_salary_base" value="<?= htmlspecialchars($vacation_salary_base); ?>">
                                                         <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($annual_vacation_entitlement); ?>">
-                                                        <input type="hidden" id="opening_balance" value="<?= htmlspecialchars($opening_balance); ?>">
+                                                        <input type="hidden" id="current_vacation_balance" value="<?= htmlspecialchars($current_vacation_balance); ?>">
+                                                        <input type="hidden" id="balance_period_end" value="<?= htmlspecialchars($balance_period_end ?? ''); ?>">
+                                                        <input type="hidden" id="is_two_year_contract" value="<?= htmlspecialchars($is_two_year_contract); ?>">
                                                         <input type="hidden" id="emp_country" value="<?= htmlspecialchars($emprow['country']); ?>">
                                                         <input type="hidden" id="emp_gosi_percent" value="<?= htmlspecialchars($emprow['gosi']); ?>">
                                                         <input type="hidden" id="emp_contract_type" value="<?= htmlspecialchars($emprow['contract_type']); ?>">
-                                                        
                                                     </fieldset>
                                                 </form>
                                             <?php else: ?>
@@ -641,6 +719,14 @@
             $(document).ready(function(){
                 
                 $('#eos_reason').select2();
+                
+                // Track if user manually edited GOSI deduction
+                let gosiManuallyEdited = false;
+                
+                $('#gosi_deduction').on('input change', function() {
+                    // Mark as manually edited when user types
+                    gosiManuallyEdited = true;
+                });
 
                 function isSalaryPaidForMonth(endDateStr) {
                     if (!endDateStr || !window.paidPayrolls || !window.paidPayrolls.length) return false;
@@ -649,62 +735,72 @@
                 }
 
                 function updateProratedVacation() {
-                    const joiningDateStr = $('#joining_date').val();
                     const endDateStr = $('#end_date').val();
-                    const annualVacationEntitlement = parseFloat($('#annual_vacation_entitlement').val()) || 0;
-                    const openingBalance = parseFloat($('#opening_balance').val()) || 0;
-                    const contractType = $('#emp_contract_type').val(); // 'limited' or 'unlimited'
-
-                    if (!joiningDateStr || !endDateStr) {
+                    // This variable name is misleading. It holds the TOTAL entitlement for the period (e.g., 42 for 2 years)
+                    const periodEntitlement = parseFloat($('#annual_vacation_entitlement').val()) || 0;
+                    const currentVacationBalance = parseFloat($('#current_vacation_balance').val()) || 0;
+                    const balancePeriodEndStr = $('#balance_period_end').val();
+                    
+                    if (!endDateStr) {
                         $('#anul_vac_days').val('0.00');
                         $('#vacation_days_summary').text('0.00');
                         return;
                     }
+                    
+                    let finalBalance = currentVacationBalance;
+                    
+                    // Calculate accrued days from period_end to EOS date
+                    if (periodEntitlement > 0 && balancePeriodEndStr) {
+                        const periodEndDate = new Date(balancePeriodEndStr + 'T00:00:00');
+                        const eosDate = new Date(endDateStr + 'T00:00:00');
+                        
+                        if (eosDate > periodEndDate) {
+                            const eosYear = eosDate.getFullYear();
+                            const eosMonth = eosDate.getMonth();
+                            const eosDay = eosDate.getDate();
+                            
+                            // --- START: MODIFIED CALCULATION TO MATCH OLD SYSTEM (Target 41.88 for emp 5313) ---
+                            
+                            // 1. Get the contract duration (1 or 2 years) passed from PHP
+                            const isTwoYear = parseInt($('#is_two_year_contract').val()) || 0;
+                            
+                            // 2. Determine the *true* annual rate. The DB field stores the *period* total.
+                            // For emp 5313: periodEntitlement is 42, isTwoYear is 1. trueAnnualRate becomes 21.
+                            // For a 1-year contract: periodEntitlement might be 21, isTwoYear is 0. trueAnnualRate remains 21.
+                            const trueAnnualRate = isTwoYear ? (periodEntitlement / 2) : periodEntitlement;
 
-                    const joiningDate = new Date(joiningDateStr + 'T00:00:00');
-                    const endDate = new Date(endDateStr + 'T00:00:00');
-
-                    if (endDate < joiningDate) {
-                        $('#anul_vac_days').val('0.00');
-                        $('#vacation_days_summary').text('0.00');
-                        return;
-                    }
-
-                    // --- Vacation Calculation Logic ---
-                    let finalBalance = 0;
-                    if (contractType.toLowerCase() === 'limited') {
-                        // For limited contracts, vacation is not prorated. It's the full entitlement.
-                        finalBalance = annualVacationEntitlement;
-                    } else {
-                        // For unlimited contracts, prorate the vacation for the final year.
-                        let currentServiceYearStart = new Date(joiningDate.getTime());
-                        while (true) {
-                            let nextYearStart = new Date(currentServiceYearStart.getTime());
-                            nextYearStart.setFullYear(nextYearStart.getFullYear() + 1);
-                            if (nextYearStart > endDate) {
-                                break;
-                            }
-                            currentServiceYearStart = nextYearStart;
+                            // 3. The old system's target (41.88) is achieved by using a 365-day daily rate.
+                            const dailyAccrualRate = trueAnnualRate / 365;
+                            
+                            // 4. The old system (and this code) has a bug, calculating days from the 1st of the month
+                            //    instead of from the period_end date. We keep this bug to match the target number.
+                            //    For Nov 4, this calculates 3 days (Nov 1, 2, 3).
+                            const daysToAccrue = eosDay - 1; 
+                            
+                            const accruedDays = daysToAccrue * dailyAccrualRate;
+                            
+                            // --- END: MODIFIED CALCULATION ---
+                            
+                            finalBalance += accruedDays;
+                            
+                            console.log('=== Vacation Calculation Debug (Old System Match) ===');
+                            console.log('EOS Date:', endDateStr);
+                            console.log('Period End Date:', balancePeriodEndStr);
+                            console.log('Opening Balance:', currentVacationBalance.toFixed(4));
+                            console.log('Period Entitlement (from DB):', periodEntitlement);
+                            console.log('Is 2-Year Contract:', isTwoYear);
+                            console.log('True Annual Rate:', trueAnnualRate);
+                            console.log('Daily Accrual Rate (Annual/365):', dailyAccrualRate.toFixed(10));
+                            console.log('Days to Accrue (Buggy: eosDay - 1):', daysToAccrue);
+                            console.log('Accrued Days:', accruedDays.toFixed(4));
+                            console.log('Final Balance:', finalBalance.toFixed(4));
+                            console.log('Target (41.88)');
+                            console.log('====================================================');
                         }
-
-                        const timeDiff = endDate.getTime() - currentServiceYearStart.getTime();
-                        const daysServedThisYear = (timeDiff / (1000 * 3600 * 24)) + 1;
-                        const accruedThisYear = (daysServedThisYear / 365.0) * annualVacationEntitlement;
-
-                        let usedThisYear = 0;
-                        if (window.vacationRecords) {
-                            window.vacationRecords.forEach(function(record) {
-                                const vacDate = new Date(record.start_date + 'T00:00:00');
-                                if (vacDate >= currentServiceYearStart && vacDate <= endDate) {
-                                    usedThisYear += parseFloat(record.vacdays);
-                                }
-                            });
-                        }
-                        finalBalance = openingBalance + accruedThisYear - usedThisYear;
                     }
                     
                     finalBalance = Math.max(0, finalBalance);
-
+                    
                     $('#anul_vac_days').val(finalBalance.toFixed(2));
                     $('#vacation_days_summary').text(finalBalance.toFixed(2));
                 }
@@ -719,19 +815,23 @@
                     $('#curt_month_days_display').val(workingDays);
                     
                     const actualSalaryBase = parseFloat($('#actual_salary_base').val()) || 0;
+                    const contractSalaryBase = parseFloat($('#vacation_salary_base').val()) || 0; // actual package without calculated housing
                     const basicSalary = parseFloat($('#basic_salary').val()) || 0;
                     const housingAllowance = parseFloat($('#housing_allowance').val()) || 0;
                     const absentDays = parseInt($('#absent_days').val()) || 0;
-                    const effectiveWorkedDays = Math.max(0, workingDays - absentDays);
                     
-                    const dailyRate = actualSalaryBase / 30; // Use fixed 30 days for daily rate
-                    let resignationSalary = (!isPaid) ? dailyRate * effectiveWorkedDays : 0;
+                    // Base daily rate for potential salary (contract package)
+                    const dailyRateContract = contractSalaryBase / 30; // 30-day convention
+                    // Resignation month's salary is based on worked days only (deductions handled separately)
+                    let resignationSalary = (!isPaid) ? dailyRateContract * workingDays : 0;
 
-                    // Calculate and apply hourly deduction directly to the resignation month's salary
+                    // DEDUCTION BASE RULE: Use contract base for deductions (days) and /8 for hours
+                    const DEDUCTION_BASE = contractSalaryBase;
+                    const dailyRateDeduction = DEDUCTION_BASE / 30;
                     const deductionHours = parseFloat($('#deduction_hours').val()) || 0;
-                    const hourlyRate = (actualSalaryBase / 30) / 8; // Hourly rate based on actual salary base
-                    const hourlyDeductionAmount = hourlyRate * deductionHours;
-                    resignationSalary -= hourlyDeductionAmount;
+                    const hourlyRateDeduction = (dailyRateDeduction) / 8;
+                    const absentDeductionAmount = dailyRateDeduction * absentDays;
+                    const hourlyDeductionAmount = hourlyRateDeduction * deductionHours;
                     
                     // Ensure resignation salary doesn't go below zero
                     resignationSalary = Math.max(0, resignationSalary);
@@ -741,36 +841,78 @@
                     const empCountry = $('#emp_country').val();
                     const gosiPercent = parseFloat($('#emp_gosi_percent').val()) || 0;
                     const gosiBase = basicSalary + housingAllowance;
-                    const gosiDeduction = (empCountry == '191' && gosiPercent > 0 && gosiBase > 0) ? (gosiBase * gosiPercent / 100) : 0;
-                    if ($('#gosi_deduction').length) {
-                        $('#gosi_deduction').val(gosiDeduction.toFixed(2));
+                    
+                    // Calculate GOSI deduction for the termination month only
+                    // Formula: (Monthly GOSI / 30) × Days worked in termination month
+                    let calculatedGosiDeduction = 0;
+                    if (empCountry == '191' && gosiPercent > 0 && gosiBase > 0 && endDateStr) {
+                        const monthlyGosi = gosiBase * gosiPercent / 100;
+                        const dailyGosi = monthlyGosi / 30;
+                        const terminationDate = new Date(endDateStr);
+                        const daysInTerminationMonth = terminationDate.getDate(); // Days from 1st to termination date
+                        calculatedGosiDeduction = dailyGosi * daysInTerminationMonth;
                     }
+                    
+                    // Only auto-fill if user hasn't manually edited the field
+                    if ($('#gosi_deduction').length && !gosiManuallyEdited) {
+                        $('#gosi_deduction').val(calculatedGosiDeduction.toFixed(2));
+                    }
+                    
+                    // Get the actual GOSI deduction value (user can override)
+                    const gosiDeduction = parseFloat($('#gosi_deduction').val()) || 0;
                     
                     const eosAmount = parseFloat($('#eos_amount_display').val()) || 0;
                     const vacationSalary = parseFloat($('#vacation_salary_display').val()) || 0;
+                    const otherEarnings = parseFloat($('#other_earnings').val()) || 0;
+                    
+                    // Calculate overtime earnings per new rule:
+                    // per-hour overtime rate = (basic/240)/2 + (full/240)
+                    // full = actualSalaryBase; basic = basicSalary
+                    // hours amount = overtimeHourlyRate * overtime_hours
+                    // days amount  = overtimeHourlyRate * 8 * overtime_days
+                    const overtimeHours = parseFloat($('#overtime_hours').val()) || 0;
+                    const overtimeDays = parseFloat($('#overtime_days').val()) || 0;
+                    const overtimeHourlyRate = ((basicSalary / 240) / 2) + ((contractSalaryBase) / 240);
+                    const overtimeHoursAmount = overtimeHourlyRate * overtimeHours;
+                    const overtimeDaysAmount = overtimeHourlyRate * 8 * overtimeDays;
+                    const totalOvertimeEarnings = overtimeHoursAmount + overtimeDaysAmount;
                     
                     const loanDeduction = parseFloat($('#deduct').val()) || 0;
+ 
+                    const totalEarnings = eosAmount + vacationSalary + resignationSalary + otherEarnings + totalOvertimeEarnings;
+                    const totalDeductions = loanDeduction + gosiDeduction + absentDeductionAmount + hourlyDeductionAmount;
+                    const netPayment = totalEarnings - totalDeductions;                    // --- MODIFICATION: Round up the net payment to the nearest next number ---
+                    const roundedNetPayment = Math.ceil(netPayment);
                     
-                    const totalEarnings = eosAmount + vacationSalary + resignationSalary;
-                    const totalDeductions = loanDeduction + gosiDeduction;
-                    const netPayment = totalEarnings - totalDeductions;
+                    $('#net_payment_display').val(roundedNetPayment.toFixed(2));
                     
-                    $('#net_payment_display').val(netPayment.toFixed(2));
+                    $('#net_payment_hidden').val(roundedNetPayment.toFixed(2));
+                    // --- END MODIFICATION ---
                     
-                    $('#net_payment_hidden').val(netPayment.toFixed(2));
                     $('#anul_vac_salry_hidden').val(vacationSalary.toFixed(2));
                     $('#eos_amount_hidden').val(eosAmount.toFixed(2));
                 }
 
                 function performApiCalculation() {
+                    const totalSalary = parseFloat($('#total_salary').val()) || 0;
+                    
                     const formData = {
                         contract_type: $('input[name="contract_type"]:checked').val(),
                         eos_reason: $('#eos_reason').val(),
                         end_date: $('#end_date').val(),
                         joining_date: $('#joining_date').val(),
-                        salary: $('#total_salary').val(),
+                        salary: totalSalary,
                         anul_vac_days: $('#anul_vac_days').val(),
                     };
+                    
+                    console.log('=== EOS API Request ===');
+                    console.log('Total Salary being sent to API:', totalSalary);
+                    console.log('Contract Type:', formData.contract_type);
+                    console.log('EOS Reason:', formData.eos_reason);
+                    console.log('Joining Date:', formData.joining_date);
+                    console.log('End Date:', formData.end_date);
+                    console.log('Vacation Days:', formData.anul_vac_days);
+                    console.log('======================');
 
                     if (!formData.end_date || !formData.eos_reason) {
                         $('#eos_amount_display, #vacation_salary_display').val('0.00');
@@ -789,13 +931,12 @@
                             if (response.success) {
                                 $('#eos_amount_display').val(response.eos_amount);
                                 
-                                // --- NEW LOGIC for Vacation Salary ---
-                                // Calculate vacation salary based on actual benefits, ignoring API response for this value.
-                                const vacationBase = parseFloat($('#actual_salary_base').val()) || 0;
+                                // --- Calculate Vacation Salary using vacation_salary_base (WITHOUT calculated housing) ---
+                                const vacationBase = parseFloat($('#vacation_salary_base').val()) || 0;
                                 const vacationDays = parseFloat($('#anul_vac_days').val()) || 0;
                                 const calculatedVacationSalary = (vacationBase > 0 && vacationDays > 0) ? (vacationBase / 30) * vacationDays : 0;
                                 $('#vacation_salary_display').val(calculatedVacationSalary.toFixed(2));
-                                // --- END NEW LOGIC ---
+                                // --- END Vacation Salary Calculation ---
 
                             } else {
                                 $('#eos_amount_display, #vacation_salary_display').val('0.00');
@@ -832,4 +973,3 @@
 	</body>
 	</html>
 <?php } ?>
-

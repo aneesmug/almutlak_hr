@@ -144,7 +144,9 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                         <?php  ?><div class="row text-center">
 
                                             <?php
-                                            if ($user_type == "dept_user") {
+                                            // Determine which departments to show based on user role
+                                            if ($user_type == "dept_user" && !$is_system_admin) {
+                                                // Department managers: show only their department
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`dept`, 
@@ -154,11 +156,11 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     FROM `employees` 
                                                     LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
                                                     LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
-                                                    WHERE `employees`.`emp_sup_type`='mocha' 
-                                                    AND `employees`.`status` = 1 
-                                                    AND `employees`.`dept` = '" . $user_dept . "' 
+                                                    WHERE `employees`.`status` = 1 
+                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "' 
                                                     GROUP BY `employees`.`dept`");
-                                            } elseif ($user_type == 'administrator' or $user_type == 'hr' or $user_dept == 5) {
+                                            } else {
+                                                // Administrators, HR team, and other privileged users: show all departments
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`dept`, 
@@ -172,7 +174,8 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     GROUP BY `employees`.`dept`");
                                             }
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
-                                            while ($rec = mysqli_fetch_array($querygrp)) {
+                                            if ($querygrp) {
+                                                while ($rec = mysqli_fetch_array($querygrp)) {
                                             ?>
                                                 <div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee_by_dept.php?page=1&status=1&dept=<?= $rec["dept"] ?>'" style="cursor: pointer;">
                                                     <?php  ?><div class="card-box widget-flat border-<?= $rec["color"] ?> bg-<?= $rec["color"] ?> text-white">
@@ -182,7 +185,9 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                         <p class="text-uppercase m-b-5 font-13 font-600"><?= ($is_rtl ?? false) ? $rec["dep_nme_ar"] : $rec["dep_nme"] ?></p>
                                                     </div>
                                                 </div>
-                                            <?php } //} 
+                                            <?php 
+                                                } // end while
+                                            } // end if ($querygrp)
                                             ?>
 
                                         </div>
@@ -192,7 +197,9 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                         <?php  ?><div class="row text-center">
 
                                             <?php
-                                            if ($user_type == "dept_user") {
+                                            // Determine which companies to show based on user role
+                                            if ($user_type == "dept_user" && !$is_system_admin) {
+                                                // Department managers: show only companies in their department
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`comp_no`, 
@@ -202,9 +209,10 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     FROM `employees` 
                                                     LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
                                                     WHERE `employees`.`status` = 1
-                                                    AND `employees`.`dept` = '{$user_dept}'
+                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
                                                     GROUP BY `employees`.`comp_no`");
-                                            } elseif ($user_type == 'administrator' or $user_type == 'hr' or $user_dept == 5) {
+                                            } else {
+                                                // Administrators, HR team, and other privileged users: show all companies
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`comp_no`, 
@@ -217,7 +225,8 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     GROUP BY `employees`.`comp_no`");
                                             }
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
-                                            while ($rec = mysqli_fetch_array($querygrp)) {
+                                            if ($querygrp) {
+                                                while ($rec = mysqli_fetch_array($querygrp)) {
                                             ?>
                                                 <div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee_by_comp.php?page=1&status=1&comp=<?= $rec["comp_no"] ?>'" style="cursor: pointer;">
                                                     <?php  ?><div class="card-box widget-flat border-<?=$color[rand(0,5)]?> bg-<?=$color[rand(0,5)]?> text-white">
@@ -227,7 +236,9 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                         <p class="text-uppercase m-b-5 font-13 font-600"><?= ($is_rtl ?? false) ? $rec["comp_name_ar"] : $rec["comp_name"] ?></p>
                                                     </div>
                                                 </div>
-                                            <?php } //} 
+                                            <?php 
+                                                } // end while
+                                            } // end if ($querygrp)
                                             ?>
 
                                         </div>
@@ -252,11 +263,43 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             </thead>
                                             <tbody>
                                                 <?php
-                                                if ($user_type == "dept_user") {
-                                                    $sql = "SELECT * FROM `employees` WHERE `status`=1 AND `fly`=0 AND `dept`='" . $user_dept . "' ";
+                                                // Determine who can see all employees vs only their department
+                                                // Can see all: Admins, HR team (dept 5), Finance team (dept 2), IT team (dept 6), Executive/Management (dept 10)
+                                                $can_see_all_employees = (
+                                                    $is_system_admin || 
+                                                    $isHR || 
+                                                    $isDeptHr || 
+                                                    $isFinance || 
+                                                    $isDeptFinance || 
+                                                    $isItTeam || 
+                                                    $user_dept == 5 || 
+                                                    $user_dept == 2 || 
+                                                    $user_dept == 6 || 
+                                                    $user_dept == 10 ||
+                                                    $user_type == 'gm'
+                                                );
 
-                                                    //$_SERVER['emp_sup_type'] = $_GET['emp_sup_type'];
+                                                if (!$can_see_all_employees) {
+                                                    // Department users: show only their department employees
+                                                    $sql = "SELECT 
+                                                            `emp`.*, 
+                                                            CASE 
+                                                                WHEN `emp`.`sex` = 1 THEN 'male' 
+                                                                WHEN `emp`.`sex` = 2 THEN 'female'
+                                                                ELSE ''
+                                                            END AS `sex`,  
+                                                            `countries`.`name` AS `country_name`,
+                                                            `department`.`dep_nme`,
+                                                            `department`.`dep_nme_ar`,
+                                                            `sponsorship`.`sponsor` AS `emp_sup_type`
+                                                            FROM `employees` `emp`
+                                                            LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
+                                                            LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
+                                                            LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
+                                                            WHERE `emp`.`status`=1 AND `emp`.`fly`=0 
+                                                            AND `emp`.`dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "' ";
                                                 } else {
+                                                    // Admins, HR, Finance, IT, Management: show all employees
                                                     $sql = "SELECT 
                                                             `emp`.*,
                                                             CASE 

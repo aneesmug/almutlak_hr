@@ -2533,46 +2533,61 @@ $(document).on('click', '.cardAddAttr', function (e) {
 $(document).on('click', '.updateUserAjax', function (e) {
     e.preventDefault();
     var e_iduser        = $(this).data('id'); 
-    var e_idpasusr      = $(this).data('id'); 
     var e_fullname      = $(this).data('fullname');
-    var e_username      = $(this).data('username');
     var e_dept          = $(this).data('dept');
     var e_email         = $(this).data('email');
-    var e_email_pass    = $(this).data('email_pass');
-    var e_mobile        = $(this).data('mobile');
-    var status          = $(this).data('status');
     var user_type       = $(this).data('user_type');
-    var oldpass         = $(this).data('oldpass');
     Swal.fire({
-        title: __('update_user_info'),
+        title: e_fullname, // Show user's name in title
         html: edit_user_HTML(),
-        text: __("revert_warning"),
         showCancelButton: true,
         confirmButtonColor: '#3085d6',
         cancelButtonColor: '#d33',
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
-        customClass: 'swal-wide',
         willOpen: function() {
-            $('#iduser')    .val(e_iduser); 
-            $('#idpass')    .attr('data-id', e_iduser);
-            $('#idpasusr')  .val(e_idpasusr); 
-            $('#fullname')  .val(e_fullname);
-            $('#username')  .val(e_username);
-            $('#dept')      .val(e_dept);
-            $('#email')     .val(e_email);
-            $('#email_pass').val(e_email_pass);
-            $('#mobile')    .val(e_mobile);
-            $('#oldpass')   .val(oldpass);
-            $('input[name="status"][value="'+status+'"]').prop('checked', true);
+            $('#iduser').val(e_iduser); 
+            $('#dept').val(e_dept);
+            $('#email').val(e_email);
             $('#user_type option[value="'+user_type+'"]').prop("selected", "selected");
-            $('.updatePasswordAjax').attr('data-oldpass', oldpass);
+            
+            // Function to toggle email field visibility
+            function toggleEmailField() {
+                var selectedType = $('#user_type').val();
+                if (selectedType === 'employee') {
+                    $('#email-group').hide();
+                    $('#email').removeAttr('required');
+                } else {
+                    $('#email-group').show();
+                    $('#email').attr('required', 'required');
+                }
+            }
+            
+            // Initial toggle on load
+            toggleEmailField();
+            
+            // Toggle on change
+            $('#user_type').on('change', function() {
+                toggleEmailField();
+            });
         },
         preConfirm: function() {
+            var selectedType = $('#user_type').val();
+            
+            // Validate user type
+            if($('#user_type').val() == "") {
+                Swal.showValidationMessage(__("select_employee_type"));
+                return false;
+            }
+            
+            // Only validate email if user type is not 'employee'
+            if(selectedType !== 'employee' && $('#email').val() == "") {
+                Swal.showValidationMessage(__("enter_valid_email"));
+                return false;
+            }
+            
             return new Promise(function(reject) {
-                if($('#fullname').val() == "" || $('#username').val() == "" )
-                {reject(__("fill_mandatory_fields"));}
                 $.ajax({
                         url: './includes/ajaxFile/ajaxUser.php',
                         type: 'POST',
@@ -2581,21 +2596,6 @@ $(document).on('click', '.updateUserAjax', function (e) {
                         dataType: "json",
                 })
                 .done(function(response){
-                    /*Swal.fire({
-                        title : response.title,
-                        text : response.message,
-                        toast : true,
-                        position : 'top-right',
-                        timer : 3000,
-                        showCancelButton : false,
-                        showConfirmButton : false,
-                        icon : response.type,
-                        timerProgressBar: true,
-                        didOpen: (toast) => {
-                            toast.addEventListener('mouseenter', Swal.stopTimer)
-                            toast.addEventListener('mouseleave', Swal.resumeTimer)
-                        }
-                    }).then(function(isConfirm){(isConfirm)?location.reload():""});*/
                     Swal.fire({
                         title:response.title,text:response.message,icon:response.type,allowOutsideClick:false, confirmButtonText: __("ok")
                     }).then(function(isConfirm){(isConfirm)?location.reload():""});
@@ -2700,14 +2700,51 @@ $(document).on('click', '.createUserDeptAjax', function(e) {
         },
         didOpen: () => {
             setupInputValidations();
-            const fields = [
-                { id: 'email', event: 'input', validation: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), requiredMessage: __('enter_valid_email') },
-                { id: 'user_type',  event: 'change', validation: (value) => value !== "", requiredMessage: __('select_employee_type') }
-            ];
+            
+            // Function to toggle email field requirement based on user type
+            function toggleEmailField() {
+                var selectedType = $('#user_type').val();
+                if (selectedType === 'employee') {
+                    $('#email').parent().hide();
+                } else {
+                    $('#email').parent().show();
+                }
+            }
+            
+            // Initial toggle on load
+            toggleEmailField();
+            
+            // Toggle on change
+            $('#user_type').on('change', function() {
+                toggleEmailField();
+            });
+            
             const onFirstInteraction = () => { hasUserInteracted = true; };
-            setupDynamicValidation(fields, onFirstInteraction);
+            setupDynamicValidation([
+                { id: 'user_type', event: 'change', validation: (value) => value !== "", requiredMessage: __('select_employee_type') }
+            ], onFirstInteraction);
         },
         preConfirm: () => {
+            var selectedType = $('#user_type').val();
+            
+            // Validate user type (always required)
+            if(!selectedType || selectedType == "") {
+                Swal.showValidationMessage(__('select_employee_type'));
+                return false;
+            }
+            
+            // Only validate email if user type is not 'employee'
+            if(selectedType !== 'employee' && !$('#email').val()) {
+                Swal.showValidationMessage(__('enter_valid_email'));
+                return false;
+            }
+            
+            // Validate email format if provided
+            if($('#email').val() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($('#email').val())) {
+                Swal.showValidationMessage(__('enter_valid_email'));
+                return false;
+            }
+            
             return $.ajax({
                 url: './includes/ajaxFile/ajaxUser.php',
                 type: 'POST',
@@ -3707,7 +3744,8 @@ function assignAsset(empId) {
             if (response.success && response.assets.length > 0) {
                 // Build the options for the select dropdown
                 let assetOptions = response.assets.map(asset => {
-                    return `<option value="${asset.id}">${asset.name}</option>`;
+                    let type = asset.asset_type ? ` (${asset.asset_type})` : '';
+                    return `<option value="${asset.id}" data-type="${asset.asset_type || ''}" data-dept="${asset.clearance_dept_id || ''}">${asset.name}${type}</option>`;
                 }).join('');
 
                 // Now, show the SweetAlert2 modal with the dynamic dropdown
@@ -3745,7 +3783,6 @@ function assignAsset(empId) {
                             format: "yyyy-mm-dd",
                             todayHighlight: true,
                             autoclose: true,
-                            // startDate: '+0d'
                         });
                         const fields = [
                             { id: 'swal-asset-id',  event: 'change', validation: (value) => value !== "", requiredMessage: __('select_asset_type_validation') },
@@ -3757,7 +3794,10 @@ function assignAsset(empId) {
                     },
                     preConfirm: () => {
                         // Collect data from the form
-                        const assetId = document.getElementById('swal-asset-id').value;
+                        const assetSelect = document.getElementById('swal-asset-id');
+                        const assetId = assetSelect.value;
+                        const assetType = assetSelect.options[assetSelect.selectedIndex].getAttribute('data-type');
+                        const clearanceDeptId = assetSelect.options[assetSelect.selectedIndex].getAttribute('data-dept');
                         const serialNumber = document.getElementById('swal-serial-number').value;
                         const description = document.getElementById('swal-description').value;
                         const assignedDate = document.getElementById('swal-assigned-date').value;
@@ -3766,6 +3806,8 @@ function assignAsset(empId) {
                             ajaxType: 'assign_asset',
                             emp_id: empId,
                             asset_id: assetId,
+                            asset_type: assetType,
+                            clearance_dept_id: clearanceDeptId,
                             serial_number: serialNumber,
                             description: description,
                             assigned_date: assignedDate
@@ -3787,7 +3829,6 @@ function assignAsset(empId) {
                                     icon: ajaxResponse.type
                                 }).then(() => {
                                     if(ajaxResponse.type === 'success') {
-                                        // Optionally, reload the page or update a table to show the new asset
                                         location.reload();
                                     }
                                 });
@@ -3807,6 +3848,71 @@ function assignAsset(empId) {
             Swal.fire(__('error_title'), __('failed_to_connect_for_asset_types'), 'error');
         }
     });
+// New function to register asset with type and clearance department
+function registerAssetModal() {
+    Swal.fire({
+        title: __('register_new_asset'),
+        html: `
+            <form id="registerAssetForm" class="text-left">
+                <div class="form-group">
+                    <label for="swal-asset-name">${__('asset_name')}</label>
+                    <input id="swal-asset-name" class="form-control" placeholder="${__('asset_name_placeholder')}">
+                </div>
+                <div class="form-group">
+                    <label for="swal-asset-type">${__('asset_type')}</label>
+                    <input id="swal-asset-type" class="form-control" placeholder="${__('asset_type_placeholder')}">
+                </div>
+                <div class="form-group">
+                    <label for="swal-clearance-dept-id">${__('clearance_department_id')}</label>
+                    <input id="swal-clearance-dept-id" class="form-control" placeholder="${__('clearance_department_id_placeholder')}">
+                </div>
+            </form>
+        `,
+        showCancelButton: true,
+        cancelButtonText: __('cancel'),
+        confirmButtonText: __('register'),
+        showLoaderOnConfirm: true,
+        preConfirm: () => {
+            const assetName = document.getElementById('swal-asset-name').value;
+            const assetType = document.getElementById('swal-asset-type').value;
+            const clearanceDeptId = document.getElementById('swal-clearance-dept-id').value;
+            if (!assetName || !assetType || !clearanceDeptId) {
+                Swal.showValidationMessage(__('fill_all_fields_validation'));
+                return false;
+            }
+            return {
+                ajaxType: 'register_asset',
+                name: assetName,
+                asset_type: assetType,
+                clearance_dept_id: clearanceDeptId
+            };
+        },
+        allowOutsideClick: false,
+    }).then((result) => {
+        if (result.isConfirmed) {
+            $.ajax({
+                type: 'POST',
+                url: './includes/ajaxFile/ajaxEmployee.php',
+                data: result.value,
+                dataType: 'json',
+                success: function(ajaxResponse) {
+                    Swal.fire({
+                        title: ajaxResponse.title,
+                        text: ajaxResponse.message,
+                        icon: ajaxResponse.type
+                    }).then(() => {
+                        if(ajaxResponse.type === 'success') {
+                            location.reload();
+                        }
+                    });
+                },
+                error: function() {
+                    Swal.fire(__('error_title'), __('unexpected_error'), 'error');
+                }
+            });
+        }
+    });
+}
 }
 
 function unassignAsset(assetRecordId) {
@@ -4422,7 +4528,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                 format: "yyyy-mm-dd",
                 todayHighlight: true,
                 autoclose: true,
-                startDate: '+0d'
+                startDate: '-5d'
             }).on('changeDate', function(e) {
                 $('#end_date').datepicker('setStartDate', e.date);
                 if ($('#leave_type_select').val() === 'Compensatory Leave') {
@@ -4486,6 +4592,16 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                 return false;
             }
 
+            // Require attachment ONLY for Sick Leave and Maternity Leave
+            const attachmentInput = document.getElementById('attachment');
+            const attachmentRequiredTypes = ['Sick Leave', 'Maternity Leave'];
+            if (attachmentRequiredTypes.includes(leaveType)) {
+                if (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0) {
+                    Swal.showValidationMessage(__('select_attachment_file_validation'));
+                    return false;
+                }
+            }
+
 
             // --- AJAX Submission ---
             return $.ajax({
@@ -4520,82 +4636,386 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 
 
 
+// $(document).on('click', '.applyvacationAtterXXOrignal', function (e) {
+//     e.preventDefault();
+//     var empid = $(this).data('empid');
+//     var deptId = $(this).data('dept');
+//     var country = $(this).data('country');
+//     Swal.fire({
+//         title: __('apply_vacation_info_title'),
+//         html: vacationApply_HTML(country),
+//         showCancelButton: true,
+//         confirmButtonColor: '#3085d6',
+//         cancelButtonColor: '#d33',
+//         confirmButtonText: __('yes_register'),
+//         cancelButtonText: __('cancel'),
+//         showLoaderOnConfirm: true,
+//         allowOutsideClick: false,
+//         rtl: true,
+//         // width: "50%",
+//         willOpen: () => {
+//             $('#start_date').datepicker({
+//                 format: "yyyy-mm-dd",
+//                 todayHighlight: true,
+//                 autoclose: true
+//             }).on('changeDate', function (e) {
+//                 var startDate = e.date;
+//                 $('#end_date').datepicker('setStartDate', startDate); // Prevent end date before start
+//             });
+
+//             $('#end_date').datepicker({
+//                 format: "yyyy-mm-dd",
+//                 todayHighlight: true,
+//                 autoclose: true
+//             }).on('changeDate', function (e) {
+//                 var endDate = e.date;
+//                 $('#start_date').datepicker('setEndDate', endDate); // Prevent start date after end
+//             });
+//             // Date picker initialization
+//             /*$('#start_date').datepicker({
+//                 format: "yyyy-mm-dd",
+//                 todayHighlight: true,
+//                 autoclose: true,
+//                 startDate: '+0d'
+//             }).on('changeDate', function(e) {
+//                 var startDate = e.date;
+//                 var maxEndDate = new Date(startDate);
+//                 maxEndDate.setDate(maxEndDate.getDate() + 20.00); // Add 20 days
+//                 // Set end date to same as start date initially
+//                 $('#end_date').datepicker('setStartDate', startDate);
+//                 $('#end_date').datepicker('setEndDate', maxEndDate);
+//                 $('#end_date').datepicker('update', startDate); // Auto-set end date to start date
+//             });
+//             $('#end_date').datepicker({
+//                 format: "yyyy-mm-dd",
+//                 todayHighlight: true,
+//                 autoclose: true
+//             }).on('changeDate', function(e) {
+//                 // Prevent start date from being after end date
+//                 $('#start_date').datepicker('setEndDate', e.date); 
+//                 // Calculate if end date is more than 20 days from start
+//                 var startDate = $('#start_date').datepicker('getDate');
+//                 if (startDate) {
+//                     var maxAllowedDate = new Date(startDate);
+//                     maxAllowedDate.setDate(maxAllowedDate.getDate() + 20.00);
+//                     if (e.date > maxAllowedDate) {
+//                         $('#end_date').datepicker('update', maxAllowedDate);
+//                         alert('Maximum 20 days range allowed');
+//                     }
+//                 }
+//             });*/
+//             /*$('#start_date').datepicker({
+//                 format: "yyyy-mm-dd",
+//                 todayHighlight: true,
+//                 autoclose: true,
+//                 startDate: '+0d'
+//             }).on('changeDate', function (e) {
+//                 var startDate = e.date;
+//                 $('#end_date').datepicker('setStartDate', startDate); // Prevent end date before start
+//             });
+
+//             $('#end_date').datepicker({
+//                 format: "yyyy-mm-dd",
+//                 todayHighlight: true,
+//                 autoclose: true
+//             }).on('changeDate', function (e) {
+//                 var endDate = e.date;
+//                 $('#start_date').datepicker('setEndDate', endDate); // Prevent start date after end
+//             });*/
+
+//             // Initialize Select2 for replacement person dropdown
+//             $("#replacement_per").select2();
+//             // Load replacement persons
+//             $.ajax({
+//                 url: './includes/ajaxFile/ajaxEmployee.php',
+//                 dataType: 'JSON',
+//                 type: 'POST',
+//                 data: {ajaxType: "emp_department", dept: deptId},
+//                 success: function(res) {
+//                     if (res.status == 200) {
+//                         let options = '';
+//                         for (let i in res.data) {
+//                             options += `<option value="${res.data[i].emp_id}">${res.data[i].name.split(' ')[0]+' '+res.data[i].name.split(' ')[1]}</option>`;
+//                         }
+//                         $('#replacement_per').append(options);
+//                     }
+//                 },
+//                 error: function(j, e) {
+//                     errorHandling(j, e);
+//                 },
+//             });
+//             // Load employee data
+//             $.ajax({
+//                 url: './includes/ajaxFile/ajaxEmployee.php',
+//                 dataType: 'JSON',
+//                 type: 'POST',
+//                 data: {ajaxType: "emp_data", empid: empid},
+//                 success: function(res) {
+//                     if (res.status == 200) {
+//                         $('input[name="name"]').val(res.data[0].name);
+//                         $('input[name="empid"]').val(res.data[0].emp_id);
+//                     }
+//                 },
+//                 error: function(j, e) {
+//                     errorHandling(j, e);
+//                 },
+//             });
+//             // Toggle fields based on vacation type selection
+//             function toggleVacationFields() {
+//                 const selectedVac = document.querySelector('input[name="vac_type"]:checked');
+//                 // Hide all by default
+//                 $('#flyTypeSection, #replacementSection, #date_select, #notesSection').addClass('d-none');
+//                 if (!selectedVac) return;
+//                 const vacValue = selectedVac.value;
+//                 if (vacValue === 'Local Vacation' || vacValue === 'Fly') {
+//                     $('#flyTypeSection').removeClass('d-none');
+//                     // Check if any fly_type is already selected
+//                     const selectedFlyType = document.querySelector('input[name="fly_type"]:checked');
+//                     if (selectedFlyType) {
+//                         const flyVal = selectedFlyType.value;
+//                         if (flyVal === 'annual' || flyVal === 'emergency') {
+//                             $('#replacementSection, #date_select').removeClass('d-none');
+//                         }
+//                     }
+//                     // Attach fly_type listener to trigger section toggle
+//                     document.querySelectorAll('input[name="fly_type"]').forEach(flyRadio => {
+//                         flyRadio.addEventListener('change', function () {
+//                             const flyVal = this.value;
+//                             if (flyVal === 'annual' || flyVal === 'emergency') {
+//                                 $('#replacementSection, #date_select').removeClass('d-none');
+//                             } else {
+//                                 $('#replacementSection, #date_select').addClass('d-none');
+//                             }
+//                         });
+//                     });
+//                 }
+//             }
+//             // Initialize date picker and fields when form is created
+//             function initVacationForm() {
+//                 document.querySelectorAll('input[name="vac_type"]').forEach(radio => {
+//                     radio.addEventListener('change', toggleVacationFields);
+//                 });
+//                 toggleVacationFields(); // trigger once on load
+//             }
+//             initVacationForm();
+//         },
+//         preConfirm: function() {
+//             const formElement = document.getElementById('submitVacationApplyForm');
+//             const formData = new FormData(formElement);
+//             formData.append("ajaxType", "applyVacation");
+//             const selectedRadio = $('input[name="vac_type"]:checked').val();
+//             if (!selectedRadio) {
+//                 Swal.showValidationMessage(__('select_vacation_type_validation'));
+//                 return false;
+//             }
+//             // Validation for "Local Vacation" or "Fly"
+//             if (selectedRadio === 'Local Vacation' || selectedRadio === 'Fly') {
+//                 const flyType = $('input[name="fly_type"]:checked').val();
+//                 if (!flyType) {
+//                     Swal.showValidationMessage(__('select_vacation_type_validation'));
+//                     return false;
+//                 }
+//                 if (flyType === 'annual' || flyType === 'emergency') {
+//                     const startDate = $('#start_date').val();
+//                     const endDate = $('#end_date').val();
+//                     const replacement = $('#replacement_per').val();
+//                     if (!startDate || !endDate) {
+//                         Swal.showValidationMessage(__('start_return_date_required_validation'));
+//                         return false;
+//                     }
+//                     if (!replacement) {
+//                         Swal.showValidationMessage(__('replacement_person_required_validation'));
+//                         return false;
+//                     }
+//                 }
+//             }
+//             // No extra validation needed for "Encashed"
+//             return new Promise(function (resolve, reject) {
+//                 $.ajax({
+//                     url: './includes/ajaxFile/ajaxVacation.php',
+//                     type: 'POST',
+//                     dataType: "JSON",
+//                     cache: false,
+//                     contentType: false,
+//                     processData: false,
+//                     data: formData,
+//                 })
+//                 .done(function (response) {
+//                     Swal.fire({
+//                         title: response.title,
+//                         text: response.message,
+//                         icon: response.type,
+//                         allowOutsideClick: false
+//                     }).then(function (isConfirm) {
+//                         if (isConfirm) location.reload();
+//                     });
+//                 })
+//                 .fail(function (jqXHR, textStatus, errorThrown) {
+//                     reject(handleAjaxFailure(jqXHR, textStatus).message);
+//                 });
+//             });
+//         }
+
+//     })
+// });
+
 $(document).on('click', '.applyvacationAtter', function (e) {
     e.preventDefault();
     var empid = $(this).data('empid');
     var deptId = $(this).data('dept');
     var country = $(this).data('country');
+
+    // Quick pre-check: block opening the modal if there's already a pending request
+    try {
+        $.ajax({
+            url: './includes/ajaxFile/ajaxVacation.php',
+            type: 'POST',
+            dataType: 'json',
+            data: { ajaxType: 'canApplyVacation', emp_id: empid },
+        }).done(function(res) {
+            if (!res || res.ok === false) {
+                Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' });
+                return;
+            }
+            if (res.can_apply === false) {
+                // Build a richer status message if details are available, plus the full approval chain
+                const esc = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+                let lines = [];
+                if (res.pending_inv) lines.push(`${__('request') || 'Request'}: ${esc(res.pending_inv)}`);
+                if (res.current_status || res.current_level) {
+                    const statusText = (function(){
+                        if (res.current_status === 'approved') return __('approved') || 'Approved';
+                        if (res.current_status === 'rejected') return __('rejected') || 'Rejected';
+                        return __('pending_approval') || 'Pending approval';
+                    })();
+                    const levelText = res.current_level ? ` (${__('level') || 'Level'} ${esc(res.current_level)})` : '';
+                    lines.push(`${__('current_status_label') || 'Current status'}: ${statusText}${levelText}`);
+                }
+                if (res.current_approver_name) {
+                    lines.push(`${__('pending_with') || 'Pending with'}: ${esc(res.current_approver_name)}`);
+                }
+
+                // Build approval chain HTML
+                let chainHtml = '';
+                if (Array.isArray(res.chain) && res.chain.length) {
+                    const labelRaw = __('approval_chain');
+                    const label = (labelRaw && labelRaw !== 'approval_chain') ? labelRaw : 'Approval chain';
+                    const statusLabel = (s) => {
+                        if (s === 'approved') return __('approved') || 'Approved';
+                        if (s === 'pending') return __('pending') || 'Pending';
+                        if (s === 'awaiting') return __('awaiting') || 'Awaiting';
+                        if (s === 'rejected') return __('rejected') || 'Rejected';
+                        return esc(s);
+                    };
+                    const icon = (s) => s === 'approved' ? '✅' : (s === 'pending' ? '🟡' : (s === 'awaiting' ? '⏸️' : (s === 'rejected' ? '❌' : 'ℹ️')));
+                    const rows = res.chain
+                        .sort((a, b) => (a.level||0) - (b.level||0))
+                        .map(step => `<div style="text-align:left;">${icon(step.status)} ${__('level') || 'Level'} ${esc(step.level)}: ${esc(step.name)} — ${statusLabel(step.status)}</div>`) 
+                        .join('');
+                    chainHtml = `<hr/><div style="text-align:left;"><strong>${label}:</strong></div>${rows}`;
+                }
+
+                const textMsg = res.message || lines.join('\n');
+                if (chainHtml) {
+                    // Use HTML to render the chain nicely
+                    const htmlTop = esc(textMsg).replace(/\n/g, '<br/>');
+                    Swal.fire({ title: __('cannot_apply_now') || 'Cannot Apply', html: `${htmlTop}${chainHtml}`, icon: 'info', allowOutsideClick: false });
+                } else {
+                    Swal.fire({ title: __('cannot_apply_now') || 'Cannot Apply', text: textMsg, icon: 'info', allowOutsideClick: false });
+                }
+                return;
+            }
+
+            // Proceed to open the modal as usual
+            openVacationApplyModal(empid, deptId, country);
+        }).fail(function(jqXHR){
+            let msg = 'Unable to verify eligibility.';
+            try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
+            Swal.fire({ title: 'Error', text: msg, icon: 'error' });
+        });
+    } catch(err) {
+        Swal.fire({ title: 'Error', text: 'Unexpected error. Please try again.', icon: 'error' });
+    }
+});
+
+// Extracted function to open the Apply Vacation modal after eligibility check
+function openVacationApplyModal(empid, deptId, country) {
+
+    // --- NEW: HTML for the "First Approver" dropdown ---
+    let approverHtml = `
+        <div class="vacation-card" style="margin-top: 20px;">
+            <div class="vacation-card-header">
+                <i class="fa fa-user-tie"></i>
+                ${__('select_first_approver')} <span class="text-danger">*</span>
+            </div>
+            <select id="vac_first_approver" name="first_approver_id" class="form-control form-control-modern" style="width: 100%;">
+                <option value="">${__('loading_approvers')}</option>
+            </select>
+            <small class="form-text text-muted" style="margin-top: 10px; display: block; font-size: 12px; color: #858796;">
+                <i class="fa fa-info-circle"></i> ${__('approver_help_text') || 'Select your direct supervisor/manager. Your request will follow the approval chain automatically.'}
+            </small>
+        </div>
+    `;
+
+    // --- NEW: HTML for vacation salary type selection (initially hidden) ---
+    let salaryTypeHtml = `
+        <div class="vacation-card d-none" id="salaryTypeSection" style="margin-top: 20px;">
+            <div class="vacation-card-header">
+                <i class="fa fa-wallet"></i>
+                ${__('vacation_salary_payment')} <span class="text-danger">*</span>
+            </div>
+            <div class="vac-radio-group">
+                <div class="vac-radio-option">
+                    <input type="radio" id="salary_with_payroll" value="payroll" name="vacation_salary_type" checked>
+                    <label for="salary_with_payroll" class="vac-radio-label">
+                        <i class="fa fa-money-check-alt"></i>
+                        <span>${__('yes')}</span>
+                    </label>
+                </div>
+                <div class="vac-radio-option">
+                    <input type="radio" id="salary_with_eos" value="end_of_service" name="vacation_salary_type">
+                    <label for="salary_with_eos" class="vac-radio-label">
+                        <i class="fa fa-piggy-bank"></i>
+                        <span>${__('no')}</span>
+                    </label>
+                </div>
+            </div>
+            <small class="form-text text-muted" style="margin-top: 10px; display: block; font-size: 12px; color: #858796;">
+                ${__('vacation_salary_type_help')}
+            </small>
+        </div>
+    `;
+
     Swal.fire({
-        title: __('apply_vacation_info_title'),
-        html: vacationApply_HTML(country),
+        title: '<i class="fa fa-umbrella-beach"></i> ' + __('apply_vacation_info_title'),
+        // --- MODIFICATION: Add the approver dropdown HTML and salary type selection ---
+        html: vacationApply_HTML(country) + salaryTypeHtml + approverHtml, 
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
-        confirmButtonText: __('yes_register'),
-        cancelButtonText: __('cancel'),
+        confirmButtonColor: '#4e73df',
+        cancelButtonColor: '#e74a3b',
+        confirmButtonText: '<i class="fa fa-check"></i> ' + __('yes_register'),
+        cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
-        rtl: true,
-        // width: "50%",
+        customClass: {
+            popup: 'vacation-modal-popup',
+            title: 'vacation-modal-title',
+            confirmButton: 'btn-modern-confirm',
+            cancelButton: 'btn-modern-cancel'
+        },
+        width: '95%',
+        padding: '20px',
         willOpen: () => {
+            const swalModal = Swal.getHtmlContainer();
+
+            // Original date pickers
             $('#start_date').datepicker({
                 format: "yyyy-mm-dd",
                 todayHighlight: true,
                 autoclose: true
             }).on('changeDate', function (e) {
                 var startDate = e.date;
-                $('#end_date').datepicker('setStartDate', startDate); // Prevent end date before start
-            });
-
-            $('#end_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
-            }).on('changeDate', function (e) {
-                var endDate = e.date;
-                $('#start_date').datepicker('setEndDate', endDate); // Prevent start date after end
-            });
-            // Date picker initialization
-            /*$('#start_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true,
-                startDate: '+0d'
-            }).on('changeDate', function(e) {
-                var startDate = e.date;
-                var maxEndDate = new Date(startDate);
-                maxEndDate.setDate(maxEndDate.getDate() + 20.00); // Add 20 days
-                // Set end date to same as start date initially
                 $('#end_date').datepicker('setStartDate', startDate);
-                $('#end_date').datepicker('setEndDate', maxEndDate);
-                $('#end_date').datepicker('update', startDate); // Auto-set end date to start date
-            });
-            $('#end_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
-            }).on('changeDate', function(e) {
-                // Prevent start date from being after end date
-                $('#start_date').datepicker('setEndDate', e.date); 
-                // Calculate if end date is more than 20 days from start
-                var startDate = $('#start_date').datepicker('getDate');
-                if (startDate) {
-                    var maxAllowedDate = new Date(startDate);
-                    maxAllowedDate.setDate(maxAllowedDate.getDate() + 20.00);
-                    if (e.date > maxAllowedDate) {
-                        $('#end_date').datepicker('update', maxAllowedDate);
-                        alert('Maximum 20 days range allowed');
-                    }
-                }
-            });*/
-            /*$('#start_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true,
-                startDate: '+0d'
-            }).on('changeDate', function (e) {
-                var startDate = e.date;
-                $('#end_date').datepicker('setStartDate', startDate); // Prevent end date before start
             });
 
             $('#end_date').datepicker({
@@ -4604,12 +5024,13 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                 autoclose: true
             }).on('changeDate', function (e) {
                 var endDate = e.date;
-                $('#start_date').datepicker('setEndDate', endDate); // Prevent start date after end
-            });*/
+                $('#start_date').datepicker('setEndDate', endDate);
+            });
 
-            // Initialize Select2 for replacement person dropdown
-            $("#replacement_per").select2();
-            // Load replacement persons
+            // Original replacement person loader
+            $("#replacement_per").select2({
+                dropdownParent: $(swalModal) // Attach to modal
+            });
             $.ajax({
                 url: './includes/ajaxFile/ajaxEmployee.php',
                 dataType: 'JSON',
@@ -4628,7 +5049,8 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     errorHandling(j, e);
                 },
             });
-            // Load employee data
+
+            // Original emp_data loader
             $.ajax({
                 url: './includes/ajaxFile/ajaxEmployee.php',
                 dataType: 'JSON',
@@ -4644,42 +5066,92 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     errorHandling(j, e);
                 },
             });
-            // Toggle fields based on vacation type selection
+
+            // =================================================================
+            // == MODIFICATION: Load department approvers (Supervisors/Managers)
+            // =================================================================
+            
+            // Initialize the new approver dropdown
+            let $approverSelect = $('#vac_first_approver');
+            $approverSelect.select2({
+                placeholder: "Select your Manager/Supervisor...",
+                allowClear: true,
+                dropdownParent: $(swalModal) // Attach to modal
+            });
+
+            $.ajax({
+                url: './includes/ajaxFile/ajaxEmployee.php',
+                dataType: 'JSON',
+                type: 'POST',
+                data: {
+                    ajaxType: "get_department_approvers", // This function excludes 'Supporter' emptype
+                    dept_id: deptId 
+                },
+                success: function(res) {
+                    if (res.status == 200 && res.data.length > 0) {
+                        let approverOptions = `<option value="">${__('select_your_manager')}</option>`;
+                        for (let i in res.data) {
+                            // Exclude the employee from their own approver list
+                            if (res.data[i].emp_id != empid) { 
+                                approverOptions += `<option value="${res.data[i].emp_id}">${res.data[i].name} (${res.data[i].user_type})</option>`;
+                            }
+                        }
+                        $approverSelect.html(approverOptions);
+                    } else {
+                         let errorOptions = `<option value="">${__('no_approvers_found')}</option>`;
+                         $approverSelect.html(errorOptions);
+                    }
+                },
+                error: function(j, e) {
+                    let errorOptions = `<option value="">${__('error_loading_approvers')}</option>`;
+                    $approverSelect.html(errorOptions);
+                    errorHandling(j, e);
+                },
+            });
+            // =================================================================
+            
+            // MODIFIED: Toggle Fields Logic - now includes salary type section
             function toggleVacationFields() {
                 const selectedVac = document.querySelector('input[name="vac_type"]:checked');
-                // Hide all by default
-                $('#flyTypeSection, #replacementSection, #date_select, #notesSection').addClass('d-none');
+                $('#flyTypeSection, #replacementSection, #date_select, #notesSection, #salaryTypeSection').addClass('d-none');
                 if (!selectedVac) return;
                 const vacValue = selectedVac.value;
                 if (vacValue === 'Local Vacation' || vacValue === 'Fly') {
                     $('#flyTypeSection').removeClass('d-none');
-                    // Check if any fly_type is already selected
                     const selectedFlyType = document.querySelector('input[name="fly_type"]:checked');
                     if (selectedFlyType) {
                         const flyVal = selectedFlyType.value;
                         if (flyVal === 'annual' || flyVal === 'emergency') {
                             $('#replacementSection, #date_select').removeClass('d-none');
+                            // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
+                            if (flyVal === 'annual') {
+                                $('#salaryTypeSection').removeClass('d-none');
+                            }
                         }
                     }
-                    // Attach fly_type listener to trigger section toggle
                     document.querySelectorAll('input[name="fly_type"]').forEach(flyRadio => {
                         flyRadio.addEventListener('change', function () {
                             const flyVal = this.value;
                             if (flyVal === 'annual' || flyVal === 'emergency') {
                                 $('#replacementSection, #date_select').removeClass('d-none');
+                                // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
+                                if (flyVal === 'annual') {
+                                    $('#salaryTypeSection').removeClass('d-none');
+                                } else {
+                                    $('#salaryTypeSection').addClass('d-none');
+                                }
                             } else {
-                                $('#replacementSection, #date_select').addClass('d-none');
+                                $('#replacementSection, #date_select, #salaryTypeSection').addClass('d-none');
                             }
                         });
                     });
                 }
             }
-            // Initialize date picker and fields when form is created
             function initVacationForm() {
                 document.querySelectorAll('input[name="vac_type"]').forEach(radio => {
                     radio.addEventListener('change', toggleVacationFields);
                 });
-                toggleVacationFields(); // trigger once on load
+                toggleVacationFields();
             }
             initVacationForm();
         },
@@ -4687,12 +5159,17 @@ $(document).on('click', '.applyvacationAtter', function (e) {
             const formElement = document.getElementById('submitVacationApplyForm');
             const formData = new FormData(formElement);
             formData.append("ajaxType", "applyVacation");
+
+            // --- FIX: Add empid and deptId to the form data ---
+            formData.append("emp_id", empid);
+            formData.append("dept_id", deptId);
+            // --- END FIX ---
+
             const selectedRadio = $('input[name="vac_type"]:checked').val();
             if (!selectedRadio) {
                 Swal.showValidationMessage(__('select_vacation_type_validation'));
                 return false;
             }
-            // Validation for "Local Vacation" or "Fly"
             if (selectedRadio === 'Local Vacation' || selectedRadio === 'Fly') {
                 const flyType = $('input[name="fly_type"]:checked').val();
                 if (!flyType) {
@@ -4713,7 +5190,18 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     }
                 }
             }
-            // No extra validation needed for "Encashed"
+
+            // =================================================================
+            // == MODIFICATION: Validate and add selected approver
+            // =================================================================
+            let firstApproverId = $('#vac_first_approver').val();
+            if (!firstApproverId) {
+                Swal.showValidationMessage(__('must_select_supervisor'));
+                return false;
+            }
+            formData.append("first_approver_id", firstApproverId);
+            // =================================================================
+
             return new Promise(function (resolve, reject) {
                 $.ajax({
                     url: './includes/ajaxFile/ajaxVacation.php',
@@ -4722,7 +5210,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     cache: false,
                     contentType: false,
                     processData: false,
-                    data: formData,
+                    data: formData, // formData now includes first_approver_id
                 })
                 .done(function (response) {
                     Swal.fire({
@@ -4731,17 +5219,38 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                         icon: response.type,
                         allowOutsideClick: false
                     }).then(function (isConfirm) {
-                        if (isConfirm) location.reload();
+                        if (isConfirm.value && response.type === 'success') { // Only reload on success
+                            location.reload();
+                        }
                     });
                 })
                 .fail(function (jqXHR, textStatus, errorThrown) {
-                    reject(handleAjaxFailure(jqXHR, textStatus).message);
+                    // Try to parse the JSON response even on failure
+                    let errorMsg = 'An error occurred. Please try again.';
+                    try {
+                        let jsonResponse = JSON.parse(jqXHR.responseText);
+                        if (jsonResponse && jsonResponse.message) {
+                            errorMsg = jsonResponse.message;
+                        } else if (jqXHR.responseText) {
+                            // Fallback for non-JSON errors
+                            let responseText = jqXHR.responseText.split('<br />');
+                            errorMsg = responseText[responseText.length - 1].replace(/<b>Warning<\/b>:|<b>Fatal error<\/b>:|Uncaught \(in promise\) Error!:/gi, '').trim();
+                        }
+                    } catch (e) {
+                         // ignore parsing error
+                    }
+                    
+                    Swal.fire({
+                        title: 'Error!',
+                        text: errorMsg,
+                        icon: 'error'
+                    });
+                    reject(errorMsg); // Reject the promise
                 });
             });
         }
-
     })
-});
+}
 
 
 
@@ -4809,7 +5318,6 @@ function generateLeaveFormHTML() {
         'Sick Leave', /*'Casual Leave',*/ 'Maternity Leave', 
         'Business Trip', 'Compensatory Leave', 'Other Leave'
     ];
-
     let leaveOptions = leaveTypes.map(type => `<option value="${type}">${type}</option>`).join('');
 
     return `
@@ -4851,7 +5359,7 @@ function generateLeaveFormHTML() {
             </div>
 
             <div id="attachmentSection" class="form-group d-none">
-                <label for="attachment">${__('attach_document_optional')}</label>
+                <label for="attachment">${__('attach_document_required')}</label>
                 <input type="file" name="attachment" id="attachment" class="form-control-file">
                 <small class="form-text text-muted">${__('attachment_example')}</small>
             </div>
@@ -5524,21 +6032,32 @@ function edit_password_HTML(){
 
 
 function create_user_HTML() {
-    // This function now returns only the form elements, without any custom error containers.
+    // Define all available user roles/permissions
+    const roleTypes = [
+        { value: 'administrator', label: __('administrator') || 'Administrator' },
+        { value: 'dept_user', label: __('department_manager') || 'Department Manager' },
+        { value: 'assistant', label: __('assistant') || 'Assistant' },
+        { value: 'employee', label: __('employee') || 'Normal Employee' },
+        { value: 'general_manager', label: __('general_manager') || 'General Manager' },
+        { value: 'hr', label: __('hr') || 'HR' },
+        { value: 'hr_senior_bp', label: __('hr_senior_bp') || 'HR Senior BP' }
+    ];
+    let roleOptions = roleTypes.map(role => `<option value="${role.value}">${role.label}</option>`).join('');
+    
     return `
     <form class="contact-input" id="createUserForm" style="text-align: left;">
         <div class="modal-body">
             <div class="form-row">
                 <div class="form-group col-md-12">
-                    <label for="email">${__('email')}<span class="text-danger">*</span></label>
-                    <input type="text" id="email" name="email" class="form-control email-validation">
+                    <label for="email">${__('email')}</label>
+                    <input type="email" id="email" name="email" class="form-control email-validation">
+                    <small class="form-text text-muted">${__('admin_email_note') || 'Note: Some user types do not require email'}</small>
                 </div>
                 <div class="form-group col-md-12">
-                    <label for="user_type">${__('employee_type')}<span class="text-danger">*</span></label>
+                    <label for="user_type">${__('type_of_permission') || 'User Role / Permission'}<span class="text-danger">*</span></label>
                     <select id="user_type" name="user_type" class="form-control">
                         <option value="">${__('select_type')}</option>
-                        <option value="Manager">${__('manager')}</option>
-                        <option value="Assistant">${__('assistant')}</option>
+                        ${roleOptions}
                     </select>
                 </div>
             </div>
@@ -5548,62 +6067,38 @@ function create_user_HTML() {
 
 
 function edit_user_HTML(){
+    const roleTypes = [
+        { value: 'administrator', label: __('administrator') || 'Administrator' },
+        { value: 'dept_user', label: __('department_manager') || 'Department Manager' },
+        { value: 'assistant', label: __('assistant') || 'Assistant' },
+        { value: 'employee', label: __('employee') || 'Normal Employee' },
+        { value: 'general_manager', label: __('general_manager') || 'General Manager' },
+        { value: 'hr', label: __('hr') || 'HR' }
+    ];
+    let roleOptions = roleTypes.map(role => `<option value="${role.value}">${role.label}</option>`).join('');
+
     var strView =
     `<form id="submitEditUserForm">
     <div class="form-row customSweetAlertMLR">
-        <div class="form-row customSweetAlertMLR">
-        <div class="form-group col-md-4">
-            <label for="name">${__('full_name')}</label>
-            <input type="text" id="fullname" name="fullname" class="form-control">
+        <div class="form-group col-md-12">
+            <label for="dept">${__('department')}</label>
+            <input type="text" id="dept" name="dept" class="form-control" readonly>
         </div>
-        <div class="form-group col-md-4">
-            <label for="name">${__('username')}</label>
-            <input type="text" id="username" name="username" class="form-control">
-        </div>
-        <div class="form-group col-md-4">
-            <label for="name">${__('department')}</label>
-            <input type="text" id="dept" name="dept" class="form-control" readonly="">
-        </div>
-        <div class="form-group col-md-4">
-            <label for="name">${__('type_of_permission')}</label>
-            <select class="custom-select" name="user_type" id="user_type" required="">
-                <option value="administrator">${__('administrator')}</option>
-                <option value="dept_user">${__('department_manager')}</option>
-                <option value="assistant">${__('assistant')}</option>
-                <option value="employee">${__('employee')}</option>
-                <option value="gm">${__('general_manager')}</option>
-                <option value="hr">${__('human_resource')}</option>
+        <div class="form-group col-md-12">
+            <label for="user_type">${__('type_of_permission')}</label>
+            <select class="custom-select" name="user_type" id="user_type" required>
+                <option value="">${__('select_type')}</option>
+                ${roleOptions}
             </select>
         </div>
-        <div class="form-group col-md-4">
-            <label for="name">${__('email')}</label>
-            <input type="text" id="email" name="email" class="form-control">
+        <div class="form-group col-md-12" id="email-group">
+            <label for="email">${__('email')}</label>
+            <input type="email" id="email" name="email" class="form-control" required>
+            <small class="form-text text-muted">${__('admin_email_note') || 'Note: Administrator users do not require email'}</small>
         </div>
-        <div class="form-group col-md-4">
-            <label for="name">${__('email_password')}</label>
-            <input type="text" id="email_pass" name="email_pass" class="form-control">
-        </div>
-        <div class="form-group col-md-4">
-            <label for="name">${__('mobile')}</label>
-            <input type="text" id="mobile" name="mobile" class="form-control">
-        </div>
-        <div class="form-group col-md-4">
-            <label for="name">${__('changing_password')}</label>
-            <a href="javascript:void:(0);" class="btn bt-sm btn-warning updatePasswordAjax" id="idpass" >${__('update_password')}</a>
-        </div>
-        <div class="form-group col-md-4">
-            <br><br>
-            <div class="d-inline-block custom-control custom-radio mr-1">
-                <input type="radio" class="custom-control-input" name="status" id="radio1" value="1">
-                <label class="custom-control-label" for="radio1">${__('active')}</label>
-            </div>
-            <div class="d-inline-block custom-control custom-radio mr-1">
-                <input type="radio" class="custom-control-input" name="status" id="radio2" value="0">
-                <label class="custom-control-label" for="radio2">${__('inactive')}</label>
-            </div>
-        </div>
-    <input type="hidden" id="iduser" name="id"></div>
-    <input type="hidden" id="oldpass" name="oldpass"></div></form>
+        <input type="hidden" id="iduser" name="id">
+    </div>
+    </form>
     `;
     return strView;
 }
@@ -6045,85 +6540,285 @@ function approv_inv_mont_HTML(){
 
 function vacationApply_HTML(country) {
     var strView = 
-    `<form id="submitVacationApplyForm" enctype="multipart/form-data">
-    <div class="row customSweetAlertMLR">
+    `<style>
+        .vacation-form-container {
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 0;
+        }
+        .vacation-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #e3e6f0;
+        }
+        .vacation-card-header {
+            font-weight: 600;
+            color: #4e73df;
+            margin-bottom: 15px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            border-bottom: 2px solid #4e73df;
+            padding-bottom: 8px;
+        }
+        .vacation-card-header i {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        .vac-radio-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .vac-radio-option {
+            flex: 1;
+            min-width: 140px;
+        }
+        .vac-radio-option input[type="radio"] {
+            display: none;
+        }
+        .vac-radio-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 15px 10px;
+            border: 2px solid #e3e6f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            min-height: 80px;
+            text-align: center;
+        }
+        .vac-radio-label:hover {
+            border-color: #4e73df;
+            background: #f1f5ff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(78, 115, 223, 0.1);
+        }
+        .vac-radio-option input[type="radio"]:checked + .vac-radio-label {
+            border-color: #4e73df;
+            background: #4e73df;
+            color: white;
+            box-shadow: 0 4px 12px rgba(78, 115, 223, 0.3);
+        }
+        .vac-radio-label i {
+            font-size: 24px;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .vac-radio-label span {
+            font-size: 13px;
+            font-weight: 500;
+            display: block;
+        }
+        .form-control-modern {
+            border-radius: 6px;
+            border: 1px solid #d1d3e2;
+            padding: 10px 15px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        .form-control-modern:focus {
+            border-color: #4e73df;
+            box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.15);
+        }
+        .form-label-modern {
+            font-weight: 600;
+            color: #5a5c69;
+            margin-bottom: 8px;
+            font-size: 13px;
+            display: block;
+        }
+        .info-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .info-field {
+            flex: 1;
+            background: white;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border: 1px solid #e3e6f0;
+        }
+        .info-field label {
+            font-size: 11px;
+            color: #858796;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            display: block;
+            font-weight: 600;
+        }
+        .info-field input {
+            border: none;
+            padding: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #3a3b45;
+            background: transparent;
+            width: 100%;
+        }
+        .date-range-container {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .date-field {
+            flex: 1;
+            min-width: 200px;
+        }
+        @media (max-width: 576px) {
+            .vac-radio-option {
+                min-width: 100%;
+            }
+            .vac-radio-label {
+                flex-direction: row;
+                justify-content: flex-start;
+                padding: 12px 15px;
+                min-height: auto;
+            }
+            .vac-radio-label i {
+                margin-right: 12px;
+                margin-bottom: 0;
+                font-size: 20px;
+            }
+            .info-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .date-field {
+                min-width: 100%;
+            }
+            .vacation-card {
+                padding: 12px;
+            }
+        }
+    </style>
+    
+    <form id="submitVacationApplyForm" enctype="multipart/form-data">
+        <div class="vacation-form-container">
+            
+            <!-- Employee Information -->
+            <div class="info-row">
+                <div class="info-field" style="flex: 2;">
+                    <label>${__('employee_name')}</label>
+                    <input type="text" name="name" id="name" readonly>
+                </div>
+                <div class="info-field" style="flex: 1;">
+                    <label>${__('employee_id')}</label>
+                    <input type="text" name="empid" id="empid" readonly>
+                </div>
+            </div>
 
-        <div class="form-group col-md-9">
-            <label for="name">${__('employee_name')}</label>
-            <input type="text" class="form-control" name="name" id="name" readonly>
-        </div>
-        <div class="form-group col-md-3">
-            <label for="emp_id">${__('employee_id')}</label>
-            <input type="text" class="form-control" name="empid" id="empid" readonly>
-        </div>
-
-        <div class="form-group col-md-12">
-            <label for="inlineRadio3" class="radioalign">${__('remarks')}<span class="text-danger">*</span></label>
-            <div class="radio radio-info form-check-inline mt-3">
-                <input type="radio" id="inlineRadio3" value="Local Vacation" name="vac_type">
-                <label for="inlineRadio3" class="atch"><i class="fa fa-brands fa-odnoklassniki"></i> ${__('local_vacation')}</label>
-             </div>`;
+            <!-- Vacation Type Selection -->
+            <div class="vacation-card">
+                <div class="vacation-card-header">
+                    <i class="fa fa-clipboard-list"></i>
+                    ${__('remarks')}<span class="text-danger">*</span>
+                </div>
+                <div class="vac-radio-group">
+                    <div class="vac-radio-option">
+                        <input type="radio" id="inlineRadio3" value="Local Vacation" name="vac_type">
+                        <label for="inlineRadio3" class="vac-radio-label">
+                            <i class="fa fa-map-marker-alt"></i>
+                            <span>${__('local_vacation')}</span>
+                        </label>
+                    </div>`;
              
                 if (country != 191 && country != 150) {
-                    strView += `<div class="radio radio-info form-check-inline">
+                    strView += `
+                    <div class="vac-radio-option">
                         <input type="radio" id="inlineRadio1" value="Fly" name="vac_type">
-                        <label for="inlineRadio1" class="atch"><i class="fa fa-solid fa-plane-departure"></i> ${__('fly')}</label>
+                        <label for="inlineRadio1" class="vac-radio-label">
+                            <i class="fa fa-plane-departure"></i>
+                            <span>${__('fly')}</span>
+                        </label>
                     </div>`;
                 }
 
                 strView += `
-            <div class="radio radio-info form-check-inline">
-                <input type="radio" id="inlineRadio2" value="Encashed" name="vac_type">
-                <label for="inlineRadio2" class="atch"><i class="fa fa-solid fa-money-from-bracket"></i> ${__('encashed')}</label>
-            </div>
-        </div>
-
-        <div class="col-md-12 d-none" id="flyTypeSection">
-            <div class="form-group">
-                <label for="type" class="radioalign">${__('select_vacation_type')}<span class="text-danger">*</span></label>
-                <div class="radio radio-info form-check-inline">
-                    <input type="radio" id="vac_type1" value="annual" name="fly_type">
-                    <label for="vac_type1" class="atch"><i class="fa fa-solid fa-truck-plane"></i> ${__('annual_vacation')}</label>
-                </div>
-                <div class="radio radio-info form-check-inline">
-                    <input type="radio" id="vac_type2" value="emergency" name="fly_type">
-                    <label for="vac_type2" class="atch"><i class="fa fa-solid fa-light-emergency"></i> ${__('emergency_vacation')}</label>
+                    <div class="vac-radio-option">
+                        <input type="radio" id="inlineRadio2" value="Encashed" name="vac_type">
+                        <label for="inlineRadio2" class="vac-radio-label">
+                            <i class="fa fa-money-bill-wave"></i>
+                            <span>${__('encashed')}</span>
+                        </label>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="form-group col-md-12 input-daterange d-none" id="date_select">
-            <div class="form-row">
-                <div class="form-group col-md-6">
-                    <label for="start_date">${__('start_date')}<span class="text-danger">*</span></label>
-                    <input type="text" name="start_date" placeholder="${__('select_start_date_placeholder')}" class="form-control" id="start_date">
+            <!-- Fly Type Selection -->
+            <div class="vacation-card d-none" id="flyTypeSection">
+                <div class="vacation-card-header">
+                    <i class="fa fa-tags"></i>
+                    ${__('select_vacation_type')}<span class="text-danger">*</span>
                 </div>
-                <div class="form-group col-md-6">
-                    <label for="end_date">${__('return_date')}<span class="text-danger">*</span></label>
-                    <input type="text" name="end_date" required placeholder="${__('select_return_date_placeholder')}" class="form-control" id="end_date">
+                <div class="vac-radio-group">
+                    <div class="vac-radio-option">
+                        <input type="radio" id="vac_type1" value="annual" name="fly_type">
+                        <label for="vac_type1" class="vac-radio-label">
+                            <i class="fa fa-calendar-check"></i>
+                            <span>${__('annual_vacation')}</span>
+                        </label>
+                    </div>
+                    <div class="vac-radio-option">
+                        <input type="radio" id="vac_type2" value="emergency" name="fly_type">
+                        <label for="vac_type2" class="vac-radio-label">
+                            <i class="fa fa-exclamation-triangle"></i>
+                            <span>${__('emergency_vacation')}</span>
+                        </label>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="col-md-12 d-none" id="replacementSection">
-            <div class="form-group">
-                <label for="replacement_per">${__('replacement_person')}<span class="text-danger">*</span></label>
-                <select class="form-control" name="replacement_per" id="replacement_per">
+            <!-- Date Selection -->
+            <div class="vacation-card d-none" id="date_select">
+                <div class="vacation-card-header">
+                    <i class="fa fa-calendar-alt"></i>
+                    ${__('start_date')} & ${__('return_date')}
+                </div>
+                <div class="date-range-container">
+                    <div class="date-field">
+                        <label class="form-label-modern">${__('start_date')}<span class="text-danger">*</span></label>
+                        <input type="text" name="start_date" placeholder="${__('select_start_date_placeholder')}" class="form-control form-control-modern" id="start_date">
+                    </div>
+                    <div class="date-field">
+                        <label class="form-label-modern">${__('return_date')}<span class="text-danger">*</span></label>
+                        <input type="text" name="end_date" placeholder="${__('select_return_date_placeholder')}" class="form-control form-control-modern" id="end_date">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Replacement Person -->
+            <div class="vacation-card d-none" id="replacementSection">
+                <div class="vacation-card-header">
+                    <i class="fa fa-user-friends"></i>
+                    ${__('replacement_person')}<span class="text-danger">*</span>
+                </div>
+                <select class="form-control form-control-modern" name="replacement_per" id="replacement_per">
                     <option value="">${__('select')}</option>
                 </select>
             </div>
-        </div>
 
-        <div class="col-md-12 d-none" id="notesSection">
-             <div class="form-group">
-                <label for="remarks">${__('notes')}<span class="text-danger">*</span></label>
-                <input type="text" name="remarks" parsley-trigger="change" class="form-control" id="remarks" autocomplete="off">
+            <!-- Notes Section -->
+            <div class="vacation-card d-none" id="notesSection">
+                <div class="vacation-card-header">
+                    <i class="fa fa-sticky-note"></i>
+                    ${__('notes')}<span class="text-danger">*</span>
+                </div>
+                <input type="text" name="remarks" class="form-control form-control-modern" id="remarks" autocomplete="off" placeholder="${__('enter_notes_placeholder') || 'Enter additional notes...'}">
             </div>
-        </div>
 
-        <input type="hidden" class="cid" name="cid">
-    </div>
-</form>`;
+            <input type="hidden" class="cid" name="cid">
+        </div>
+    </form>`;
     return strView;
 }
 

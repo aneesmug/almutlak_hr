@@ -13,8 +13,10 @@
 	$format="DD/MM/YYYY";
 
 	/****************Employee Allow Page*****************/
-    if ($_SESSION['user_type'] == 'employee') {
-        header( "refresh:1 ; url= ./profile.php" );
+    // Only regular employees (not team members) should be redirected to profile
+    if ($user_role == 'Employee') {
+        header("Location: ./profile.php");
+        exit();
     }
     /****************Employee Allow Page*****************/
 
@@ -201,7 +203,7 @@ if(isset($_POST['submit'])){
                                     <p class="text-uppercase m-b-5 font-13 font-600"><?=__('total_on_job_employees') ?></p>
                                 </div>
                             </div>
-                            <div class="col-sm-4 col-xl-4" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&status=1&fly=yes'" style="cursor: pointer;" <?php } ?> >
+                            <div class="col-sm-4 col-xl-4" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&status=1&fly=1'" style="cursor: pointer;" <?php } ?> >
                                 <div class="card-box bg-warning widget-flat border-primary text-white">
                                     <i class="fa fa-planet-moon"></i>
                                     <h3 class="m-b-10"><?=$status_cont_fly ?></h3>
@@ -241,9 +243,12 @@ if(isset($_POST['submit'])){
                         <?php } */?>
 							<?php
 
-							if ($user_type == "dept_user" || $user_type == "hr" || $user_type == "administrator"):
+							// Show expiry notifications for: Administrators, HR team, Finance team, IT team, and department managers
+							if ($is_system_admin || $isHR || $isDeptHr || $isDeptFinance || $isItTeam || 
+							    $user_type == "dept_user" || $user_type == "gm" || 
+							    strpos($user_role, '_Manager') !== false):
 
-								if($user_type == "dept_user"){
+								if($user_type == "dept_user" && !$is_system_admin){
 									$result=mysqli_query($conDB, "SELECT 
 									`e`.*, 
 									`d`.`dep_nme`,
@@ -328,7 +333,7 @@ if(isset($_POST['submit'])){
 						</div>
 						<?php } ?>
 						<?php
-							if($user_type == "dept_user"){
+							if($user_type == "dept_user" && !$is_system_admin){
 									// $result=mysqli_query($conDB, "SELECT 
 									// 	`e`.*, 
 									// 	`d`.`dep_nme`,

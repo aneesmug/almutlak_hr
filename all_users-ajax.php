@@ -317,11 +317,15 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
             1: { title: 'Active', class: 'badge-border-success' },
         };
         var employeeTypeObj = {
-            'hr'        : { title: 'Human Resource'},
-            'dept_user' : { title: 'Department Manager'},
-            'assistant' : { title: 'Assistant Manager'},
-            'employee'  : { title: 'Employee'},
-            'gm'        : { title: 'General Manager'},
+            'administrator'   : { title: 'Administrator'},
+            'hr'              : { title: 'Human Resource'},
+            'hr_senior_bp'    : { title: 'HR Senior BP'},
+            'dept_user'       : { title: 'Department Manager'},
+            'assistant'       : { title: 'Assistant Manager'},
+            'employee'        : { title: 'Employee'},
+            'general_manager' : { title: 'General Manager'},
+            // Legacy compatibility
+            'gm'              : { title: 'General Manager'},
         };
         var table = $('#employee_vac').DataTable({
             'lengthChange': false,
@@ -350,7 +354,13 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
                 {
                     targets: 6,
                     render: function ( data, type, row, full ) {
-                        return employeeTypeObj[row['user_type']].title;
+                        // Check if user type exists in our mapping, otherwise show the raw value
+                        if (employeeTypeObj[row['user_type']]) {
+                            return employeeTypeObj[row['user_type']].title;
+                        }
+                        // Fallback for unknown types
+                        var userType = row['user_type'] || '';
+                        return userType.charAt(0).toUpperCase() + userType.slice(1).replace(/_/g, ' ');
                     }
                 },
                 {

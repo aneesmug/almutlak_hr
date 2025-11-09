@@ -64,6 +64,10 @@ if (mysqli_num_rows($query) == 1) {
                 display: none !important;
             }
         </style>
+        <?php if ($is_rtl): ?>
+            <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+        <?php endif; ?>
+		<script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 
     </head>
 
@@ -186,7 +190,7 @@ if (mysqli_num_rows($query) == 1) {
                                                         <div class='btn-group dropdown'>
                                                             <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                                             <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                                                <a href='javascript:void(0);' class='dropdown-item text-custom editUserAttr updateUserAjax' data-id="<?= $rec['id'] ?>" data-fullname="<?= $rec['fullname'] ?>" data-dept="<?= $rec['deptnme'] ?>" data-email="<?= $rec['email'] ?>" data-mobile="<?= $rec['mobile'] ?>" data-status="<?= $rec['status'] ?>" data-user_type="<?= $rec['user_type'] ?>" data-email_pass="<?= $rec['email_pass'] ?>" data-oldpass="<?= $rec['bk_password'] ?>"><i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit</a>
+                                                                <a href='javascript:void(0);' class='dropdown-item text-custom editUserAttr updateUserAjax' data-id="<?= $rec['id'] ?>" data-fullname="<?= $rec['efullname'] ?>" data-dept="<?= $rec['deptnme'] ?>" data-email="<?= $rec['email'] ?>" data-user_type="<?= $rec['user_type'] ?>"><i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit</a>
                                                                 <?php if ($user_type == $access1) { ?>
                                                                     <a href='javascript:void(0);' class='dropdown-item  text-danger deleteAjax' data-id='<?= $id_user_usr ?>' data-tbl='admin_login' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>Delete</a>
                                                                 <?php } ?>
@@ -364,6 +368,9 @@ if (mysqli_num_rows($query) == 1) {
                     'hr': {
                         title: 'Human Resource'
                     },
+                    'hr_senior_bp': {
+                        title: 'HR Senior BP'
+                    },
                     'dept_user': {
                         title: 'Department Manager'
                     },
@@ -373,6 +380,10 @@ if (mysqli_num_rows($query) == 1) {
                     'employee': {
                         title: 'Employee'
                     },
+                    'general_manager': {
+                        title: 'General Manager'
+                    },
+                    // Legacy compatibility
                     'gm': {
                         title: 'General Manager'
                     },
@@ -405,10 +416,15 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         },
                         {
-                            // User Status
+                            // User Type/Role
                             targets: 5,
                             render: function(data, type, row, meta) {
-                                return employeeTypeObj[data].title;
+                                // Check if user type exists in our mapping, otherwise show the raw value
+                                if (employeeTypeObj[data]) {
+                                    return employeeTypeObj[data].title;
+                                }
+                                // Fallback for unknown types
+                                return data.charAt(0).toUpperCase() + data.slice(1).replace(/_/g, ' ');
                             }
                         },
                     ],

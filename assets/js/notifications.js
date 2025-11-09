@@ -401,20 +401,35 @@
             }
         }, 500); // 500ms delay
 
-        // UI: Clear All button - Clears UI only
+        // UI: Clear All button - Now also marks all as read on the server
         $('#clear-all-notifications').off('click').on('click', function(e) {
             e.preventDefault();
-            logDebug("Clearing notifications from UI dropdown.");
-            $('#notification-badge').text('0').fadeOut();
-            $('#notification-dropdown-menu .slimscroll').find('.notify-item:not(#notification-placeholder)').remove();
-            $('#notification-placeholder').show();
-            // Optional: Add AJAX call here to mark ALL currently displayed as read if desired
-            // Example:
-            // var visibleIds = [];
-            // $('#notification-dropdown-menu .slimscroll .notify-item[data-id]').each(function() {
-            //     visibleIds.push($(this).data('id'));
-            // });
-            // if (visibleIds.length > 0) markMultipleNotificationsRead(visibleIds); // Need a new AJAX endpoint/function
+            logDebug("Clear All clicked: marking all unread notifications as read via AJAX.");
+
+            $.ajax({
+                url: 'includes/notification.php',
+                method: 'POST',
+                dataType: 'json',
+                data: { action: 'mark_all_read' },
+                success: function(resp) {
+                    logDebug('Mark all read response:', resp);
+                    // Optimistically update UI regardless; warn if server error
+                    if (!resp || resp.status !== 'success') {
+                        logWarn('Mark all read did not return success.');
+                    }
+                    // Clear UI
+                    $('#notification-badge').text('0').fadeOut();
+                    $('#notification-dropdown-menu .slimscroll').find('.notify-item:not(#notification-placeholder)').remove();
+                    $('#notification-placeholder').show();
+                },
+                error: function(xhr) {
+                    logError('Mark all read failed:', xhr && xhr.responseText ? xhr.responseText : xhr);
+                    // Still clear UI to honor user action (optional: comment out if you prefer strict mode)
+                    $('#notification-badge').text('0').fadeOut();
+                    $('#notification-dropdown-menu .slimscroll').find('.notify-item:not(#notification-placeholder)').remove();
+                    $('#notification-placeholder').show();
+                }
+            });
         });
 
         // UI: Click handler for dropdown items to mark as read and potentially open link
