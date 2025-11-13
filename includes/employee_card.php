@@ -2,7 +2,15 @@
     <div class="card card-employee shadow-sm h-100 <?= $status_class ?>">
         <div class="card-actions">
             <div class="btn-group" role="group">
-                <?php if ($emp_status == 1 && ($user_type ?? '') != "dept_user"): ?>
+                <?php 
+                // Only system_admin, hr_operations, hr_recruitment can edit employees
+                $can_modify_employee = (
+                    ($is_system_admin ?? false) || 
+                    ($user_type ?? '') === 'hr_operations' ||
+                    ($user_type ?? '') === 'hr_recruitment'
+                );
+                ?>
+                <?php if ($emp_status == 1 && $can_modify_employee): ?>
                     <a href="edit_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-light btn-sm" title="<?= __('edit') ?>">
                         <i class="fa fa-solid fa-user-pen"></i>
                     </a>

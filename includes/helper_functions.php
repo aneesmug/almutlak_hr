@@ -1102,6 +1102,21 @@ if (!function_exists('handle_approval_action')) {
     function handle_approval_action($conDB, $inv_no, $request_type, $current_user_id, $action, $note, $next_approver_chain = []) {
         global $userwel; // Assumes $userwel contains the current user's name
 
+        // Helper: Get a friendly human-readable label for the request type (once per call)
+        if (!function_exists('get_friendly_request_label')) {
+            function get_friendly_request_label($type) {
+                $map = [
+                    'vacation_request' => 'Vacation Request',
+                    'smart_request' => 'Smart Request',
+                    // Extend here as new request types are added
+                ];
+                if (isset($map[$type])) return $map[$type];
+                // Fallback: transform snake_case to Title Case
+                return ucwords(str_replace('_', ' ', trim($type)));
+            }
+        }
+        $friendly_label = get_friendly_request_label($request_type);
+
         // ** Input Validation **
         if (!$conDB) {
             error_log("handle_approval_action: Database connection error.");
@@ -1244,13 +1259,20 @@ if (!function_exists('handle_approval_action')) {
                          $result_payload['next_approver_id'] = $next_approver_id;
                         
                         // --- [FIX] SEND NOTIFICATION TO NEXT APPROVER ---
-                        $notification_title = "New Vacation Request";
-                        $notification_message = "A new vacation request ($inv_no_safe) is pending your approval.";
-                        $notification_url = "all_applied_vac.php?status=my_pending";
+                        $notification_title = "New $friendly_label";
+                        $notification_message = "A new $friendly_label ($inv_no_safe) is pending your approval.";
+                        // Dynamic URL based on request type
+                        if ($request_type === 'smart_request') {
+                            $notification_url = "all_requests.php?status=pending_approval";
+                        } elseif ($request_type === 'vacation_request') {
+                            $notification_url = "all_applied_vac.php?status=my_pending";
+                        } else {
+                            $notification_url = "all_requests.php"; // Fallback
+                        }
                         create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
                         
                         if ($next_approver_details['email']) {
-                            $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A new vacation request ($inv_no_safe) is pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                            $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A new $friendly_label ($inv_no_safe) is pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
                             send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $email_body);
                         }
                         // --- [END FIX] ---
@@ -1298,13 +1320,20 @@ if (!function_exists('handle_approval_action')) {
                             $result_payload['next_approver_id'] = $next_approver_id;
                             
                             // --- [FIX] SEND NOTIFICATION TO NEXT APPROVER ---
-                            $notification_title = "New Vacation Request";
-                            $notification_message = "A vacation request ($inv_no_safe) is now pending your approval.";
-                            $notification_url = "all_applied_vac.php?status=my_pending";
+                            $notification_title = "New $friendly_label";
+                            $notification_message = "A $friendly_label ($inv_no_safe) is now pending your approval.";
+                            // Dynamic URL based on request type
+                            if ($request_type === 'smart_request') {
+                                $notification_url = "all_requests.php?status=pending_approval";
+                            } elseif ($request_type === 'vacation_request') {
+                                $notification_url = "all_applied_vac.php?status=my_pending";
+                            } else {
+                                $notification_url = "all_requests.php"; // Fallback
+                            }
                             create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
 
                             if ($next_approver_details['email']) {
-                                $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A vacation request ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                                $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A $friendly_label ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
                                 send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $email_body);
                             }
                             // --- [END FIX] ---
@@ -1418,12 +1447,19 @@ if (!function_exists('handle_approval_action')) {
                                 if ($next_details) {
                                     $result_payload['next_approver'] = $next_details;
                                     $result_payload['next_approver_id'] = $next_approver_id;
-                                    $notification_title = "New Vacation Request";
-                                    $notification_message = "A vacation request ($inv_no_safe) is now pending your approval.";
-                                    $notification_url = "all_applied_vac.php?status=my_pending";
+                                    $notification_title = "New $friendly_label";
+                                    $notification_message = "A $friendly_label ($inv_no_safe) is now pending your approval.";
+                                    // Dynamic URL based on request type
+                                    if ($request_type === 'smart_request') {
+                                        $notification_url = "all_requests.php?status=pending_approval";
+                                    } elseif ($request_type === 'vacation_request') {
+                                        $notification_url = "all_applied_vac.php?status=my_pending";
+                                    } else {
+                                        $notification_url = "all_requests.php"; // Fallback
+                                    }
                                     create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
                                     if ($next_details['email']) {
-                                        $email_body = "Dear " . htmlspecialchars($next_details['name']) . ",<br><br>A vacation request ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                                        $email_body = "Dear " . htmlspecialchars($next_details['name']) . ",<br><br>A $friendly_label ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
                                         send_approval_email($conDB, $next_details['email'], $next_details['name'], $notification_title, $email_body);
                                     }
                                 }
@@ -1449,8 +1485,10 @@ if (!function_exists('handle_approval_action')) {
                             $vacation_id = null;
                             $vacation_emp_id = null; // Employee who created the request
                             $vacation_type = null;   // Vacation type to decide fly flag
+                            $vacation_start_date = null; // Start date to check if vacation is active
+                            $request_inv_no = null;  // To check if it's a Leave Request (VAC-*)
                             // Use the dynamic main_table_name which we know is 'emp_vacation' for this request type
-                            $sql_get_id = "SELECT `id`, `emp_id`, `vac_type` FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
+                            $sql_get_id = "SELECT `id`, `emp_id`, `vac_type`, `start_date`, `request_inv_no` FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
                             $stmt_get_id = mysqli_prepare($conDB, $sql_get_id);
                             
                             if ($stmt_get_id) {
@@ -1461,6 +1499,8 @@ if (!function_exists('handle_approval_action')) {
                                         $vacation_id = (int)$row_id['id'];
                                         $vacation_emp_id = isset($row_id['emp_id']) ? (int)$row_id['emp_id'] : null;
                                         $vacation_type = isset($row_id['vac_type']) ? $row_id['vac_type'] : null;
+                                        $vacation_start_date = isset($row_id['start_date']) ? $row_id['start_date'] : null;
+                                        $request_inv_no = isset($row_id['request_inv_no']) ? $row_id['request_inv_no'] : null;
                                     }
                                     if($res_id) mysqli_free_result($res_id); // Free result
                                 } else {
@@ -1480,20 +1520,34 @@ if (!function_exists('handle_approval_action')) {
                                      error_log("INFO: handle_approval_action: Successfully updated vacation balance for vac_id $vacation_id ($inv_no_safe).");
                                 }
 
-                                // --- [NEW] Set employee fly status on final approval (except 'Encashed') ---
-                                if (!empty($vacation_emp_id) && (!isset($vacation_type) || strtolower($vacation_type) !== 'encashed')) {
-                                    $sql_set_fly = "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?";
-                                    $stmt_set_fly = mysqli_prepare($conDB, $sql_set_fly);
-                                    if ($stmt_set_fly) {
-                                        // emp_id can be numeric or string in schema; bind as string for safety
-                                        mysqli_stmt_bind_param($stmt_set_fly, "s", $vacation_emp_id);
-                                        if (!mysqli_stmt_execute($stmt_set_fly)) {
-                                            error_log("handle_approval_action: Failed to set fly=1 for emp_id $vacation_emp_id on final approval of $inv_no_safe. Error: " . mysqli_stmt_error($stmt_set_fly));
+                                // --- [UPDATED] Set employee fly status ONLY for REGULAR VACATION (not Leave Requests) ---
+                                // Leave Requests (LV-*) do NOT set fly=1
+                                // Only regular vacation (annual vacation - VAC-*) sets fly=1
+                                $is_leave_request = !empty($request_inv_no) && strpos($request_inv_no, 'LV-') === 0;
+                                
+                                if (!$is_leave_request && !empty($vacation_emp_id) && (!isset($vacation_type) || strtolower($vacation_type) !== 'encashed')) {
+                                    // Only set fly=1 if the vacation has actually started (start_date <= today)
+                                    $today = date('Y-m-d');
+                                    if (!empty($vacation_start_date) && $vacation_start_date <= $today) {
+                                        $sql_set_fly = "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?";
+                                        $stmt_set_fly = mysqli_prepare($conDB, $sql_set_fly);
+                                        if ($stmt_set_fly) {
+                                            // emp_id can be numeric or string in schema; bind as string for safety
+                                            mysqli_stmt_bind_param($stmt_set_fly, "s", $vacation_emp_id);
+                                            if (!mysqli_stmt_execute($stmt_set_fly)) {
+                                                error_log("handle_approval_action: Failed to set fly=1 for emp_id $vacation_emp_id on final approval of $inv_no_safe. Error: " . mysqli_stmt_error($stmt_set_fly));
+                                            } else {
+                                                error_log("handle_approval_action: Set fly=1 for emp_id $vacation_emp_id (regular vacation started on $vacation_start_date).");
+                                            }
+                                            mysqli_stmt_close($stmt_set_fly);
+                                        } else {
+                                            error_log("handle_approval_action: Prepare failed when setting fly=1 for emp_id $vacation_emp_id. Error: " . mysqli_error($conDB));
                                         }
-                                        mysqli_stmt_close($stmt_set_fly);
                                     } else {
-                                        error_log("handle_approval_action: Prepare failed when setting fly=1 for emp_id $vacation_emp_id. Error: " . mysqli_error($conDB));
+                                        error_log("handle_approval_action: Skipped setting fly=1 for emp_id $vacation_emp_id - vacation starts in future ($vacation_start_date).");
                                     }
+                                } elseif ($is_leave_request) {
+                                    error_log("handle_approval_action: Skipped setting fly=1 for emp_id $vacation_emp_id - this is a Leave Request ($request_inv_no), fly status not changed.");
                                 }
                             } else {
                                  error_log("CRITICAL: handle_approval_action: Final approval for $inv_no_safe succeeded, but could NOT find matching vacation ID to update balance.");
@@ -1512,13 +1566,20 @@ if (!function_exists('handle_approval_action')) {
                         if ($creator_id > 0) {
                             $creator_details = getEmployeeDetailsForApproval($conDB, $creator_id);
                             if ($creator_details) {
-                                $notification_title = "Vacation Request Approved";
-                                $notification_message = "Your vacation request ($inv_no_safe) has been fully approved.";
-                                $notification_url = "my_vacations.php"; // Adjust URL as needed
+                                $notification_title = "$friendly_label Approved";
+                                $notification_message = "Your $friendly_label ($inv_no_safe) has been fully approved.";
+                                // Dynamic URL based on request type
+                                if ($request_type === 'smart_request') {
+                                    $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
+                                } elseif ($request_type === 'vacation_request') {
+                                    $notification_url = "my_vacations.php";
+                                } else {
+                                    $notification_url = "all_requests.php"; // Fallback
+                                }
                                 create_browser_notification($conDB, $creator_id, $notification_title, $notification_message, $notification_url);
 
                                 if ($creator_details['email']) {
-                                    $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>Your vacation request ($inv_no_safe) has been fully approved.<br><br>Thank you.";
+                                    $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>Your $friendly_label ($inv_no_safe) has been fully approved.<br><br>Thank you.";
                                     send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $email_body);
                                 }
                             }

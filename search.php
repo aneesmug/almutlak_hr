@@ -66,9 +66,19 @@ if (strlen($search_term) > 1) {
     }
     $construct = implode(" AND ", $construct_parts);
 
-    if (isset($user_type) && $user_type == "dept_user" && isset($_SESSION['user_dept'])) {
+    // DEPARTMENT-BASED ACCESS CONTROL
+    // Only HR, system admins, and administrators can see all employees
+    $can_see_all_employees = (
+        $is_system_admin || 
+        $user_type == 'administrator' ||
+        $user_dept == 5 || // HR Department
+        $isHR || 
+        $isDeptHr
+    );
+    
+    if (!$can_see_all_employees && isset($user_dept)) {
         $construct .= " AND `dept` = ?";
-        $params[] = $_SESSION['user_dept'];
+        $params[] = $user_dept;
         $types .= "i";
     }
 }

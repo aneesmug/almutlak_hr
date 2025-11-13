@@ -48,15 +48,26 @@ if (mysqli_num_rows($query) == 1) {
 	require("./includes/emp_query.php");
 
 
-	// Get the current user's department and type from session  
+	// DEPARTMENT-BASED ACCESS CONTROL
+	// Get the employee's department
 	$target_dept = $emprow["dept"] ?? 0;
-	// The main fix is adding $is_system_admin to this check.
-	$hasAccess = ($user_dept == $target_dept) || $isHR || $isDeptHr || $is_system_admin || $isItAssistant;
+	
+	// Check if user has permission to view this employee
+	$can_see_all_employees = (
+		$is_system_admin || 
+		$user_type == 'administrator' ||
+		$user_dept == 5 || // HR Department
+		$isHR || 
+		$isDeptHr
+	);
+	
+	$hasAccess = $can_see_all_employees || ($user_dept == $target_dept);
+	
 	if (!$hasAccess) {
 		$_SESSION['error_msg'] = sprintf(
 			'<div class="col-xl-12">
 				<div class="alert alert-danger bg-danger text-white border-0" role="alert">
-					<b>Error ooooh!</b> 
+					<b>Access Denied!</b> 
 					<h4>You don\'t have access for ( %s ) Department.</h4>
 				</div>
 			</div>',
@@ -80,7 +91,7 @@ if (mysqli_num_rows($query) == 1) {
 
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
-		$sql_active_loan = "SELECT id, total_payable, disbursement_receipt_id, disbursement_attachment FROM `emp_loan` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status` = 'approved' ORDER BY `id` DESC LIMIT 1";
+		$sql_active_loan = "SELECT * FROM `emp_loan` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status` = 'approved' ORDER BY `id` DESC LIMIT 1";
 		$query_active_loan = mysqli_query($conDB, $sql_active_loan);
 
 		if (mysqli_num_rows($query_active_loan) > 0) {
@@ -96,6 +107,15 @@ if (mysqli_num_rows($query) == 1) {
 			$remaining_balance = $total_payable - $total_paid;
 
 			$loan_summary = [
+				'loan_id' => $loan_id,
+				'inv_no' => $active_loan_data['inv_no'],
+				'loan_type' => $active_loan_data['loan_type'],
+				'loan_amount' => $active_loan_data['loan_amount'],
+				'final_approved_amount' => $active_loan_data['final_approved_amount'] ?? $active_loan_data['loan_amount'],
+				'installments' => $active_loan_data['installments'],
+				'monthly_deduction' => $active_loan_data['monthly_deduction'],
+				'start_date' => $active_loan_data['start_date'],
+				'end_date' => $active_loan_data['end_date'],
 				'total_payable' => $total_payable,
 				'total_paid' => $total_paid,
 				'remaining_balance' => $remaining_balance,
@@ -215,6 +235,11 @@ if (mysqli_num_rows($query) == 1) {
 		<link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+		
+		<!-- SweetAlert2 -->
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+		<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+		
 		<script src="assets/js/modernizr.min.js"></script>
 
 		<link rel="stylesheet" href="./plugins/croppie/croppie.css">
@@ -423,6 +448,11 @@ if (mysqli_num_rows($query) == 1) {
 										<li class="nav-item">
 											<a href="#noties" data-toggle="tab" aria-expanded="false" class="nav-link">
 												<i class="mdi mdi-book-open-page-variant mr-2"></i> <?= __('notes') ?> <?= ($emprow['empnote'] > 0) ? "(" . $emprow['empnote'] . ")" : "" ?>
+											</a>
+										</li>
+										<li class="nav-item">
+											<a href="#evaluations" data-toggle="tab" aria-expanded="false" class="nav-link">
+												<i class="mdi mdi-chart-line mr-2"></i> <?= __('evaluations', 'Performance Evaluations') ?>
 											</a>
 										</li>
 										<?php /*}*/ ?>
@@ -760,20 +790,75 @@ if (mysqli_num_rows($query) == 1) {
 										<div class="tab-pane" id="loan1">
 											<?php if ($loan_summary): ?>
 												<div class="card border-primary border mb-4">
-													<div class="card-header bg-primary text-white font-weight-bold"><?= __('active_loan_summary') ?></div>
+													<div class="card-header bg-primary text-white">
+														<h5 class="mb-0"><i class="fa fa-info-circle"></i> <?= __('active_loan_summary') ?></h5>
+													</div>
 													<div class="card-body">
-														<div class="row text-center">
-															<div class="col-md-4">
-																<h6 class="text-muted text-uppercase"><?= __('total_payable_amount') ?></h6>
-																<h4><?= number_format($loan_summary['total_payable'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
+														<div class="row">
+															<!-- Loan Details Column -->
+															<div class="col-md-6">
+																<div class="info-block mb-3">
+																	<h6 class="text-muted text-uppercase mb-3"><i class="fa fa-file-text"></i> <?= __('loan_details') ?></h6>
+																	<table class="table table-sm table-borderless">
+																		<tr>
+																			<td class="font-weight-bold" width="50%"><?= __('invoice_number') ?>:</td>
+																			<td><?= htmlspecialchars($loan_summary['inv_no']) ?></td>
+																		</tr>
+																		<tr>
+																			<td class="font-weight-bold"><?= __('loan_type') ?>:</td>
+																			<td><span class="badge badge-info"><?= ucfirst(str_replace('_', ' ', __($loan_summary['loan_type']))) ?></span></td>
+																		</tr>
+																		<tr>
+																			<td class="font-weight-bold"><?= __('approved_amount') ?>:</td>
+																			<td class="text-primary font-weight-bold"><?= number_format($loan_summary['final_approved_amount'], 2) ?> SAR</td>
+																		</tr>
+																		<tr>
+																			<td class="font-weight-bold"><?= __('installments') ?>:</td>
+																			<td><?= $loan_summary['installments'] ?> <?= __('months') ?></td>
+																		</tr>
+																		<tr>
+																			<td class="font-weight-bold"><?= __('monthly_deduction') ?>:</td>
+																			<td class="text-warning font-weight-bold"><?= number_format($loan_summary['monthly_deduction'], 2) ?> SAR</td>
+																		</tr>
+																		<tr>
+																			<td class="font-weight-bold"><?= __('start_date') ?>:</td>
+																			<td><?= date('d M, Y', strtotime($loan_summary['start_date'])) ?></td>
+																		</tr>
+																		<tr>
+																			<td class="font-weight-bold"><?= __('end_date') ?>:</td>
+																			<td><?= date('d M, Y', strtotime($loan_summary['end_date'])) ?></td>
+																		</tr>
+																	</table>
+																</div>
 															</div>
-															<div class="col-md-4">
-																<h6 class="text-muted text-uppercase"><?= __('total_paid') ?></h6>
-																<h4><?= number_format($loan_summary['total_paid'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
-															</div>
-															<div class="col-md-4">
-																<h6 class="text-muted text-uppercase"><?= __('remaining_balance') ?></h6>
-																<h4 class="text-danger font-weight-bold"><?= number_format($loan_summary['remaining_balance'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
+															
+															<!-- Payment Summary Column -->
+															<div class="col-md-6">
+																<div class="info-block mb-3">
+																	<h6 class="text-muted text-uppercase mb-3"><i class="fa fa-money"></i> <?= __('payment_summary') ?></h6>
+																	<div class="payment-stat mb-3 p-3 bg-light rounded">
+																		<small class="text-muted d-block"><?= __('total_loan_amount') ?></small>
+																		<h4 class="mb-0 text-primary"><?= number_format($loan_summary['total_payable'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
+																	</div>
+																	<div class="payment-stat mb-3 p-3 bg-light rounded">
+																		<small class="text-muted d-block"><?= __('total_paid') ?></small>
+																		<h4 class="mb-0 text-success"><?= number_format($loan_summary['total_paid'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
+																	</div>
+																	<div class="payment-stat mb-3 p-3 bg-light rounded">
+																		<small class="text-muted d-block"><?= __('remaining_balance') ?></small>
+																		<h4 class="mb-0 text-danger font-weight-bold"><?= number_format($loan_summary['remaining_balance'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
+																	</div>
+																	<?php if ($loan_summary['remaining_balance'] > 0): ?>
+																	<div class="mt-3">
+																		<button type="button" class="btn btn-success btn-block waves-effect waves-light addManualPayment" 
+																		        data-loan-id="<?= $loan_summary['loan_id'] ?>" 
+																		        data-emp-id="<?= $emprow['empid'] ?>"
+																		        data-remaining="<?= $loan_summary['remaining_balance'] ?>">
+																			<i class="mdi mdi-cash-multiple"></i> <?= __('add_manual_payment') ?>
+																		</button>
+																	</div>
+																	<?php endif; ?>
+																</div>
 															</div>
 														</div>
 														<?php if ($loan_summary['disbursement_receipt']): ?>
@@ -800,11 +885,6 @@ if (mysqli_num_rows($query) == 1) {
 											?>
 											<div class="d-flex justify-content-between align-items-center mb-3">
 												<h4 class="header-title m-t-0"><?= __('loan_history') ?></h4>
-												<?php if ($active_loan_rec) : ?>
-													<button type="button" class="btn btn-info waves-effect waves-light addManualPayment" data-loan-id="<?= $active_loan_rec['id'] ?>" data-emp-id="<?= $emprow['empid'] ?>">
-														<i class="mdi mdi-plus-circle-outline"></i> <?= __('add_manual_payment') ?>
-													</button>
-												<?php endif; ?>
 											</div>
 											<table id="loan_history_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 												<thead>
@@ -853,8 +933,10 @@ if (mysqli_num_rows($query) == 1) {
 													<tr>
 														<th><?= __('payment_date') ?></th>
 														<th><?= __('amount') ?></th>
+														<th><?= __('payment_method') ?></th>
 														<th><?= __('receipt_id') ?></th>
 														<th><?= __('attachment') ?></th>
+														<th><?= __('note') ?></th>
 														<th><?= __('loan_id') ?></th>
 													</tr>
 												</thead>
@@ -863,16 +945,45 @@ if (mysqli_num_rows($query) == 1) {
 													$sql_loan_payments = "SELECT lp.* FROM `emp_loan_payments` lp JOIN `emp_loan` l ON lp.loan_id = l.id WHERE l.emp_id = '" . $emprow['empid'] . "' ORDER BY lp.payment_date DESC";
 													$query_loan_payments = mysqli_query($conDB, $sql_loan_payments);
 													while ($payment_rec = mysqli_fetch_array($query_loan_payments)) {
+														$payment_method = $payment_rec['payment_method'] ?? 'auto';
+														$payment_method_badge = '';
+														switch($payment_method) {
+															case 'manual':
+																$payment_method_badge = '<span class="badge badge-success"><i class="fa fa-hand-paper-o"></i> Manual</span>';
+																break;
+															case 'payroll':
+																$payment_method_badge = '<span class="badge badge-primary"><i class="fa fa-calendar"></i> Payroll</span>';
+																break;
+															default:
+																$payment_method_badge = '<span class="badge badge-info"><i class="fa fa-cog"></i> Auto</span>';
+														}
 													?>
 														<tr>
 															<td><?= date('d, M Y', strtotime($payment_rec['payment_date'])); ?></td>
-															<td><?= $payment_rec['amount']; ?></td>
-															<td><?= __(strtolower($payment_rec['receipt_id'])); ?></td>
+															<td class="font-weight-bold text-success"><?= number_format($payment_rec['amount'], 2); ?> SAR</td>
+															<td><?= $payment_method_badge; ?></td>
+															<td><?= !empty($payment_rec['receipt_id']) ? htmlspecialchars($payment_rec['receipt_id']) : '<span class="text-muted">N/A</span>'; ?></td>
 															<td>
-																<?php if (!empty($payment_rec['attachment'])): ?>
-																	<a href="./assets/loan_receipts/<?= htmlspecialchars($payment_rec['attachment']); ?>" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> <?= __('view') ?></a>
+																<?php if (!empty($payment_rec['attachment'])): 
+																	// Determine file path based on payment method
+																	if ($payment_method === 'manual') {
+																		$file_path = './assets/loan_manual_payments/' . htmlspecialchars($payment_rec['attachment']);
+																	} else {
+																		$file_path = './assets/loan_receipts/' . htmlspecialchars($payment_rec['attachment']);
+																	}
+																?>
+																	<a href="<?= $file_path; ?>" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> <?= __('view') ?></a>
 																<?php else: ?>
-																	N/A
+																	<span class="text-muted">N/A</span>
+																<?php endif; ?>
+															</td>
+															<td>
+																<?php if (!empty($payment_rec['note'])): ?>
+																	<span class="text-muted" data-toggle="tooltip" title="<?= htmlspecialchars($payment_rec['note']); ?>">
+																		<i class="fa fa-comment"></i> <?= substr(htmlspecialchars($payment_rec['note']), 0, 30); ?><?= strlen($payment_rec['note']) > 30 ? '...' : ''; ?>
+																	</span>
+																<?php else: ?>
+																	<span class="text-muted">-</span>
 																<?php endif; ?>
 															</td>
 															<td><?= $payment_rec['loan_id']; ?></td>
@@ -1022,6 +1133,84 @@ if (mysqli_num_rows($query) == 1) {
 													</thead>
 												</table>
 
+											</div>
+										</div>
+
+										<div class="tab-pane" id="evaluations">
+											<div class="card-box">
+												<h4 class="header-title m-b-30"><?= __('performance_evaluations', 'Performance Evaluations') ?></h4>
+												
+												<table id="evaluations_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+													<thead>
+														<tr>
+															<th><?= __('id') ?></th>
+															<th><?= __('evaluation_date', 'Evaluation Date') ?></th>
+															<th><?= __('evaluated_by', 'Evaluated By') ?></th>
+															<th><?= __('department', 'Department') ?></th>
+															<th><?= __('total_score', 'Total Score') ?></th>
+															<th><?= __('observation', 'Observation') ?></th>
+															<th><?= __('action') ?></th>
+														</tr>
+													</thead>
+													<tbody>
+														<?php
+														// Fetch employee evaluations
+														$eval_query = $pdo->prepare("
+															SELECT 
+																ev.id,
+																ev.manager_emp_id,
+																em.name AS manager_name,
+																ev.dept_name,
+																ev.total_score,
+																ev.observation,
+																DATE_FORMAT(ev.created_at, '%Y-%m-%d %H:%i') AS eval_date
+															FROM emp_evaluations ev
+															LEFT JOIN employees em ON ev.manager_emp_id = em.emp_id
+															WHERE ev.employee_emp_id = ?
+															ORDER BY ev.created_at DESC
+														");
+														$eval_query->execute([$emprow['empid']]);
+														$evaluations = $eval_query->fetchAll(PDO::FETCH_ASSOC);
+														
+														if (count($evaluations) > 0):
+															foreach ($evaluations as $eval):
+																$score_class = 'success';
+																if ($eval['total_score'] < 50) $score_class = 'danger';
+																elseif ($eval['total_score'] < 70) $score_class = 'warning';
+																elseif ($eval['total_score'] < 90) $score_class = 'info';
+														?>
+															<tr>
+																<td><?= htmlspecialchars($eval['id']) ?></td>
+																<td><?= htmlspecialchars($eval['eval_date']) ?></td>
+																<td><?= htmlspecialchars($eval['manager_name'] ?? 'N/A') ?></td>
+																<td><?= htmlspecialchars($eval['dept_name']) ?></td>
+																<td>
+																	<span class="badge badge-<?= $score_class ?>" style="font-size: 14px;">
+																		<?= htmlspecialchars($eval['total_score']) ?>/100
+																	</span>
+																</td>
+																<td><?= htmlspecialchars(substr($eval['observation'], 0, 100)) ?><?= strlen($eval['observation']) > 100 ? '...' : '' ?></td>
+																<td>
+																	<button class="btn btn-sm btn-primary view-eval-details" 
+																		data-id="<?= $eval['id'] ?>" 
+																		data-toggle="modal" 
+																		data-target="#evaluationModal">
+																		<i class="mdi mdi-eye"></i> <?= __('view_details', 'View Details') ?>
+																	</button>
+																</td>
+															</tr>
+														<?php 
+															endforeach;
+														else:
+														?>
+															<tr>
+																<td colspan="7" class="text-center">
+																	<em><?= __('no_evaluations_found', 'No performance evaluations found for this employee.') ?></em>
+																</td>
+															</tr>
+														<?php endif; ?>
+													</tbody>
+												</table>
 											</div>
 										</div>
 
@@ -1187,6 +1376,21 @@ if (mysqli_num_rows($query) == 1) {
 
 		<script type="text/javascript">
 			$(document).ready(function() {
+				// Check for SweetAlert message from session (after edit redirect)
+				<?php if (isset($_SESSION['swal_alert'])): ?>
+					Swal.fire({
+						title: '<?= addslashes($_SESSION['swal_alert']['title']) ?>',
+						text: '<?= addslashes($_SESSION['swal_alert']['message']) ?>',
+						icon: '<?= $_SESSION['swal_alert']['type'] ?>',
+						confirmButtonText: '<?= __("ok") ?>',
+						customClass: {
+							confirmButton: 'btn btn-primary'
+						},
+						buttonsStyling: false
+					});
+					<?php unset($_SESSION['swal_alert']); ?>
+				<?php endif; ?>
+				
 				$('#assets_tbl').DataTable({
 					language: {
 						search: `<span>${__('search')}:</span> _INPUT_`,
@@ -1397,8 +1601,16 @@ if (mysqli_num_rows($query) == 1) {
 							title: __('employee_name')
 						},
 						{
+							data: 'note_type',
+							title: __('note_type')
+						},
+						{
 							data: 'note',
 							title: __('notes')
+						},
+						{
+							data: 'attachment',
+							title: __('attachment')
 						},
 						{
 							data: 'created_at',
@@ -1420,13 +1632,90 @@ if (mysqli_num_rows($query) == 1) {
 							width: '60px',
 						},
 						{
+							targets: 3,
+							width: '120px',
+							render: function(data, type, row) {
+								if (type === 'display') {
+									if (!data) return '<span class="badge badge-secondary">General</span>';
+									
+									// Map note types to badge colors and labels
+									const typeMap = {
+										'warning': { color: 'warning', icon: 'fa-exclamation-triangle', label: 'Warning' },
+										'sick_leave': { color: 'info', icon: 'fa-notes-medical', label: 'Sick Leave' },
+										'appreciation': { color: 'success', icon: 'fa-star', label: 'Appreciation' },
+										'violation': { color: 'danger', icon: 'fa-ban', label: 'Violation' },
+										'absence': { color: 'dark', icon: 'fa-user-slash', label: 'Absence' },
+										'late_arrival': { color: 'warning', icon: 'fa-clock', label: 'Late Arrival' },
+										'performance_review': { color: 'primary', icon: 'fa-chart-line', label: 'Performance' },
+										'training': { color: 'info', icon: 'fa-graduation-cap', label: 'Training' },
+										'promotion': { color: 'success', icon: 'fa-arrow-up', label: 'Promotion' },
+										'salary_adjustment': { color: 'primary', icon: 'fa-money-bill', label: 'Salary' },
+										'disciplinary_action': { color: 'danger', icon: 'fa-gavel', label: 'Disciplinary' },
+										'medical_report': { color: 'info', icon: 'fa-file-medical', label: 'Medical' },
+										'general': { color: 'secondary', icon: 'fa-sticky-note', label: 'General' },
+										'other': { color: 'secondary', icon: 'fa-ellipsis-h', label: 'Other' }
+									};
+									
+									const typeInfo = typeMap[data] || { color: 'secondary', icon: 'fa-sticky-note', label: data };
+									return `<span class="badge badge-${typeInfo.color}"><i class="fa ${typeInfo.icon}"></i> ${typeInfo.label}</span>`;
+								}
+								return data;
+							}
+						},
+						{
 							targets: 4,
+							render: function(data, type, row) {
+								if (type === 'display' && data) {
+									// Truncate long notes and add tooltip
+									if (data.length > 50) {
+										return `<span title="${data.replace(/"/g, '&quot;')}">${data.substring(0, 50)}...</span>`;
+									}
+									return data;
+								}
+								return data;
+							}
+						},
+						{
+							targets: 5,
 							width: '100px',
+							orderable: false,
+							render: function(data, type, row) {
+								if (type === 'display') {
+									if (data && data !== '') {
+										// Extract file extension
+										const fileExt = data.split('.').pop().toLowerCase();
+										let iconClass = 'fa-file';
+										let badgeColor = 'secondary';
+										
+										// Set icon and color based on file type
+										if (fileExt === 'pdf') {
+											iconClass = 'fa-file-pdf';
+											badgeColor = 'danger';
+										} else if (['doc', 'docx'].includes(fileExt)) {
+											iconClass = 'fa-file-word';
+											badgeColor = 'primary';
+										} else if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExt)) {
+											iconClass = 'fa-file-image';
+											badgeColor = 'success';
+										}
+										
+										return `<a href="${data}" target="_blank" class="btn btn-sm btn-${badgeColor}" title="View Attachment">
+											<i class="fa ${iconClass}"></i> View
+										</a>`;
+									}
+									return '<span class="text-muted"><i class="fa fa-minus"></i> No File</span>';
+								}
+								return data;
+							}
+						},
+						{
+							targets: 6,
+							width: '120px',
 							render: function(data, type, row) {
 								if (type === 'display' && data) {
 									return new Date(data).toLocaleDateString('en-US', {
 										year: 'numeric',
-										month: 'long',
+										month: 'short',
 										day: 'numeric'
 									});
 								}
@@ -1434,22 +1723,22 @@ if (mysqli_num_rows($query) == 1) {
 							}
 						},
 						{
-							targets: 5,
-							width: '40px',
+							targets: 7,
+							width: '60px',
 							orderable: false,
 							render: function(data, type, row) {
-								return `<button class="btn btn-danger btn-sm isDeleteAjax" data-tbl='emp_notice' data-id="${row.id}"><i class="fa fa-xmark-large"></i></button>`;
+								return `<button class="btn btn-danger btn-sm isDeleteAjax" data-tbl='emp_notice' data-id="${row.id}"><i class="fa fa-trash"></i></button>`;
 							}
 						},
 						{
-							targets: [0, 1, 5],
+							targets: [0, 1, 5, 7],
 							className: 'text-center'
 						},
 					],
 					order: [
-						[3, 'desc']
-					], // Default sort by 'Created at' (the 4th column) descending
-					pageLength: 5,
+						[6, 'desc']
+					], // Default sort by 'Created at' (now the 7th column) descending
+					pageLength: 10,
 					lengthMenu: [5, 10, 25, 50],
 					language: {
 						search: `<span>${__('search')}:</span> _INPUT_`,
@@ -1568,6 +1857,233 @@ if (mysqli_num_rows($query) == 1) {
 					}
 				})
 			}
+		</script>
+
+		<!-- Evaluation Details Modal -->
+		<div class="modal fade" id="evaluationModal" tabindex="-1" role="dialog" aria-labelledby="evaluationModalLabel" aria-hidden="true">
+			<div class="modal-dialog modal-lg" role="document">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h5 class="modal-title" id="evaluationModalLabel"><?= __('evaluation_details', 'Evaluation Details') ?></h5>
+						<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+							<span aria-hidden="true">&times;</span>
+						</button>
+					</div>
+					<div class="modal-body" id="evaluationModalBody">
+						<div class="text-center">
+							<div class="spinner-border text-primary" role="status">
+								<span class="sr-only"><?= __('loading') ?>...</span>
+							</div>
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-secondary" data-dismiss="modal"><?= __('close') ?></button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+		// Load evaluation details when view button is clicked
+		$(document).on('click', '.view-eval-details', function() {
+			var evalId = $(this).data('id');
+			
+			$('#evaluationModalBody').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>');
+			
+			$.ajax({
+				url: 'includes/ajaxFile/ajaxEvaluation.php',
+				method: 'POST',
+				data: { 
+					action: 'get_evaluation_details', 
+					evaluation_id: evalId 
+				},
+				dataType: 'json',
+				success: function(response) {
+					if (response.status === 'success') {
+						var data = response.data;
+						var html = `
+							<div class="row">
+								<div class="col-md-6">
+									<p><strong><?= __('employee_name', 'Employee Name') ?>:</strong> ${data.employee_name}</p>
+									<p><strong><?= __('department', 'Department') ?>:</strong> ${data.dept_name}</p>
+									<p><strong><?= __('position', 'Position') ?>:</strong> ${data.employee_position}</p>
+								</div>
+								<div class="col-md-6">
+									<p><strong><?= __('evaluated_by', 'Evaluated By') ?>:</strong> ${data.manager_name || 'N/A'}</p>
+									<p><strong><?= __('evaluation_date', 'Evaluation Date') ?>:</strong> ${data.created_at}</p>
+									<p><strong><?= __('total_score', 'Total Score') ?>:</strong> <span class="badge badge-success" style="font-size: 16px;">${data.total_score}/100</span></p>
+								</div>
+							</div>
+							<hr>
+							<h5><?= __('evaluation_criteria', 'Evaluation Criteria') ?></h5>
+							<table class="table table-bordered table-sm">
+								<thead>
+									<tr>
+										<th><?= __('criteria', 'Criteria') ?></th>
+										<th width="100"><?= __('score', 'Score') ?></th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr><td>Punctuality Attendance</td><td class="text-center"><span class="badge badge-primary">${data.punctuality}/10</span></td></tr>
+									<tr><td>Achieving at the specified time</td><td class="text-center"><span class="badge badge-primary">${data.achieving_time}/10</span></td></tr>
+									<tr><td>Knowledge of job</td><td class="text-center"><span class="badge badge-primary">${data.job_knowledge}/10</span></td></tr>
+									<tr><td>The Ability to solve problems</td><td class="text-center"><span class="badge badge-primary">${data.problem_solving}/10</span></td></tr>
+									<tr><td>Receptiveness to Feedback and Instructions</td><td class="text-center"><span class="badge badge-primary">${data.feedback_receptiveness}/10</span></td></tr>
+									<tr><td>Self & Professional Development</td><td class="text-center"><span class="badge badge-primary">${data.self_development}/10</span></td></tr>
+									<tr><td>Work under pressure</td><td class="text-center"><span class="badge badge-primary">${data.work_under_pressure}/10</span></td></tr>
+									<tr><td>Communication skills and Teamwork</td><td class="text-center"><span class="badge badge-primary">${data.communication_teamwork}/10</span></td></tr>
+									<tr><td>Creativity and speed of response</td><td class="text-center"><span class="badge badge-primary">${data.creativity_response}/10</span></td></tr>
+									<tr><td>Initiative and cooperation</td><td class="text-center"><span class="badge badge-primary">${data.initiative_cooperation}/10</span></td></tr>
+								</tbody>
+							</table>
+							<hr>
+							<h5><?= __('observation', 'Observation/Remarks') ?></h5>
+							<p>${data.observation || '<?= __('no_observation', 'No observation provided.') ?>'}</p>
+						`;
+						$('#evaluationModalBody').html(html);
+					} else {
+						$('#evaluationModalBody').html('<div class="alert alert-danger">Failed to load evaluation details.</div>');
+					}
+				},
+				error: function() {
+					$('#evaluationModalBody').html('<div class="alert alert-danger">An error occurred while loading the evaluation details.</div>');
+				}
+			});
+		});
+		</script>
+
+		<!-- Manual Loan Payment Modal Script -->
+		<script>
+		$(document).on('click', '.addManualPayment', function() {
+			const loanId = $(this).data('loan-id');
+			const empId = $(this).data('emp-id');
+			const remainingBalance = parseFloat($(this).data('remaining'));
+			
+			Swal.fire({
+				title: '<i class="fa fa-money"></i> ' + __('add_manual_payment'),
+				html: `
+					<div class="text-left">
+						<div class="form-group">
+							<label for="payment_date" class="font-weight-bold">${__('payment_date')} <span class="text-danger">*</span></label>
+							<input type="date" id="payment_date" class="form-control swal2-input" value="${new Date().toISOString().split('T')[0]}" required>
+						</div>
+						<div class="form-group">
+							<label for="payment_amount" class="font-weight-bold">${__('payment_amount')} (SAR) <span class="text-danger">*</span></label>
+							<input type="number" id="payment_amount" class="form-control swal2-input" step="0.01" min="0.01" max="${remainingBalance.toFixed(2)}" placeholder="${__('max')}: ${remainingBalance.toFixed(2)}" required>
+							<small class="text-muted">${__('remaining_balance')}: ${remainingBalance.toFixed(2)} SAR</small>
+						</div>
+						<div class="form-group">
+							<label for="receipt_id" class="font-weight-bold">${__('receipt_number')}</label>
+							<input type="text" id="receipt_id" class="form-control swal2-input" placeholder="${__('optional')}">
+						</div>
+						<div class="form-group">
+							<label for="payment_proof" class="font-weight-bold">${__('payment_proof')} <span class="text-danger">*</span></label>
+							<input type="file" id="payment_proof" class="form-control-file swal2-file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required>
+							<small class="text-muted">${__('allowed_formats')}: PDF, JPG, PNG, DOC, DOCX (Max 10MB)</small>
+						</div>
+						<div class="form-group">
+							<label for="payment_note" class="font-weight-bold">${__('note')}</label>
+							<textarea id="payment_note" class="form-control swal2-textarea" rows="2" placeholder="${__('optional')}"></textarea>
+						</div>
+					</div>
+				`,
+				width: '600px',
+				showCancelButton: true,
+				confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit_payment'),
+				cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
+				confirmButtonColor: '#28a745',
+				cancelButtonColor: '#dc3545',
+				showLoaderOnConfirm: true,
+				preConfirm: () => {
+					const payment_date = $('#payment_date').val();
+					const payment_amount = parseFloat($('#payment_amount').val());
+					const receipt_id = $('#receipt_id').val();
+					const payment_proof = $('#payment_proof')[0].files[0];
+					const payment_note = $('#payment_note').val();
+					
+					// Validation
+					if (!payment_date) {
+						Swal.showValidationMessage(__('payment_date_required'));
+						return false;
+					}
+					if (!payment_amount || payment_amount <= 0) {
+						Swal.showValidationMessage(__('invalid_payment_amount'));
+						return false;
+					}
+					if (payment_amount > remainingBalance) {
+						Swal.showValidationMessage(__('amount_exceeds_balance'));
+						return false;
+					}
+					if (!payment_proof) {
+						Swal.showValidationMessage(__('payment_proof_required'));
+						return false;
+					}
+					
+					// File validation
+					const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 
+					                       'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+					if (!allowedTypes.includes(payment_proof.type)) {
+						Swal.showValidationMessage(__('invalid_file_type'));
+						return false;
+					}
+					if (payment_proof.size > 10 * 1024 * 1024) { // 10MB
+						Swal.showValidationMessage(__('file_too_large'));
+						return false;
+					}
+					
+					// Prepare FormData
+					const formData = new FormData();
+					formData.append('ajaxType', 'add_manual_payment');
+					formData.append('loan_id', loanId);
+					formData.append('emp_id', empId);
+					formData.append('payment_date', payment_date);
+					formData.append('payment_amount', payment_amount);
+					formData.append('receipt_id', receipt_id);
+					formData.append('payment_proof', payment_proof);
+					formData.append('payment_note', payment_note);
+					
+					// Debug logging
+					console.log('=== FormData Debug ===');
+					console.log('loanId:', loanId);
+					console.log('empId:', empId);
+					console.log('payment_proof file:', payment_proof);
+					for (let pair of formData.entries()) {
+						console.log(pair[0] + ':', pair[1]);
+					}
+					
+					// Submit via AJAX
+					return $.ajax({
+						url: './includes/ajaxFile/ajaxLoan.php',
+						type: 'POST',
+						data: formData,
+						processData: false,
+						contentType: false,
+						dataType: 'json'
+					})
+					.then(response => {
+						if (response.type !== 'success') {
+							throw new Error(response.message || __('payment_failed'));
+						}
+						return response;
+					})
+					.catch(error => {
+						Swal.showValidationMessage(`${__('request_failed')}: ${error.message || error}`);
+					});
+				},
+				allowOutsideClick: () => !Swal.isLoading()
+			}).then((result) => {
+				if (result.isConfirmed && result.value) {
+					Swal.fire({
+						title: result.value.title || __('success'),
+						text: result.value.message,
+						icon: 'success',
+						allowOutsideClick: false
+					}).then(() => {
+						location.reload();
+					});
+				}
+			});
+		});
 		</script>
 
 	</body>

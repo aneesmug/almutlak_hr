@@ -18,6 +18,18 @@ MODIFICATION SUMMARY (Previous Version):
  if(mysqli_num_rows($query) == 1){
  include("./includes/avatar_select.php");
 
+    // Detect if current user is an assigned payer with pending payments
+    $is_payer_with_pending = false;
+    if (!empty($empid)) {
+        $empid_safe = (int)$empid;
+        $sql_payer_pending = "SELECT COUNT(*) AS cnt FROM `smart_request` WHERE `current_status`='pending_payment' AND `payable_by_emp_id` = {$empid_safe}";
+        if ($res_pp = mysqli_query($conDB, $sql_payer_pending)) {
+            $row_pp = mysqli_fetch_assoc($res_pp);
+            $is_payer_with_pending = ((int)($row_pp['cnt'] ?? 0) > 0);
+            mysqli_free_result($res_pp);
+        }
+    }
+
     $q_post = mysqli_query($conDB, "SELECT * FROM `menu_category` ORDER BY `id` DESC LIMIT 1");
     while ($row = mysqli_fetch_assoc($q_post)) {
         $lastid =  $row['id'];
@@ -115,6 +127,11 @@ MODIFICATION SUMMARY (Previous Version):
                 <!-- Start Page content -->
                 <div class="content">
                     <div class="container-fluid">           
+                    <?php if (isset($_GET['error']) && $_GET['error'] === 'request_not_found'): ?>
+                        <div class="alert alert-danger bg-danger text-white border-0" role="alert">
+                            <?= __('error_request_not_found', 'The requested item was not found or the link is invalid.') ?>
+                        </div>
+                    <?php endif; ?>
 <div class="row">
  <div class="col-12">
   <div class="card-box table-responsive">
@@ -134,6 +151,7 @@ MODIFICATION SUMMARY (Previous Version):
             <option value="pending_approval"><?=__('pending_approval')?></option> 
             <option value="approved"><?=__('approved')?></option>
             <option value="rejected"><?=__('rejected')?></option>
+            <option value="pending_payment"><?=__('ready_for_payment', 'Ready for Payment')?></option>
             <option value="paid"><?=__('paid_status')?></option> 
         </select>
     </div>
@@ -273,6 +291,8 @@ MODIFICATION SUMMARY (Previous Version):
                         d.emp_id    = '<?=$empid?>';
                         d.smtStatus = $('#smtStatus').val(); // Will now send 'draft', 'pending_approval', etc.
                         d.search    = $('#search').val();
+                        // Hint server to restrict to my assigned payments when applicable
+                        d.payerOnly = (window.__isPayerPending === true && $('#smtStatus').val() === 'pending_payment') ? 1 : 0;
                     },
                 },
                 'columns': [
@@ -316,8 +336,15 @@ MODIFICATION SUMMARY (Previous Version):
             $('#smartRequestTbl_filter').remove();
 
             // UPDATED: Set default filter based on user role using new statuses
+            // Highest priority: if user is assigned payer with pending payments, show those first
+            window.__isPayerPending = <?= $is_payer_with_pending ? 'true' : 'false' ?>;
+            if (window.__isPayerPending) {
+                $('#smtStatus').val('pending_payment');
+                table.draw();
+            }
+            // Otherwise, fall back to role-based defaults
             // Finance Manager (dept 2, manager) -> show pending approval (for them)
-            if('<?=$emptypeget?>' == "Manager" && '<?=$user_dept?>' == 2){
+            else if('<?=$emptypeget?>' == "Manager" && '<?=$user_dept?>' == 2){
                 $('#smtStatus').val('pending_approval'); // Changed from pending_finance_approval
                 table.draw();
             } 

@@ -51,6 +51,14 @@ if (isset($_POST['process_payment'])) {
 }
 
 
+// --- Early guard: ensure a valid request id is provided ---
+if (!isset($_GET['id']) || trim((string)$_GET['id']) === '') {
+    // No id supplied; redirect to the listing page with error flag
+    header('Location: all_requests.php?error=request_not_found');
+    exit;
+}
+
+
 include("./includes/convertNumbersToWords.php");
 
 require './includes/vendor/autoload.php';
@@ -169,9 +177,9 @@ if ($getquery && mysqli_num_rows($getquery) > 0) {
         }
     }
 } else {
-    // Handle case where request ID is invalid or query fails
-     $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">".__('error_request_not_found')." Error: ".mysqli_error($conDB)."</div>";
-     // Potentially redirect or stop further processing
+    // Invalid or not found: redirect away to list (clean failure)
+    header('Location: all_requests.php?error=request_not_found');
+    exit;
 }
 
 

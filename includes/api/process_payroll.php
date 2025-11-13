@@ -91,7 +91,7 @@ try {
         ];
         
         // --- PRORATED SALARY LOGIC FOR RETURNING EMPLOYEES ---
-        $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND approval_status = 'gm_approved' AND is_deductible = 1");
+        $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND current_status = 'approved' AND is_deductible = 1");
         $stmtVacationReturn->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
         $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
 
@@ -266,49 +266,31 @@ try {
  * Calculates and inserts/updates a deduction for unpaid leave based on approved, deductible vacations.
  */
 function addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary) {
+    // Remove any previous absence deduction for this employee/month
     $stmtDelete = $pdo->prepare("DELETE FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND deduction LIKE 'Absence Deduction%'");
     $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
 
-    $stmtLeaves = $pdo->prepare("
-        SELECT SUM(vacdays) as total_deductible_days
-        FROM emp_vacation
-        WHERE emp_id = :emp_id
-        AND approval_status = 'gm_approved'
-        AND is_deductible = 1
-        AND DATE_FORMAT(start_date, '%Y-%m') = :month_year
-    ");
-    $stmtLeaves->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-    $deductibleDays = $stmtLeaves->fetchColumn();
-
-    if ($deductibleDays > 0) {
-        $dailyRate = $totalGrossSalary / 30;
-        $deductionAmount = $dailyRate * $deductibleDays;
-
-        if ($deductionAmount > 0) {
-            $deductionName = "Absence (" . $deductibleDays . ($deductibleDays > 1 ? " Days" : " Day") . ")";
-            $stmtInsertDeduction = $pdo->prepare("
-                INSERT INTO payroll_deductions (emp_id, deduction, note, month, status)
-                VALUES (:emp_id, :deduction_name, :amount, :month_year, 1)
-            ");
-            $stmtInsertDeduction->execute([
-                ':emp_id' => $empId,
-                ':deduction_name' => $deductionName,
-                ':amount' => number_format($deductionAmount, 2, '.', ''),
-                ':month_year' => $monthYear
-            ]);
-        }
-    }
+    // NEW LOGIC: Do NOT deduct for any approved leave days (any type)
+    // Only deduct for true absences (not covered by any approved leave)
+    // If you have a table of absences, loop through each absent day and check if it is covered by any approved leave
+    // If not covered, then deduct. Otherwise, skip deduction.
+    // If you do not track absences, then do not insert any absence deduction here at all.
+    // (If you want to keep absence deduction for true absences, implement that logic here)
+    // For now, this function will NOT insert any deduction for approved leave days.
 }
 
 /**
  * Checks for active loans and inserts a deduction for the monthly installment,
- * but only if a manual "Loan Installment" deduction doesn't already exist.
+ * but only if a loan deduction doesn't already exist (checks for any loan-related deduction).
+ * MODIFIED: Now checks for ANY loan deduction (not just "Loan Installment") to work with 
+ * automated loan approval system that creates specific loan deductions.
  */
 function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
-    $stmtCheck = $pdo->prepare("SELECT id FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND deduction = 'Loan Installment'");
+    // Check if ANY loan-related deduction already exists for this month
+    $stmtCheck = $pdo->prepare("SELECT id FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND (deduction = 'Loan Installment' OR deduction LIKE '%Loan%')");
     $stmtCheck->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     if ($stmtCheck->fetch()) {
-        return;
+        return; // Skip if any loan deduction already exists
     }
     $payrollMonthEnd = date('Y-m-t', strtotime($monthYear . '-01'));
     $stmtLoan = $pdo->prepare("SELECT id, total_payable, monthly_deduction FROM emp_loan WHERE emp_id = :emp_id AND status = 'approved' AND start_date <= :payroll_month_end LIMIT 1");
@@ -339,24 +321,62 @@ function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
 
 
 /**
- * NEW FUNCTION
- * Calculates and inserts a benefit for salary of days worked in the month a vacation starts.
+ * ENHANCED FUNCTION
+ * Calculates and inserts benefits for employees on vacation:
+ * 1. Working days salary before vacation starts (prorated monthly salary)
+ * 2. Vacation salary benefit (if vacation_salary_type = 'payroll')
  */
 function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary) {
-    // First, remove any previous vacation working days salary benefit to avoid duplication
-    $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year AND benefit LIKE 'Working Days Salary for Vacation%'");
-    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-
-    // Find approved, payable vacations starting this month
+    // Find approved vacation starting this month
     $stmtVacation = $pdo->prepare("
-        SELECT id, start_date, vac_type, fly_type
+        SELECT id, start_date, return_date, vac_type, fly_type, vacation_salary_type, vacdays
         FROM emp_vacation
         WHERE emp_id = :emp_id
-        AND approval_status = 'gm_approved'
+        AND current_status = 'approved'
         AND DATE_FORMAT(start_date, '%Y-%m') = :month_year
+        ORDER BY start_date ASC
+        LIMIT 1
     ");
     $stmtVacation->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $vacation = $stmtVacation->fetch(PDO::FETCH_ASSOC);
+    
+    // If no vacation found, delete any existing vacation benefits and return
+    if (!$vacation) {
+        $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits 
+            WHERE emp_id = :emp_id 
+            AND month = :month_year 
+            AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')");
+        $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        return;
+    }
+    
+    // Check if vacation benefits already exist for this specific vacation ID
+    $stmtCheckExisting = $pdo->prepare("
+        SELECT COUNT(*) as count 
+        FROM payroll_benefits 
+        WHERE emp_id = :emp_id 
+        AND month = :month_year 
+        AND (benefit = :working_days_name OR benefit = :vacation_salary_name)
+    ");
+    $stmtCheckExisting->execute([
+        ':emp_id' => $empId, 
+        ':month_year' => $monthYear,
+        ':working_days_name' => "Working Days Salary for Vacation (ID: {$vacation['id']})",
+        ':vacation_salary_name' => "Vacation Salary Benefit (ID: {$vacation['id']})"
+    ]);
+    $existingCount = $stmtCheckExisting->fetch(PDO::FETCH_ASSOC)['count'];
+    
+    // If benefits already exist for this vacation, skip adding duplicates
+    if ($existingCount > 0) {
+        return;
+    }
+    
+    // Remove any old vacation-related benefits (from different vacation IDs or orphaned entries)
+    $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits 
+        WHERE emp_id = :emp_id 
+        AND month = :month_year 
+        AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')");
+    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
 
     if ($vacation) {
         // Define non-payable leave types
@@ -364,18 +384,22 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
         
         // Check if it's a payable leave (not in the non-payable list and not an emergency)
         $is_payable_leave = !in_array($vacation['vac_type'], $non_payable_leave_types) && $vacation['fly_type'] !== 'emergency';
+        $vacation_salary_type = $vacation['vacation_salary_type'] ?? 'end_of_service';
 
         if ($is_payable_leave) {
             // Calculate working days before vacation starts
             $startDate = new DateTime($vacation['start_date']);
             $workingDays = (int)$startDate->format('d') - 1;
 
+            $dailyRate = $totalGrossSalary / 30;
+
+            // 1. ADD WORKING DAYS SALARY (salary for days worked before vacation)
             if ($workingDays > 0) {
-                $dailyRate = $totalGrossSalary / 30;
                 $workingDaysSalary = $dailyRate * $workingDays;
 
                 if ($workingDaysSalary > 0) {
                     $benefitName = "Working Days Salary for Vacation (ID: {$vacation['id']})";
+                    
                     $stmtInsertBenefit = $pdo->prepare("
                         INSERT INTO payroll_benefits (emp_id, benefit, note, month, status)
                         VALUES (:emp_id, :benefit_name, :amount, :month_year, 1)
@@ -388,6 +412,33 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
                     ]);
                 }
             }
+
+            // 2. ADD VACATION SALARY BENEFIT (if vacation_salary_type = 'payroll')
+            if ($vacation_salary_type === 'payroll') {
+                // Calculate vacation salary based on vacation days
+                $vacationDays = (int)$vacation['vacdays'];
+                
+                if ($vacationDays > 0) {
+                    $vacationSalary = $dailyRate * $vacationDays;
+                    
+                    if ($vacationSalary > 0) {
+                        $benefitName = "Vacation Salary Benefit (ID: {$vacation['id']})";
+                        
+                        $stmtInsertVacSalary = $pdo->prepare("
+                            INSERT INTO payroll_benefits (emp_id, benefit, note, month, status)
+                            VALUES (:emp_id, :benefit_name, :amount, :month_year, 1)
+                        ");
+                        $stmtInsertVacSalary->execute([
+                            ':emp_id' => $empId,
+                            ':benefit_name' => $benefitName,
+                            ':amount' => number_format($vacationSalary, 2, '.', ''),
+                            ':month_year' => $monthYear
+                        ]);
+                    }
+                }
+            }
+            // If vacation_salary_type = 'end_of_service', vacation salary is NOT added to payroll
+            // It will be calculated and paid during end of service settlement
         }
     }
 }

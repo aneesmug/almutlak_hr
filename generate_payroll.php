@@ -384,39 +384,64 @@ function buildBenefitsHtml(benefits, benefitTypes) {
     return benefits.map(b => {
         const benefitName = b.benefit || '';
         const benefitAmount = parseFloat(b.note || 0).toFixed(2);
-        // Fallback to a simple text input if benefit types are not available
-        const benefitOptionsHtml = benefitTypes && benefitTypes.length > 0
-            ? `
-                <select class="form-select form-select-sm benefit-type custom-select" data-benefit-id="${b.id}">
+        
+        // Check if this is a vacation-related benefit and extract description
+        let benefitLabel = '';
+        let isVacationBenefit = false;
+        let displayName = benefitName;
+        
+        if (benefitName.includes('Working Days Salary for Vacation')) {
+            isVacationBenefit = true;
+            const match = benefitName.match(/ID:\s*(\d+)/);
+            const vacationId = match ? match[1] : '';
+            displayName = 'Working Days Before Vacation';
+            benefitLabel = `<small class="text-muted d-block mt-1"><i class="fas fa-info-circle"></i> Salary for working days before vacation (Vac ID: ${vacationId})</small>`;
+        } else if (benefitName.includes('Vacation Salary Benefit')) {
+            isVacationBenefit = true;
+            const match = benefitName.match(/ID:\s*(\d+)/);
+            const vacationId = match ? match[1] : '';
+            displayName = 'Vacation Salary';
+            benefitLabel = `<small class="text-success d-block mt-1"><i class="fas fa-plane-departure"></i> Vacation salary benefit (Vac ID: ${vacationId})</small>`;
+        } else if (benefitName.includes('Loan Installment')) {
+            displayName = 'Loan Installment Deduction';
+            benefitLabel = `<small class="text-danger d-block mt-1"><i class="fas fa-hand-holding-usd"></i> Deducted from active loan</small>`;
+        }
+        
+        // For vacation benefits, always show as readonly text
+        // For regular benefits, use dropdown if benefit types are available
+        const benefitOptionsHtml = isVacationBenefit
+            ? `<input type="text" class="form-control form-control-sm benefit-name bg-light" 
+                       data-benefit-id="${b.id}" value="${displayName}" readonly>`
+            : (benefitTypes && benefitTypes.length > 0
+                ? `<select class="form-select form-select-sm benefit-type custom-select" data-benefit-id="${b.id}">
                     <option>${__('select_type_option')}</option>
                     ${benefitTypes.map(type => `
                         <option value="${type.id}" data-calculation="${type.calculation_type}" ${type.name === benefitName ? 'selected' : ''}>
                             ${type.name}
                         </option>
                     `).join('')}
-                </select>
-            `
-            : `
-                <input type="text" class="form-control form-control-sm benefit-name" 
-                       data-benefit-id="${b.id}" value="${benefitName}" placeholder="${__('benefit_name_placeholder')}">
-            `;
+                </select>`
+                : `<input type="text" class="form-control form-control-sm benefit-name" 
+                       data-benefit-id="${b.id}" value="${benefitName}" placeholder="${__('benefit_name_placeholder')}">`
+            );
 
         return `
             <div class="benefit-row row mb-2 align-items-center g-2">
                 <div class="col-md-6">
                     ${benefitOptionsHtml}
+                    ${benefitLabel}
                 </div>
                 <div class="col-md-2">
                     </div>
                 <div class="col-md-3">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                        <input type="text" step="0.01" class="form-control benefit-amount" 
-                               data-benefit-id="${b.id}" value="${benefitAmount}" placeholder="${__('amount_placeholder')}">
+                        <input type="text" step="0.01" class="form-control benefit-amount ${isVacationBenefit ? 'bg-light' : ''}" 
+                               data-benefit-id="${b.id}" value="${benefitAmount}" placeholder="${__('amount_placeholder')}" ${isVacationBenefit ? 'readonly' : ''}>
                     </div>
                 </div>
                 <div class="col-md-1 text-center">
-                    <button class="btn btn-sm btn-outline-danger delete-benefit-btn" data-benefit-id="${b.id}">
+                    <button class="btn btn-sm btn-outline-danger delete-benefit-btn" data-benefit-id="${b.id}" ${isVacationBenefit ? 'disabled title="Cannot delete vacation benefits"' : ''}>
                         <i class="fas fa-trash-alt"></i>
                     </button>
                 </div>
@@ -1416,7 +1441,19 @@ async function showPayrollDetails(empId, empName, month) {
                                     if (data.status === 'success') {
                                         row.remove();
                                         updateDynamicNetSalary();
-                                        Swal.fire(__('deleted_success_title'), __('benefit_deleted_success_msg'), 'success');
+                                        
+                                        // Show success message and reopen the edit modal
+                                        await Swal.fire({
+                                            title: __('deleted_success_title'),
+                                            text: __('benefit_deleted_success_msg'),
+                                            icon: 'success',
+                                            timer: 1500,
+                                            showConfirmButton: false
+                                        });
+                                        
+                                        // Reopen the edit modal after deletion
+                                        Swal.close();
+                                        showPayrollDetails(empId, empName, month);
                                     } else {
                                         throw new Error(data.message || 'Failed to delete benefit');
                                     }
@@ -1466,7 +1503,19 @@ async function showPayrollDetails(empId, empName, month) {
                                     if (data.status === 'success') {
                                         row.remove();
                                         updateDynamicNetSalary();
-                                        Swal.fire(__('deleted_success_title'), __('deduction_deleted_success_msg'), 'success');
+                                        
+                                        // Show success message and reopen the edit modal
+                                        await Swal.fire({
+                                            title: __('deleted_success_title'),
+                                            text: __('deduction_deleted_success_msg'),
+                                            icon: 'success',
+                                            timer: 1500,
+                                            showConfirmButton: false
+                                        });
+                                        
+                                        // Reopen the edit modal after deletion
+                                        Swal.close();
+                                        showPayrollDetails(empId, empName, month);
                                     } else {
                                         throw new Error(data.message || 'Failed to delete deduction');
                                     }

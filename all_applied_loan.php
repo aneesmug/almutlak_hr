@@ -15,171 +15,216 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
-$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
-if (mysqli_num_rows($query) == 1) {
-    
-    // --- FIX START: Fetch data BEFORE the include to prevent overwrites ---
-    $user_data = mysqli_fetch_assoc($query);
-    $user_type = $user_data['user_type'];
-    $emp_type = $user_data['emp_type'];
-    $user_dept = $user_data['dept'];
-    mysqli_data_seek($query, 0); // Reset pointer for the include file if it needs it
-    // --- FIX END ---
+// --- Get Request Type ID for 'loan_request' ---
+$type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'loan_request' LIMIT 1");
+if (!$type_query || mysqli_num_rows($type_query) == 0) {
+    die("CRITICAL ERROR: 'loan_request' type not found in `approval_request_types` table.");
+}
+$request_type_id = (int)mysqli_fetch_assoc($type_query)['id'];
 
-    // Include the file, which may use its own variables or the reset $query.
-    include("./includes/avatar_select.php");
+// --- Search, Pagination & Filtering Logic ---
+$all_statuses = [
+    'my_pending' => __('my_pending_queue'),
+    'my_dept' => __('my_department_requests'),
+    'pending_approval' => __('all_pending'),
+    'approved' => __('approved'),
+    'rejected' => __('rejected'),
+    'all' => __('all_requests')
+];
 
-    // --- Corrected Role Definition ---
-    $user_role = 'Employee'; // Default role
+$search_term = $_GET['search'] ?? '';
+$limit_options = [8, 12, 16];
+$perpage = 8;
+$items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $perpage;
+$show_all = isset($_GET['limit']) && $_GET['limit'] == 'all';
+if ($show_all) {
+    $items_per_page = -1;
+}
 
-    if ($user_type == 'administrator') {
-        $user_role = 'administrator';
-    } elseif ($user_type == 'gm') {
-        $user_role = 'GM';
-    } elseif ($user_type == 'hr') {
-        $user_role = 'HR_Manager';
-    } elseif ($user_type == 'assistant' && $user_dept == 5) { // Dept 5 is HR
-        $user_role = 'HR_Assistant';
-    } elseif ($emp_type == 'Manager' && $user_dept == 2) {
-        $user_role = 'Finance_Manager';
-    } elseif ($user_type == 'assistant' && $user_dept == 2) { // Dept 2 is Finance
-        $user_role = 'Finance_Assistant';
-    } elseif ($emp_type == 'Manager') {
-        $user_role = 'DPT_Manager';
+$current_page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
+if ($current_page < 1) {
+    $current_page = 1;
+}
+
+$current_filter = $_GET['status'] ?? null;
+$statuses_to_query = [];
+
+// 2. Determine the effective filter: either from URL or a default based on role
+if ($current_filter === null) {
+    if ($is_system_admin) {
+        $current_filter = 'all'; 
+    } else {
+        $current_filter = 'my_pending';
+    }
+}
+
+$where_clauses = [];
+$params = [];
+$types = "";
+$join_sql = "";
+
+$page_title = $all_statuses[$current_filter] ?? __('all_requests');
+
+if ($current_filter === 'my_pending') {
+    // Backward compatibility: only join request_approvers if inv_no column exists in emp_loan
+    $has_inv_no = false;
+    $column_check = mysqli_query($conDB, "SHOW COLUMNS FROM emp_loan LIKE 'inv_no'");
+    if ($column_check && mysqli_num_rows($column_check) === 1) { $has_inv_no = true; }
+    if ($has_inv_no) {
+        $join_sql .= " JOIN `request_approvers` ra ON ra.request_inv_no = l.inv_no AND ra.request_type_id = ? ";
+        $params[] = $request_type_id;
+        $types .= "i";
+        $where_clauses[] = "ra.approver_id = ?";
+        $params[] = $empid;
+        $types .= "i";
+        $where_clauses[] = "ra.status = 'pending'";
+    }
+} elseif ($current_filter === 'my_dept') {
+    $where_clauses[] = "e.dept = ?";
+    $params[] = $user_dept;
+    $types .= "i";
+} elseif (in_array($current_filter, ['pending_approval', 'approved', 'rejected'])) {
+    $where_clauses[] = "l.status = ?";
+    $params[] = $current_filter;
+    $types .= "s";
+    if ($current_filter === 'approved' && empty($search_term)) {
+        $where_clauses[] = "l.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+    }
+} elseif ($current_filter === 'all' && empty($search_term)) {
+    $where_clauses[] = "(l.status != 'approved' OR l.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY))";
+}
+
+if (!empty($search_term)) {
+    $where_clauses[] = "(e.name LIKE ? OR l.emp_id LIKE ? OR l.inv_no LIKE ?)";
+    $search_param = "%{$search_term}%";
+    array_push($params, $search_param, $search_param, $search_param);
+    $types .= "sss";
+}
+
+if (!$is_system_admin && !in_array($current_filter, ['my_pending', 'all', 'my_dept'])) {
+    $where_clauses[] = "e.dept = ?";
+    $params[] = $user_dept;
+    $types .= "i";
+}
+
+$where_sql = "";
+if (!empty($where_clauses)) {
+    $where_sql = " WHERE " . implode(" AND ", $where_clauses);
+}
+
+$base_query = "FROM emp_loan l 
+               JOIN employees e ON l.emp_id = e.emp_id 
+               $join_sql 
+               $where_sql";
+
+$count_sql = "SELECT COUNT(DISTINCT l.id) as total " . $base_query;
+$total_items = 0;
+
+$stmt_count = $conDB->prepare($count_sql);
+if (!$stmt_count) { die("Count query prepare failed: " . $conDB->error); }
+if (!empty($params)) {
+    $stmt_count->bind_param($types, ...$params);
+}
+$stmt_count->execute();
+$total_items = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
+$stmt_count->close();
+
+$total_pages = $show_all ? 1 : ceil($total_items / $items_per_page);
+if ($current_page > $total_pages && $total_pages > 0) {
+    $current_page = $total_pages;
+}
+
+$requests = [];
+if ($total_items > 0) {
+    $sql = "SELECT 
+        l.*, 
+        l.inv_no AS request_inv_no,
+        e.name as employee_name,
+        e.dept,
+        ra_pending.approver_id as current_approver_id, 
+        ra_pending.approval_level as current_approval_level, 
+    COALESCE(approver_emp.name, approver_admin.fullname, approver_admin.username) as current_approver_name,
+    approver_admin.user_type as current_approver_user_type,
+        l.loan_amount,
+        l.monthly_deduction,
+        l.start_date,
+        l.end_date
+    FROM emp_loan l 
+    JOIN employees e ON l.emp_id = e.emp_id
+    LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = l.inv_no AND ra_pending.request_type_id = ? AND ra_pending.status = 'pending' 
+    LEFT JOIN employees approver_emp ON ra_pending.approver_id = approver_emp.emp_id 
+    LEFT JOIN admin_login approver_admin ON ra_pending.approver_id = approver_admin.emp_id
+    $join_sql
+    $where_sql";
+    $sql .= " GROUP BY l.id ORDER BY l.created_at DESC";
+
+    $main_params = $params;
+    $main_types = $types;
+    // Prepend the request_type_id for the LEFT JOIN on ra_pending
+    array_unshift($main_params, $request_type_id);
+    $main_types = "i" . $main_types;
+
+    if (!$show_all) {
+        $offset = ($current_page - 1) * $items_per_page;
+        $sql .= " LIMIT ?, ?";
+        array_push($main_params, $offset, $items_per_page);
+        $main_types .= "ii";
     }
 
-
-    // --- Loan Request Logic ---
-    $all_loan_statuses = [
-        'dept_manager_pending' => __('pending_department_manager'),
-        'hr_assistant_pending' => __('pending_hr_assistant'),
-        'hr_manager_pending' => __('pending_hr_manager'),
-        'finance_manager_pending' => __('pending_finance_manager'),
-        'gm_pending' => __('pending_gm'),
-        'finance_assistant_pending' => __('pending_final_processing'),
-        'approved' => __('approved_and_processed'),
-        'paid' => __('paid_and_closed'),
-        'rejected' => __('rejected')
-    ];
-    
-    // --- Search, Pagination & Filtering Logic ---
-    $search_term = $_GET['search'] ?? '';
-    $limit_options = [8, 12, 16];
-    $perpage = 8;
-    $items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $perpage;
-    $show_all = isset($_GET['limit']) && $_GET['limit'] == 'all';
-    if ($show_all) {
-        $items_per_page = -1;
+    $stmt = $conDB->prepare($sql);
+    if (!$stmt) { die("Main query prepare failed: " . $conDB->error); }
+    if (!empty($main_params)) {
+        $stmt->bind_param($main_types, ...$main_params);
     }
-
-    $current_page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
-    if ($current_page < 1) {
-        $current_page = 1;
-    }
-    
-    $current_filter = $_GET['status'] ?? null; // Start with null
-
-    // Determine the default filter if none is selected in the URL
-    if ($current_filter === null) {
-        switch ($user_role) {
-            case 'DPT_Manager': $current_filter = 'dept_manager_pending'; break;
-            case 'HR_Assistant': $current_filter = 'hr_assistant_pending'; break;
-            case 'HR_Manager': $current_filter = 'hr_manager_pending'; break;
-            case 'Finance_Manager': $current_filter = 'finance_manager_pending'; break;
-            case 'GM': $current_filter = 'gm_pending'; break;
-            case 'Finance_Assistant': $current_filter = 'finance_assistant_pending'; break;
-            default: $current_filter = 'all'; break; // Default for admin or others
+    if(!$stmt->execute()) { die("Main query execute failed: " . $stmt->error); }
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $requests[] = $row;
         }
     }
+    $stmt->close();
+}
 
-    $loan_where_clauses = [];
-    $loan_params = [];
-    $loan_types = "";
-    $page_title = __('loan_requests');
+$unfiltered_sql = "SELECT COUNT(id) as total FROM emp_loan";
+$unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
+$unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
-    // Build query based on the final filter value
-    if ($current_filter !== 'all') {
-        if (array_key_exists($current_filter, $all_loan_statuses)) {
-            $loan_where_clauses[] = "l.status = ?";
-            $loan_params[] = $current_filter;
-            $loan_types .= "s";
-            $page_title = $all_loan_statuses[$current_filter];
-
-            // Add department-specific filter for DPT managers
-            if ($user_role === 'DPT_Manager') {
-                $loan_where_clauses[] = "e.dept = ?";
-                $loan_params[] = $user_dept;
-                $loan_types .= "i";
+// --- Helper: Fallback next-approver name by status level when chain table isn't available ---
+function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
+    $status = $loanRow['status'] ?? '';
+    $empDept = (int)($loanRow['dept'] ?? 0);
+    $map = [
+        'pending_level_1' => ['where' => "a.emp_type='Manager' AND e.dept=?", 'title' => __('pending_department_manager')],
+        'pending_level_2' => ['where' => "a.user_type='assistant' AND e.dept=5", 'title' => __('pending_hr_assistant')],
+        'pending_level_3' => ['where' => "a.user_type='hr' AND e.dept=5", 'title' => __('pending_hr_manager')],
+        'pending_level_4' => ['where' => "a.emp_type='Manager' AND e.dept=2", 'title' => __('pending_finance_manager')],
+        'pending_level_5' => ['where' => "a.user_type='gm'", 'title' => __('pending_gm')],
+        'pending_level_6' => ['where' => "a.user_type='assistant' AND e.dept=2", 'title' => __('pending_final_processing')],
+    ];
+    if (!isset($map[$status])) return null;
+    $rule = $map[$status];
+    $sql = "SELECT e.name FROM admin_login a JOIN employees e ON e.emp_id = a.id_iqama WHERE " . $rule['where'] . " LIMIT 1";
+    $name = null;
+    if (strpos($rule['where'], '?') !== false) {
+        $stmt = $conDB->prepare($sql);
+        if ($stmt) {
+            $stmt->bind_param('i', $empDept);
+            if ($stmt->execute()) {
+                $res = $stmt->get_result()->fetch_assoc();
+                $name = $res['name'] ?? null;
             }
-        } else {
-             $loan_where_clauses[] = "1=0"; // No valid status, show nothing
+            $stmt->close();
         }
     } else {
-        $page_title = __('all_loan_requests');
-    }
-    
-    // Add search term filter if it exists
-    if (!empty($search_term)) {
-        $loan_where_clauses[] = "(e.name LIKE ? OR l.emp_id LIKE ?)";
-        $search_param = "%{$search_term}%";
-        $loan_params[] = $search_param;
-        $loan_params[] = $search_param;
-        $loan_types .= "ss";
-    }
-
-    $loan_where_sql = "";
-    if (!empty($loan_where_clauses)) {
-        $loan_where_sql = " WHERE " . implode(" AND ", $loan_where_clauses);
-    }
-    
-    // First, get the total count of items for pagination
-    $count_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id" . $loan_where_sql;
-    $stmt_count = $conDB->prepare($count_sql);
-    if (!empty($loan_params)) {
-        $stmt_count->bind_param($loan_types, ...$loan_params);
-    }
-    $stmt_count->execute();
-    $total_items = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
-    $stmt_count->close();
-
-    $total_pages = $show_all ? 1 : ceil($total_items / $items_per_page);
-    if ($current_page > $total_pages && $total_pages > 0) {
-        $current_page = $total_pages;
-    }
-
-    // Now, fetch the data for the current page
-    $loan_requests = [];
-    if ($total_items > 0) {
-        $loan_sql = "SELECT l.*, e.name as employee_name, e.dept, (l.total_payable / l.monthly_deduction) as installments FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id" . $loan_where_sql . " ORDER BY l.created_at DESC";
-        
-        $main_params = $loan_params;
-        $main_types = $loan_types;
-
-        if (!$show_all) {
-            $offset = ($current_page - 1) * $items_per_page;
-            $loan_sql .= " LIMIT ?, ?";
-            $main_params[] = $offset;
-            $main_params[] = $items_per_page;
-            $main_types .= "ii";
+        $res = mysqli_query($conDB, $sql);
+        if ($res) {
+            $row = mysqli_fetch_assoc($res);
+            $name = $row['name'] ?? null;
         }
-
-        $stmt_loan = $conDB->prepare($loan_sql);
-        if (!empty($main_params)) {
-            $stmt_loan->bind_param($main_types, ...$main_params);
-        }
-        $stmt_loan->execute();
-        $loan_result = $stmt_loan->get_result();
-        if ($loan_result->num_rows > 0) {
-            while ($row = $loan_result->fetch_assoc()) {
-                $loan_requests[] = $row;
-            }
-        }
-        $stmt_loan->close();
     }
-    // ** NEW ** Get the total unfiltered count of all loan requests.
-    $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_loan";
-    $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
-    $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
+    return $name ?: null;
+}
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -248,8 +293,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <div class="form-group">
                                                 <label for="statusFilter" class="font-weight-bold"><?=__('filter_by_status')?></label>
                                                 <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                    <option value="all" <?php if ($current_filter == 'all') echo 'selected'; ?>><?=__('all_requests')?></option>
-                                                    <?php foreach ($all_loan_statuses as $status_key => $status_value): ?>
+                                                    <?php foreach ($all_statuses as $status_key => $status_value): ?>
                                                         <option value="<?=$status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
                                                             <?=htmlspecialchars($status_value); ?>
                                                         </option>
@@ -275,10 +319,10 @@ if (mysqli_num_rows($query) == 1) {
                                         <span class="badge badge-light p-2"><?=__('total_found')?>: <?=$total_items; ?></span>
                                     </div>
 
-                                    <?php if (!empty($loan_requests)): ?>
+                                    <?php if (!empty($requests)): ?>
                                         <div class="row">
-                                            <?php foreach ($loan_requests as $loan): ?>
-                                                <div class="col-lg-3 col-md-6 mb-3">
+                                            <?php foreach ($requests as $loan): ?>
+                                                <div class="col-lg-4 col-md-6 mb-4">
                                                     <div class="card request-card h-100">
                                                         <div class="card-header">
                                                             <?=($loan['employee_name']); ?>
@@ -291,70 +335,52 @@ if (mysqli_num_rows($query) == 1) {
                                                             <div class="detail-item"><i class="fad fa-wallet duotone-info"></i><strong><?=__('monthly')?>:</strong> <?=htmlspecialchars($loan['monthly_deduction']); ?></div>
                                                             <div class="detail-item">
                                                                 <?php
-                                                                    $loan_status_text = $all_loan_statuses[$loan['status']] ?? __('unknown');
                                                                     $loan_badge_class = 'secondary';
-                                                                    switch ($loan['status']) {
-                                                                        case 'dept_manager_pending': $loan_badge_class = 'info'; break;
-                                                                        case 'hr_assistant_pending':
-                                                                        case 'hr_manager_pending':
-                                                                        case 'finance_manager_pending':
-                                                                        case 'gm_pending':
-                                                                        case 'finance_assistant_pending': $loan_badge_class = 'warning'; break;
-                                                                        case 'approved': $loan_badge_class = 'success'; break;
-                                                                        case 'paid': $loan_badge_class = 'primary'; break;
-                                                                        case 'rejected': $loan_badge_class = 'danger'; break;
+                                                                    $loan_status_text = '';
+                                                                    $current_level_display = '';
+                                                                    
+                                                                    // Check if we have current approver from chain (ALWAYS show if available)
+                                                                    if (!empty($loan['current_approver_name'])) {
+                                                                        $loan_status_text = __('pending_with') . ' ' . htmlspecialchars($loan['current_approver_name']);
+                                                                        $loan_badge_class = 'warning';
+                                                                        if (!empty($loan['current_approval_level'])) {
+                                                                            $current_level_display = ' (Level ' . $loan['current_approval_level'] . ')';
+                                                                        }
+                                                                    } elseif (in_array($loan['status'], ['pending', 'pending_approval'])) {
+                                                                        // Generic pending status when no approver is found
+                                                                        $loan_status_text = __('pending_approval');
+                                                                        $loan_badge_class = 'warning';
+                                                                    } elseif ($loan['status'] === 'approved') {
+                                                                        $loan_status_text = __('approved');
+                                                                        $loan_badge_class = 'success';
+                                                                    } elseif ($loan['status'] === 'rejected') {
+                                                                        $loan_status_text = __('rejected');
+                                                                        $loan_badge_class = 'danger';
+                                                                    } elseif ($loan['status'] === 'paid') {
+                                                                        $loan_status_text = __('paid');
+                                                                        $loan_badge_class = 'primary';
+                                                                    } else {
+                                                                        $loan_status_text = __('pending');
+                                                                        $loan_badge_class = 'warning';
                                                                     }
                                                                 ?>
                                                                 <i class="fad fa-info-circle duotone-info"></i>
-                                                                <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$loan_badge_class; ?> p-2"><?=htmlspecialchars($loan_status_text); ?></span>
+                                                                <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$loan_badge_class; ?> p-2"><?=htmlspecialchars($loan_status_text . $current_level_display); ?></span>
                                                             </div>
                                                         </div>
                                                         <?php
-                                                            // Logic to show/hide buttons based on user role and loan status
+                                                            // Button visibility: Only show if pending with logged-in user
                                                             $can_take_action = false;
-                                                            $action_role = '';
-
-                                                            if ($loan['status'] == 'dept_manager_pending' && $user_role == 'DPT_Manager' && $loan['dept'] == $user_dept && $loan['dept_manager_status'] == 'pending') {
-                                                                $can_take_action = true; $action_role = 'dept_manager';
-                                                            } elseif ($loan['status'] == 'hr_assistant_pending' && $user_role == 'HR_Assistant' && $loan['hr_assistant_status'] == 'pending') {
-                                                                $can_take_action = true; $action_role = 'hr_assistant';
-                                                            } elseif ($loan['status'] == 'hr_manager_pending' && $user_role == 'HR_Manager' && $loan['hr_manager_status'] == 'pending') {
-                                                                $can_take_action = true; $action_role = 'hr_manager';
-                                                            } elseif ($loan['status'] == 'finance_manager_pending' && $user_role == 'Finance_Manager' && $loan['finance_manager_status'] == 'pending') {
-                                                                $can_take_action = true; $action_role = 'finance_manager';
-                                                            } elseif ($loan['status'] == 'gm_pending' && $user_role == 'GM' && $loan['gm_status'] == 'pending') {
-                                                                $can_take_action = true; $action_role = 'gm';
-                                                            } elseif ($loan['status'] == 'finance_assistant_pending' && $user_role == 'Finance_Assistant' && $loan['finance_assistant_status'] == 'pending') {
-                                                                $can_take_action = true; $action_role = 'finance_assistant';
-                                                            } elseif ($user_role == 'administrator' && !in_array($loan['status'], ['approved', 'rejected', 'paid'])) {
+                                                            if ($loan['current_approver_id'] == $empid) {
                                                                 $can_take_action = true;
-                                                                $status_to_role_map = [
-                                                                    'dept_manager_pending' => 'dept_manager',
-                                                                    'hr_assistant_pending' => 'hr_assistant',
-                                                                    'hr_manager_pending' => 'hr_manager',
-                                                                    'finance_manager_pending' => 'finance_manager',
-                                                                    'gm_pending' => 'gm',
-                                                                    'finance_assistant_pending' => 'finance_assistant'
-                                                                ];
-                                                                $action_role = $status_to_role_map[$loan['status']] ?? '';
                                                             }
                                                         ?>
                                                         <div class="card-footer d-flex justify-content-between align-items-center btn-group">
                                                             <a href="loan_report_details.php?id=<?=$loan['id']; ?>&emp_id=<?=$loan['emp_id']; ?>" target="_blank" class="btn btn-info btn-block waves-effect"><i class="fa fa-eye"></i> <?=__('view')?></a>
-                                                            <?php if($can_take_action && $action_role): ?>
-                                                                <?php if($action_role == 'finance_assistant'): ?>
-                                                                    <button class="btn btn-danger btn-block waves-effect" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=$action_role?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
-                                                                    <button class="btn btn-primary btn-block waves-effect" onclick="finalizeLoan(<?=$loan['id']; ?>)"><i class="fa fa-check-double"></i> <?=__('finalize')?></button>
-                                                                <?php elseif($action_role == 'gm'): ?>
-                                                                    <button class="btn btn-danger btn-block waves-effect" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=$action_role?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
-                                                                    <button class="btn btn-success btn-block waves-effect" onclick="modifyAndApproveLoan(<?=$loan['id']; ?>, '<?=$loan['loan_amount']?>', '<?=round($loan['installments'])?>', '<?=$loan['emp_id']?>')"><i class="fa fa-edit"></i> <?=__('approve')?></button>
-                                                                <?php elseif($action_role == 'hr_assistant'): ?>
-                                                                    <button class="btn btn-danger btn-block waves-effect" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=$action_role?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
-                                                                    <button class="btn btn-success btn-block waves-effect" onclick="modifyAndApproveLoanHRAssistant(<?=$loan['id']; ?>, '<?=$loan['loan_amount']?>', '<?=round($loan['installments'])?>', '<?=$loan['emp_id']?>')"><i class="fa fa-edit"></i> <?=__('approve')?></button>
-                                                                <?php else: ?>
-                                                                    <button class="btn btn-danger btn-block waves-effect" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=$action_role?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
-                                                                    <button class="btn btn-success btn-block waves-effect" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=$action_role?>')"><i class="fa fa-check"></i> <?=__('approve')?></button>
-                                                                <?php endif; ?>
+                                                            <a href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank" class="btn btn-secondary btn-block waves-effect"><i class="fa fa-history"></i> <?=__('history')?></a>
+                                                            <?php if($can_take_action): ?>
+                                                                <button class="btn btn-danger btn-block waves-effect" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=$loan['employee_name']?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
+                                                                <button class="btn btn-success btn-block waves-effect" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=$loan['employee_name']?>', <?=$loan['total_payable']; ?>, '<?=$loan['current_approver_user_type'] ?? ''?>', <?=$loan['current_approval_level'] ?? 0?>)"><i class="fa fa-check"></i> <?=__('approve')?></button>
                                                             <?php endif; ?>
                                                         </div>
                                                     </div>
@@ -414,5 +440,4 @@ if (mysqli_num_rows($query) == 1) {
     </html>
 <?php
     $conDB->close();
-}
 ?>

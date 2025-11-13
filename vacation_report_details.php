@@ -106,50 +106,41 @@ if (mysqli_num_rows($query) == 1) {
     $vacation_salary_type = $request['vacation_salary_type'] ?? 'payroll';
     $show_vacation_salary = ($vacation_salary_type === 'payroll');
 
-    if ($is_payable_leave && $show_vacation_salary) {
+    if ($is_payable_leave) {
         if ($salary) {
             $total_monthly_salary = ($salary['basic'] ?? 0) + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
             $daily_rate = $total_monthly_salary / 30;
 
-            // Calculate vacation days salary
-            $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
-            if ($contract_days > 0 && $applied_days == $contract_days) {
-                $vacation_salary = $total_monthly_salary;
-            } else {
-                $vacation_salary = $daily_rate * $applied_days;
-            }
-            
-            // Calculate working days salary (from 1st day of month until last day)
-            $start_date_obj = new DateTime($request['start_date']);
-            $working_days = (int)$start_date_obj->format('d');
-            $working_days_salary = $daily_rate * $working_days;
-
-            if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
-                $gosi_percentage = (float)$request['gosi'];
-                $gosi_deduction = (($vacation_salary + $working_days_salary) * $gosi_percentage) / 100;
-            }
-        }
-        if (($request['vac_type'] === 'Fly' || $request['vac_type'] === 'Local Vacation') && $request['country_id'] != 191) {
-            $ticket_fee = $request['ticket_pay'] ?? 0;
-            $permit_fee = $request['permit_fee'] ?? 0;
-        }
-    } elseif ($is_payable_leave && !$show_vacation_salary) {
-        // NEW: If salary type is 'end_of_service', only calculate working days salary (1st to last day of month)
-        if ($salary) {
-            $total_monthly_salary = ($salary['basic'] ?? 0) + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
-            $daily_rate = $total_monthly_salary / 30;
-
-            // Calculate working days salary (from 1st day of month until last day before vacation)
+            // Calculate working days salary (from 1st day of month until day before vacation starts)
             $start_date_obj = new DateTime($request['start_date']);
             $working_days = (int)$start_date_obj->format('d') - 1; // Days before vacation starts
             $working_days_salary = $daily_rate * $working_days;
 
+            // Only calculate vacation salary if type is 'payroll'
+            if ($show_vacation_salary) {
+                // Calculate vacation days salary
+                $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
+                if ($contract_days > 0 && $applied_days == $contract_days) {
+                    $vacation_salary = $total_monthly_salary;
+                } else {
+                    $vacation_salary = $daily_rate * $applied_days;
+                }
+            }
+
+            // GOSI deduction calculation
             if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
                 $gosi_percentage = (float)$request['gosi'];
-                $gosi_deduction = ($working_days_salary * $gosi_percentage) / 100;
+                if ($show_vacation_salary) {
+                    // Both working days + vacation salary
+                    $gosi_deduction = (($vacation_salary + $working_days_salary) * $gosi_percentage) / 100;
+                } else {
+                    // Only working days salary
+                    $gosi_deduction = ($working_days_salary * $gosi_percentage) / 100;
+                }
             }
         }
-        // Still show ticket and permit fees
+        
+        // Ticket and permit fees (applicable for both types)
         if (($request['vac_type'] === 'Fly' || $request['vac_type'] === 'Local Vacation') && $request['country_id'] != 191) {
             $ticket_fee = $request['ticket_pay'] ?? 0;
             $permit_fee = $request['permit_fee'] ?? 0;
@@ -335,15 +326,15 @@ if (mysqli_num_rows($query) == 1) {
                 <div class="content">
                     <div class="container-fluid">
                         <div class="text-right no-print mb-3">
-                            <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print mr-1"></i> Print Report</a>
+                            <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print mr-1"></i> <?= __('print_report') ?></a>
                         </div>
                         
                         <div class="report-wrapper">
                             <div class="report-header">
                                 <div class="logo-container"><img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo"></div>
                                 <div class="report-meta">
-                                    <h2 class="report-title">Vacation Request Report</h2>
-                                    <p class="report-subtitle">Request ID: #<?=htmlspecialchars($request['id']); ?></p>
+                                    <h2 class="report-title"><?= __('vacation_request_report') ?></h2>
+                                    <p class="report-subtitle"><?= __('request_id') ?>: #<?=htmlspecialchars($request['id']); ?></p>
                                 </div>
                             </div>
 
@@ -352,21 +343,21 @@ if (mysqli_num_rows($query) == 1) {
                                     <img src="<?=htmlspecialchars($request['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
                                         <h4><?=htmlspecialchars($request['employee_name']); ?></h4>
-                                        <p>Employee ID: <?=htmlspecialchars($request['emp_id']); ?> | <?=htmlspecialchars($request['deptname']); ?><?= !empty($request['section_name']) ? ' / ' . htmlspecialchars($request['section_name']) : '' ?></p>
+                                        <p><?= __('employee_id') ?>: <?=htmlspecialchars($request['emp_id']); ?> | <?=htmlspecialchars($request['deptname']); ?><?= !empty($request['section_name']) ? ' / ' . htmlspecialchars($request['section_name']) : '' ?></p>
                                     </div>
                                 </div>
 
                                 <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-calendar-alt"></i>Vacation Details</h5>
+                                    <h5 class="section-title"><i class="fa fa-calendar-alt"></i><?= __('vacation_details') ?></h5>
                                     <div class="grid-details">
-                                        <div class="detail-item"><span class="label">Vacation Type</span> <span class="value"><small><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></small></span></div>
-                                        <div class="detail-item"><span class="label">Start Date</span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></small></span></div>
-                                        <div class="detail-item"><span class="label">Return Date</span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></small></span></div>
-                                        <div class="detail-item"><span class="label">Total Days</span> <span class="value highlight"><small><?=htmlspecialchars($request['vacdays']); ?> Days</small></span></div>
-                                        <div class="detail-item"><span class="label">Replacement</span> <span class="value"><small><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></small></span></div>
-                                        <div class="detail-item"><span class="label">Requested On</span> <span class="value"><small><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('total_days') ?></span> <span class="value highlight"><small><?=htmlspecialchars($request['vacdays']); ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></small></span></div>
                                          <?php if (!empty($request['attachment_path'])): ?>
-                                            <div class="detail-item"><span class="label">Attachment</span> <span class="value"><small><a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank">View Document</a></small></span></div>
+                                            <div class="detail-item"><span class="label"><?= __('attachment') ?></span> <span class="value"><small><a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank"><?= __('view_document') ?></a></small></span></div>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -374,32 +365,32 @@ if (mysqli_num_rows($query) == 1) {
                                 <?php 
                                 // Hide payment details if:
                                 // 1. Emergency vacation, OR
-                                    // 2. Vacation salary type is 'end_of_service', OR
-                                    // 3. Encashment request (will show separate section)
-                                    $is_encashment_request = (trim(strtolower($request['remarks'] ?? '')) === 'encashment');
-                                    $hide_payment_details = ($request['raw_fly_type'] === 'emergency') || ($vacation_salary_type === 'end_of_service') || $is_encashment_request;
+                                // 2. Encashment request (will show separate section)
+                                // Note: end_of_service type will show payment details but only working days salary
+                                $is_encashment_request = (trim(strtolower($request['remarks'] ?? '')) === 'encashment');
+                                $hide_payment_details = ($request['raw_fly_type'] === 'emergency') || $is_encashment_request;
                                 ?>
                                 
                                     <?php if ($is_encashment_request): ?>
                                     <div class="report-section">
-                                        <h5 class="section-title"><i class="fa fa-coins"></i>Encashment Payment Details</h5>
+                                        <h5 class="section-title"><i class="fa fa-coins"></i><?= __('encashment_payment_details') ?></h5>
                                         <div class="alert alert-success mb-3">
-                                            <i class="fa fa-info-circle"></i> <strong>Vacation Balance Encashment</strong>
-                                            <p class="mb-0 mt-2">The employee has opted to encash their remaining vacation balance instead of taking time off.</p>
+                                            <i class="fa fa-info-circle"></i> <strong><?= __('vacation_balance_encashment') ?></strong>
+                                            <p class="mb-0 mt-2"><?= __('employee_opted_encash_message') ?></p>
                                         </div>
                                         <div class="payment-summary">
                                             <ul>
                                                 <li>
                                                     <div>
-                                                        <span class="label">Encashed Vacation Days</span>
-                                                        <small class="text-muted d-block">Based on available balance</small>
+                                                        <span class="label"><?= __('encashed_vacation_days') ?></span>
+                                                        <small class="text-muted d-block"><?= __('based_on_available_balance') ?></small>
                                                     </div>
-                                                    <span class="value"><?= htmlspecialchars($effective_remaining ?? $request['vacdays'] ?? 0); ?> day(s)</span>
+                                                    <span class="value"><?= htmlspecialchars($effective_remaining ?? $request['vacdays'] ?? 0); ?> <?= __('day_s') ?></span>
                                                 </li>
                                                 <li>
                                                     <div>
-                                                        <span class="label">Daily Salary Rate</span>
-                                                        <small class="text-muted d-block">Monthly salary ÷ 30</small>
+                                                        <span class="label"><?= __('daily_salary_rate') ?></span>
+                                                        <small class="text-muted d-block"><?= __('monthly_salary_divided_30') ?></small>
                                                     </div>
                                                     <span class="value">
                                                         <?php 
@@ -412,32 +403,32 @@ if (mysqli_num_rows($query) == 1) {
                                                 </li>
                                                 <?php if ($gosi_deduction > 0): ?>
                                                 <li>
-                                                    <span class="label text-danger">GOSI Deduction</span>
+                                                    <span class="label text-danger"><?= __('gosi_deduction') ?></span>
                                                     <span class="value text-danger">-<?= number_format($gosi_deduction, 2); ?> SAR</span>
                                                 </li>
                                                 <?php endif; ?>
                                                 <li class="total-payable">
-                                                    <span class="label">Total Encashment Payment</span>
+                                                    <span class="label"><?= __('total_encashment_payment') ?></span>
                                                     <span class="value"><?= number_format($encashment_amount - $gosi_deduction, 2); ?> SAR</span>
                                                 </li>
                                             </ul>
                                         </div>
                                         <div class="alert alert-warning mt-3 mb-0">
-                                            <i class="fa fa-exclamation-triangle"></i> <strong>Note:</strong> After this encashment, your vacation balance will be set to <strong>0 days</strong>.
+                                            <i class="fa fa-exclamation-triangle"></i> <strong><?= __('note') ?>:</strong> <?= __('encashment_balance_warning') ?> <strong><?= __('zero_days') ?></strong>.
                                         </div>
                                     </div>
                                     <?php endif; ?>
                                 
                                 <?php if ($vacation_salary_type === 'end_of_service'): ?>
                                 <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-piggy-bank"></i>Salary Payment Information</h5>
+                                    <h5 class="section-title"><i class="fa fa-info-circle"></i><?= __('vacation_salary_information') ?></h5>
                                     <div class="alert alert-info mb-0">
-                                        <i class="fa fa-info-circle"></i> <strong>Vacation Salary Deferred to End of Service</strong>
-                                        <p class="mb-2 mt-2">The employee has chosen to receive their vacation salary (<?= htmlspecialchars($applied_days); ?> days) at the time of End of Service settlement.</p>
+                                        <i class="fa fa-piggy-bank"></i> <strong><?= __('vacation_salary_deferred_eos') ?></strong>
+                                        <p class="mb-2 mt-2"><?= str_replace('{days}', htmlspecialchars($applied_days), __('employee_chosen_receive_vacation_salary_eos')) ?></p>
                                         <ul class="mb-0 pl-4">
-                                            <li>Vacation Days: <strong><?= htmlspecialchars($applied_days); ?> day(s)</strong></li>
-                                            <li>Payment: <strong>End of Service Settlement</strong></li>
-                                            <li>This amount will be calculated and added to the final settlement upon termination of employment.</li>
+                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?></strong></li>
+                                            <li><?= __('payment') ?>: <strong><?= __('end_of_service_settlement') ?></strong></li>
+                                            <li><?= __('amount_calculated_added_final_settlement') ?></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -445,32 +436,34 @@ if (mysqli_num_rows($query) == 1) {
                                 
                                 <?php if (!$hide_payment_details): ?>
                                 <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i>Payment Details</h5>
+                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?></h5>
                                     <?php if (!$is_payable_leave): ?>
-                                        <div class="alert alert-info">Salary and benefits are not applicable for this type of leave.</div>
+                                        <div class="alert alert-info"><?= __('salary_benefits_not_applicable') ?></div>
                                     <?php else: ?>
                                         <div class="payment-summary">
                                             <ul>
                                                 <?php if($request['vac_type'] !== 'Encashed'): ?>
                                                 <li>
                                                     <div>
-                                                        <span class="label">Working Days Salary</span>
-                                                        <small class="text-muted d-block">Calculated for <?= htmlspecialchars($working_days); ?> day(s)</small>
+                                                        <span class="label"><?= __('working_days_salary') ?></span>
+                                                        <small class="text-muted d-block"><?= str_replace('{days}', htmlspecialchars($working_days), __('calculated_for_days_before_vacation')) ?></small>
                                                     </div>
                                                     <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
                                                 </li>
                                                 <?php endif; ?>
+                                                <?php if ($show_vacation_salary): ?>
                                                 <li>
                                                     <div>
-                                                        <span class="label">Vacation Salary</span>
-                                                        <small class="text-muted d-block">Calculated for <?= htmlspecialchars($applied_days); ?> day(s)</small>
+                                                        <span class="label"><?= __('vacation_salary') ?></span>
+                                                        <small class="text-muted d-block"><?= str_replace('{days}', htmlspecialchars($applied_days), __('calculated_for_days')) ?></small>
                                                     </div>
                                                     <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>
                                                 </li>
-                                                <?php if ($ticket_fee > 0): ?><li><span class="label">Ticket Payment</span> <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span></li><?php endif; ?>
-                                                <?php if ($permit_fee > 0): ?><li><span class="label">Permit Fee</span> <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span></li><?php endif; ?>
-                                                <?php if ($gosi_deduction > 0): ?><li><span class="label text-danger">GOSI Deduction</span> <span class="value text-danger">-<?=number_format($gosi_deduction, 2); ?> SAR</span></li><?php endif; ?>
-                                                <li class="total-payable"><span class="label">Total Payable</span> <span class="value"><?=number_format($total_payable, 2); ?> SAR</span></li>
+                                                <?php endif; ?>
+                                                <?php if ($ticket_fee > 0): ?><li><span class="label"><?= __('ticket_payment') ?></span> <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span></li><?php endif; ?>
+                                                <?php if ($permit_fee > 0): ?><li><span class="label"><?= __('permit_fee') ?></span> <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span></li><?php endif; ?>
+                                                <?php if ($gosi_deduction > 0): ?><li><span class="label text-danger"><?= __('gosi_deduction') ?></span> <span class="value text-danger">-<?=number_format($gosi_deduction, 2); ?> SAR</span></li><?php endif; ?>
+                                                <li class="total-payable"><span class="label"><?= __('total_payable') ?></span> <span class="value"><?=number_format($total_payable, 2); ?> SAR</span></li>
                                             </ul>
                                         </div>
                                     <?php endif; ?>
@@ -480,21 +473,21 @@ if (mysqli_num_rows($query) == 1) {
                                 <div class="row">
                                     <div class="col-md-7">
                                         <div class="report-section">
-                                            <h5 class="section-title"><i class="fa fa-tasks"></i>Approval Status</h5>
+                                            <h5 class="section-title"><i class="fa fa-tasks"></i><?= __('approval_status') ?></h5>
                                             <div class="approval-timeline">
                                                 <?php if ($current_status == 'rejected'): ?>
                                                     <div class="timeline-item rejected">
                                                         <div class="icon"><i class="fa fa-times-circle"></i></div>
-                                                        <span class="status ml-3"><strong>Request Rejected</strong></span>
+                                                        <span class="status ml-3"><strong><?= __('request_rejected') ?></strong></span>
                                                     </div>
                                                 <?php elseif ($current_status == 'approved'): ?>
                                                     <div class="timeline-item approved">
                                                         <div class="icon"><i class="fa fa-check-circle"></i></div>
-                                                        <span class="status ml-3"><strong>Request Approved</strong></span>
+                                                        <span class="status ml-3"><strong><?= __('request_approved') ?></strong></span>
                                                     </div>
                                                     <?php if (!empty($approval_chain)): ?>
                                                         <div class="mt-3">
-                                                            <small class="text-muted"><i class="fa fa-info-circle"></i> Approved by:</small>
+                                                            <small class="text-muted"><i class="fa fa-info-circle"></i> <?= __('approved_by') ?></small>
                                                             <?php foreach ($approval_chain as $approver): ?>
                                                                 <?php if ($approver['status'] == 'approved'): ?>
                                                                     <div class="ml-3 mt-1">
@@ -534,7 +527,7 @@ if (mysqli_num_rows($query) == 1) {
                                                                 <span class="status ml-3">
                                                                     <i class="fa <?= $role_icon ?>"></i>
                                                                     <?= htmlspecialchars($approver['approver_name']) ?> 
-                                                                    <small class="text-muted">(Level <?= $approver['approval_level'] ?>: <?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : ucfirst($approver['approver_role'])) ?>)</small>
+                                                                    <small class="text-muted">(<?= __('level') ?> <?= $approver['approval_level'] ?>: <?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : ucfirst($approver['approver_role'])) ?>)</small>
                                                                 </span>
                                                             </div>
                                                     <?php endforeach; ?>
@@ -546,9 +539,9 @@ if (mysqli_num_rows($query) == 1) {
                                                             <?php 
                                                             // Check for old approval_status field
                                                             if (isset($request['approval_status'])) {
-                                                                echo "Status: " . htmlspecialchars(ucfirst(str_replace('_', ' ', $request['approval_status'])));
+                                                                echo __('status') . ": " . htmlspecialchars(ucfirst(str_replace('_', ' ', $request['approval_status'])));
                                                             } else {
-                                                                echo "Pending Approval";
+                                                                echo __('pending_approval');
                                                             }
                                                             ?>
                                                         </span>
@@ -560,7 +553,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <div class="col-md-5">
                                         <?php if(!empty($request['remarks']) || !empty($request['note'])): ?>
                                         <div class="report-section">
-                                             <h5 class="section-title"><i class="fa fa-comments"></i>Remarks</h5>
+                                             <h5 class="section-title"><i class="fa fa-comments"></i><?= __('remarks') ?></h5>
                                              <?php if($current_status == 'rejected'): ?>
                                                 <div class="alert alert-danger mb-0"><?=nl2br(htmlspecialchars($request['note'])); ?></div>
                                              <?php elseif(!empty($request['remarks'])): ?>
@@ -581,25 +574,31 @@ if (mysqli_num_rows($query) == 1) {
                                         foreach ($approval_chain as $approver) {
                                             $role_lower = strtolower($approver['approver_role'] ?? '');
                                             $dept_lower = strtolower($approver['approver_dept_name'] ?? '');
+                                            
                                             // Normalize dept names into categories (handles synonyms/abbreviations)
                                             $dept_is_it = (
                                                 $dept_lower === 'it' ||
+                                                $dept_lower === 'information technology' ||
                                                 stripos($dept_lower, 'information technology') !== false ||
                                                 stripos($dept_lower, 'technology') !== false ||
             	                                stripos($dept_lower, 'technical support') !== false
                                             );
                                             $dept_is_admin = (
                                                 $dept_lower === 'admin' ||
+                                                $dept_lower === 'administration' ||
                                                 stripos($dept_lower, 'administration') !== false ||
                                                 stripos($dept_lower, 'general admin') !== false ||
                                                 stripos($dept_lower, 'general administration') !== false
                                             );
                                             $dept_is_transport = (
+                                                $dept_lower === 'transportation' ||
+                                                $dept_lower === 'transport' ||
                                                 stripos($dept_lower, 'transportation') !== false ||
                                                 stripos($dept_lower, 'transport') !== false ||
                                                 stripos($dept_lower, 'fleet') !== false ||
                                                 stripos($dept_lower, 'garage') !== false
                                             );
+                                            
                                             // Consider either role keywords OR department categories
                                             $is_asset_clearance_role = (
                                                 stripos($role_lower, 'it') !== false || $dept_is_it ||
@@ -618,11 +617,11 @@ if (mysqli_num_rows($query) == 1) {
                                     if ($asset_clearance_happened):
                                 ?>
                                 <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-laptop"></i>Asset Clearance Details</h5>
+                                    <h5 class="section-title"><i class="fa fa-laptop"></i><?= __('asset_clearance_details') ?></h5>
                                     
                                     <?php if (!empty($asset_clearance_approvers)): ?>
                                     <div class="mb-3">
-                                        <small class="text-muted"><i class="fa fa-info-circle"></i> Cleared by:</small>
+                                        <small class="text-muted"><i class="fa fa-info-circle"></i> <?= __('cleared_by') ?></small>
                                         <?php foreach ($asset_clearance_approvers as $approver): ?>
                                             <?php if ($approver['status'] == 'approved'): ?>
                                                 <div class="ml-3 mt-1">
@@ -644,33 +643,33 @@ if (mysqli_num_rows($query) == 1) {
                                         <table class="table table-bordered table-sm">
                                             <thead>
                                                 <tr>
-                                                    <th>Asset Name</th>
-                                                    <th>Serial Number</th>
-                                                    <th>Asset Type</th>
-                                                    <th>Clearance Status</th>
+                                                    <th><?= __('asset_name') ?></th>
+                                                    <th><?= __('serial_number') ?></th>
+                                                    <th><?= __('asset_type') ?></th>
+                                                    <th><?= __('clearance_status') ?></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($assigned_assets as $asset): 
                                                     // Determine asset type for better categorization
                                                     $asset_name_lower = strtolower($asset['asset_name']);
-                                                    $asset_type = 'Other';
+                                                    $asset_type = __('other');
                                                     $clearance_dept = 'General';
                                                     
                                                     if (stripos($asset_name_lower, 'laptop') !== false || 
                                                         stripos($asset_name_lower, 'computer') !== false || 
                                                         stripos($asset_name_lower, 'pc') !== false) {
-                                                        $asset_type = 'IT Equipment';
-                                                        $clearance_dept = 'IT';
+                                                        $asset_type = __('it_equipment');
+                                                        $clearance_dept = __('it');
                                                     } elseif (stripos($asset_name_lower, 'mobile') !== false || 
                                                                stripos($asset_name_lower, 'phone') !== false || 
                                                                stripos($asset_name_lower, 'sim') !== false) {
-                                                        $asset_type = 'Communication';
-                                                        $clearance_dept = 'Administration';
+                                                        $asset_type = __('communication');
+                                                        $clearance_dept = __('administration');
                                                     } elseif (stripos($asset_name_lower, 'car') !== false || 
                                                                stripos($asset_name_lower, 'vehicle') !== false) {
-                                                        $asset_type = 'Vehicle';
-                                                        $clearance_dept = 'Transportation';
+                                                        $asset_type = __('vehicle');
+                                                        $clearance_dept = __('transportation');
                                                     }
                                                     
                                                     // Check if this asset type's department has cleared
@@ -678,24 +677,30 @@ if (mysqli_num_rows($query) == 1) {
                                                     foreach ($asset_clearance_approvers as $approver) {
                                                         $role_lower = strtolower($approver['approver_role'] ?? '');
                                                         $dept_lower = strtolower($approver['approver_dept_name'] ?? '');
+                                                        
                                                         $dept_is_it = (
                                                             $dept_lower === 'it' ||
+                                                            $dept_lower === 'information technology' ||
                                                             stripos($dept_lower, 'information technology') !== false ||
                                                             stripos($dept_lower, 'technology') !== false ||
                                                             stripos($dept_lower, 'technical support') !== false
                                                         );
                                                         $dept_is_admin = (
                                                             $dept_lower === 'admin' ||
+                                                            $dept_lower === 'administration' ||
                                                             stripos($dept_lower, 'administration') !== false ||
                                                             stripos($dept_lower, 'general admin') !== false ||
                                                             stripos($dept_lower, 'general administration') !== false
                                                         );
                                                         $dept_is_transport = (
+                                                            $dept_lower === 'transportation' ||
+                                                            $dept_lower === 'transport' ||
                                                             stripos($dept_lower, 'transportation') !== false ||
                                                             stripos($dept_lower, 'transport') !== false ||
                                                             stripos($dept_lower, 'fleet') !== false ||
                                                             stripos($dept_lower, 'garage') !== false
                                                         );
+                                                        
                                                         if ($approver['status'] == 'approved') {
                                                             $match_it = ($clearance_dept == 'IT' && (stripos($role_lower, 'it') !== false || $dept_is_it));
                                                             $match_admin = ($clearance_dept == 'Administration' && (stripos($role_lower, 'admin') !== false || $dept_is_admin));
@@ -707,7 +712,7 @@ if (mysqli_num_rows($query) == 1) {
                                                         }
                                                     }
                                                     
-                                                    $status = $cleared_by_dept ? 'Cleared' : 'Pending';
+                                                    $status = $cleared_by_dept ? __('cleared') : __('pending');
                                                     $badge = $cleared_by_dept ? 'success' : 'warning';
                                                 ?>
                                                 <tr>
@@ -726,19 +731,19 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php elseif ($current_status == 'pending_approval' || $current_status == 'approved'): ?>
                                 <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-laptop"></i>Assigned Assets</h5>
+                                    <h5 class="section-title"><i class="fa fa-laptop"></i><?= __('asset_clearance_details') ?></h5>
                                     <div class="alert alert-info mb-3">
-                                        <i class="fa fa-info-circle"></i> <strong>Asset Clearance Required</strong>
-                                        <p class="mb-0 mt-2">The following assets are assigned to this employee and must be cleared before final approval:</p>
+                                        <i class="fa fa-info-circle"></i> <strong><?= __('asset_clearance_required') ?></strong>
+                                        <p class="mb-0 mt-2"><?= __('assigned_assets_message') ?></p>
                                     </div>
                                     <div class="table-responsive">
                                         <table class="table table-bordered table-sm">
                                             <thead>
                                                 <tr>
-                                                    <th>Asset Name</th>
-                                                    <th>Serial Number</th>
-                                                    <th>Asset Type</th>
-                                                    <th>Clearance Department</th>
+                                                    <th><?= __('asset_name') ?></th>
+                                                    <th><?= __('serial_number') ?></th>
+                                                    <th><?= __('asset_type') ?></th>
+                                                    <th><?= __('clearance_department') ?></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -780,9 +785,9 @@ if (mysqli_num_rows($query) == 1) {
                             
                             <div class="report-footer">
                                 <div class="signature-area">
-                                    <div class="signature-box"><p>Employee Signature</p></div>
-                                    <div class="signature-box"><p>HR Manager Signature</p></div>
-                                    <div class="signature-box"><p>General Manager Signature</p></div>
+                                    <div class="signature-box"><p><?= __('employee_signature') ?></p></div>
+                                    <div class="signature-box"><p><?= __('hr_manager_signature') ?></p></div>
+                                    <div class="signature-box"><p><?= __('general_manager_signature') ?></p></div>
                                 </div>
                             </div>
                         </div>

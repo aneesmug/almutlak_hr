@@ -39,13 +39,33 @@ function generatePayroll($emp_id, $month_year, $conDB) {
     $benefits_data = $benefits_result->fetch_assoc();
     $total_benefits = $benefits_data['total'] ?? 0;
     
-    // Calculate deductions
-    $deductions_stmt = $conDB->prepare("SELECT SUM(deduction) as total FROM payroll_deductions WHERE emp_id = ? AND month = ? AND status = 1");
+    // Calculate deductions, excluding approved leave days (e.g., sick leave)
+    $total_deductions = 0;
+    // Get all deduction records for this employee/month
+    $deductions_stmt = $conDB->prepare("SELECT * FROM payroll_deductions WHERE emp_id = ? AND month = ? AND status = 1");
     $deductions_stmt->bind_param("ss", $emp_id, $month_year);
     $deductions_stmt->execute();
     $deductions_result = $deductions_stmt->get_result();
-    $deductions_data = $deductions_result->fetch_assoc();
-    $total_deductions = $deductions_data['total'] ?? 0;
+    while ($ded_row = $deductions_result->fetch_assoc()) {
+        $absent_date = $ded_row['absent_date'] ?? null; // assuming absent_date column exists
+        $deduct_amount = $ded_row['deduction'] ?? 0;
+        $is_leave_day = false;
+        if ($absent_date) {
+            // Check if this absent date is covered by ANY approved leave (any vac_type)
+            $leave_sql = "SELECT * FROM apply_vac_dep WHERE emp_id = ? AND status = 'approve' AND STR_TO_DATE(vac_strt_date, '%d/%m/%Y') <= ? AND STR_TO_DATE(return_date, '%d/%m/%Y') >= ?";
+            $leave_stmt = $conDB->prepare($leave_sql);
+            $leave_stmt->bind_param("sss", $emp_id, $absent_date, $absent_date);
+            $leave_stmt->execute();
+            $leave_result = $leave_stmt->get_result();
+            if ($leave_result->num_rows > 0) {
+                $is_leave_day = true;
+            }
+            $leave_stmt->close();
+        }
+        if (!$is_leave_day) {
+            $total_deductions += $deduct_amount;
+        }
+    }
     
     // Calculate total salary components
     $basic_salary = $salary_data['basic'] ?? 0;

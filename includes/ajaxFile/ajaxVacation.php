@@ -314,6 +314,71 @@ elseif ($ajaxType == 'applyVacation') {
             $vacdays = $diff->days + 1;
         }
 
+        // 5b. Check if employee is currently on an active approved vacation (can't apply while on vacation)
+        $today = date('Y-m-d');
+        $sql_active = "SELECT request_inv_no, start_date, return_date FROM emp_vacation 
+                       WHERE emp_id = ? 
+                         AND current_status = 'approved' 
+                         AND start_date <= ? 
+                         AND return_date >= ? 
+                       LIMIT 1";
+        $stmt_active = mysqli_prepare($conDB, $sql_active);
+        if ($stmt_active) {
+            mysqli_stmt_bind_param($stmt_active, 'sss', $emp_id, $today, $today);
+            if (mysqli_stmt_execute($stmt_active)) {
+                $res_active = mysqli_stmt_get_result($stmt_active);
+                if ($res_active && mysqli_num_rows($res_active) > 0) {
+                    $active_vac = mysqli_fetch_assoc($res_active);
+                    if ($res_active) mysqli_free_result($res_active);
+                    mysqli_stmt_close($stmt_active);
+                    send_json_response(
+                        'Currently On Vacation',
+                        'You are currently on an approved vacation (' . htmlspecialchars($active_vac['request_inv_no']) . ') from ' . htmlspecialchars($active_vac['start_date']) . ' to ' . htmlspecialchars($active_vac['return_date']) . '. You cannot apply for another vacation while your current vacation is active.',
+                        'error',
+                        400
+                    );
+                    exit;
+                }
+                if ($res_active) mysqli_free_result($res_active);
+            }
+            mysqli_stmt_close($stmt_active);
+        }
+
+        // 5c. Prevent overlapping / duplicate vacation requests (pending or approved)
+        if (!empty($start_date) && !empty($end_date)) {
+            $sql_overlap = "SELECT request_inv_no, start_date, return_date, current_status FROM emp_vacation 
+                            WHERE emp_id = ? 
+                              AND current_status IN ('pending_approval','approved') 
+                              AND start_date <= ? 
+                              AND return_date >= ? ";
+            $stmt_overlap = mysqli_prepare($conDB, $sql_overlap);
+            if ($stmt_overlap) {
+                // bind as strings (emp_id may be varchar in schema)
+                mysqli_stmt_bind_param($stmt_overlap, 'sss', $emp_id, $end_date, $start_date);
+                if (mysqli_stmt_execute($stmt_overlap)) {
+                    $res_overlap = mysqli_stmt_get_result($stmt_overlap);
+                    if ($res_overlap && mysqli_num_rows($res_overlap) > 0) {
+                        $ov = mysqli_fetch_assoc($res_overlap);
+                        if ($res_overlap) mysqli_free_result($res_overlap);
+                        mysqli_stmt_close($stmt_overlap);
+                        
+                        $status_text = ($ov['current_status'] === 'approved') ? 'approved' : 'pending';
+                        send_json_response(
+                            'Date Conflict',
+                            'You already have a ' . $status_text . ' vacation request (' . htmlspecialchars($ov['request_inv_no']) . ') covering ' . htmlspecialchars($ov['start_date']) . ' to ' . htmlspecialchars($ov['return_date']) . '. Your requested dates (' . htmlspecialchars($start_date) . ' to ' . htmlspecialchars($end_date) . ') overlap with this existing request. Please choose different dates.',
+                            'error',
+                            400
+                        );
+                        exit;
+                    }
+                    if ($res_overlap) mysqli_free_result($res_overlap);
+                }
+                mysqli_stmt_close($stmt_overlap);
+            } else {
+                error_log('applyVacation: Failed to prepare overlap check: ' . mysqli_error($conDB));
+            }
+        }
+
     // 6. Check balance before proceeding
         require_once __DIR__ . '/../../includes/get_vacation_balance.php';
         $remaining_balance = get_employee_vacation_balance($conDB, $emp_id);
@@ -1558,6 +1623,35 @@ elseif($ajaxType == 'unassign_asset') {
 }
 
 // ================================================================
+// --- [NEW] GET VACATION STATUS HISTORY (for timeline modal) ---
+// ================================================================
+elseif ($ajaxType == 'getVacationStatusHistory') {
+    try {
+        $request_inv_no = trim($_POST['request_inv_no'] ?? '');
+        if ($request_inv_no === '') {
+            echo json_encode(['status' => 400, 'message' => 'Missing request_inv_no']);
+            exit;
+        }
+        $stmt = $conDB->prepare("SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = ? ORDER BY created_at ASC");
+        if (!$stmt) {
+            echo json_encode(['status' => 500, 'message' => 'DB error: prepare failed']);
+            exit;
+        }
+        $stmt->bind_param('s', $request_inv_no);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $history = [];
+        while ($row = $res->fetch_assoc()) { $history[] = $row; }
+        if ($res) { $res->free(); }
+        $stmt->close();
+        echo json_encode(['status' => 200, 'history' => $history]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ================================================================
 // --- NEW CHAIN APPROVAL AJAX FUNCTIONS ---
 // ================================================================
 
@@ -1685,6 +1779,74 @@ elseif ($ajaxType == 'applyLeave') {
             exit;
         }
         
+        // Check if employee is currently on an active approved vacation/leave (can't apply while on leave)
+        $today = date('Y-m-d');
+        
+        // Check: Is employee currently on ANY approved vacation or leave (VAC-* or LV-*)?
+        // We check both to prevent overlapping requests
+        $sql_active = "SELECT request_inv_no, vac_type, start_date, return_date FROM emp_vacation 
+                       WHERE emp_id = ? 
+                         AND current_status = 'approved' 
+                         AND start_date <= ? 
+                         AND return_date >= ? 
+                       LIMIT 1";
+        $stmt_active = mysqli_prepare($conDB, $sql_active);
+        if ($stmt_active) {
+            mysqli_stmt_bind_param($stmt_active, 'iss', $empid, $today, $today);
+            if (mysqli_stmt_execute($stmt_active)) {
+                $res_active = mysqli_stmt_get_result($stmt_active);
+                if ($res_active && mysqli_num_rows($res_active) > 0) {
+                    $active_request = mysqli_fetch_assoc($res_active);
+                    if ($res_active) mysqli_free_result($res_active);
+                    mysqli_stmt_close($stmt_active);
+                    
+                    $request_type_name = (strpos($active_request['request_inv_no'], 'VAC-') === 0) ? 'Annual Vacation' : 'Leave';
+                    
+                    send_json_response(
+                        'Currently On ' . $request_type_name,
+                        'You are currently on an approved ' . htmlspecialchars($active_request['vac_type']) . ' (' . htmlspecialchars($active_request['request_inv_no']) . ') from ' . htmlspecialchars($active_request['start_date']) . ' to ' . htmlspecialchars($active_request['return_date']) . '. You cannot apply for another leave/vacation while your current one is active.',
+                        'error',
+                        400
+                    );
+                    exit;
+                }
+                if ($res_active) mysqli_free_result($res_active);
+            }
+            mysqli_stmt_close($stmt_active);
+        }
+        
+        // Check for overlapping leave requests (pending or approved)
+        if (!empty($start_date) && !empty($end_date)) {
+            $sql_overlap = "SELECT request_inv_no, vac_type, start_date, return_date, current_status FROM emp_vacation 
+                            WHERE emp_id = ? 
+                              AND current_status IN ('pending_approval','approved') 
+                              AND start_date <= ? 
+                              AND return_date >= ? ";
+            $stmt_overlap = mysqli_prepare($conDB, $sql_overlap);
+            if ($stmt_overlap) {
+                mysqli_stmt_bind_param($stmt_overlap, 'iss', $empid, $end_date, $start_date);
+                if (mysqli_stmt_execute($stmt_overlap)) {
+                    $res_overlap = mysqli_stmt_get_result($stmt_overlap);
+                    if ($res_overlap && mysqli_num_rows($res_overlap) > 0) {
+                        $overlap = mysqli_fetch_assoc($res_overlap);
+                        if ($res_overlap) mysqli_free_result($res_overlap);
+                        mysqli_stmt_close($stmt_overlap);
+                        
+                        $status_text = ($overlap['current_status'] === 'approved') ? 'approved' : 'pending';
+                        send_json_response(
+                            'Date Conflict',
+                            'You already have a ' . $status_text . ' ' . htmlspecialchars($overlap['vac_type']) . ' request (' . htmlspecialchars($overlap['request_inv_no']) . ') covering ' . htmlspecialchars($overlap['start_date']) . ' to ' . htmlspecialchars($overlap['return_date']) . '. Your requested dates (' . htmlspecialchars($start_date) . ' to ' . htmlspecialchars($end_date) . ') overlap with this existing request. Please choose different dates.',
+                            'error',
+                            400
+                        );
+                        exit;
+                    }
+                    if ($res_overlap) mysqli_free_result($res_overlap);
+                }
+                mysqli_stmt_close($stmt_overlap);
+            }
+        }
+        
         // Get employee's department and supervisor
         $sql_emp = "SELECT `dept`, `supervisor_id` FROM `employees` WHERE `emp_id` = ? LIMIT 1";
         $stmt_emp = mysqli_prepare($conDB, $sql_emp);
@@ -1765,7 +1927,8 @@ elseif ($ajaxType == 'applyLeave') {
         $deductible_types = ['Sick Leave', 'Casual Leave', 'Unpaid Leave'];
         $is_deductible = in_array($leave_type, $deductible_types) ? 1 : 0;
         
-        // Generate unique request invoice number
+        // Generate unique request invoice number with LV- prefix (Leave Request)
+        // Annual Vacation applications use the applyVacation handler which generates VAC- prefix
         $request_inv_no = 'LV-' . date('Ymd') . '-' . str_pad($empid, 4, '0', STR_PAD_LEFT) . '-' . substr(uniqid(), -4);
         
         // Calculate days if dates are provided

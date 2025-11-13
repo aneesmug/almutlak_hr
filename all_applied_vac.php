@@ -508,7 +508,8 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 														</div>
 														<div class="card-footer d-flex justify-content-between align-items-center btn-group">
 															<button class="btn btn-info btn-block waves-effect" onclick="window.open('vacation_report_details.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>')"><i class="fa fa-eye"></i> <?=__('view')?></button>
-															
+												<button class="btn btn-secondary btn-block waves-effect" onclick="window.open('vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>')"><i class="fas fa-history"></i> <?=__('history')?></button>
+												
                                                             <?php
                                                             // --- NEW SIMPLIFIED BUTTON LOGIC ---
                                                             // Show buttons if the request is pending approval AND the current logged-in user is the one it's pending with.
@@ -1267,7 +1268,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                 }
             });
         }
-        
+
         </script>
     </body>
 </html>

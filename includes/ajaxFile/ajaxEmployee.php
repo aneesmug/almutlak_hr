@@ -41,6 +41,40 @@ if($ajaxType == 'emp_search') {
         'status'    => 200
     ];
     echo json_encode($data);
+} elseif($ajaxType == 'get_direct_supervisor') {
+    // Get the direct supervisor ID for an employee
+    $empId = isset($_POST['emp_id']) ? (int)$_POST['emp_id'] : 0;
+    
+    if ($empId > 0) {
+        $stmt = mysqli_query($conDB, "SELECT `supervisor_id` FROM `employees` WHERE `emp_id` = {$empId} AND `status` = 1");
+        if ($stmt && mysqli_num_rows($stmt) > 0) {
+            $row = mysqli_fetch_assoc($stmt);
+            $supervisorId = $row['supervisor_id'];
+            mysqli_free_result($stmt);
+            
+            if ($supervisorId && $supervisorId > 0) {
+                echo json_encode([
+                    'status' => 200,
+                    'supervisor_id' => $supervisorId
+                ]);
+            } else {
+                echo json_encode([
+                    'status' => 404,
+                    'message' => 'No supervisor assigned to this employee.'
+                ]);
+            }
+        } else {
+            echo json_encode([
+                'status' => 404,
+                'message' => 'Employee not found.'
+            ]);
+        }
+    } else {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Invalid employee ID.'
+        ]);
+    }
 } elseif($ajaxType == 'emp_department') {
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
@@ -1167,21 +1201,86 @@ elseif($ajaxType == 'unassign_asset') {
         send_json_response("Error!", "Record not added because there are some error.", "error");
     }
 } elseif ($ajaxType == "add_note") {
-    $stmt = $pdo->prepare("INSERT INTO `emp_notice` (`emp_id`, `note`, `created_at`) VALUES (:emp_id, :note, :created_at)");
-    $dataPost = [
-        ':emp_id' => $_POST['empid'],
-        ':note' => $_POST['note'],
-        ':created_at' => date('Y-m-d H:i:s')
-    ];
-    if($stmt->execute($dataPost)){
-        send_json_response("Added!", "Record has been added successfully.", "success");
-    } else {
-        send_json_response("Error!", "Record not added because there are some error.", "error");
+    try {
+        // Get form data
+        $empid = $_POST['empid'] ?? null;
+        $note = $_POST['note'] ?? null;
+        $noteType = $_POST['note_type'] ?? 'general';
+        
+        // Validate required fields
+        if (empty($empid) || empty($note) || empty($noteType)) {
+            send_json_response("Error!", "Missing required fields.", "error");
+            exit;
+        }
+
+        // Handle file upload if attachment is provided
+        $attachmentPath = null;
+        if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
+            $file = $_FILES['attachment'];
+            $allowedTypes = ['application/pdf', 'application/msword', 
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'image/jpeg', 'image/jpg', 'image/png'];
+            
+            // Validate file type
+            if (!in_array($file['type'], $allowedTypes)) {
+                send_json_response("Error!", "Invalid file type. Only PDF, DOC, DOCX, JPG, PNG allowed.", "error");
+                exit;
+            }
+            
+            // Validate file size (max 5MB)
+            if ($file['size'] > 5 * 1024 * 1024) {
+                send_json_response("Error!", "File size must be less than 5MB.", "error");
+                exit;
+            }
+            
+            // Create upload directory if it doesn't exist
+            $uploadDir = __DIR__ . '/../../assets/emp_notes/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            
+            // Generate unique filename
+            $fileExtension = pathinfo($file['name'], PATHINFO_EXTENSION);
+            $uniqueFilename = 'note_' . $empid . '_' . time() . '_' . uniqid() . '.' . $fileExtension;
+            $uploadPath = $uploadDir . $uniqueFilename;
+            
+            // Move uploaded file
+            if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
+                $attachmentPath = 'assets/emp_notes/' . $uniqueFilename;
+            } else {
+                send_json_response("Error!", "Failed to upload attachment.", "error");
+                exit;
+            }
+        }
+
+        // Insert note into database
+        $stmt = $pdo->prepare("INSERT INTO `emp_notice` (`emp_id`, `note`, `note_type`, `attachment`, `created_at`) 
+                               VALUES (:emp_id, :note, :note_type, :attachment, :created_at)");
+        $dataPost = [
+            ':emp_id' => $empid,
+            ':note' => $note,
+            ':note_type' => $noteType,
+            ':attachment' => $attachmentPath,
+            ':created_at' => date('Y-m-d H:i:s')
+        ];
+        
+        if ($stmt->execute($dataPost)) {
+            $message = $attachmentPath 
+                ? "Note with attachment has been added successfully." 
+                : "Note has been added successfully.";
+            send_json_response("Added!", $message, "success");
+        } else {
+            send_json_response("Error!", "Failed to add note. Please try again.", "error");
+        }
+        
+    } catch (Exception $e) {
+        error_log("Add Note Error: " . $e->getMessage());
+        send_json_response("Error!", "An error occurred while adding the note.", "error");
     }
 } elseif($ajaxType == "view_notes"){
     // Use INNER JOIN to ensure only employees with notes are returned.
     $sql = "SELECT
-                `n`.`id`, `n`.`note`, `n`.`status`, `n`.`created_at`,
+                `n`.`id`, `n`.`note`, `n`.`note_type`, `n`.`attachment`, `n`.`status`, `n`.`created_at`,
                 `e`.`name`, `e`.`emp_id`
             FROM `employees` `e`
             INNER JOIN `emp_notice` `n` ON `e`.`emp_id` = `n`.`emp_id` AND `n`.`is_deleted` = 0

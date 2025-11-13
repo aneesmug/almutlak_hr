@@ -4941,21 +4941,6 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 // Extracted function to open the Apply Vacation modal after eligibility check
 function openVacationApplyModal(empid, deptId, country) {
 
-    // --- NEW: HTML for the "First Approver" dropdown ---
-    let approverHtml = `
-        <div class="vacation-card" style="margin-top: 20px;">
-            <div class="vacation-card-header">
-                <i class="fa fa-user-tie"></i>
-                ${__('select_first_approver')} <span class="text-danger">*</span>
-            </div>
-            <select id="vac_first_approver" name="first_approver_id" class="form-control form-control-modern" style="width: 100%;">
-                <option value="">${__('loading_approvers')}</option>
-            </select>
-            <small class="form-text text-muted" style="margin-top: 10px; display: block; font-size: 12px; color: #858796;">
-                <i class="fa fa-info-circle"></i> ${__('approver_help_text') || 'Select your direct supervisor/manager. Your request will follow the approval chain automatically.'}
-            </small>
-        </div>
-    `;
 
     // --- NEW: HTML for vacation salary type selection (initially hidden) ---
     let salaryTypeHtml = `
@@ -4989,7 +4974,7 @@ function openVacationApplyModal(empid, deptId, country) {
     Swal.fire({
         title: '<i class="fa fa-umbrella-beach"></i> ' + __('apply_vacation_info_title'),
         // --- MODIFICATION: Add the approver dropdown HTML and salary type selection ---
-        html: vacationApply_HTML(country) + salaryTypeHtml + approverHtml, 
+    html: vacationApply_HTML(country) + salaryTypeHtml,
         showCancelButton: true,
         confirmButtonColor: '#4e73df',
         cancelButtonColor: '#e74a3b',
@@ -5067,48 +5052,7 @@ function openVacationApplyModal(empid, deptId, country) {
                 },
             });
 
-            // =================================================================
-            // == MODIFICATION: Load department approvers (Supervisors/Managers)
-            // =================================================================
-            
-            // Initialize the new approver dropdown
-            let $approverSelect = $('#vac_first_approver');
-            $approverSelect.select2({
-                placeholder: "Select your Manager/Supervisor...",
-                allowClear: true,
-                dropdownParent: $(swalModal) // Attach to modal
-            });
-
-            $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
-                dataType: 'JSON',
-                type: 'POST',
-                data: {
-                    ajaxType: "get_department_approvers", // This function excludes 'Supporter' emptype
-                    dept_id: deptId 
-                },
-                success: function(res) {
-                    if (res.status == 200 && res.data.length > 0) {
-                        let approverOptions = `<option value="">${__('select_your_manager')}</option>`;
-                        for (let i in res.data) {
-                            // Exclude the employee from their own approver list
-                            if (res.data[i].emp_id != empid) { 
-                                approverOptions += `<option value="${res.data[i].emp_id}">${res.data[i].name} (${res.data[i].user_type})</option>`;
-                            }
-                        }
-                        $approverSelect.html(approverOptions);
-                    } else {
-                         let errorOptions = `<option value="">${__('no_approvers_found')}</option>`;
-                         $approverSelect.html(errorOptions);
-                    }
-                },
-                error: function(j, e) {
-                    let errorOptions = `<option value="">${__('error_loading_approvers')}</option>`;
-                    $approverSelect.html(errorOptions);
-                    errorHandling(j, e);
-                },
-            });
-            // =================================================================
+            // ...existing code...
             
             // MODIFIED: Toggle Fields Logic - now includes salary type section
             function toggleVacationFields() {
@@ -5159,11 +5103,8 @@ function openVacationApplyModal(empid, deptId, country) {
             const formElement = document.getElementById('submitVacationApplyForm');
             const formData = new FormData(formElement);
             formData.append("ajaxType", "applyVacation");
-
-            // --- FIX: Add empid and deptId to the form data ---
             formData.append("emp_id", empid);
             formData.append("dept_id", deptId);
-            // --- END FIX ---
 
             const selectedRadio = $('input[name="vac_type"]:checked').val();
             if (!selectedRadio) {
@@ -5191,61 +5132,65 @@ function openVacationApplyModal(empid, deptId, country) {
                 }
             }
 
-            // =================================================================
-            // == MODIFICATION: Validate and add selected approver
-            // =================================================================
-            let firstApproverId = $('#vac_first_approver').val();
-            if (!firstApproverId) {
-                Swal.showValidationMessage(__('must_select_supervisor'));
-                return false;
-            }
-            formData.append("first_approver_id", firstApproverId);
-            // =================================================================
-
+            // NEW: Automatically set direct supervisor as first approver
             return new Promise(function (resolve, reject) {
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/ajaxEmployee.php',
                     type: 'POST',
-                    dataType: "JSON",
-                    cache: false,
-                    contentType: false,
-                    processData: false,
-                    data: formData, // formData now includes first_approver_id
-                })
-                .done(function (response) {
-                    Swal.fire({
-                        title: response.title,
-                        text: response.message,
-                        icon: response.type,
-                        allowOutsideClick: false
-                    }).then(function (isConfirm) {
-                        if (isConfirm.value && response.type === 'success') { // Only reload on success
-                            location.reload();
-                        }
-                    });
-                })
-                .fail(function (jqXHR, textStatus, errorThrown) {
-                    // Try to parse the JSON response even on failure
-                    let errorMsg = 'An error occurred. Please try again.';
-                    try {
-                        let jsonResponse = JSON.parse(jqXHR.responseText);
-                        if (jsonResponse && jsonResponse.message) {
-                            errorMsg = jsonResponse.message;
-                        } else if (jqXHR.responseText) {
-                            // Fallback for non-JSON errors
-                            let responseText = jqXHR.responseText.split('<br />');
-                            errorMsg = responseText[responseText.length - 1].replace(/<b>Warning<\/b>:|<b>Fatal error<\/b>:|Uncaught \(in promise\) Error!:/gi, '').trim();
-                        }
-                    } catch (e) {
-                         // ignore parsing error
+                    dataType: 'JSON',
+                    data: { ajaxType: 'get_direct_supervisor', emp_id: empid },
+                }).done(function(res) {
+                    if (res && res.supervisor_id) {
+                        formData.append('first_approver_id', res.supervisor_id);
                     }
-                    
-                    Swal.fire({
-                        title: 'Error!',
-                        text: errorMsg,
-                        icon: 'error'
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: "JSON",
+                        cache: false,
+                        contentType: false,
+                        processData: false,
+                        data: formData,
+                    })
+                    .done(function (response) {
+                        Swal.fire({
+                            title: response.title,
+                            text: response.message,
+                            icon: response.type,
+                            allowOutsideClick: false
+                        }).then(function (isConfirm) {
+                            if (isConfirm.value && response.type === 'success') {
+                                location.reload();
+                            }
+                        });
+                        resolve();
+                    })
+                    .fail(function (jqXHR, textStatus, errorThrown) {
+                        let errorMsg = 'An error occurred. Please try again.';
+                        try {
+                            let jsonResponse = JSON.parse(jqXHR.responseText);
+                            if (jsonResponse && jsonResponse.message) {
+                                errorMsg = jsonResponse.message;
+                            } else if (jqXHR.responseText) {
+                                let responseText = jqXHR.responseText.split('<br />');
+                                errorMsg = responseText[responseText.length - 1].replace(/<b>Warning<\/b>:|<b>Fatal error<\/b>:|Uncaught \(in promise\) Error!:/gi, '').trim();
+                            }
+                        } catch (e) {}
+                        Swal.fire({
+                            title: 'Error!',
+                            text: errorMsg,
+                            icon: 'error'
+                        });
+                        reject(errorMsg);
                     });
-                    reject(errorMsg); // Reject the promise
+                }).fail(function() {
+                    Swal.fire({
+                        title: __('error'),
+                        text: __('could_not_find_supervisor'),
+                        icon: 'error',
+                        allowOutsideClick: false
+                    });
+                    reject(__('could_not_find_supervisor'));
                 });
             });
         }
@@ -5266,22 +5211,57 @@ function add_noties() {
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
+        width: '600px',
         preConfirm: () => {
-            const note = $('input[name=note]').val();
+            const note = $('#note').val();
+            const noteType = $('#note_type').val();
+            const attachmentFile = document.getElementById('attachment').files[0];
+            
             // Validation
-            if (!note) {
+            if (!noteType) {
+                Swal.showValidationMessage(__('select_note_type_validation') || 'Please select note type');
+                return false;
+            }
+            if (!note || note.trim() === '') {
                 Swal.showValidationMessage(__('enter_notes_validation'));
                 return false;
             }
+
+            // Validate file size if attachment is provided (max 5MB)
+            if (attachmentFile && attachmentFile.size > 5 * 1024 * 1024) {
+                Swal.showValidationMessage(__('file_too_large') || 'File size must be less than 5MB');
+                return false;
+            }
+
+            // Validate file type if attachment is provided
+            if (attachmentFile) {
+                const allowedTypes = ['application/pdf', 'application/msword', 
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'image/jpeg', 'image/jpg', 'image/png'];
+                if (!allowedTypes.includes(attachmentFile.type)) {
+                    Swal.showValidationMessage(__('invalid_file_type') || 'Invalid file type. Only PDF, DOC, DOCX, JPG, PNG allowed');
+                    return false;
+                }
+            }
+
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('empid', empid);
+            formData.append('note', note.trim());
+            formData.append('note_type', noteType);
+            formData.append('ajaxType', 'add_note');
+            
+            if (attachmentFile) {
+                formData.append('attachment', attachmentFile);
+            }
+
             return new Promise((resolve, reject) => {
                 $.ajax({
                     url: './includes/ajaxFile/ajaxEmployee.php',
                     type: 'POST',
-                    data: { 
-                        empid: empid, 
-                        note: note, 
-                        ajaxType: 'add_note'
-                    },
+                    data: formData,
+                    processData: false,
+                    contentType: false,
                     dataType: "json"
                 })
                 .done(response => {
@@ -5295,7 +5275,7 @@ function add_noties() {
                     });
                 })
                 .fail(error => {
-                    reject(__('failed_to_update_password'));
+                    reject(__('failed_to_add_note') || 'Failed to add note');
                     console.error('Error:', error);
                 });
             });
@@ -6032,33 +6012,80 @@ function edit_password_HTML(){
 
 
 function create_user_HTML() {
-    // Define all available user roles/permissions
+    // Define all available user roles/permissions based on admin_login.user_type ENUM
     const roleTypes = [
-        { value: 'administrator', label: __('administrator') || 'Administrator' },
-        { value: 'dept_user', label: __('department_manager') || 'Department Manager' },
-        { value: 'assistant', label: __('assistant') || 'Assistant' },
-        { value: 'employee', label: __('employee') || 'Normal Employee' },
-        { value: 'general_manager', label: __('general_manager') || 'General Manager' },
-        { value: 'hr', label: __('hr') || 'HR' },
-        { value: 'hr_senior_bp', label: __('hr_senior_bp') || 'HR Senior BP' }
+        // Primary Roles
+        { value: 'administrator', label: __('administrator') || 'System Administrator', group: 'primary' },
+        { value: 'gm', label: __('general_manager') || 'General Manager', group: 'primary' },
+        { value: 'employee', label: __('employee') || 'Regular Employee', group: 'primary' },
+        
+        // HR Roles
+        { value: 'hr_senior_bp', label: __('hr_senior_bp') || 'HR Senior Business Partner', group: 'hr' },
+        { value: 'hr_operations', label: __('hr_operations') || 'HR Operations', group: 'hr' },
+        { value: 'hr_supervisor', label: __('hr_supervisor') || 'HR Supervisor', group: 'hr' },
+        { value: 'hr_recruitment', label: __('hr_recruitment') || 'HR Recruitment', group: 'hr' },
+        { value: 'hr_payroll', label: __('hr_payroll') || 'HR Payroll', group: 'hr' },
+        
+        // Department Roles
+        { value: 'dept_user', label: __('dept_user') || 'Department User', group: 'dept' },
+        { value: 'finance_officer', label: __('finance_officer') || 'Finance Officer', group: 'dept' },
+        { value: 'auditor', label: __('auditor') || 'Auditor', group: 'dept' },
+        { value: 'gr_officer', label: __('gr_officer') || 'Government Relations Officer', group: 'dept' },
+        
+        // Legacy Roles (for backward compatibility)
+        { value: 'hr', label: __('hr') || 'HR (Legacy)', group: 'legacy' },
+        { value: 'it', label: __('it') || 'IT (Legacy)', group: 'legacy' },
+        { value: 'finance', label: __('finance') || 'Finance (Legacy)', group: 'legacy' },
+        { value: 'assistant', label: __('assistant') || 'Assistant (Legacy)', group: 'legacy' }
     ];
-    let roleOptions = roleTypes.map(role => `<option value="${role.value}">${role.label}</option>`).join('');
+    
+    // Group roles for better UI organization
+    let roleOptions = '';
+    
+    // Primary roles
+    roleOptions += `<optgroup label="${__('primary_roles') || 'Primary Roles'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'primary').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
+    
+    // HR roles
+    roleOptions += `<optgroup label="${__('hr_roles') || 'HR Department Roles'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'hr').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
+    
+    // Department roles
+    roleOptions += `<optgroup label="${__('department_roles') || 'Department Roles'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'dept').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
+    
+    // Legacy roles (commented out or shown separately)
+    roleOptions += `<optgroup label="${__('legacy_roles') || 'Legacy Roles (Not Recommended)'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'legacy').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
     
     return `
     <form class="contact-input" id="createUserForm" style="text-align: left;">
         <div class="modal-body">
             <div class="form-row">
                 <div class="form-group col-md-12">
-                    <label for="email">${__('email')}</label>
-                    <input type="email" id="email" name="email" class="form-control email-validation">
-                    <small class="form-text text-muted">${__('admin_email_note') || 'Note: Some user types do not require email'}</small>
-                </div>
-                <div class="form-group col-md-12">
                     <label for="user_type">${__('type_of_permission') || 'User Role / Permission'}<span class="text-danger">*</span></label>
                     <select id="user_type" name="user_type" class="form-control">
                         <option value="">${__('select_type')}</option>
                         ${roleOptions}
                     </select>
+                    <small class="form-text text-muted">${__('user_role_note') || 'Note: User role determines system access permissions. Employee type is automatically inherited from employee record.'}</small>
+                </div>
+                <div class="form-group col-md-12">
+                    <label for="email">${__('email')}</label>
+                    <input type="email" id="email" name="email" class="form-control email-validation">
+                    <small class="form-text text-muted">${__('admin_email_note') || 'Note: Email is optional for regular employees. Required for administrative roles.'}</small>
                 </div>
             </div>
         </div>
@@ -6067,15 +6094,63 @@ function create_user_HTML() {
 
 
 function edit_user_HTML(){
+    // Define all available user roles/permissions based on admin_login.user_type ENUM
     const roleTypes = [
-        { value: 'administrator', label: __('administrator') || 'Administrator' },
-        { value: 'dept_user', label: __('department_manager') || 'Department Manager' },
-        { value: 'assistant', label: __('assistant') || 'Assistant' },
-        { value: 'employee', label: __('employee') || 'Normal Employee' },
-        { value: 'general_manager', label: __('general_manager') || 'General Manager' },
-        { value: 'hr', label: __('hr') || 'HR' }
+        // Primary Roles
+        { value: 'administrator', label: __('administrator') || 'System Administrator', group: 'primary' },
+        { value: 'gm', label: __('general_manager') || 'General Manager', group: 'primary' },
+        { value: 'employee', label: __('employee') || 'Regular Employee', group: 'primary' },
+        
+        // HR Roles
+        { value: 'hr_senior_bp', label: __('hr_senior_bp') || 'HR Senior Business Partner', group: 'hr' },
+        { value: 'hr_operations', label: __('hr_operations') || 'HR Operations', group: 'hr' },
+        { value: 'hr_supervisor', label: __('hr_supervisor') || 'HR Supervisor', group: 'hr' },
+        { value: 'hr_recruitment', label: __('hr_recruitment') || 'HR Recruitment', group: 'hr' },
+        { value: 'hr_payroll', label: __('hr_payroll') || 'HR Payroll', group: 'hr' },
+        
+        // Department Roles
+        { value: 'dept_user', label: __('dept_user') || 'Department User', group: 'dept' },
+        { value: 'finance_officer', label: __('finance_officer') || 'Finance Officer', group: 'dept' },
+        { value: 'auditor', label: __('auditor') || 'Auditor', group: 'dept' },
+        { value: 'gr_officer', label: __('gr_officer') || 'Government Relations Officer', group: 'dept' },
+        
+        // Legacy Roles (for backward compatibility)
+        { value: 'hr', label: __('hr') || 'HR (Legacy)', group: 'legacy' },
+        { value: 'it', label: __('it') || 'IT (Legacy)', group: 'legacy' },
+        { value: 'finance', label: __('finance') || 'Finance (Legacy)', group: 'legacy' },
+        { value: 'assistant', label: __('assistant') || 'Assistant (Legacy)', group: 'legacy' }
     ];
-    let roleOptions = roleTypes.map(role => `<option value="${role.value}">${role.label}</option>`).join('');
+    
+    // Group roles for better UI organization
+    let roleOptions = '';
+    
+    // Primary roles
+    roleOptions += `<optgroup label="${__('primary_roles') || 'Primary Roles'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'primary').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
+    
+    // HR roles
+    roleOptions += `<optgroup label="${__('hr_roles') || 'HR Department Roles'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'hr').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
+    
+    // Department roles
+    roleOptions += `<optgroup label="${__('department_roles') || 'Department Roles'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'dept').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
+    
+    // Legacy roles
+    roleOptions += `<optgroup label="${__('legacy_roles') || 'Legacy Roles (Not Recommended)'}">`;
+    roleOptions += roleTypes.filter(r => r.group === 'legacy').map(role => 
+        `<option value="${role.value}">${role.label}</option>`
+    ).join('');
+    roleOptions += '</optgroup>';
 
     var strView =
     `<form id="submitEditUserForm">
@@ -6085,16 +6160,17 @@ function edit_user_HTML(){
             <input type="text" id="dept" name="dept" class="form-control" readonly>
         </div>
         <div class="form-group col-md-12">
-            <label for="user_type">${__('type_of_permission')}</label>
+            <label for="user_type">${__('type_of_permission')}<span class="text-danger">*</span></label>
             <select class="custom-select" name="user_type" id="user_type" required>
                 <option value="">${__('select_type')}</option>
                 ${roleOptions}
             </select>
+            <small class="form-text text-muted">${__('user_role_note') || 'User role determines system access permissions.'}</small>
         </div>
         <div class="form-group col-md-12" id="email-group">
             <label for="email">${__('email')}</label>
             <input type="email" id="email" name="email" class="form-control" required>
-            <small class="form-text text-muted">${__('admin_email_note') || 'Note: Administrator users do not require email'}</small>
+            <small class="form-text text-muted">${__('admin_email_note') || 'Email is optional for regular employees. Required for administrative roles.'}</small>
         </div>
         <input type="hidden" id="iduser" name="id">
     </div>
@@ -6541,165 +6617,7 @@ function approv_inv_mont_HTML(){
 function vacationApply_HTML(country) {
     var strView = 
     `<style>
-        .vacation-form-container {
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 0;
-        }
-        .vacation-card {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            border: 1px solid #e3e6f0;
-        }
-        .vacation-card-header {
-            font-weight: 600;
-            color: #4e73df;
-            margin-bottom: 15px;
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: center;
-            border-bottom: 2px solid #4e73df;
-            padding-bottom: 8px;
-        }
-        .vacation-card-header i {
-            margin-right: 8px;
-            font-size: 16px;
-        }
-        .vac-radio-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .vac-radio-option {
-            flex: 1;
-            min-width: 140px;
-        }
-        .vac-radio-option input[type="radio"] {
-            display: none;
-        }
-        .vac-radio-label {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 15px 10px;
-            border: 2px solid #e3e6f0;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: white;
-            min-height: 80px;
-            text-align: center;
-        }
-        .vac-radio-label:hover {
-            border-color: #4e73df;
-            background: #f1f5ff;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(78, 115, 223, 0.1);
-        }
-        .vac-radio-option input[type="radio"]:checked + .vac-radio-label {
-            border-color: #4e73df;
-            background: #4e73df;
-            color: white;
-            box-shadow: 0 4px 12px rgba(78, 115, 223, 0.3);
-        }
-        .vac-radio-label i {
-            font-size: 24px;
-            margin-bottom: 8px;
-            display: block;
-        }
-        .vac-radio-label span {
-            font-size: 13px;
-            font-weight: 500;
-            display: block;
-        }
-        .form-control-modern {
-            border-radius: 6px;
-            border: 1px solid #d1d3e2;
-            padding: 10px 15px;
-            font-size: 14px;
-            transition: border-color 0.3s ease;
-        }
-        .form-control-modern:focus {
-            border-color: #4e73df;
-            box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.15);
-        }
-        .form-label-modern {
-            font-weight: 600;
-            color: #5a5c69;
-            margin-bottom: 8px;
-            font-size: 13px;
-            display: block;
-        }
-        .info-row {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .info-field {
-            flex: 1;
-            background: white;
-            padding: 12px 15px;
-            border-radius: 6px;
-            border: 1px solid #e3e6f0;
-        }
-        .info-field label {
-            font-size: 11px;
-            color: #858796;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-            display: block;
-            font-weight: 600;
-        }
-        .info-field input {
-            border: none;
-            padding: 0;
-            font-size: 14px;
-            font-weight: 600;
-            color: #3a3b45;
-            background: transparent;
-            width: 100%;
-        }
-        .date-range-container {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        .date-field {
-            flex: 1;
-            min-width: 200px;
-        }
-        @media (max-width: 576px) {
-            .vac-radio-option {
-                min-width: 100%;
-            }
-            .vac-radio-label {
-                flex-direction: row;
-                justify-content: flex-start;
-                padding: 12px 15px;
-                min-height: auto;
-            }
-            .vac-radio-label i {
-                margin-right: 12px;
-                margin-bottom: 0;
-                font-size: 20px;
-            }
-            .info-row {
-                flex-direction: column;
-                gap: 10px;
-            }
-            .date-field {
-                min-width: 100%;
-            }
-            .vacation-card {
-                padding: 12px;
-            }
-        }
+        
     </style>
     
     <form id="submitVacationApplyForm" enctype="multipart/form-data">
@@ -6840,12 +6758,40 @@ function eos_select_date_HTML(){
 
 function add_note_HTML(){
     var strView =
-    `<form class="contact-input" id="validatedForm" class="submitEditUserPassForm">
+    `<form class="contact-input" id="addNoteForm" enctype="multipart/form-data">
         <div class="modal-body">
             <div class="form-row">
-            <div class="form-group col-md-12">
-                <label for="name">${__('enter_note')}</label>
-                <input type="text" id="note" name="note" class="form-control">
+                <div class="form-group col-md-12">
+                    <label for="note_type">${__('note_type')} <span class="text-danger">*</span></label>
+                    <select id="note_type" name="note_type" class="form-control" required>
+                        <option value="">${__('select')}</option>
+                        <option value="warning">Warning / ${__('warning')}</option>
+                        <option value="sick_leave">Sick Leave / ${__('sick_leave')}</option>
+                        <option value="appreciation">Appreciation / ${__('appreciation')}</option>
+                        <option value="violation">Violation / ${__('violation')}</option>
+                        <option value="absence">Absence / ${__('absence')}</option>
+                        <option value="late_arrival">Late Arrival / ${__('late_arrival')}</option>
+                        <option value="performance_review">Performance Review / ${__('performance_review')}</option>
+                        <option value="training">Training / ${__('training')}</option>
+                        <option value="promotion">Promotion / ${__('promotion')}</option>
+                        <option value="salary_adjustment">Salary Adjustment / ${__('salary_adjustment')}</option>
+                        <option value="disciplinary_action">Disciplinary Action / ${__('disciplinary_action')}</option>
+                        <option value="medical_report">Medical Report / ${__('medical_report')}</option>
+                        <option value="general">General Note / ${__('general')}</option>
+                        <option value="other">Other / ${__('other')}</option>
+                    </select>
+                </div>
+                <div class="form-group col-md-12">
+                    <label for="note">${__('enter_note')} <span class="text-danger">*</span></label>
+                    <textarea id="note" name="note" class="form-control" rows="3" required placeholder="${__('enter_note_details')}"></textarea>
+                </div>
+                <div class="form-group col-md-12">
+                    <label for="attachment">${__('attachment')} <span class="text-muted">(${__('optional')})</span></label>
+                    <input type="file" id="attachment" name="attachment" class="form-control-file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                    <small class="form-text text-muted">
+                        <i class="fa fa-info-circle"></i> ${__('allowed_formats')}: PDF, DOC, DOCX, JPG, PNG (Max 5MB)
+                    </small>
+                </div>
             </div>
         </div>
     </form>

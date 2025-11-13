@@ -109,7 +109,7 @@ if ($emprow['user_type'] !== 'employee') {
 											<i class="fa fa-solid fa-project-diagram mr-2"></i> <?= __('assign_asset') ?>
 										</a>
 										<?php endif; ?>
-										<?php if (empty($emprow['has_active_regular_loan']) && $is_system_admin || $isDeptHr || $isHR) : ?>
+										<?php if (empty($emprow['has_active_regular_loan']) /*&& $is_system_admin || $isDeptHr || $isHR*/ ) : ?>
 											<a href="javascript:void(0);" class="text-warning dropdown-item applyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 												<i class="fa fa-money-bill-trend-up mr-2"></i> <?= __('apply_loan') ?>
 											</a>
@@ -185,19 +185,28 @@ if ($emprow['user_type'] !== 'employee') {
 										<?php endif; ?>
 
 										<?php if ($is_system_admin || $isDeptHr || $isHR) : ?>
-											<?php if ($user_type != "dept_user" && $current_page_name == "edit_employee.php") : ?>
-												<a href="javascript:void(0);" class="text-danger dropdown-item d-flex align-items-center" data-toggle="modal" data-target=".terminat">
-													<i class="fa fa-user-large-slash mr-2"></i> <?= __('terminat') ?>
-												</a>
-											<?php endif; ?>
+										<?php if ($user_type != "dept_user" && $current_page_name == "edit_employee.php") : ?>
+											<a href="javascript:void(0);" class="text-danger dropdown-item d-flex align-items-center" data-toggle="modal" data-target=".terminat">
+												<i class="fa fa-user-large-slash mr-2"></i> <?= __('terminat') ?>
+											</a>
+										<?php endif; ?>
 
-											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR || $is_system_admin || $isDeptHr) : ?>
-												<a href="edit_employee.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item d-flex align-items-center">
-													<i class="fa fa-user-pen mr-2"></i> <?= __('edit') ?>
-												</a>
-											<?php endif; ?>
+										<?php 
+										// Only system_admin, hr_operations, hr_recruitment can edit employees
+										$can_modify_employee = (
+											$is_system_admin || 
+											$user_type === 'hr_operations' ||
+											$user_type === 'hr_recruitment'
+										);
+										?>
 
-											<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $isHR || $is_system_admin || $isDeptHr) : ?>
+										<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) : ?>
+											<a href="edit_employee.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item d-flex align-items-center">
+												<i class="fa fa-user-pen mr-2"></i> <?= __('edit') ?>
+											</a>
+										<?php endif; ?>
+
+										<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) : ?>
 												<a href="javascript:void(0);" class="text-info dropdown-item addnote d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 													<i class="fa fa-book-user mr-2"></i> <?= __('note') ?>
 												</a>

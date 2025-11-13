@@ -82,6 +82,8 @@ $manualVacationLink = 'import_vacation_balance.php';
 $processIqamaImportLink = 'import_iqama_exp.php';
 $addManualLoanLink = 'add_manual_loan.php';
 $employeeSalaryReportLink = 'employee_salary_report.php';
+$employeeEvaluationLink = 'employee_evaluation.php';
+$allEmployeeEvaluationsLink = 'all_employee_evaluations.php';
 
 
 // =================================================================================
@@ -114,6 +116,8 @@ $page_roles = [
     'log_activity.php' => ['Administrator'],
     'manual_vacation.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'import_iqama_exp.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -183,6 +187,15 @@ $can_see_vouchers_page = [
     'Finance_Officer', 'Auditor',
     'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
     'HR_Manager', 'Finance_Manager'
+];
+
+$can_see_employee_evaluation_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'
+];
+
+$can_see_all_evaluations_report = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Supervisor', 'HR_Recruitment', 'HR_Manager'
 ];
 
 $is_admin = $is_system_admin; 
@@ -394,6 +407,20 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
+                <?php endif; ?>
+                
+                <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page) || $isDeptManager): ?>
+                    <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
+                <?php endif; ?>
+                
+                <?php
+                $can_see_evaluations_report_strict = ['GM', 'administrator', 'hr_recruitment'];
+                if (
+                    in_array($user_role, $can_see_evaluations_report_strict) ||
+                    in_array($user_type, $can_see_evaluations_report_strict) ||
+                    $is_gm || $is_admin
+                ): ?>
+                    <li><a href="<?= $allEmployeeEvaluationsLink ?>"><i class="fa fa-file-chart-line"></i><span><?=__('evaluation_reports', 'Evaluation Reports') ?></span></a></li>
                 <?php endif; ?>
             </ul>
         </li>

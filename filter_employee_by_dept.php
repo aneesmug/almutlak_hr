@@ -15,6 +15,29 @@ if (!isset($_GET['dept']) || !is_numeric($_GET['dept'])) {
 }
 $department_id = (int)$_GET['dept'];
 
+// DEPARTMENT-BASED ACCESS CONTROL
+// Check if user has permission to view this department's employees
+$can_see_all_employees = (
+    $is_system_admin || 
+    $user_type == 'administrator' ||
+    $user_dept == 5 || // HR Department
+    $isHR || 
+    $isDeptHr
+);
+
+if (!$can_see_all_employees && $user_dept != $department_id) {
+    $_SESSION['error_msg'] = sprintf(
+        '<div class="col-xl-12">
+            <div class="alert alert-danger bg-danger text-white border-0" role="alert">
+                <b>Access Denied!</b> 
+                <h3>You don\'t have access to view employees from other departments.</h3>
+            </div>
+        </div>'
+    );
+    header("Location: dashbydepart.php");
+    exit;
+}
+
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");

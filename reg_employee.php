@@ -28,9 +28,21 @@ $where_conditions = [];
 $params = [];
 $types = "";
 
-// Handle department-specific user access from the session
-if (isset($user_type) && $user_type == "dept_user" && isset($_SESSION['user_dept'])) {
-    $user_dept = $_SESSION['user_dept'];
+// ================================================================
+// DEPARTMENT-BASED ACCESS CONTROL
+// ================================================================
+// HR Department (dept 5) and System Admins can see all employees
+// All other users can only see employees from their own department
+$can_see_all_employees = (
+    $is_system_admin || 
+    $user_type == 'administrator' ||
+    $user_dept == 5 || // HR Department
+    $isHR || 
+    $isDeptHr
+);
+
+// If user cannot see all employees, restrict to their department only
+if (!$can_see_all_employees && isset($user_dept)) {
     $where_conditions[] = "dept = ?";
     $params[] = $user_dept;
     $types .= "i";

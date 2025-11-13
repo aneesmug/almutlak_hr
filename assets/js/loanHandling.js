@@ -28,205 +28,241 @@
 
 $(document).on('click', '.applyLoan', async function(e) {
     e.preventDefault();
-    var emp_id = $(this).data('emp_id');
+    const emp_id = $(this).data('emp_id');
 
-    // Show loading indicator while fetching details
+    // Build new requirement form without EOS/40% blocks
     Swal.fire({
-        title: __('loading_loan_details'),
-        text: __('please_wait'),
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
-    });
-
-    try {
-        // Fetch End of Service and Max Loan Amount from the server
-        const response = await $.ajax({
-            url: './includes/ajaxFile/ajaxLoan.php',
-            type: 'POST',
-            data: {
-                emp_id: emp_id,
-                ajaxType: 'get_loan_details'
-            },
-            dataType: "json",
-        });
-
-        if (response.status === 'success') {
-            const endOfService = response.end_of_service;
-            const maxLoanAmount = response.max_loan_amount;
-            const showFullDetails = response.show_full_details; // New boolean flag from server
-
-            let endOfServiceDisplay = '';
-            // If showFullDetails is true, show the full end of service calculation
-            if (showFullDetails) {
-                 endOfServiceDisplay = `
-                    <div class="alert alert-info">
-                        <h6 class="alert-heading">${__('end_of_service_benefit')}</h6>
-                        <p class="mb-0">${__('total_calculated')} <strong>${endOfService.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
-                        <hr>
-                        <p class="mb-0">${__('max_loan_amount_40_percent')} <strong>${maxLoanAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
-                    </div>`;
-            } else {
-                // Otherwise, only show the maximum loan amount allowed.
-                 endOfServiceDisplay = `
-                    <div class="alert alert-info">
-                        <p class="mb-0">${__('max_loan_amount')} <strong>${maxLoanAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
-                    </div>`;
-            }
-
-            // Generate options for installments dropdown
-            let installmentOptions = '';
-            for (let i = 1; i <= 12; i++) {
-                installmentOptions += `<option value="${i}">${i} ${i > 1 ? __('months') : __('month')}</option>`;
-            }
-
-            Swal.fire({
-                title: __('apply_for_loan_title'),
-                html: `
-                    <form id="loanApplicationForm" class="text-left">
-                        <div class="alert alert-warning">
-                            <h6 class="alert-heading">${__('notice')}</h6>
-                            <p class="mb-0">${__('eos_based_amount_notice')}</p>
+        title: '<i class="fa fa-hand-holding-usd"></i> ' + __('apply_for_loan_title'),
+        html: `
+            <form id="loanApplicationForm" class="text-left">
+                <div class="vacation-card" style="margin-bottom: 20px;">
+                    <div class="vacation-card-header">
+                        <i class="fa fa-list-alt"></i>
+                        ${__('loan_type_label') || 'Loan Type'} <span class="text-danger">*</span>
+                    </div>
+                    <div class="vac-radio-group" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 15px;">
+                        <div class="vac-radio-option" style="min-height: 100px;">
+                            <input type="radio" id="loan_type_eos" name="loan_type" value="end_of_service" checked>
+                            <label for="loan_type_eos" class="vac-radio-label" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 15px;">
+                                <i class="fa fa-briefcase" style="font-size: 24px; margin-bottom: 8px;"></i>
+                                <span style="word-wrap: break-word; font-size: 13px;">${__('loan_type_eos') || 'End of Service'}</span>
+                            </label>
                         </div>
-                        ${endOfServiceDisplay}
-                        <div class="form-group">
-                            <label for="loan_amount">${__('loan_amount_label')}</label>
-                            <input type="number" id="loan_amount" name="loan_amount" class="form-control" placeholder="${__('enter_loan_amount_placeholder')}" required step="any" max="${maxLoanAmount}">
-                            <small id="loan_feedback" class="form-text text-muted"></small>
+                        <div class="vac-radio-option" style="min-height: 100px;">
+                            <input type="radio" id="loan_type_housing" name="loan_type" value="housing">
+                            <label for="loan_type_housing" class="vac-radio-label" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 15px;">
+                                <i class="fa fa-home" style="font-size: 24px; margin-bottom: 8px;"></i>
+                                <span style="word-wrap: break-word; font-size: 13px;">${__('loan_type_housing') || 'Housing'}</span>
+                            </label>
                         </div>
-                        <div class="form-group">
-                            <label for="installments">${__('number_of_installments_label')}</label>
-                            <select id="installments" name="installments" class="form-control" required>
-                                ${installmentOptions}
-                            </select>
+                        <div class="vac-radio-option" style="min-height: 100px;">
+                            <input type="radio" id="loan_type_adv" name="loan_type" value="advance_salary">
+                            <label for="loan_type_adv" class="vac-radio-label" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 15px;">
+                                <i class="fa fa-dollar-sign" style="font-size: 24px; margin-bottom: 8px;"></i>
+                                <span style="word-wrap: break-word; font-size: 13px;">${__('loan_type_advance_salary') || 'Advance Salary'}</span>
+                            </label>
                         </div>
-                        <div class="form-group" id="deduction_summary" style="display: none;">
-                            <label>${__('monthly_deduction_label')}</label>
-                            <input type="text" id="monthly_deduction_display" class="form-control" readonly style="font-weight: bold;">
-                        </div>
-                        <div class="form-group">
-                            <label for="start_date">${__('start_date_of_deduction_label')}</label>
-                            <input type="text" id="start_date" name="start_date" class="form-control" required autocomplete="off">
-                        </div>
-                    </form>
-                `,
-                showCancelButton: true,
-                confirmButtonText: __('submit_application_button'),
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
-                cancelButtonText: __('cancel'),
-                didOpen: () => {
-                    const loanAmountInput = $('#loan_amount');
-                    const installmentsInput = $('#installments');
-                    const confirmButton = Swal.getConfirmButton();
-                    
-                    // Initialize Datepicker
-                    jQuery('#start_date').datepicker({
-                        format: "yyyy-mm-dd",
-                        todayHighlight: true,
-                        autoclose: true,
-                        startDate: new Date(),
-                    });
-
-                    function updateDeductionDisplay() {
-                        const amount = parseFloat(loanAmountInput.val());
-                        const installments = parseInt(installmentsInput.val());
-                        const deductionSummaryDiv = $('#deduction_summary');
-                        const deductionDisplayInput = $('#monthly_deduction_display');
-
-                        if (!isNaN(amount) && amount > 0 && amount <= maxLoanAmount && !isNaN(installments) && installments > 0) {
-                            const monthlyDeduction = amount / installments;
-                            deductionDisplayInput.val(monthlyDeduction.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
-                            deductionSummaryDiv.show();
-                        } else {
-                            deductionSummaryDiv.hide();
-                        }
-                    }
-
-                    loanAmountInput.on('input', function() {
-                        const amount = parseFloat($(this).val());
-                         if (isNaN(amount) || amount <= 0 || amount > maxLoanAmount) {
-                            if (amount > maxLoanAmount) {
-                                $('#loan_feedback').text(__('amount_exceeds_max_validation')).css('color', 'red');
-                            } else {
-                                 $('#loan_feedback').text('');
+                    </div>
+                    <style>
+                        @media (max-width: 768px) {
+                            .vac-radio-group {
+                                grid-template-columns: 1fr !important;
                             }
-                            confirmButton.disabled = true;
-                        } else {
-                             $('#loan_feedback').text('');
-                             confirmButton.disabled = false;
                         }
-                        updateDeductionDisplay();
-                    });
-                    
-                    installmentsInput.on('change', updateDeductionDisplay);
-                    
-                    // Initial check
-                    updateDeductionDisplay();
-                },
-                preConfirm: () => {
-                    const loan_amount = $('#loan_amount').val();
-                    const start_date = $('#start_date').val();
-                    const installments = $('#installments').val();
+                    </style>
+                </div>
+                <div id="eligibility_info" class="alert alert-info" style="display:none; margin-bottom: 20px;"></div>
+                <div class="vacation-card" style="margin-bottom: 20px;">
+                    <div class="vacation-card-header">
+                        <i class="fa fa-money-bill-wave"></i>
+                        ${__('loan_amount_label')} <span class="text-danger">*</span>
+                    </div>
+                    <input type="number" id="loan_amount" name="loan_amount" class="form-control form-control-modern" placeholder="${__('enter_loan_amount_placeholder')}" required step="any" style="margin-top: 15px;">
+                    <small id="loan_feedback" class="form-text text-danger" style="margin-top: 5px;"></small>
+                </div>
+                <div class="vacation-card" id="installments_group" style="display:none; margin-bottom: 20px;">
+                    <div class="vacation-card-header">
+                        <i class="fa fa-calendar-alt"></i>
+                        ${__('number_of_installments_label')} <span class="text-danger">*</span>
+                    </div>
+                    <select id="installments" name="installments" class="form-control form-control-modern" style="margin-top: 15px;"></select>
+                </div>
+                <div class="vacation-card" id="deduction_summary" style="display:none; margin-bottom: 20px;">
+                    <div class="vacation-card-header">
+                        <i class="fa fa-calculator"></i>
+                        ${__('monthly_deduction_label')}
+                    </div>
+                    <input type="text" id="monthly_deduction_display" class="form-control form-control-modern" readonly style="font-weight:bold; margin-top: 15px; background-color: #f8f9fc;">
+                </div>
 
-                    if (!loan_amount || !start_date || !installments) {
-                        Swal.showValidationMessage(__('fill_all_fields_validation'));
-                        return false;
-                    }
-                    if (parseFloat(loan_amount) > maxLoanAmount) {
-                        Swal.showValidationMessage(`${__('loan_amount_cannot_exceed_validation')} ${maxLoanAmount.toFixed(2)}.`);
-                        return false;
-                    }
-                     if (parseFloat(loan_amount) <= 0) {
-                        Swal.showValidationMessage(__('loan_amount_must_be_positive_validation'));
-                        return false;
-                    }
+            </form>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit_application_button'),
+        cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
+        allowOutsideClick: false,
+        confirmButtonColor: '#4e73df',
+        cancelButtonColor: '#e74a3b',
+        customClass: {
+            popup: 'vacation-modal-popup',
+            title: 'vacation-modal-title',
+            confirmButton: 'btn-modern-confirm',
+            cancelButton: 'btn-modern-cancel'
+        },
+        width: '95%',
+        padding: '20px',
+        didOpen: () => {
+            const confirmButton = Swal.getConfirmButton();
+            const amountInput = $('#loan_amount');
+            const installmentsSelect = $('#installments');
+            const installmentsGroup = $('#installments_group');
+            const deductionGroup = $('#deduction_summary');
+            const deductionDisplay = $('#monthly_deduction_display');
+            const eligibilityInfo = $('#eligibility_info');
+            const loanTypeInputs = $('input[name="loan_type"]');
 
+            let minAmount = 0;
+            let maxAmount = 0;
+            let maxInstallments = 0;
+            let housingAllowance = 0;
 
-                    return $.ajax({
+            function setInstallmentOptions(n) {
+                let opts = '';
+                for (let i = 1; i <= n; i++) {
+                    opts += `<option value="${i}">${i} ${i>1?(__('months')||'Months'):(__('month')||'Month')}</option>`;
+                }
+                installmentsSelect.html(opts);
+            }
+
+            function updateDeduction() {
+                const type = $('input[name="loan_type"]:checked').val();
+                const amt = Number(amountInput.val());
+                const inst = Number(installmentsSelect.val());
+                if (!amt || amt <= 0) { deductionGroup.hide(); return; }
+                let monthly = 0;
+                if (type === 'end_of_service') {
+                    monthly = inst > 0 ? amt / inst : 0;
+                } else if (type === 'housing') {
+                    monthly = Number(housingAllowance) || 0;
+                } else if (type === 'advance_salary') {
+                    monthly = amt; // full deduction next payroll
+                }
+                deductionDisplay.val((Number(monthly)||0).toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
+                deductionGroup.show();
+            }
+
+            function validateAmount() {
+                const amt = Number(amountInput.val());
+                let ok = true;
+                if (isNaN(amt) || amt <= 0) ok = false;
+                if (maxAmount && amt > maxAmount) ok = false;
+                if (minAmount && amt < minAmount) ok = false;
+                $('#loan_feedback').text(!ok ? `${__('amount_must_be_between') || 'Amount must be between'} ${minAmount.toFixed(2)} - ${maxAmount.toFixed(2)}` : '');
+                confirmButton.disabled = !ok;
+                updateDeduction();
+            }
+
+            async function fetchEligibility(type) {
+                eligibilityInfo.hide().removeClass('alert-danger alert-info');
+                confirmButton.disabled = true;
+                try {
+                    const resp = await $.ajax({
                         url: './includes/ajaxFile/ajaxLoan.php',
                         type: 'POST',
-                        data: {
-                            emp_id: emp_id,
-                            loan_amount: loan_amount,
-                            start_date: start_date,
-                            installments: installments,
-                            ajaxType: 'apply_loan',
-                            loan_type: 'regular' // Specify loan type
-                        },
-                        dataType: "json",
-                    })
-                    .done(function(response){
-                        Swal.fire({
-                            title: response.title,
-                            text: response.message,
-                            icon: response.type,
-                            allowOutsideClick: false
-                        }).then(function(isConfirm){
-                            if(isConfirm.value){
-                                location.reload();
-                            }
-                        });
-                    })
-                    .fail(function(jqXHR, textStatus) {
-                        const error = handleAjaxFailure(jqXHR, textStatus);
-                        Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
+                        data: { ajaxType: 'check_loan_eligibility', emp_id: emp_id, loan_type: type },
+                        dataType: 'json'
                     });
+                    if (resp.status === 'success') {
+                        // Build message from key and data
+                        let message = '';
+                        if (resp.message_key) {
+                            message = __(resp.message_key);
+                            // Replace placeholders if message_data exists
+                            if (resp.message_data) {
+                                for (let [key, value] of Object.entries(resp.message_data)) {
+                                    message = message.replace(new RegExp('\\{' + key + '\\}', 'g'), value.toLocaleString());
+                                }
+                            }
+                        } else if (resp.message) {
+                            // Fallback for old format
+                            message = resp.message;
+                        }
+
+                        if (!resp.eligible) {
+                            eligibilityInfo.addClass('alert-danger').text(message || __('not_eligible')).show();
+                            confirmButton.disabled = true;
+                            amountInput.prop('disabled', true);
+                            installmentsGroup.hide();
+                            deductionGroup.hide();
+                            return;
+                        }
+                        minAmount = Number(resp.min_amount) || 0;
+                        maxAmount = Number(resp.max_amount) || 0;
+                        maxInstallments = Number(resp.max_installments) || 0;
+                        housingAllowance = Number(resp.housing_allowance) || 0;
+                        amountInput.prop('min', minAmount || 0);
+                        if (maxAmount) amountInput.prop('max', maxAmount);
+                        amountInput.prop('disabled', false);
+                        eligibilityInfo.addClass('alert-info').text(message || '').show();
+
+                        // Configure installments visibility
+                        if (type === 'end_of_service') {
+                            installmentsGroup.show();
+                            setInstallmentOptions(maxInstallments || 12);
+                        } else if (type === 'housing') {
+                            installmentsGroup.show();
+                            setInstallmentOptions(maxInstallments || 6);
+                        } else {
+                            installmentsGroup.hide();
+                            installmentsSelect.html('<option value="1">1 '+(__('month')||'Month')+'</option>');
+                        }
+                        validateAmount();
+                    } else {
+                        throw new Error(resp.message || __('failed_to_fetch_loan_details'));
+                    }
+                } catch (err) {
+                    eligibilityInfo.addClass('alert-danger').text(err.message);
+                    confirmButton.disabled = true;
                 }
+            }
+
+            // Init datepicker
+            // Start date is now determined by backend (next payroll); no datepicker needed.
+
+            // Bind events
+            loanTypeInputs.on('change', function(){ fetchEligibility($(this).val()); });
+            amountInput.on('input', validateAmount);
+            installmentsSelect.on('change', updateDeduction);
+
+            // Initial load
+            fetchEligibility($('input[name="loan_type"]:checked').val());
+        },
+        preConfirm: () => {
+            const type = $('input[name="loan_type"]:checked').val();
+            const loan_amount = $('#loan_amount').val();
+            let installments = $('#installments').val();
+            if (type === 'advance_salary') installments = 1;
+            if (!loan_amount || !type) {
+                Swal.showValidationMessage(__('fill_all_fields_validation'));
+                return false;
+            }
+            return $.ajax({
+                url: './includes/ajaxFile/ajaxLoan.php',
+                type: 'POST',
+                data: { emp_id: emp_id, loan_amount, installments, ajaxType: 'apply_loan', loan_type: type },
+                dataType: 'json'
+            }).fail((jqXHR, textStatus) => {
+                const error = handleAjaxFailure(jqXHR, textStatus);
+                Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
             });
-
-        } else {
-            throw new Error(response.message || __('failed_to_fetch_loan_details'));
         }
-
-    } catch (error) {
-        Swal.fire({
-            icon: 'error',
-            title: __('error_title'),
-            text: error.message,
-        });
-    }
+    }).then(result => {
+        if (result.isConfirmed) {
+            const response = result.value;
+            Swal.fire({ title: response.title, text: response.message, icon: response.type, allowOutsideClick: false })
+            .then(() => { if (response.status === 'success') location.reload(); });
+        }
+    });
 });
 
 // NEW FUNCTION for handling manual loan payments

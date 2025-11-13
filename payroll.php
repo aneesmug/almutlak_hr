@@ -115,7 +115,22 @@
 	</thead>
 	<tbody>
 <?php
-	$sql_emp_vac = "SELECT * FROM `employees` ORDER BY `id` DESC";
+	// DEPARTMENT-BASED ACCESS CONTROL FOR PAYROLL
+	// Determine if user can see all employees or only their department
+	$can_see_all_employees = (
+		$is_system_admin || 
+		$user_type == 'administrator' ||
+		$user_dept == 5 || // HR Department
+		$isHR || 
+		$isDeptHr
+	);
+
+	// Build the SQL query with department filtering if needed
+	if ($can_see_all_employees) {
+		$sql_emp_vac = "SELECT * FROM `employees` ORDER BY `id` DESC";
+	} else {
+		$sql_emp_vac = "SELECT * FROM `employees` WHERE `dept` = '".mysqli_real_escape_string($conDB, $user_dept)."' ORDER BY `id` DESC";
+	}
 	
 	$query_emp_vac = mysqli_query($conDB, $sql_emp_vac);
 

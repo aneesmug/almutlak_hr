@@ -13,6 +13,7 @@ header('Content-Type: application/json');
  ****************************************************************/
 
 require_once("./../../includes/db.php"); 
+require_once("./../../includes/session_check.php"); // Include session to get user permissions
 
 $pdo = getDbConnection();
 
@@ -21,6 +22,25 @@ $monthYear = $_GET['month'] ?? null;
 if (!$monthYear) {
     echo json_encode(['status' => 'error', 'message' => 'Month parameter is required.']);
     exit;
+}
+
+// DEPARTMENT-BASED ACCESS CONTROL FOR PAYROLL REPORT
+// Determine if user can see all employees or only their department
+$can_see_all_employees = (
+    $is_system_admin || 
+    $user_type == 'administrator' ||
+    $user_dept == 5 || // HR Department
+    $isHR || 
+    $isDeptHr
+);
+
+// Build department filter condition
+$dept_filter = "";
+$params = [':month_year_param' => $monthYear];
+
+if (!$can_see_all_employees && isset($user_dept)) {
+    $dept_filter = " AND e.dept = :user_dept";
+    $params[':user_dept'] = $user_dept;
 }
 
 try {
@@ -55,11 +75,13 @@ try {
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN bank_list bl ON bl.bnk_id = e.bank_name
             LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
-            WHERE gp.month_year = :month_year_param
+            WHERE gp.month_year = :month_year_param" . $dept_filter . "
             ORDER BY d.dep_nme ASC, e.name ASC";
 
     $stmt = $pdo->prepare($sql);
-    $stmt->bindParam(':month_year_param', $monthYear, PDO::PARAM_STR);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
     $stmt->execute();
     $reportData = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

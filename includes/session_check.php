@@ -123,33 +123,41 @@ $is_system_admin = ($user_type === 'administrator');
 $isGM = ($user_type === 'gm');
 
 // HR Team Roles (based on user_type)
+$isHR_Manager = ($user_type === 'hr');
 $isHR_Senior_BP = ($user_type === 'hr_senior_bp');
 $isHR_Operations = ($user_type === 'hr_operations');
 $isHR_Supervisor = ($user_type === 'hr_supervisor');
 $isHR_Recruitment = ($user_type === 'hr_recruitment');
 $isHR_Payroll = ($user_type === 'hr_payroll');
+$isHR_Assistant = ($user_type === 'assistant' && $user_dept == 5); // HR Department Assistant
 
 // Combined HR roles (any HR position or HR department)
-$isHR = ($user_type === 'hr' || $isHR_Senior_BP || $isHR_Operations || $isHR_Supervisor || $isHR_Recruitment || $isHR_Payroll || $user_dept == 5);
+$isHR = ($user_type === 'hr' || $isHR_Senior_BP || $isHR_Operations || $isHR_Supervisor || $isHR_Recruitment || $isHR_Payroll || $isHR_Assistant || $user_dept == 5);
 $isDeptHr = ($user_dept == 5); // Anyone in HR Department
 
 // Finance & Audit Roles
+$isFinance_Manager = ($emp_type === 'Manager' && $user_dept == 2); // Finance Department Manager
 $isFinance_Officer = ($user_type === 'finance_officer');
+$isFinance_Assistant = ($user_type === 'assistant' && $user_dept == 2); // Finance Department Assistant
 $isAuditor = ($user_type === 'auditor');
-$isFinance = ($user_type === 'finance_officer' || $user_type === 'auditor' || $user_dept == 2);
+$isFinance = ($user_type === 'finance_officer' || $user_type === 'auditor' || $isFinance_Manager || $isFinance_Assistant || $user_dept == 2);
 $isDeptFinance = ($user_dept == 2); // Anyone in Finance Department
+
+// Department & Management Roles
+$isDeptManager = ($user_type === 'dept_user' || $user_role === 'DPT_Manager' || $emp_type === 'Manager');
+$isSupervisor = (isset($emprow['supervisor_id']) && $emprow['supervisor_id'] !== '' && $emprow['supervisor_id'] !== null); // Has subordinates
 
 // Other Specific Roles
 $isGR_Officer = ($user_type === 'gr_officer');
+$isAssistant = ($user_type === 'assistant'); // Generic assistant role
 $isItTeam = ($user_dept == 6); // Anyone in IT Department
+$isItAssistant = ($user_type === 'assistant' && $user_dept == 6); // IT Department Assistant
 
 // General Role Types
 $isEmployee = ($user_type === 'employee');
-$isDeptManager = ($user_type === 'dept_user' || $user_role === 'DPT_Manager' || $emp_type === 'Manager');
 
 // Legacy variables (for backward compatibility)
-$isAssistant = false; // No more assistant role
-$isItAssistant = ($user_dept == 6); // IT team member
+// $isAssistant is now defined above as generic assistant
 
 // --- 7. Page Access Control ---
 $current_page = strtolower(basename($_SERVER['PHP_SELF']));
@@ -169,6 +177,56 @@ if (!$isSpecialAssistant && ($user_type ?? null) === 'assistant' && in_array($cu
     exit();
 }
 
+// --- 8. Auto-Update Fly Status on Every Page Load ---
+update_employee_fly_status_on_session($conDB);
+
 include(__DIR__ . "/menu_active_class.php");
+
+/**
+ * Automatically resets employees.fly to 0 when their approved vacation/leave has ended.
+ * Runs on EVERY page load to ensure immediate updates (no throttle).
+ * 
+ * How it works:
+ * - Regular Vacation (annual vacation - VAC-*): Sets fly=1 on approval, auto-resets when ended
+ * - Leave Requests (LV-*): Does NOT set fly=1, only restricts application during vacation
+ * 
+ * @param mysqli $conDB Database connection
+ * @return void
+ */
+function update_employee_fly_status_on_session($conDB) {
+    // Run on every page load - no throttle
+    // The query is optimized with EXISTS subquery and only affects rows where fly=1
+    
+    try {
+        // Reset fly=0 for employees who have fly=1 but no active approved vacation/leave covering today
+        // This works automatically for both vacation and leave requests
+        $sql = "
+            UPDATE employees e
+            SET e.fly = 0
+            WHERE e.fly = 1
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM emp_vacation v
+                  WHERE v.emp_id = e.emp_id
+                    AND v.current_status = 'approved'
+                    AND v.start_date <= CURDATE()
+                    AND v.return_date >= CURDATE()
+              )
+        ";
+        
+        if (mysqli_query($conDB, $sql)) {
+            // Optional: log affected rows for debugging
+            $affected = mysqli_affected_rows($conDB);
+            if ($affected > 0) {
+                error_log("update_employee_fly_status: Reset fly=0 for $affected employee(s) with no active vacation/leave.");
+            }
+        } else {
+            error_log("update_employee_fly_status: Query failed - " . mysqli_error($conDB));
+        }
+    } catch (Exception $e) {
+        // Silently fail to avoid breaking page loads
+        error_log("update_employee_fly_status: Exception - " . $e->getMessage());
+    }
+}
 
 ?>

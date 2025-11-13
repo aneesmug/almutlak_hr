@@ -14,7 +14,87 @@
  * 6.  ADDED EOS DETAILS TO GM MODAL: The `modifyAndApproveLoan` function for the GM has been updated to fetch and display the End of Service and max loan amount details, and validates the new loan amount against this limit.
  */
 
-function approveLoanRequest(loanId, role) {
+function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLevel) {
+    // Check if this is the final payer (Level 7 - Finance Officer)
+    const isFinalPayer = (approvalLevel == 7 && userType === 'finance_officer');
+    
+    if (isFinalPayer) {
+        // Show payment proof and final amount modal for finance officer
+        Swal.fire({
+            title: __('final_approval_payment_proof_title') || 'Final Approval - Payment Proof Required',
+            html: `
+                <form id="finalApprovalForm" class="text-left" enctype="multipart/form-data">
+                    <p class="alert alert-info text-center"><i class="fa fa-info-circle"></i> ${__('final_approval_notice') || 'As the final approver, you must upload payment proof and confirm the approved amount.'}</p>
+                    
+                    <div class="form-group">
+                        <label for="final_approved_amount">${__('final_approved_amount_label') || 'Final Approved Amount (SAR)'} <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" id="final_approved_amount" name="final_approved_amount" class="form-control" placeholder="${__('enter_approved_amount') || 'Enter amount to be paid'}" value="${requestedAmount}" required>
+                        <small class="form-text text-muted">${__('requested_amount_label') || 'Requested Amount'}: ${parseFloat(requestedAmount).toFixed(2)} SAR</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="payment_proof">${__('payment_proof_file_label') || 'Payment Proof Document'} <span class="text-danger">*</span></label>
+                        <input type="file" id="payment_proof" name="payment_proof" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required>
+                        <small class="form-text text-muted">${__('accepted_formats') || 'Accepted: PDF, JPG, PNG, DOC, DOCX'}</small>
+                    </div>
+                </form>
+            `,
+            showCancelButton: true,
+            confirmButtonText: __('approve_and_submit_button') || 'Approve & Submit',
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#dc3545',
+            showLoaderOnConfirm: true,
+            allowOutsideClick: false,
+            preConfirm: () => {
+                const form = document.getElementById('finalApprovalForm');
+                const formData = new FormData(form);
+                formData.append('ajaxType', 'approve_loan');
+                formData.append('loan_id', loanId);
+                formData.append('approver_role', role);
+
+                const approvedAmount = formData.get('final_approved_amount');
+                const paymentProof = document.getElementById('payment_proof').files[0];
+
+                if (!approvedAmount || parseFloat(approvedAmount) <= 0) {
+                    Swal.showValidationMessage(__('approved_amount_required') || 'Approved amount is required and must be greater than zero');
+                    return false;
+                }
+                
+                if (!paymentProof) {
+                    Swal.showValidationMessage(__('payment_proof_required') || 'Payment proof document is required');
+                    return false;
+                }
+
+                return $.ajax({
+                    url: './includes/ajaxFile/ajaxLoan.php',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    dataType: 'JSON',
+                })
+                .fail(function(jqXHR, textStatus) {
+                    const error = handleAjaxFailure(jqXHR, textStatus);
+                    Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
+                });
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const response = result.value;
+                Swal.fire({
+                    title: response.title,
+                    text: response.message,
+                    icon: response.type,
+                    allowOutsideClick: false
+                }).then(() => {
+                    if (response.status === 'success') {
+                        location.reload();
+                    }
+                });
+            }
+        });
+    } else {
+        // Normal approval for other levels
     Swal.fire({
         title: __('confirm_approval_title'),
         text: __('confirm_approve_loan_text'),
@@ -29,6 +109,7 @@ function approveLoanRequest(loanId, role) {
             sendLoanUpdate(loanId, role, 'approve_loan');
         }
     });
+    }
 }
 
 function rejectLoanRequest(loanId, role) {

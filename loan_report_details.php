@@ -58,7 +58,44 @@ if (mysqli_num_rows($query) == 1) {
     }
     $stmt_payments->close();
 
-    // Fetch Approval History
+    // Fetch Approval Chain from request_approvers table
+    $approval_chain = [];
+    if (!empty($loan_details['inv_no'])) {
+        $chain_sql = "SELECT ra.*, 
+                      COALESCE(e.name, al.fullname, al.username) as approver_name,
+                      al.user_type
+                      FROM request_approvers ra
+                      LEFT JOIN employees e ON ra.approver_id = e.emp_id
+                      LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+                      WHERE ra.request_inv_no = ? AND ra.request_type_id = 2
+                      ORDER BY ra.approval_level";
+        $stmt_chain = $conDB->prepare($chain_sql);
+        $stmt_chain->bind_param("s", $loan_details['inv_no']);
+        $stmt_chain->execute();
+        $chain_result = $stmt_chain->get_result();
+        while ($row = $chain_result->fetch_assoc()) {
+            $approval_chain[] = $row;
+        }
+        $stmt_chain->close();
+    }
+
+    // Fetch Status History from smt_request_status table
+    $status_history = [];
+    if (!empty($loan_details['inv_no'])) {
+        $history_sql = "SELECT * FROM smt_request_status 
+                        WHERE inv_no = ? 
+                        ORDER BY created_at ASC";
+        $stmt_history = $conDB->prepare($history_sql);
+        $stmt_history->bind_param("s", $loan_details['inv_no']);
+        $stmt_history->execute();
+        $history_result = $stmt_history->get_result();
+        while ($row = $history_result->fetch_assoc()) {
+            $status_history[] = $row;
+        }
+        $stmt_history->close();
+    }
+
+    // Fetch Legacy Approval History (for backward compatibility)
     $approval_history = [];
     $stmt_approvals = $conDB->prepare("SELECT * FROM `emp_loan_approvals` WHERE `loan_id` = ? ORDER BY `created_at` ASC");
     $stmt_approvals->bind_param("i", $loan_id);
@@ -165,6 +202,39 @@ if (mysqli_num_rows($query) == 1) {
                 font-weight: 600;
                 color: #6c757d;
             }
+            
+            /* Payment History Styles */
+            .payment-summary-card {
+                border-left: 3px solid;
+                transition: all 0.3s ease;
+            }
+            
+            .payment-summary-card:hover {
+                box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, .1);
+            }
+            
+            .table thead th {
+                font-weight: 600;
+                font-size: 0.85rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            
+            .table tbody tr:hover {
+                background-color: #f8f9fa;
+            }
+            
+            .btn-xs {
+                padding: 0.15rem 0.4rem;
+                font-size: 0.75rem;
+                line-height: 1.2;
+                border-radius: 0.2rem;
+            }
+            
+            .badge {
+                font-weight: 500;
+                padding: 0.35em 0.6em;
+            }
 
             .timeline {
                 list-style: none;
@@ -212,22 +282,80 @@ if (mysqli_num_rows($query) == 1) {
 
             @media print {
 
+                * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+
+                @page {
+                    margin: 0.5cm;
+                    size: A4;
+                }
+
                 body,
                 html {
                     background: #fff !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100% !important;
+                    font-size: 11px !important;
+                    line-height: 1.3 !important;
+                }
+
+                body.enlarged {
+                    padding-left: 0 !important;
                 }
 
                 .no-print,
                 .left.side-menu,
                 .footer,
-                .topbar {
+                .topbar,
+                .navbar,
+                .breadcrumb,
+                .slimscroll-menu {
                     display: none !important;
+                    height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
                 }
 
-                #wrapper,
-                .content-page,
-                .content,
-                .container-fluid,
+                #wrapper {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100% !important;
+                }
+
+                .content-page {
+                    margin: 0 !important;
+                    margin-left: 0 !important;
+                    padding: 0 !important;
+                    min-height: auto !important;
+                    width: 100% !important;
+                }
+
+                .content {
+                    margin: 0 !important;
+                    margin-top: 0 !important;
+                    padding: 0 !important;
+                    width: 100% !important;
+                }
+
+                .container-fluid {
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    width: 100% !important;
+                }
+
+                .row {
+                    margin-left: 0 !important;
+                    margin-right: 0 !important;
+                }
+
+                .col-md-6, .col-xl-12 {
+                    padding-left: 5px !important;
+                    padding-right: 5px !important;
+                }
+
                 .card-box {
                     padding: 0 !important;
                     margin: 0 !important;
@@ -235,10 +363,150 @@ if (mysqli_num_rows($query) == 1) {
                     border: none !important;
                 }
 
+                .report-container {
+                    margin: 0 !important;
+                    padding: 5px !important;
+                }
+
+                .report-header {
+                    margin-top: 0 !important;
+                    margin-bottom: 0.5rem !important;
+                    padding-top: 0 !important;
+                    padding-bottom: 0.3rem !important;
+                    border-bottom: 1px solid #dee2e6;
+                    text-align: center !important;
+                }
+
+                .report-header img {
+                    max-height: 40px !important;
+                    margin-bottom: 0.3rem !important;
+                    display: block !important;
+                    margin-left: auto !important;
+                    margin-right: auto !important;
+                }
+
+                .report-title {
+                    font-size: 1rem !important;
+                    margin: 0 !important;
+                    font-weight: 600;
+                }
+
                 .report-main-card {
                     box-shadow: none !important;
                     border: 1px solid #dee2e6 !important;
                     page-break-inside: avoid;
+                    margin: 0 !important;
+                }
+
+                .report-card-header {
+                    padding: 0.5rem !important;
+                    background-color: #f8f9fa !important;
+                }
+
+                .report-card-header h4 {
+                    font-size: 0.95rem !important;
+                    margin: 0 !important;
+                }
+
+                .report-card-header p {
+                    font-size: 0.8rem !important;
+                    margin: 0 !important;
+                }
+
+                .report-card-header .avatar {
+                    width: 40px !important;
+                    height: 40px !important;
+                    margin-right: 0.5rem !important;
+                }
+
+                .card-body {
+                    padding: 0.5rem !important;
+                }
+
+                .section-title {
+                    font-size: 0.9rem !important;
+                    margin-bottom: 0.4rem !important;
+                    font-weight: 600;
+                }
+
+                .detail-list li {
+                    padding: 0.25rem 0 !important;
+                    font-size: 0.85rem !important;
+                }
+
+                .mb-4 {
+                    margin-bottom: 0.5rem !important;
+                }
+
+                .payment-summary-card {
+                    padding: 0.4rem !important;
+                    margin-bottom: 0.4rem !important;
+                }
+
+                .payment-summary-card h6 {
+                    font-size: 0.8rem !important;
+                    margin-bottom: 0.2rem !important;
+                }
+
+                .payment-summary-card h3 {
+                    font-size: 1rem !important;
+                    margin: 0 !important;
+                }
+
+                table {
+                    font-size: 0.8rem !important;
+                    margin-bottom: 0.5rem !important;
+                }
+
+                table thead th {
+                    padding: 0.3rem !important;
+                    font-size: 0.75rem !important;
+                }
+
+                table tbody td {
+                    padding: 0.3rem !important;
+                }
+
+                .badge {
+                    font-size: 0.7rem !important;
+                    padding: 0.2em 0.4em !important;
+                }
+
+                .btn-xs {
+                    font-size: 0.7rem !important;
+                    padding: 0.1rem 0.3rem !important;
+                }
+
+                h5 {
+                    font-size: 0.9rem !important;
+                    margin-bottom: 0.4rem !important;
+                }
+
+                .row {
+                    page-break-inside: avoid;
+                }
+
+                table {
+                    page-break-inside: auto;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    page-break-after: auto;
+                }
+
+                thead {
+                    display: table-header-group;
+                }
+
+                tfoot {
+                    display: table-footer-group;
+                }
+
+                .alert {
+                    padding: 0.4rem !important;
+                    font-size: 0.8rem !important;
+                    margin-bottom: 0.5rem !important;
                 }
             }
         </style>
@@ -286,7 +554,10 @@ if (mysqli_num_rows($query) == 1) {
                                                     <div class="col-md-6 mb-4">
                                                         <h5 class="section-title"><?= __('loan_details_header') ?></h5>
                                                         <ul class="list-unstyled detail-list">
+                                                            <li><span class="label"><?= __('invoice_no_label') ?></span> <span class="value"><code><?= htmlspecialchars($loan_details['inv_no'] ?? 'N/A'); ?></code></span></li>
+                                                            <li><span class="label"><?= __('loan_type_label') ?></span> <span class="value"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $loan_details['loan_type'] ?? 'N/A'))); ?></span></li>
                                                             <li><span class="label"><?= __('loan_amount_label') ?></span> <span class="value"><?= number_format($loan_details['loan_amount'], 2); ?> <?= __('sar_currency') ?></span></li>
+                                                            <li><span class="label"><?= __('installments_label') ?></span> <span class="value"><?= htmlspecialchars($loan_details['installments'] ?? '1'); ?> <?= __('months') ?></span></li>
                                                             <li><span class="label"><?= __('total_payable_label') ?></span> <span class="value"><?= number_format($loan_details['total_payable'], 2); ?> <?= __('sar_currency') ?></span></li>
                                                             <li><span class="label"><?= __('monthly_deduction_label') ?></span> <span class="value"><?= number_format($loan_details['monthly_deduction'], 2); ?> <?= __('sar_currency') ?></span></li>
                                                             <li><span class="label"><?= __('start_date_label') ?></span> <span class="value"><?= date('d M Y', strtotime($loan_details['start_date'])); ?></span></li>
@@ -295,33 +566,231 @@ if (mysqli_num_rows($query) == 1) {
                                                         </ul>
                                                     </div>
                                                     <div class="col-md-6 mb-4">
-                                                        <h5 class="section-title"><?= __('payment_history_header') ?></h5><?php if (empty($payment_history)): ?><div class="alert alert-info"><?= __('no_payments_recorded_yet') ?></div><?php else: ?><div class="table-responsive">
-                                                                <table class="table table-sm table-striped">
-                                                                    <thead>
+                                                        <h5 class="section-title"><i class="fa fa-history"></i> <?= __('payment_history_header') ?></h5>
+                                                        <?php if (empty($payment_history)): ?>
+                                                            <div class="alert alert-info">
+                                                                <i class="fa fa-info-circle"></i> <?= __('no_payments_recorded_yet') ?>
+                                                            </div>
+                                                        <?php else: 
+                                                            // Calculate totals
+                                                            $total_paid = 0;
+                                                            foreach ($payment_history as $payment) {
+                                                                $total_paid += $payment['amount'];
+                                                            }
+                                                            $remaining_balance = $loan_details['total_payable'] - $total_paid;
+                                                        ?>
+                                                            <!-- Payment Summary Cards -->
+                                                            <div class="row mb-3">
+                                                                <div class="col-6">
+                                                                    <div class="card border-success mb-2">
+                                                                        <div class="card-body p-2 text-center">
+                                                                            <small class="text-muted d-block"><?= __('total_paid') ?></small>
+                                                                            <h5 class="mb-0 text-success font-weight-bold"><?= number_format($total_paid, 2); ?> SAR</h5>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <div class="card border-<?= $remaining_balance > 0 ? 'danger' : 'success' ?> mb-2">
+                                                                        <div class="card-body p-2 text-center">
+                                                                            <small class="text-muted d-block"><?= __('remaining_balance') ?></small>
+                                                                            <h5 class="mb-0 text-<?= $remaining_balance > 0 ? 'danger' : 'success' ?> font-weight-bold"><?= number_format($remaining_balance, 2); ?> SAR</h5>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <!-- Payment Details Table -->
+                                                            <div class="table-responsive">
+                                                                <table class="table table-sm table-bordered">
+                                                                    <thead class="thead-light">
                                                                         <tr>
                                                                             <th><?= __('date_header') ?></th>
                                                                             <th><?= __('method_header') ?></th>
+                                                                            <th><?= __('receipt_id') ?></th>
                                                                             <th class="text-right"><?= __('amount_header') ?></th>
+                                                                            <th class="text-center no-print"><?= __('attachment') ?></th>
                                                                         </tr>
                                                                     </thead>
-                                                                    <tbody><?php foreach ($payment_history as $payment): ?><tr>
-                                                                                <td><?= date('d M Y', strtotime($payment['payment_date'])); ?></td>
-                                                                                <td><?= __($payment['payment_method']) ?></td>
-                                                                                <td class="text-right"><?= number_format($payment['amount'], 2); ?> <?= __('sar_currency') ?></td>
-                                                                            </tr><?php endforeach; ?></tbody>
+                                                                    <tbody>
+                                                                        <?php foreach ($payment_history as $payment): 
+                                                                            $payment_method = $payment['payment_method'] ?? 'auto';
+                                                                            $payment_method_badge = '';
+                                                                            $badge_icon = '';
+                                                                            switch($payment_method) {
+                                                                                case 'manual':
+                                                                                    $payment_method_badge = 'badge-success';
+                                                                                    $badge_icon = 'fa-hand-paper-o';
+                                                                                    $method_text = __('manual');
+                                                                                    break;
+                                                                                case 'payroll':
+                                                                                    $payment_method_badge = 'badge-primary';
+                                                                                    $badge_icon = 'fa-calendar';
+                                                                                    $method_text = __('payroll');
+                                                                                    break;
+                                                                                default:
+                                                                                    $payment_method_badge = 'badge-info';
+                                                                                    $badge_icon = 'fa-cog';
+                                                                                    $method_text = __('auto');
+                                                                            }
+                                                                        ?>
+                                                                        <tr>
+                                                                            <td><?= date('d M Y', strtotime($payment['payment_date'])); ?></td>
+                                                                            <td>
+                                                                                <span class="badge <?= $payment_method_badge ?>">
+                                                                                    <i class="fa <?= $badge_icon ?>"></i> <?= $method_text ?>
+                                                                                </span>
+                                                                            </td>
+                                                                            <td>
+                                                                                <?php if (!empty($payment['receipt_id'])): ?>
+                                                                                    <small><?= htmlspecialchars($payment['receipt_id']); ?></small>
+                                                                                <?php else: ?>
+                                                                                    <span class="text-muted">-</span>
+                                                                                <?php endif; ?>
+                                                                            </td>
+                                                                            <td class="text-right font-weight-bold"><?= number_format($payment['amount'], 2); ?> SAR</td>
+                                                                            <td class="text-center no-print">
+                                                                                <?php if (!empty($payment['attachment'])): 
+                                                                                    // Determine file path based on payment method
+                                                                                    if ($payment_method === 'manual') {
+                                                                                        $file_path = './assets/loan_manual_payments/' . htmlspecialchars($payment['attachment']);
+                                                                                    } else {
+                                                                                        $file_path = './assets/loan_receipts/' . htmlspecialchars($payment['attachment']);
+                                                                                    }
+                                                                                ?>
+                                                                                    <a href="<?= $file_path; ?>" target="_blank" class="btn btn-xs btn-info">
+                                                                                        <i class="fa fa-eye"></i>
+                                                                                    </a>
+                                                                                <?php else: ?>
+                                                                                    <span class="text-muted">-</span>
+                                                                                <?php endif; ?>
+                                                                            </td>
+                                                                        </tr>
+                                                                        <?php if (!empty($payment['note'])): ?>
+                                                                        <tr>
+                                                                            <td colspan="5" class="bg-light">
+                                                                                <small class="text-muted">
+                                                                                    <i class="fa fa-comment"></i> <strong><?= __('note_label') ?>:</strong> <?= htmlspecialchars($payment['note']); ?>
+                                                                                </small>
+                                                                            </td>
+                                                                        </tr>
+                                                                        <?php endif; ?>
+                                                                        <?php endforeach; ?>
+                                                                    </tbody>
+                                                                    <tfoot class="font-weight-bold bg-light">
+                                                                        <tr>
+                                                                            <td colspan="3" class="text-right"><?= __('total_paid') ?>:</td>
+                                                                            <td class="text-right text-success"><?= number_format($total_paid, 2); ?> SAR</td>
+                                                                            <td class="no-print"></td>
+                                                                        </tr>
+                                                                    </tfoot>
                                                                 </table>
-                                                            </div><?php endif; ?>
+                                                            </div>
+                                                            
+                                                            <?php if ($remaining_balance <= 0): ?>
+                                                            <div class="alert alert-success mt-2 mb-0">
+                                                                <i class="fa fa-check-circle"></i> <strong><?= __('loan_fully_paid') ?></strong>
+                                                            </div>
+                                                            <?php endif; ?>
+                                                        <?php endif; ?>
                                                     </div>
                                                 </div>
                                                 <hr>
-                                                <div class="row">
+                                                
+                                                <!-- Approval Chain Section -->
+                                                <div class="row mb-4">
                                                     <div class="col-12">
-                                                        <h5 class="section-title"><?= __('approval_history_header') ?></h5><?php if (empty($approval_history)): ?><div class="alert alert-info"><?= __('no_approval_history_found') ?></div><?php else: ?><ul class="timeline"><?php foreach ($approval_history as $approval): ?><li class="timeline-item">
-                                                                        <div class="timeline-icon text-<?= $approval['status'] == 'approved' ? 'success' : 'danger' ?>"><i class="fa fa-<?= $approval['status'] == 'approved' ? 'check' : 'times' ?>"></i></div>
-                                                                        <div class="timeline-body"><strong><?= __($approval['approver_role']) ?></strong> <?= __($approval['status'])." ".__('on') ?> <?= date('d M Y, h:i A', strtotime($approval['created_at'])) ?><?php if (!empty($approval['notes'])): ?><p class="mb-0 mt-2 text-muted"><em><?= __('note_label') ?>: <?= htmlspecialchars($approval['notes']) ?></em></p><?php endif; ?></div>
-                                                                    </li><?php endforeach; ?></ul><?php endif; ?>
+                                                        <h5 class="section-title"><i class="fa fa-check-circle"></i> <?= __('Approval Chain') ?></h5>
+                                                        <?php if (empty($approval_chain)): ?>
+                                                            <div class="alert alert-info"><?= __('No approval chain found') ?></div>
+                                                        <?php else: ?>
+                                                            <div class="table-responsive">
+                                                                <table class="table table-sm table-bordered">
+                                                                    <thead class="thead-light">
+                                                                        <tr>
+                                                                            <th><?= __('Level') ?></th>
+                                                                            <th><?= __('Approver') ?></th>
+                                                                            <th><?= __('Status') ?></th>
+                                                                            <th><?= __('Date & Time') ?></th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        <?php foreach ($approval_chain as $level): ?>
+                                                                            <tr>
+                                                                                <td><strong>Level <?= $level['approval_level'] ?></strong></td>
+                                                                                <td><?= htmlspecialchars($level['approver_name'] ?? 'Pending Assignment'); ?></td>
+                                                                                <td>
+                                                                                    <?php 
+                                                                                    $status_badge = '';
+                                                                                    switch($level['status']) {
+                                                                                        case 'approved':
+                                                                                            $status_badge = '<span class="badge badge-success">Approved</span>';
+                                                                                            break;
+                                                                                        case 'rejected':
+                                                                                            $status_badge = '<span class="badge badge-danger">Rejected</span>';
+                                                                                            break;
+                                                                                        case 'pending':
+                                                                                            $status_badge = '<span class="badge badge-warning">Pending</span>';
+                                                                                            break;
+                                                                                        case 'awaiting':
+                                                                                            $status_badge = '<span class="badge badge-secondary">Awaiting</span>';
+                                                                                            break;
+                                                                                        default:
+                                                                                            $status_badge = '<span class="badge badge-light">' . htmlspecialchars($level['status']) . '</span>';
+                                                                                    }
+                                                                                    echo $status_badge;
+                                                                                    ?>
+                                                                                </td>
+                                                                                <td>
+                                                                                    <?php if (!empty($level['action_date'])): ?>
+                                                                                        <small><?= date('d M Y, h:i A', strtotime($level['action_date'])); ?></small>
+                                                                                    <?php else: ?>
+                                                                                        <span class="text-muted">-</span>
+                                                                                    <?php endif; ?>
+                                                                                </td>
+                                                                            </tr>
+                                                                        <?php endforeach; ?>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        <?php endif; ?>
                                                     </div>
                                                 </div>
+                                                
+                                                <!-- Payment Proof Section -->
+                                                <?php if (!empty($loan_details['payment_proof_file']) || !empty($loan_details['final_approved_amount'])): ?>
+                                                <div class="row mb-4">
+                                                    <div class="col-12">
+                                                        <h5 class="section-title"><i class="fa fa-file-invoice-dollar"></i> <?= __('Payment Proof') ?></h5>
+                                                        <div class="card border-primary">
+                                                            <div class="card-body">
+                                                                <div class="row">
+                                                                    <?php if (!empty($loan_details['final_approved_amount'])): ?>
+                                                                    <div class="col-md-6">
+                                                                        <div class="mb-2">
+                                                                            <strong class="text-primary"><?= __('Final Approved Amount') ?>:</strong>
+                                                                            <h4 class="mb-0 text-success"><?= number_format($loan_details['final_approved_amount'], 2); ?> SAR</h4>
+                                                                        </div>
+                                                                    </div>
+                                                                    <?php endif; ?>
+                                                                    
+                                                                    <?php if (!empty($loan_details['payment_proof_file'])): ?>
+                                                                    <div class="col-md-6">
+                                                                        <div class="mb-2">
+                                                                            <strong class="text-primary"><?= __('Payment Proof Attachment') ?>:</strong><br>
+                                                                            <a href="./assets/loan_payment_proofs/<?= htmlspecialchars($loan_details['payment_proof_file']); ?>" 
+                                                                               target="_blank" 
+                                                                               class="btn btn-info btn-sm mt-2">
+                                                                                <i class="fa fa-download"></i> <?= __('View/Download Payment Proof') ?>
+                                                                            </a>
+                                                                        </div>
+                                                                    </div>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>

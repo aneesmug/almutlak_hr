@@ -15,6 +15,38 @@ if (!isset($_GET['comp']) || !is_numeric($_GET['comp'])) {
 }
 $department_id = (int)$_GET['comp'];
 
+// DEPARTMENT-BASED ACCESS CONTROL FOR COMPANY FILTERING
+// Only HR Department and System Admins can see all companies
+$can_see_all_companies = (
+    $is_system_admin || 
+    $user_type == 'administrator' ||
+    $user_dept == 5 || // HR Department
+    $isHR || 
+    $isDeptHr
+);
+
+// If user cannot see all companies, verify this company has employees in their department
+if (!$can_see_all_companies && isset($user_dept)) {
+    $check_access_stmt = $conDB->prepare("SELECT COUNT(*) as count FROM employees WHERE comp_no = ? AND dept = ?");
+    $check_access_stmt->bind_param("ii", $department_id, $user_dept);
+    $check_access_stmt->execute();
+    $access_count = $check_access_stmt->get_result()->fetch_assoc()['count'] ?? 0;
+    $check_access_stmt->close();
+    
+    if ($access_count == 0) {
+        $_SESSION['error_msg'] = sprintf(
+            '<div class="col-xl-12">
+                <div class="alert alert-danger bg-danger text-white border-0" role="alert">
+                    <b>Access Denied!</b> 
+                    <h3>You don\'t have access to view employees from this company.</h3>
+                </div>
+            </div>'
+        );
+        header("Location: dashbydepart.php");
+        exit;
+    }
+}
+
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -48,9 +80,16 @@ $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
 // --- Build Query ---
-$where_clauses = ["`comp_no` = ?"]; // Department is the base filter for this page
+$where_clauses = ["`comp_no` = ?"]; // Company is the base filter for this page
 $params = [$department_id];
 $types = "i";
+
+// Add department restriction for non-privileged users
+if (!$can_see_all_companies && isset($user_dept)) {
+    $where_clauses[] = "`dept` = ?";
+    $params[] = $user_dept;
+    $types .= "i";
+}
 
 if (!empty($search_term)) {
     $where_clauses[] = "(`name` LIKE ? OR `iqama` LIKE ? OR `emp_id` LIKE ?)";

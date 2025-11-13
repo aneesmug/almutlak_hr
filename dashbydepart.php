@@ -144,8 +144,20 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                         <?php  ?><div class="row text-center">
 
                                             <?php
-                                            // Determine which departments to show based on user role
-                                            if ($user_type == "dept_user" && !$is_system_admin) {
+                                            // ================================================================
+                                            // DEPARTMENT-BASED ACCESS CONTROL FOR DEPARTMENT GROUPING
+                                            // ================================================================
+                                            // HR Department (dept 5) and System Admins can see all departments
+                                            // All other users can only see their own department
+                                            $can_see_all_departments = (
+                                                $is_system_admin || 
+                                                $user_type == 'administrator' ||
+                                                $user_dept == 5 || // HR Department
+                                                $isHR || 
+                                                $isDeptHr
+                                            );
+                                            
+                                            if (!$can_see_all_departments) {
                                                 // Department managers: show only their department
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
@@ -160,7 +172,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "' 
                                                     GROUP BY `employees`.`dept`");
                                             } else {
-                                                // Administrators, HR team, and other privileged users: show all departments
+                                                // HR and System Admins: show all departments
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`dept`, 
@@ -197,8 +209,20 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                         <?php  ?><div class="row text-center">
 
                                             <?php
-                                            // Determine which companies to show based on user role
-                                            if ($user_type == "dept_user" && !$is_system_admin) {
+                                            // ================================================================
+                                            // DEPARTMENT-BASED ACCESS CONTROL FOR COMPANY GROUPING
+                                            // ================================================================
+                                            // HR Department (dept 5) and System Admins can see all companies
+                                            // All other users can only see companies in their department
+                                            $can_see_all_companies = (
+                                                $is_system_admin || 
+                                                $user_type == 'administrator' ||
+                                                $user_dept == 5 || // HR Department
+                                                $isHR || 
+                                                $isDeptHr
+                                            );
+                                            
+                                            if (!$can_see_all_companies) {
                                                 // Department managers: show only companies in their department
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
@@ -212,7 +236,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
                                                     GROUP BY `employees`.`comp_no`");
                                             } else {
-                                                // Administrators, HR team, and other privileged users: show all companies
+                                                // HR and System Admins: show all companies
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`comp_no`, 
@@ -263,20 +287,17 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             </thead>
                                             <tbody>
                                                 <?php
-                                                // Determine who can see all employees vs only their department
-                                                // Can see all: Admins, HR team (dept 5), Finance team (dept 2), IT team (dept 6), Executive/Management (dept 10)
+                                                // ================================================================
+                                                // DEPARTMENT-BASED ACCESS CONTROL
+                                                // ================================================================
+                                                // HR Department (dept 5) and System Admins can see all employees
+                                                // All other users can only see employees from their own department
                                                 $can_see_all_employees = (
                                                     $is_system_admin || 
+                                                    $user_type == 'administrator' ||
+                                                    $user_dept == 5 || // HR Department
                                                     $isHR || 
-                                                    $isDeptHr || 
-                                                    $isFinance || 
-                                                    $isDeptFinance || 
-                                                    $isItTeam || 
-                                                    $user_dept == 5 || 
-                                                    $user_dept == 2 || 
-                                                    $user_dept == 6 || 
-                                                    $user_dept == 10 ||
-                                                    $user_type == 'gm'
+                                                    $isDeptHr
                                                 );
 
                                                 if (!$can_see_all_employees) {
@@ -299,7 +320,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                             WHERE `emp`.`status`=1 AND `emp`.`fly`=0 
                                                             AND `emp`.`dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "' ";
                                                 } else {
-                                                    // Admins, HR, Finance, IT, Management: show all employees
+                                                    // HR and System Admins: show all employees
                                                     $sql = "SELECT 
                                                             `emp`.*,
                                                             CASE 
@@ -377,14 +398,13 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                                     <a class='dropdown-item text-dark' href='view_employee.php?emp_id=<?= $emp_id ?>'><i class='mdi mdi-eye-outline mr-2 font-18 vertical-middle'></i><?= __('open') ?></a>
                                                                     <?php
                                                                     if ($emp_status == "1") {
-                                                                        if ($user_type <> "dept_user") {
+                                                                        // Only system_admin, hr_operations, hr_recruitment can edit employees
+                                                                        if ($is_system_admin || $user_type === 'hr_operations' || $user_type === 'hr_recruitment') {
                                                                     ?>
                                                                             <a href='edit_employee.php?emp_id=<?= $emp_id ?>' class='dropdown-item text-custom'><i class='fa fa-edit mr-2 font-18 vertical-middle'></i><?= __('edit') ?></a>
                                                                         <?php }
                                                                     }
-                                                                    if ($user_type == $access1) { ?>
-                                                                        <a href='javascript:void(0);' class='dropdown-item  text-danger' data-toggle="modal" data-target=".del_modal_sm_<?= $id ?>"><i class='fa fa-trash mr-2 font-18 vertical-middle'></i><?= __('vouchers') ?></a>
-                                                                    <?php } ?>
+                                                                    ?>
                                                                 </div>
                                                             </div>
 

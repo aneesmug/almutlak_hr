@@ -1,6 +1,107 @@
 <?php
 // require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+
+// ============================================================
+// HANDLE POST REQUEST FIRST (BEFORE ANY OUTPUT)
+// ============================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
+	// Process the form submission before any HTML output
+	try {
+		$formData = $_POST;
+		// Whitelist of allowed database columns
+		$allowedColumns = [
+			'name',
+			'iqama',
+			'iqama_exp_g',
+			'iqama_exp',
+			'passport_number',
+			'passport_exp',
+			'mobile',
+			'emg_mobile',
+			'emg_name',
+			'country',
+			'dept',
+			'sectin_nme',
+			'emptype',
+			'supervisor_id',
+			'joining_date',
+			'dob',
+			'dob_h',
+			't_shirt_size',
+			'sex',
+			'mar_status',
+			'blood_type',
+			'emp_sup_type',
+			'actual_job',
+			'vac_period',
+			'vacation_days',
+			'salary',
+			'bank_name',
+			'iban',
+			'email',
+			'c_email',
+			'address',
+			'insurance_no',
+			'comp_no',
+			'insurance_exp',
+			'gosi',
+			'insurance_class',
+			'probation',
+			'payment_type'
+		];
+		// Prepare the update data
+		$setParts = [];
+		$formData['dept'] = $formData['department'];
+		
+		$employee_id_from_form = $formData['emp_id'];
+		$params = [':emp_id' => $employee_id_from_form];
+
+		foreach ($formData as $field => $value) {
+			// Skip non-database fields and the primary key
+			if ($field === 'emp_id' || $field === 'submit' || !in_array($field, $allowedColumns)) {
+				continue;
+			}
+			if ($field === 'salary') {
+				$value = str_replace(',', '', $value);
+			} elseif ($field === 'iban') {
+				$value = str_replace(' ', '', $value);
+			}
+			$setParts[] = "`$field` = :$field";
+			$params[":$field"] = $value;
+		}
+		
+		// Build and execute the query
+		$sql = "UPDATE `employees` SET " . implode(', ', $setParts) . " WHERE `emp_id` = :emp_id";
+		$stmt = $pdo->prepare($sql);
+		$stmt->execute($params);
+		
+		// Store alert data in session for display on the view page
+		if ($stmt->rowCount() > 0) {
+			$_SESSION['swal_alert'] = [
+				'title' => __("success"),
+				'message' => __("employee_details_edited_successfully"),
+				'type' => 'success'
+			];
+		} else {
+			$_SESSION['swal_alert'] = [
+				'title' => __("info"),
+				'message' => __("no_changes_made"),
+				'type' => 'info'
+			];
+		}
+		
+		header("Location: view_employee.php?emp_id={$employee_id_from_form}");
+		exit();
+		
+	} catch (PDOException $e) {
+		die(__("database_error") . " " . $e->getMessage());
+	}
+}
+// ============================================================
+// END POST HANDLING
+// ============================================================
+
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
 	include("./includes/avatar_select.php");
@@ -38,20 +139,22 @@ if (mysqli_num_rows($query) == 1) {
 			$emprow = $rec;
 		}
 
-		// Get the current user's department and type from session  
-		$target_dept = $emprow["dept"] ?? 0;
-		$hasAccess = ($user_dept == $target_dept) || $isHR || $isDeptHr || $is_system_admin;
-		if (!$hasAccess) {
-			$_SESSION['error_msg'] = sprintf(
-				'<div class="col-xl-12">
+		// EMPLOYEE MODIFICATION ACCESS CONTROL
+		// Only system admin, hr_operations, and hr_recruitment can modify employees
+		$can_modify_employee = (
+			$is_system_admin || 
+			$user_type === 'hr_operations' ||
+			$user_type === 'hr_recruitment'
+		);
+		
+		if (!$can_modify_employee) {
+			$_SESSION['error_msg'] = '<div class="col-xl-12">
 					<div class="alert alert-danger bg-danger text-white border-0" role="alert">
-						<b>Error ooooh!</b> 
-						<h4>' . __('error_no_access_to_department') . '</h4>
+						<b>Access Denied!</b> 
+						<h4>You do not have permission to modify employee information.</h4>
 					</div>
-				</div>',
-				$emprow["deptnme"]
-			);
-			header("Location: ./dashboard.php");
+				</div>';
+			header("Location: ./view_employee.php?emp_id=" . $_GET['emp_id']);
 			exit;
 		}
 		// If we get here, access is granted
@@ -73,94 +176,10 @@ if (mysqli_num_rows($query) == 1) {
 		}
 	}
 
-	if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
-		// Assuming $pdo connection is already established
-		try {
-			$formData = $_POST;
-			// Whitelist of allowed database columns
-			$allowedColumns = [
-				'name',
-				'iqama',
-				'iqama_exp_g',
-				'iqama_exp',
-				'passport_number',
-				'passport_exp',
-				'mobile',
-				'emg_mobile',
-				'emg_name',
-				'country',
-				'dept',
-				'sectin_nme',
-				'emptype',
-				'supervisor_id',
-				'joining_date',
-				'dob',
-				'dob_h',
-				't_shirt_size',
-				'sex',
-				'mar_status',
-				'blood_type',
-				'emp_sup_type',
-				'actual_job',
-				'vac_period',
-				'vacation_days',
-				'salary',
-				'bank_name',
-				'iban',
-				'email',
-				'c_email',
-				'address',
-				'insurance_no',
-				'comp_no',
-				'insurance_exp',
-				'gosi',
-				'insurance_class',
-				'probation',
-				'payment_type'
-			];
-			// Prepare the update data
-			$setParts = [];
-			$formData['dept'] = $formData['department'];
-			
-			// --- FIX 2: Use the emp_id from the form submission for the query AND redirect ---
-			$employee_id_from_form = $formData['emp_id'];
-			$params = [':emp_id' => $employee_id_from_form];
-
-			foreach ($formData as $field => $value) {
-				// Skip non-database fields and the primary key
-				if ($field === 'emp_id' || $field === 'submit' || !in_array($field, $allowedColumns)) {
-					continue;
-				}
-				if ($field === 'salary') {
-					$value = str_replace(',', '', $value);
-				} elseif ($field === 'iban') {
-					$value = str_replace(' ', '', $value);
-				}
-				$setParts[] = "`$field` = :$field";
-				$params[":$field"] = $value;
-			}
-			
-			// Build and execute the query
-			$sql = "UPDATE `employees` SET " . implode(', ', $setParts) . " WHERE `emp_id` = :emp_id";
-			$stmt = $pdo->prepare($sql);
-			$stmt->execute($params);
-			
-			// Check if update was successful
-			// --- FIX 3: Use the $employee_id_from_form for the redirect ---
-			if ($stmt->rowCount() > 0) {
-				salert(__("success"), __("employee_details_edited_successfully"), "success", "view_employee.php?emp_id={$employee_id_from_form}", __('ok'));
-			} else {
-				salert(__("info"), __("no_changes_made"), "info", "view_employee.php?emp_id={$employee_id_from_form}", __('ok'));
-			}
-		} catch (PDOException $e) {
-			die(__("database_error") . " " . $e->getMessage());
-		}
-	}
-
 ?>
 
 	<!doctype html>
-	<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
+	<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>
 
 	<head>
 		<meta charset="utf-8" />

@@ -39,6 +39,7 @@ $user_type = $_POST['user_type'];
 $user_dept = $_POST['user_dept'];
 $emptype = $_POST['emptype'];
 $emp_id = $_POST['emp_id'];
+$payerOnly = isset($_POST['payerOnly']) ? (int)$_POST['payerOnly'] : 0;
 
 $searchValue = mysqli_real_escape_string($conDB,$_POST['search']);
 $typeValue = mysqli_real_escape_string($conDB,$_POST['smtStatus']); // Will be 'draft', 'pending_approval', etc.
@@ -75,8 +76,12 @@ $baseSql = "FROM `smart_request` `sr`
 // UPDATED: Role-based filtering conditions
 $additionalConditions = ""; // Start empty
 
-// Admin, Finance (2), and Management (10) see everything
-if ($user_type == 'administrator' || $user_dept == 2 || $user_dept == 10) {
+// Admin, Finance (2), and Management (10) see everything (unless payerOnly specified)
+if ($payerOnly === 1) {
+    // Restrict to records assigned to this user as payer and in pending_payment
+    $additionalConditions = " AND `sr`.`current_status` = 'pending_payment' AND `sr`.`payable_by_emp_id` = ".(int)$emp_id;
+}
+else if ($user_type == 'administrator' || $user_dept == 2 || $user_dept == 10) {
     $additionalConditions = ''; // See all
 }
 // GM (who is NOT in dept 2 or 10)

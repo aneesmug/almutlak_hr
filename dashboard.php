@@ -20,43 +20,41 @@
     }
     /****************Employee Allow Page*****************/
 
-if($user_type == "dept_user"){
-	$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) AS `activeusr`, `id` FROM `employees` WHERE `status`=1 AND `fly`=0 AND `dept`='".$user_dept."' ");
-	while($rec = mysqli_fetch_assoc($sql_count_active)){$status_cont_active = $rec["activeusr"];}
-//	$status_cont_active = ceil(mysqli_result($sql_count_active,0));
-		
-	$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter`, `id` FROM `employees` WHERE `status`=0 AND `dept`='".$user_dept."'");
-	while($rec = mysqli_fetch_assoc($sql_count_ter)){$status_cont_ter = $rec["ter"];}
-//	$status_cont_ter = ceil(mysqli_result($sql_count_ter,0));
-		
-	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying`, `id` FROM `employees` WHERE `fly`=1 AND `dept`='".$user_dept."'");
-	while($rec = mysqli_fetch_assoc($sql_count_fly)){$status_cont_fly = $rec["flying"];}
-//	$status_cont_fly = ceil(mysqli_result($sql_count_fly,0));
-		
-	$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) AS `tot`, `id` FROM `employees` WHERE `dept`='".$user_dept."'");
-	while($rec = mysqli_fetch_assoc($sql_count_tot)){$status_cont_tot = $rec["tot"];}
-//	$status_cont_tot = ceil(mysqli_result($sql_count_tot,0));
-	
-	$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr`, `id` FROM `employees` WHERE `emp_sup_type`='man_power' AND `dept`='".$user_dept."' AND `status`=1 ");
-	while($rec = mysqli_fetch_assoc($sql_count_man_power)){$status_cont_man_power = $rec["manpwr"];}
-//	$status_cont_man_power = ceil(mysqli_result($sql_count_man_power,0));
-	
-}else{
-	$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) AS `activeusr`, `id` FROM `employees` WHERE `status`=1 AND `fly`=0 ");
-	while($rec = mysqli_fetch_assoc($sql_count_active)){$status_cont_active = $rec["activeusr"];}
-		
-	$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter`, `id` FROM `employees` WHERE `status`=0 ");
-	while($rec = mysqli_fetch_assoc($sql_count_ter)){$status_cont_ter = $rec["ter"];}
-		
-	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying`, `id` FROM `employees` WHERE `fly`=1");
-	while($rec = mysqli_fetch_assoc($sql_count_fly)){$status_cont_fly = $rec["flying"];}
-		
-	$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) AS `tot`, `id` FROM `employees`");
-	while($rec = mysqli_fetch_assoc($sql_count_tot)){$status_cont_tot = $rec["tot"];}
-	
-	$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr`, `id` FROM `employees` WHERE `emp_sup_type`='man_power' AND `status`=1 ");
-	while($rec = mysqli_fetch_assoc($sql_count_man_power)){$status_cont_man_power = $rec["manpwr"];}
+// DEPARTMENT-BASED ACCESS CONTROL FOR DASHBOARD COUNTS
+// Determine if user can see all employees or only their department
+$can_see_all_employees = (
+    $is_system_admin || 
+    $user_type == 'administrator' ||
+    $user_dept == 5 || // HR Department
+    $isHR || 
+    $isDeptHr
+);
+
+// Build department filter for queries
+$dept_filter = "";
+if (!$can_see_all_employees && isset($user_dept)) {
+	$dept_filter = " AND `dept`='".$user_dept."' ";
 }
+
+// Count Active Employees (Status=1, Not on vacation)
+$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) AS `activeusr`, `id` FROM `employees` WHERE `status`=1 AND `fly`=0 ".$dept_filter);
+while($rec = mysqli_fetch_assoc($sql_count_active)){$status_cont_active = $rec["activeusr"];}
+
+// Count Terminated Employees
+$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter`, `id` FROM `employees` WHERE `status`=0 ".$dept_filter);
+while($rec = mysqli_fetch_assoc($sql_count_ter)){$status_cont_ter = $rec["ter"];}
+
+// Count Employees on Vacation
+$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying`, `id` FROM `employees` WHERE `fly`=1 ".$dept_filter);
+while($rec = mysqli_fetch_assoc($sql_count_fly)){$status_cont_fly = $rec["flying"];}
+
+// Count Total Employees
+$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) AS `tot`, `id` FROM `employees` WHERE 1=1 ".$dept_filter);
+while($rec = mysqli_fetch_assoc($sql_count_tot)){$status_cont_tot = $rec["tot"];}
+
+// Count Man Power Employees
+$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr`, `id` FROM `employees` WHERE `emp_sup_type`='man_power' AND `status`=1 ".$dept_filter);
+while($rec = mysqli_fetch_assoc($sql_count_man_power)){$status_cont_man_power = $rec["manpwr"];}
 
 if(isset($_POST['submit'])){
 	if($_POST['iqama_exp']){
@@ -238,17 +236,15 @@ if(isset($_POST['submit'])){
 								</div>
 							</div>							
 							<button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-update"></i> Search Birthday</button>
-							</form>
+							</form>ى
                         </div>
                         <?php } */?>
 							<?php
 
 							// Show expiry notifications for: Administrators, HR team, Finance team, IT team, and department managers
-							if ($is_system_admin || $isHR || $isDeptHr || $isDeptFinance || $isItTeam || 
-							    $user_type == "dept_user" || $user_type == "gm" || 
-							    strpos($user_role, '_Manager') !== false):
-
-								if($user_type == "dept_user" && !$is_system_admin){
+							if ($is_system_admin || $isHR || $isDeptHr ):
+								// Use the same access control pattern for expiry notifications
+								if(!$can_see_all_employees && isset($user_dept)){
 									$result=mysqli_query($conDB, "SELECT 
 									`e`.*, 
 									`d`.`dep_nme`,
@@ -333,30 +329,26 @@ if(isset($_POST['submit'])){
 						</div>
 						<?php } ?>
 						<?php
-							if($user_type == "dept_user" && !$is_system_admin){
-									// $result=mysqli_query($conDB, "SELECT 
-									// 	`e`.*, 
-									// 	`d`.`dep_nme`,
-									// 	`d`.`dep_nme_ar`,
-									// 	`c`.`name` AS `countryname_en`,
-									// 	`c`.`name_ar` AS `countryname_ar`
-									// 	LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
-									// 	LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
-									// 	WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1 AND `e`.`dept`='".$user_dept."' ");
-								}else{
-									$result=mysqli_query($conDB, "SELECT 
-										`e`.*, 
-										`d`.`dep_nme`,
-										`d`.`dep_nme_ar`,
-										`c`.`name` AS `countryname_en`,
-										`c`.`name_ar` AS `countryname_ar`
-										FROM `employees` as `e`
-										LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
-										LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
-										WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1
-									");
-								}
-								if( mysqli_num_rows($result) != 0 ){
+							// Query for expired Iqamas - use same access control
+							if(!$can_see_all_employees && isset($user_dept)){
+									// Query for department-restricted users (commented out in original)
+									// Keep it commented as the else block is used for all cases
+							}
+							// Always use the full query, filtered by department if needed
+							$expired_filter = $can_see_all_employees ? "" : " AND `e`.`dept`='".$user_dept."'";
+							$result=mysqli_query($conDB, "SELECT 
+								`e`.*, 
+								`d`.`dep_nme`,
+								`d`.`dep_nme_ar`,
+								`c`.`name` AS `countryname_en`,
+								`c`.`name_ar` AS `countryname_ar`
+								FROM `employees` as `e`
+								LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+								LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
+								WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1".$expired_filter."
+							");
+							
+							if( mysqli_num_rows($result) != 0 ){
 
 						?>
 						<div class="card-box">

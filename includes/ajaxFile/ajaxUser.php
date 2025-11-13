@@ -10,26 +10,35 @@ if ($ajaxType == 'add_customer') {
     $email_up = mysqli_real_escape_string($conDB, $_POST['email']);
     $user_id = intval($_POST['id']);
     
-    // Fetch employee name from employees table
-    $emp_name_query = "SELECT e.name as emp_name FROM admin_login al 
-                       LEFT JOIN employees e ON e.emp_id = al.emp_id 
-                       WHERE al.id = $user_id";
-    $emp_result = mysqli_query($conDB, $emp_name_query);
+    // Fetch employee name and emptype from employees table
+    $emp_query = "SELECT e.name as emp_name, e.emptype as emp_type FROM admin_login al 
+                  LEFT JOIN employees e ON e.emp_id = al.emp_id 
+                  WHERE al.id = $user_id";
+    $emp_result = mysqli_query($conDB, $emp_query);
     $emp_data = mysqli_fetch_assoc($emp_result);
     $fullname_up = $emp_data['emp_name'] ?? '';
+    $emp_type_up = $emp_data['emp_type'] ?? '';
     
-    $sql = "UPDATE `admin_login` SET `fullname`='".$fullname_up."', `user_type`='".$user_type_up."', `email`='".$email_up."', `updated_at`='".date('Y-m-d H:i:s')."' WHERE `id`='".$user_id."' ";
+    // Update admin_login with user_type and emp_type
+    $sql = "UPDATE `admin_login` SET 
+            `fullname` = '".$fullname_up."', 
+            `user_type` = '".$user_type_up."', 
+            `emp_type` = '".$emp_type_up."', 
+            `email` = '".$email_up."', 
+            `updated_at` = '".date('Y-m-d H:i:s')."' 
+            WHERE `id` = '".$user_id."'";
+    
     if(mysqli_query($conDB, $sql)){
         $data = [
             'title'   => "Updated!",
-            'message' => "This user has been updated successfully.",
+            'message' => "User has been updated successfully with role: " . $user_type_up,
             'type'    => 'success',
         ];
         echo json_encode($data);
     } else {
         $data = [
             'title'   => "Error!",
-            'message' => "User not updated because there are some error.",
+            'message' => "User not updated: " . mysqli_error($conDB),
             'type'    => 'error',
         ];
         echo json_encode($data);
@@ -55,7 +64,10 @@ if ($ajaxType == 'add_customer') {
     }
 } elseif($ajaxType == 'create_user') {
     $emp_id = $_POST['emp_id'];
+    $user_type = $_POST['user_type'];
+    $email = isset($_POST['email']) ? $_POST['email'] : '';
     
+    // Fetch employee details from employees table
     $sqlusr = "SELECT * FROM `employees` WHERE `emp_id`=?";
     $stmt = $conDB->prepare($sqlusr);
     $stmt->bind_param('i', $emp_id);
@@ -63,27 +75,70 @@ if ($ajaxType == 'add_customer') {
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
     
-    // Insert into admin_login
-    $sql = "INSERT INTO `admin_login` (`emp_id`,`id_iqama`,`fullname`, `user_type`, `dept`, `email`, `created_at`) VALUES (?,?,?, ?,?,?,?)";
+    if (!$row) {
+        $data = [
+            'title'   => "Error!",
+            'message' => "Employee not found.",
+            'type'    => 'error',
+        ];
+        echo json_encode($data);
+        exit;
+    }
+    
+    // Get emp_type from employees table
+    $emp_type = isset($row['emptype']) ? $row['emptype'] : '';
+    
+    // Check if user already exists
+    $check_sql = "SELECT id FROM `admin_login` WHERE `emp_id` = ?";
+    $check_stmt = $conDB->prepare($check_sql);
+    $check_stmt->bind_param('i', $emp_id);
+    $check_stmt->execute();
+    $check_result = $check_stmt->get_result();
+    
+    if ($check_result->num_rows > 0) {
+        $data = [
+            'title'   => "Error!",
+            'message' => "User account already exists for this employee.",
+            'type'    => 'error',
+        ];
+        echo json_encode($data);
+        $check_stmt->close();
+        exit;
+    }
+    $check_stmt->close();
+    
+    // Insert into admin_login with user_type and emp_type
+    $sql = "INSERT INTO `admin_login` (`emp_id`, `id_iqama`, `fullname`, `user_type`, `emp_type`, `dept`, `email`, `created_at`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt2 = $conDB->prepare($sql);
-    $stmt2->bind_param('iississ', $row['emp_id'],$row['iqama'],$row['name'],$_POST['user_type'],$row['dept'],$_POST['email'], date('Y-m-d H:i:s') );
+    $created_at = date('Y-m-d H:i:s');
+    $stmt2->bind_param('iissssss', 
+        $row['emp_id'],
+        $row['iqama'],
+        $row['name'],
+        $user_type,
+        $emp_type,
+        $row['dept'],
+        $email,
+        $created_at
+    );
     
     if($stmt2->execute()){
         $data = [
             'title'   => "Created!",
-            'message' => "New user has been created successfully.",
+            'message' => "New user has been created successfully with role: " . $user_type,
             'type'    => 'success',
         ];
         echo json_encode($data);
     } else {
         $data = [
             'title'   => "Error!",
-            'message' => "User not created because there was an error.",
+            'message' => "User not created: " . $stmt2->error,
             'type'    => 'error',
         ];
         echo json_encode($data);
     }
     $stmt2->close();
+    $stmt->close();
 } elseif($ajaxType == 'load_supervisors') {
     $emp_id = isset($_POST['emp_id']) ? intval($_POST['emp_id']) : 0;
     

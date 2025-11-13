@@ -74,7 +74,7 @@ try {
     }
     
     // --- PRORATED SALARY LOGIC ---
-    $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND approval_status = 'gm_approved' AND is_deductible = 1");
+    $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND current_status = 'approved' AND is_deductible = 1");
     $stmtVacationReturn->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
     
