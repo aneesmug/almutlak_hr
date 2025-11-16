@@ -9,6 +9,13 @@
  ****************************************************************/
 // require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+
+// Restrict access: Employees cannot view this detailed report page
+if (isset($isEmployee) && $isEmployee === true) {
+    header("Location: ./profile.php");
+    exit();
+}
+
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -26,6 +33,7 @@ if (mysqli_num_rows($query) == 1) {
                 e.name as employee_name,
                 e.avatar,
                 e.joining_date,
+                e.dept AS dept_id,
                 d.dep_nme AS `deptname`,
                 s.section_name,
                 c.name AS `country_name`
@@ -45,6 +53,30 @@ if (mysqli_num_rows($query) == 1) {
 
     if (!$loan_details) {
         die(__('loan_request_not_found'));
+    }
+
+    // Enforce department scoping: Only HR and System Admin can view other departments
+    // Otherwise allow if the user is in the approval chain for this loan request
+    $canSeeAll = ($is_system_admin ?? false) || ($isHR ?? false);
+    if (!$canSeeAll) {
+        $userDeptId = $user_dept ?? null;
+        $sameDept = ($userDeptId !== null && isset($loan_details['dept_id'])) ? ((int)$loan_details['dept_id'] === (int)$userDeptId) : false;
+        $inChain = false;
+        if (!$sameDept && !empty($loan_details['inv_no'])) {
+            if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'loan_request' WHERE ra.request_inv_no = ? AND ra.approver_id = ? LIMIT 1")) {
+                $inv = $loan_details['inv_no'];
+                $chk->bind_param('si', $inv, $empid);
+                if ($chk->execute()) {
+                    $resChk = $chk->get_result();
+                    $inChain = ($resChk && $resChk->num_rows > 0);
+                }
+                $chk->close();
+            }
+        }
+        if (!$sameDept && !$inChain) {
+            http_response_code(403);
+            die('<div style=\"padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;\">Access denied: You are not authorized to view this loan report.</div>');
+        }
     }
 
     // Fetch Payment History

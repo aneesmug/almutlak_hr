@@ -11,6 +11,13 @@
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+
+// Restrict access: Employees cannot view this detailed report page
+if (isset($isEmployee) && $isEmployee === true) {
+    header("Location: ./profile.php");
+    exit();
+}
+
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -29,11 +36,15 @@ if (mysqli_num_rows($query) == 1) {
                 v.fly_type as raw_fly_type,
                 v.attachment_path,
                 v.vacation_salary_type,
+                v.departure_date,
+                v.arrival_date,
                 e.name as employee_name,
                 e.avatar,
                 e.joining_date,
                 e.gosi,
                 e.country as country_id,
+                e.passport_number,
+                e.passport_exp,
                 d.dep_nme AS `deptname`,
                 s.section_name,
                 c.name AS `country_name`,
@@ -353,6 +364,12 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></small></span></div>
+                                        <?php if (!empty($request['departure_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('departure_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['departure_date']))); ?></small></span></div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($request['arrival_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['arrival_date']))); ?></small></span></div>
+                                        <?php endif; ?>
                                         <div class="detail-item"><span class="label"><?= __('total_days') ?></span> <span class="value highlight"><small><?=htmlspecialchars($request['vacdays']); ?> <?= __('days') ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></small></span></div>

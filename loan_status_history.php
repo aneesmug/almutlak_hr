@@ -29,6 +29,28 @@ $stmt->close();
 if (!$loan) {
     die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Loan request not found.</div>');
 }
+// Enforce department scoping: Only HR and System Admin can view other departments,
+// otherwise allow if the user is part of the approval chain for this loan
+$canSeeAll = ($is_system_admin ?? false) || ($isHR ?? false);
+if (!$canSeeAll) {
+    $userDeptId = $user_dept ?? null;
+    $sameDept = ($userDeptId !== null) ? ((int)$loan['dept'] === (int)$userDeptId) : false;
+    $inChain = false;
+    if (!$sameDept) {
+        if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'loan_request' WHERE ra.request_inv_no = ? AND ra.approver_id = ? LIMIT 1")) {
+            $chk->bind_param('si', $inv_no, $empid);
+            if ($chk->execute()) {
+                $resChk = $chk->get_result();
+                $inChain = ($resChk && $resChk->num_rows > 0);
+            }
+            $chk->close();
+        }
+    }
+    if (!$sameDept && !$inChain) {
+        http_response_code(403);
+        die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">Access denied: You are not authorized to view this request.</div>');
+    }
+}
 // Payments
 $payments = [];
 $total_paid = 0.0;

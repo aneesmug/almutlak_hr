@@ -34,52 +34,29 @@ The project uses a mix of `mysqli` and `PDO` for database operations. This is a 
       $stmt = $pdo->prepare("UPDATE emp_salary SET status = 0 WHERE id = :id");
       $stmt->execute(['id' => $existing['id']]);
       $pdo->commit();
-  ## Al‑Mutlak HR — Copilot instructions (concise)
+  } catch (PDOException $e) {
+      $pdo->rollBack();
+      // ... error handling
+  }
+  ```
+- **Guideline:** When modifying existing code, follow the style already in use in that file. For new features, **always use PDO with prepared statements**.
 
-  This repo is a legacy PHP web app (flat file architecture) for HR/operations. Pages are procedural `.php` scripts that include shared helpers from `includes/`. The goal of these notes is to make an AI code agent productive quickly by pointing out the repo's patterns, pitfalls, and places to look.
+## Frontend and AJAX
 
-  1) Big picture & dataflow
-  - UI pages (root .php files) include bootstrapping files (`includes/init.php` or `includes/db.php` / `includes/session_check.php`) which expose two common DB objects:
-    - $conDB — mysqli connection (many legacy files use procedural mysqli_* and occasional PDO-style ->prepare() on $conDB)
-    - $pdo — PDO instance (used by newer code)
-  - Typical flow: browser → page JS (assets/js/*.js) → AJAX endpoint (includes/ajaxFile/*.php) → DB ($conDB or $pdo) → JSON/HTML response. Example: `emp_end_of_service.php` uses `./includes/ajaxFile/ajax_eos_calculator.php` for server-side calc; `assets/js/jquery.app.js` calls many `includes/ajaxFile/` endpoints.
+- **jQuery:** The frontend heavily relies on jQuery for DOM manipulation, event handling, and AJAX requests. The main JavaScript file is `assets/js/jquery.app.js`.
+- **AJAX Handlers:** AJAX requests are typically handled by dedicated PHP files in the `includes/ajaxFile/` directory (e.g., `ajaxSmartRequest.php`). These files process the request and often return JSON.
+- **DataTables:** The plugin `DataTables` is used for displaying and managing tables (sorting, searching, pagination). Server-side processing for these tables is implemented in files like `includes/ajaxFile/smartRequestAjaxTbl.php`.
 
-  2) When to use which DB API
-  - Follow the DB style already used in the file you edit. If adding a new feature, prefer PDO with prepared statements and transactions (use $pdo). Example pattern: beginTransaction/commit/rollBack in `add_emp_slry.php`.
-  - If you must touch legacy mysqli queries that use `$conDB`, sanitize inputs with `mysqli_real_escape_string()` or convert the block to PDO carefully and keep callers consistent.
+## Common Workflows
 
-  3) Common conventions and examples (copy/paste friendly)
-  - Bootstrapping: prefer require_once __DIR__ . '/includes/init.php' (many ajax files use relative paths like `__DIR__ . '/../../includes/db.php'`).
-  - Authentication / session: pages include `includes/session_check.php` or `includes/header.php`. User info is often in variables like `$empid`, `$username`, `$userwel` and in `$_SESSION`.
-  - AJAX endpoints live under `includes/ajaxFile/` and expect `includes/db.php` or `init.php` to be loaded. Example endpoints: `ajaxSmartRequest.php`, `ajaxEmployee.php`, `ajax_eos_calculator.php`.
-  - Frontend: jQuery-first stack. Look at `assets/js/jquery.app.js` for client behaviour and routes. DataTables server-side handlers are in `includes/ajaxFile/` (e.g., `smartRequestAjaxTbl.php`).
+- **Adding a new page:** Create a new `.php` file. Include `includes/header.php` at the beginning and `includes/footer.php` at the end.
+- **Handling Form Submissions:** Forms are typically submitted to the same page (`$_SERVER['PHP_SELF']`). The logic for processing the `POST` request is at the top of the file, before any HTML is rendered.
+- **User Authentication:** Session management is handled in `includes/header.php`. Check for user authentication and authorization at the beginning of pages that require it. User details are stored in the `$_SESSION` superglobal.
 
-  4) Project‑specific patterns & gotchas
-  - Mixed DB styles: both `$conDB` (mysqli) and `$pdo` (PDO) coexist. New code: PDO. Small fixes: keep file style.
-  - Lots of inline HTML + PHP in the same file. Form POST handlers are at top-of-file before HTML is emitted.
-  - File upload directories and naming are application-specific (e.g., `assets/smt_payment_invoices/`), and many code paths call move_uploaded_file().
-  - cURL calls: some pages (e.g., `emp_end_of_service.php`) call external APIs and disable SSL verification for local/XAMPP environments. Be conservative—do not leak secrets.
-  - Translation helper: `__()` is used widely. Global translations are available via window.lang in templates.
+## Key Files and Directories
 
-  5) Developer workflow & quick checks
-  - There is no build tool; run the app with PHP (XAMPP) and access pages via the browser. Composer is present (vendor/ and composer.json)—run `composer install` if you update PHP dependencies.
-  - To debug: enable the site setting `developer_mode` (see `includes/db.php` which reads settings and sets timezone / error modes). Inspect web server (Apache/XAMPP) and PHP error logs.
-
-  6) Files to read first (high‑leverage)
-  - `includes/db.php` — creates `$conDB` and `$pdo`, timezone, charset, developer_mode.
-  - `includes/init.php` — bootstrapping used by many ajax handlers.
-  - `includes/session_check.php` / `includes/header.php` — session/auth model and user globals.
-  - `includes/ajaxFile/*` — how AJAX handlers accept input and return JSON.
-  - `assets/js/jquery.app.js` — client-side AJAX routes and UX patterns.
-  - Example pages: `emp_end_of_service.php`, `open_request.php`, `add_emp_slry.php`, `view_employee.php` — representative of common patterns.
-
-  7) Short rules for successful edits
-  - If you change DB access in a file, keep the same DB object style unless you update all call sites. When adding new endpoints, use PDO prepared statements and transactions.
-  - Sanitize inputs: use `mysqli_real_escape_string($conDB, $v)` in mysqli code; use bound params in PDO.
-  - Keep include paths correct: many ajax files use relative includes (e.g., `__DIR__ . '/../../includes/db.php'`). Prefer absolute `__DIR__` expressions.
-
-  8) Security & testing notes
-  - Avoid introducing raw string interpolation into SQL. The codebase contains many examples of direct interpolation—do not copy that pattern for new code.
-  - There are no automated tests in the repo. Use a local XAMPP instance and a disposable DB snapshot for manual verification.
-
-  If anything here is unclear or you want this condensed into a shorter checklist for non-expert agents, tell me which areas to trim or expand and I'll iterate.
+- `system/`: The root directory for the application.
+- `system/includes/`: Contains shared PHP code (DB connection, functions, header/footer).
+- `system/includes/ajaxFile/`: Contains backend handlers for AJAX requests.
+- `system/assets/`: Contains static assets like CSS, JavaScript, and images.
+- `system/db/`: Contains the database connection file `conn.php`.

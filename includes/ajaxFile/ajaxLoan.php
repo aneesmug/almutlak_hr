@@ -22,8 +22,12 @@
  *******************************************************************************************************************/
 
 require_once __DIR__ . '/../../includes/db.php';
+include("./../../includes/helper_functions.php"); // --- Helper Function (REQUIRED for notifications) ---
 
 header('Content-Type: application/json');
+// Ensure session and capture current submitter id
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+$current_user_id = $_SESSION['empid'] ?? 0;
 
 /**
  * Generate unique loan invoice number
@@ -521,11 +525,11 @@ function get_loan_details() {
             'end_of_service' => round($endOfServiceBenefit, 2),
             'total_salary' => round($total_salary, 2),
             'housing_allowance' => round($housing_allowance, 2),
-            // Backward-compatible field expected by frontend (EOS loan cap now fixed at 20,000)
-            'max_loan_amount' => 20000,
+            // Backward-compatible field (retain key) now reflects dynamic 40% EOS cap
+            'max_loan_amount' => round($endOfServiceBenefit * 0.40, 2),
             'max_advance_salary' => round($total_salary * 0.5, 2),
             'max_housing_loan' => round(min($housing_allowance * 6, 20000, $endOfServiceBenefit), 2),
-            'max_eos_loan' => round(min(20000, $endOfServiceBenefit), 2),
+            'max_eos_loan' => round($endOfServiceBenefit * 0.40, 2),
             'has_housing' => ($housing_allowance > 0),
             'show_full_details' => $show_full_details
         ]);
@@ -586,22 +590,24 @@ function apply_for_loan() {
 
     // Validate based on loan type
     if ($loan_type === 'end_of_service') {
-        // End of Service Loan Rules:
-        // - Max 20k, Min 1k
-        // - Open amount entry (no EOS benefit cap, no salary-based cap)
+        // Revised End of Service Loan Rules:
+        // - Maximum 40% of calculated End of Service benefit
+        // - No fixed 20k cap (business requested EOS * 40%)
         // - Installments up to 12 months
-        
-        if ($loan_amount < 1000) {
-            echo json_encode(['status' => 'error', 'title' => 'Amount Too Low', 'message' => 'Minimum loan amount for End of Service is SAR 1,000.', 'type' => 'error']);
-            return;
-        }
-        
-        if ($loan_amount > 20000) {
-            echo json_encode(['status' => 'error', 'title' => 'Amount Exceeded', 'message' => 'Maximum loan amount for End of Service is SAR 20,000.', 'type' => 'error']);
-            return;
-        }
+        // - Optional: minimum amount removed (can set if needed)
 
-        // No check against End of Service benefit per new policy
+        $endOfServiceBenefit = calculateEndOfService($joining_date, $total_salary);
+        $maxAllowedEOS = $endOfServiceBenefit * 0.40; // 40%
+
+        if ($loan_amount > $maxAllowedEOS) {
+            echo json_encode([
+                'status' => 'error',
+                'title' => 'Amount Exceeded',
+                'message' => 'Maximum allowed is 40% of your End of Service benefit: SAR ' . round($maxAllowedEOS, 2),
+                'type' => 'error'
+            ]);
+            return;
+        }
 
         // Get installments (must be provided and <= 12)
         if (!isset($_POST['installments'])) {
@@ -701,13 +707,14 @@ function apply_for_loan() {
     // Generate unique invoice number
     $inv_no = generate_loan_inv_no($conDB);
 
-    // Insert into emp_loan with inv_no and installments
-    $stmt = $conDB->prepare("INSERT INTO `emp_loan` (`inv_no`, `emp_id`, `loan_type`, `loan_amount`, `installments`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
+    // Insert into emp_loan with inv_no and installments (log submitter)
+    $stmt = $conDB->prepare("INSERT INTO `emp_loan` (`inv_no`, `emp_id`, `submitted_by_emp_id`, `loan_type`, `loan_amount`, `installments`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')");
     if ($stmt === false) {
         echo json_encode(['status' => 'error', 'title' => 'Database Error', 'message' => 'Failed to prepare the SQL statement: ' . $conDB->error, 'type' => 'error']);
         return;
     }
-    $stmt->bind_param("sssididdss", $inv_no, $emp_id, $loan_type, $loan_amount, $installments, $interest_rate, $total_payable, $monthly_deduction, $start_date_str_db, $end_date_str);
+    $submitted_by = isset($_SESSION['empid']) ? (int)$_SESSION['empid'] : null;
+    $stmt->bind_param("ssissididdss", $inv_no, $emp_id, $submitted_by, $loan_type, $loan_amount, $installments, $interest_rate, $total_payable, $monthly_deduction, $start_date_str_db, $end_date_str);
     if ($stmt->execute()) {
         $loan_id = $stmt->insert_id;
         $stmt->close();
@@ -751,6 +758,70 @@ function apply_for_loan() {
             $hist_pending->bind_param("ssss", $inv_no, $emp_id, $note_pending, $pending_status);
             $hist_pending->execute();
             $hist_pending->close();
+            
+            // --- [NEW] SEND NOTIFICATION TO FIRST APPROVER ---
+            $first_level = min(array_keys($approvers));
+            $first_approver_id = $approvers[$first_level];
+            
+            error_log("apply_for_loan: Attempting to send notification to first approver: $first_approver_id");
+            
+            if (function_exists('getEmployeeDetailsForApproval')) {
+                $first_approver_details = getEmployeeDetailsForApproval($conDB, $first_approver_id);
+                
+                if ($first_approver_details) {
+                    // Send browser notification
+                    if (function_exists('create_browser_notification')) {
+                        $notification_title = "New Loan Request";
+                        $notification_message = "A new loan request ($inv_no) from employee ID $emp_id for SAR " . number_format($loan_amount, 2) . " is pending your approval.";
+                        $notification_url = "all_applied_loan.php?status=my_pending";
+                        $notif_result = create_browser_notification($conDB, $first_approver_id, $notification_title, $notification_message, $notification_url);
+                        error_log("apply_for_loan: Browser notification result: " . ($notif_result ? 'SUCCESS' : 'FAILED'));
+                    } else {
+                        error_log("apply_for_loan: create_browser_notification function NOT FOUND");
+                    }
+                    
+                    // Send email notification
+                    if (!empty($first_approver_details['email']) && function_exists('send_approval_email')) {
+                        error_log("apply_for_loan: Attempting to send email to: " . $first_approver_details['email']);
+                        
+                        // Get employee name for template
+                        $employee_name = 'Employee';
+                        $emp_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$emp_id' LIMIT 1");
+                        if ($emp_result && $emp_row = mysqli_fetch_assoc($emp_result)) {
+                            $employee_name = $emp_row['name'];
+                        }
+                        if ($emp_result) mysqli_free_result($emp_result);
+                        
+                        // Prepare template data
+                        $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+                        $template_data = [
+                            'APPROVER_NAME' => $first_approver_details['name'],
+                            'REQUEST_ID' => $inv_no,
+                            'EMPLOYEE_NAME' => $employee_name,
+                            'LOAN_TYPE' => str_replace('_', ' ', $loan_type),
+                            'LOAN_AMOUNT' => number_format($loan_amount, 2),
+                            'INSTALLMENTS' => $installments,
+                            'REQUEST_URL' => $base_url . '/all_applied_loan.php?status=my_pending'
+                        ];
+                        
+                        $email_subject = "New Loan Request Pending Approval - " . ucfirst(str_replace('_', ' ', $loan_type));
+                        $email_result = send_approval_email($conDB, $first_approver_details['email'], $first_approver_details['name'], $email_subject, 'loan_request', $template_data);
+                        error_log("apply_for_loan: Email result: " . ($email_result ? 'SUCCESS' : 'FAILED'));
+                    } else {
+                        if (empty($first_approver_details['email'])) {
+                            error_log("apply_for_loan: First approver has NO EMAIL in database");
+                        }
+                        if (!function_exists('send_approval_email')) {
+                            error_log("apply_for_loan: send_approval_email function NOT FOUND");
+                        }
+                    }
+                } else {
+                    error_log("apply_for_loan: Could not get approver details for emp_id: $first_approver_id");
+                }
+            } else {
+                error_log("apply_for_loan: getEmployeeDetailsForApproval function NOT FOUND");
+            }
+            // --- [END NEW] ---
         }
         
         echo json_encode(['status' => 'success', 'title' => 'Success', 'message' => 'Your loan application has been submitted successfully.', 'type' => 'success']);
@@ -976,12 +1047,6 @@ function get_loan_balance() {
 function add_manual_payment() {
     global $conDB;
     
-    // Debug logging
-    error_log("=== Manual Payment Debug ===");
-    error_log("POST data: " . print_r($_POST, true));
-    error_log("FILES data: " . print_r($_FILES, true));
-    error_log("GET data: " . print_r($_GET, true));
-    
     // Handle emp_id - might come from different sources
     $emp_id = null;
     if (isset($_POST['emp_id'])) {
@@ -1072,7 +1137,7 @@ function add_manual_payment() {
 
     // Handle file upload
     $attachment_filename = null;
-    if ($_FILES[$file_field]['error'] == UPLOAD_ERR_OK) {
+    if ($file_field && isset($_FILES[$file_field]) && $_FILES[$file_field]['error'] == UPLOAD_ERR_OK) {
         $allowed_types = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 
                           'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
         $file_type = $_FILES[$file_field]['type'];
@@ -1521,15 +1586,17 @@ function add_manual_loan_history() {
         // Generate unique invoice number
         $inv_no = generate_loan_inv_no($conDB);
 
-        $stmt_loan = $conDB->prepare("INSERT INTO `emp_loan` (`inv_no`, `emp_id`, `loan_type`, `loan_amount`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`, `disbursement_receipt_id`, `disbursement_attachment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt_loan = $conDB->prepare("INSERT INTO `emp_loan` (`inv_no`, `emp_id`, `submitted_by_emp_id`, `loan_type`, `loan_amount`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`, `disbursement_receipt_id`, `disbursement_attachment`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         
         $interest_rate = 0.00;
         $disbursement_receipt_id = $_POST['disbursement_receipt_id'] ?? null;
 
+        $submitted_by = isset($_SESSION['empid']) ? (int)$_SESSION['empid'] : null;
         $stmt_loan->bind_param(
-            "sssddddsssss",
+            "ssisddddsssss",
             $inv_no,
             $_POST['emp_id'],
+            $submitted_by,
             $_POST['loan_type'],
             $_POST['loan_amount'],
             $interest_rate,
@@ -1659,12 +1726,14 @@ function add_simplified_manual_loan() {
         // Generate unique invoice number
         $inv_no = generate_loan_inv_no($conDB);
         
-        $stmt_loan = $conDB->prepare("INSERT INTO `emp_loan` (`inv_no`, `emp_id`, `loan_type`, `loan_amount`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`) VALUES (?, ?, 'regular', ?, 0.00, ?, ?, ?, ?, ?)");
+        $stmt_loan = $conDB->prepare("INSERT INTO `emp_loan` (`inv_no`, `emp_id`, `submitted_by_emp_id`, `loan_type`, `loan_amount`, `interest_rate`, `total_payable`, `monthly_deduction`, `start_date`, `end_date`, `status`) VALUES (?, ?, ?, 'regular', ?, 0.00, ?, ?, ?, ?, ?)");
         
+        $submitted_by = isset($_SESSION['empid']) ? (int)$_SESSION['empid'] : null;
         $stmt_loan->bind_param(
-            "ssddssss",
+            "ssidddsss",
             $inv_no,
             $emp_id,
+            $submitted_by,
             $total_amount,
             $total_amount,
             $total_amount,
@@ -1712,6 +1781,11 @@ function add_simplified_manual_loan() {
 function check_loan_eligibility() {
     global $conDB;
     
+    // Determine viewer context from session (to hide EOS details from employees)
+    if (session_status() == PHP_SESSION_NONE) session_start();
+    $logged_in_user_type = $_SESSION['user_type'] ?? null;
+    $logged_in_emp_id = $_SESSION['empid'] ?? null;
+
     if (!isset($_POST['emp_id'], $_POST['loan_type'])) {
         echo json_encode(['status' => 'error', 'message' => 'Employee ID and loan type required.']);
         return;
@@ -1738,6 +1812,9 @@ function check_loan_eligibility() {
     $joining_date = $row['joining_date'];
     $endOfServiceBenefit = calculateEndOfService($joining_date, $total_salary);
 
+    // Decide whether to show full EOS details (hide when an employee is viewing their own data)
+    $show_full_details = !($logged_in_user_type === 'employee' && $logged_in_emp_id === $emp_id);
+
     $eligibility = [
         'status' => 'success',
         'eligible' => true,
@@ -1745,21 +1822,30 @@ function check_loan_eligibility() {
         'max_amount' => 0,
         'min_amount' => 0,
         'max_installments' => 0,
-        'eos_benefit' => round($endOfServiceBenefit, 2),
+        // Only include EOS benefit figure when allowed to show full details
+        'eos_benefit' => $show_full_details ? round($endOfServiceBenefit, 2) : null,
         'total_salary' => round($total_salary, 2),
-        'housing_allowance' => round($housing_allowance, 2)
+        'housing_allowance' => round($housing_allowance, 2),
+        'show_full_details' => $show_full_details
     ];
 
     if ($loan_type === 'end_of_service') {
+        $maxAllowedEOS = $endOfServiceBenefit * 0.40;
         $eligibility['eligible'] = true;
-        $eligibility['min_amount'] = 1000;
-        $eligibility['max_amount'] = 20000;
+        $eligibility['min_amount'] = 0; // No minimum specified in new requirement
+        $eligibility['max_amount'] = round($maxAllowedEOS, 2);
         $eligibility['max_installments'] = 12;
-        $eligibility['message_key'] = 'loan_eos_eligible_message';
-        $eligibility['message_data'] = [
-            'min' => 1000,
-            'max' => 20000
-        ];
+        if ($show_full_details) {
+            $eligibility['message_key'] = 'loan_eos_eligible_message_40pct';
+            $eligibility['message_data'] = [
+                'eos_total' => round($endOfServiceBenefit, 2),
+                'max_40pct' => round($maxAllowedEOS, 2)
+            ];
+        } else {
+            // Do not expose EOS figures in the message for employees
+            unset($eligibility['message_key']);
+            $eligibility['message'] = 'You are eligible for End of Service loan. You may apply within your allowed limit.';
+        }
 
     } elseif ($loan_type === 'housing') {
         if ($housing_allowance <= 0) {

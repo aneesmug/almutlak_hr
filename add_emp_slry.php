@@ -20,17 +20,16 @@
 		foreach ($allRecords as $rec) {
 			$emprow = $rec;
 		}
-		if($emprow["status"] == "0" && $emprow["note"] == "expired"){
-			$note_get = "Expired";
-		} elseif($emprow["status"] == "0" && $emprow["note"] == "terminat"){
-			$note_get = "Terminated";
-		}	
+	if($emprow["status"] == "0" && $emprow["note"] == "expired"){
+		$note_get = "Expired";
+	} elseif($emprow["status"] == "0" && $emprow["note"] == "terminat"){
+		$note_get = "Terminated";
+	}	
 	} else {
-			//when the id not equals id show database
-		header("Location: ./reg_employee.php");
-	}
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
+		//when the id not equals id show database
+		header("Location: ./view_employee.php?emp_id=" . $empidget);
+		exit;
+	}    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
         try {
             $postedTotal = (float)$_POST['totalsal'];
 
@@ -85,27 +84,53 @@
             $sql = "INSERT INTO emp_salary (" . implode(', ', $columns) . ") 
                     VALUES (" . implode(', ', $placeholders) . ")";
             $stmt = $pdo->prepare($sql);
-            $stmt->execute($salaryData);
-            // Commit transaction
-            $pdo->commit();
-            salert(__('success_title'), __("salary_details_saved_successfully!"), "success", "view_employee.php?emp_id={$emprow['empid']}", __('ok'));
-        } catch (PDOException $e) {
-            // Only roll back if a transaction is active
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            salert(__('error_title'), __('database_error').' '.$e->getMessage(), "error", "add_emp_slry.php?emp_id={$emprow['empid']}" , __('ok'));
-
-        } catch (Exception $e) {
-            // Only roll back if a transaction is active
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            salert(__('error_title'), ' '.$e->getMessage().' ', "error", "add_emp_slry.php?emp_id={$emprow['empid']}", __('ok'));
+        $stmt->execute($salaryData);
+        // Commit transaction
+        $pdo->commit();
+        
+        // Set success message in session
+        $_SESSION['swal_alert'] = [
+            'title' => __('success_title'),
+            'message' => __("salary_details_saved_successfully!"),
+            'type' => 'success'
+        ];
+        
+        header("Location: view_employee.php?emp_id={$emprow['empid']}");
+        exit();
+        
+    } catch (PDOException $e) {
+        // Only roll back if a transaction is active
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
         }
-    }
+        
+        // Set error message in session
+        $_SESSION['swal_alert'] = [
+            'title' => __('error_title'),
+            'message' => __('database_error') . ' ' . $e->getMessage(),
+            'type' => 'error'
+        ];
+        
+        header("Location: add_emp_slry.php?emp_id={$emprow['empid']}");
+        exit();
 
-?>
+    } catch (Exception $e) {
+        // Only roll back if a transaction is active
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        
+        // Set error message in session
+        $_SESSION['swal_alert'] = [
+            'title' => __('error_title'),
+            'message' => $e->getMessage(),
+            'type' => 'error'
+        ];
+        
+        header("Location: add_emp_slry.php?emp_id={$emprow['empid']}");
+        exit();
+    }
+}?>
 
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>

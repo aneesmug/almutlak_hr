@@ -5001,6 +5001,9 @@ function openVacationApplyModal(empid, deptId, country) {
             }).on('changeDate', function (e) {
                 var startDate = e.date;
                 $('#end_date').datepicker('setStartDate', startDate);
+                // Update flight date pickers to respect new start date
+                $('#departure_date').datepicker('setStartDate', startDate);
+                $('#arrival_date').datepicker('setStartDate', startDate);
             });
 
             $('#end_date').datepicker({
@@ -5010,6 +5013,28 @@ function openVacationApplyModal(empid, deptId, country) {
             }).on('changeDate', function (e) {
                 var endDate = e.date;
                 $('#start_date').datepicker('setEndDate', endDate);
+                // Update flight date pickers to respect new end date
+                $('#departure_date').datepicker('setEndDate', endDate);
+                $('#arrival_date').datepicker('setEndDate', endDate);
+            });
+
+            // Initialize departure and arrival date pickers
+            $('#departure_date').datepicker({
+                format: "yyyy-mm-dd",
+                todayHighlight: true,
+                autoclose: true
+            }).on('changeDate', function (e) {
+                var departureDate = e.date;
+                $('#arrival_date').datepicker('setStartDate', departureDate);
+            });
+
+            $('#arrival_date').datepicker({
+                format: "yyyy-mm-dd",
+                todayHighlight: true,
+                autoclose: true
+            }).on('changeDate', function (e) {
+                var arrivalDate = e.date;
+                $('#departure_date').datepicker('setEndDate', arrivalDate);
             });
 
             // Original replacement person loader
@@ -5054,10 +5079,10 @@ function openVacationApplyModal(empid, deptId, country) {
 
             // ...existing code...
             
-            // MODIFIED: Toggle Fields Logic - now includes salary type section
+            // MODIFIED: Toggle Fields Logic - now includes salary type section, flight dates, and remarks
             function toggleVacationFields() {
                 const selectedVac = document.querySelector('input[name="vac_type"]:checked');
-                $('#flyTypeSection, #replacementSection, #date_select, #notesSection, #salaryTypeSection').addClass('d-none');
+                $('#flyTypeSection, #replacementSection, #date_select, #notesSection, #salaryTypeSection, #flightDatesSection').addClass('d-none');
                 if (!selectedVac) return;
                 const vacValue = selectedVac.value;
                 if (vacValue === 'Local Vacation' || vacValue === 'Fly') {
@@ -5070,6 +5095,10 @@ function openVacationApplyModal(empid, deptId, country) {
                             // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                             if (flyVal === 'annual') {
                                 $('#salaryTypeSection').removeClass('d-none');
+                                // Show flight dates AND remarks ONLY for Fly + Annual
+                                if (vacValue === 'Fly') {
+                                    $('#flightDatesSection, #notesSection').removeClass('d-none');
+                                }
                             }
                         }
                     }
@@ -5081,11 +5110,15 @@ function openVacationApplyModal(empid, deptId, country) {
                                 // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                                 if (flyVal === 'annual') {
                                     $('#salaryTypeSection').removeClass('d-none');
+                                    // Show flight dates AND remarks ONLY for Fly + Annual
+                                    if (vacValue === 'Fly') {
+                                        $('#flightDatesSection, #notesSection').removeClass('d-none');
+                                    }
                                 } else {
-                                    $('#salaryTypeSection').addClass('d-none');
+                                    $('#salaryTypeSection, #flightDatesSection, #notesSection').addClass('d-none');
                                 }
                             } else {
-                                $('#replacementSection, #date_select, #salaryTypeSection').addClass('d-none');
+                                $('#replacementSection, #date_select, #salaryTypeSection, #flightDatesSection, #notesSection').addClass('d-none');
                             }
                         });
                     });
@@ -5128,6 +5161,32 @@ function openVacationApplyModal(empid, deptId, country) {
                     if (!replacement) {
                         Swal.showValidationMessage(__('replacement_person_required_validation'));
                         return false;
+                    }
+                    
+                    // Validate flight dates for Fly + Annual vacation
+                    if (selectedRadio === 'Fly' && flyType === 'annual') {
+                        const departureDate = $('#departure_date').val();
+                        const arrivalDate = $('#arrival_date').val();
+                        if (!departureDate || !arrivalDate) {
+                            Swal.showValidationMessage(__('flight_dates_required_validation') || 'Please select departure and arrival dates');
+                            return false;
+                        }
+                        
+                        // Validate that flight dates are within vacation period
+                        const start = new Date(startDate);
+                        const end = new Date(endDate);
+                        const departure = new Date(departureDate);
+                        const arrival = new Date(arrivalDate);
+                        
+                        if (departure < start || departure > end) {
+                            Swal.showValidationMessage(__('departure_date_must_be_between_vacation_dates') || 'Departure date must be between start date and return date');
+                            return false;
+                        }
+                        
+                        if (arrival < start || arrival > end) {
+                            Swal.showValidationMessage(__('arrival_date_must_be_between_vacation_dates') || 'Arrival date must be between start date and return date');
+                            return false;
+                        }
                     }
                 }
             }
@@ -6714,6 +6773,24 @@ function vacationApply_HTML(country) {
                 </div>
             </div>
 
+            <!-- Flight Dates (Departure & Arrival) -->
+            <div class="vacation-card d-none" id="flightDatesSection">
+                <div class="vacation-card-header">
+                    <i class="fa fa-plane"></i>
+                    ${__('flight_dates') || 'Flight Dates'}
+                </div>
+                <div class="date-range-container">
+                    <div class="date-field">
+                        <label class="form-label-modern">${__('departure_date') || 'Departure Date'}<span class="text-danger">*</span></label>
+                        <input type="text" name="departure_date" placeholder="${__('select_departure_date') || 'Select departure date'}" class="form-control form-control-modern" id="departure_date">
+                    </div>
+                    <div class="date-field">
+                        <label class="form-label-modern">${__('arrival_date') || 'Arrival Date'}<span class="text-danger">*</span></label>
+                        <input type="text" name="arrival_date" placeholder="${__('select_arrival_date') || 'Select arrival date'}" class="form-control form-control-modern" id="arrival_date">
+                    </div>
+                </div>
+            </div>
+
             <!-- Replacement Person -->
             <div class="vacation-card d-none" id="replacementSection">
                 <div class="vacation-card-header">
@@ -6729,7 +6806,7 @@ function vacationApply_HTML(country) {
             <div class="vacation-card d-none" id="notesSection">
                 <div class="vacation-card-header">
                     <i class="fa fa-sticky-note"></i>
-                    ${__('notes')}<span class="text-danger">*</span>
+                    ${__('notes')}
                 </div>
                 <input type="text" name="remarks" class="form-control form-control-modern" id="remarks" autocomplete="off" placeholder="${__('enter_notes_placeholder') || 'Enter additional notes...'}">
             </div>

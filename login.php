@@ -98,7 +98,20 @@ try {
             // ---> END: LANGUAGE LOADING <---
 
             // Non-Employee OTP Login
-            if (empty($user['email'])) { throw new Exception('Cannot send OTP. No email is registered for this account.'); }
+            // if (empty($user['email'])) { throw new Exception("Our system could not send a One-Time Password (OTP) as there is no email address on file for this account.<br /> To authenticate and regain access, you must contact our support department."); }
+            if (empty($user['email'])) {
+                $supportEmail = "it@almutlak.com";
+                $supportPhone = "01-2644-4426 Ext: 310";
+                throw new Exception(
+                    "Authentication System Notice: No registered email address found for this account.<br><br>" .
+                    "To maintain account security, we are unable to issue a One-Time Password (OTP) at this time.<br>" .
+                    "Please contact our Support Team for assistance:<br>" .
+                    "• Email: {$supportEmail}<br>" .
+                    "• Phone: {$supportPhone}<br><br>" .
+                    "Our team will verify your identity and help restore account access."
+                );
+            }
+
 
             $otp = sprintf("%'.06d", mt_rand(0, 999999));
             $otp_hash = password_hash($otp, PASSWORD_DEFAULT);
@@ -137,7 +150,8 @@ try {
                 // Define variables
                 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
                 $domainName = $_SERVER['HTTP_HOST'];
-                $logoUrl = $protocol . $domainName . '/assets/images/logo.png'; // Use white logo for dark theme
+                $logoUrl = 'https://hr.almutlaksystem.com/assets/logo/logo_color_sm.png'; // Use white logo for dark theme
+                // $logoUrl = $protocol . $domainName . '/assets/images/logo.png'; // Use white logo for dark theme
                 
                 // Replace placeholders with variables
                 $replacements = [

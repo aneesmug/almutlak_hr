@@ -68,7 +68,7 @@ if(isset($_POST['submit'])){
             $idiscount_po = escape_string(/*$conDB,*/ $idiscount_array[$i]);
             $total_cost_po = escape_string(/*$conDB,*/ $total_cost_array[$i]);
 
-            mysqli_query($conDB, "INSERT INTO `smart_request` (`inv_no`,`tally_id`,`injazat_id`,`location`, `sub_type`, `item_name`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by` ) VALUES ('".$inv_no_get."','".$tally_id_po."','".$injazat_id_po."','".$location_po."','".$sub_type_po."','".$item_name_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."' )");
+            mysqli_query($conDB, "INSERT INTO `smart_request` (`inv_no`,`tally_id`,`injazat_id`,`location`, `sub_type`, `item_name`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by`, `submitted_by_emp_id` ) VALUES ('".$inv_no_get."','".$tally_id_po."','".$injazat_id_po."','".$location_po."','".$sub_type_po."','".$item_name_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."', '".(int)$empid."' )");
 
         } 
 

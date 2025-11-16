@@ -80,9 +80,89 @@ if ($emprow['user_type'] !== 'employee') {
 						<p class="text-light mb-0"><?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>
 						<p class="text-light mb-0"><?= __('balance_vacations') ?>:
 							<?php
+							// Dynamic current-day available vacation balance calculation
 							$finalvacd = $emprow["total_remaining_leave"];
-							echo $finalvacd < 0 ? "<span class='badge badge-danger badge-pill'>" . $finalvacd . __('days') . " </span>" : $finalvacd . " " . __('days');
+							$dynamicBalance = null;
+							$calculatedDetails = null;
+							$empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];
+							
+							if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
+							    // Attempt live calculation using VacationCalculator
+							    $calcFile = __DIR__ . '/vacation_calculator.php';
+							    if (file_exists($calcFile)) {
+							        require_once $calcFile;
+							        if (class_exists('VacationCalculator')) {
+							            try {
+							                $vc = new VacationCalculator($conDB);
+							                $live = $vc->getCalculatedBalance($empid_for_calc);
+							                if ($live && isset($live['available_balance'])) {
+							                    // Use available_balance (earned + carryover - used)
+							                    $dynamicBalance = (float)$live['available_balance'];
+							                    $calculatedDetails = $live; // Store full details for tooltip
+							                    
+							                    // Persist (upsert) latest live balance for transparency
+							                    if (isset($live['contract_id'], $live['period_start'], $live['period_end'])) {
+							                        $vac_id_null = null;
+							                        $period_start_str = $live['period_start'] instanceof DateTime ? $live['period_start']->format('Y-m-d') : (string)$live['period_start'];
+							                        $period_end_str = $live['period_end'] instanceof DateTime ? $live['period_end']->format('Y-m-d') : (string)$live['period_end'];
+							                        
+							                        $stmt_up = $conDB->prepare("INSERT INTO `emp_vacation_balance` (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `used_days`=VALUES(`used_days`), `remaining_balance`=VALUES(`remaining_balance`), `available_balance`=VALUES(`available_balance`), `carryover_days`=VALUES(`carryover_days`), `last_updated`=NOW()");
+							                        if ($stmt_up) {
+							                            $total_d = (int)$live['total_days'];
+							                            $used_d = (int)$live['used_days'];
+							                            $remain_d = (float)$live['remaining_balance'];
+							                            $avail_d = (float)$live['available_balance'];
+							                            $carry_d = (float)$live['carryover_days'];
+							                            $stmt_up->bind_param(
+							                                'ssissiddd',
+							                                $empid_for_calc,
+							                                $vac_id_null,
+							                                $live['contract_id'],
+							                                $period_start_str,
+							                                $period_end_str,
+							                                $total_d,
+							                                $used_d,
+							                                $remain_d,
+							                                $avail_d,
+							                                $carry_d
+							                            );
+							                            @$stmt_up->execute();
+							                            $stmt_up->close();
+							                        }
+							                    }
+							                }
+							            } catch (Throwable $e) {
+							                // Silently fail; fallback to existing static value
+							                error_log("VacationCalculator error: " . $e->getMessage());
+							            }
+							        }
+							    }
+							}
+							$displayBalance = ($dynamicBalance !== null ? $dynamicBalance : $finalvacd);
+							// Build tooltip with calculated breakdown
+							$tooltipText = '';
+							if ($calculatedDetails) {
+							    $earned = (float)$calculatedDetails['available_balance'] + (float)$calculatedDetails['used_days'] - (float)$calculatedDetails['carryover_days'];
+							    $tooltipText = 'Calculated: ' 
+							        . 'Total=' . number_format((float)$calculatedDetails['total_days'], 2) . 'd, '
+							        . 'Used=' . number_format((float)$calculatedDetails['used_days'], 2) . 'd, '
+							        . 'Earned=' . number_format($earned, 2) . 'd, '
+							        . 'Carryover=' . number_format((float)$calculatedDetails['carryover_days'], 2) . 'd';
+							}
 							?>
+							<?php if ($tooltipText): ?>
+								<span title="<?= htmlspecialchars($tooltipText) ?>" style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.5);">
+							<?php endif; ?>
+								<?= $displayBalance < 0 
+								    ? "<span class='badge badge-danger badge-pill'>" . number_format($displayBalance, 2) . __('days') . " </span>" 
+								    : number_format($displayBalance, 2) . " " . __('days'); 
+								?>
+							<?php if ($tooltipText): ?>
+								</span>
+							<?php endif; ?>
+							<?php if ($dynamicBalance !== null && $dynamicBalance != $finalvacd): ?>
+								<br/><small class="text-muted">(Master: <?= number_format($finalvacd, 2) ?> <?= __('days') ?>)</small>
+							<?php endif; ?>
 						</p>
 						<?php if ($emprow["status"] == 0) : ?>
 							<p class="text-light mb-0">
@@ -109,11 +189,12 @@ if ($emprow['user_type'] !== 'employee') {
 											<i class="fa fa-solid fa-project-diagram mr-2"></i> <?= __('assign_asset') ?>
 										</a>
 										<?php endif; ?>
-										<?php if (empty($emprow['has_active_regular_loan']) /*&& $is_system_admin || $isDeptHr || $isHR*/ ) : ?>
+										<?php  ?>
+										<?php if (empty($emprow['has_active_regular_loan']) && $is_system_admin || $isDeptHr || $isHR ) : ?>
 											<a href="javascript:void(0);" class="text-warning dropdown-item applyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 												<i class="fa fa-money-bill-trend-up mr-2"></i> <?= __('apply_loan') ?>
 											</a>
-										<?php endif; ?>
+										<?php endif; /*?>
 										<?php if (empty($emprow['has_active_emergency_loan']) && $is_system_admin || $isDeptHr || $isHR) : ?>
 											<a href="javascript:void(0);" class="text-info dropdown-item applyEmergencyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
 												<i class="fa fa-money-bill-wheat mr-2"></i> <?= __('emergency_loan') ?>
@@ -124,6 +205,7 @@ if ($emprow['user_type'] !== 'employee') {
 												<i class="fa fa-solid fa-qrcode-read mr-2"></i> <?= __('send_qr') ?>
 											</a>
 										<?php endif; ?>
+										<?php */ ?>
 										<?php if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) : ?>
 
 											<?php if ($emprow['emp_sup_type'] != "man_power") : ?>
@@ -196,6 +278,7 @@ if ($emprow['user_type'] !== 'employee') {
 										$can_modify_employee = (
 											$is_system_admin || 
 											$user_type === 'hr_operations' ||
+											$user_type === 'hr_payroll' ||
 											$user_type === 'hr_recruitment'
 										);
 										?>

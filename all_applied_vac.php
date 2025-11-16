@@ -38,6 +38,12 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 // $user_type, $empid, $user_dept, $is_system_admin, $isHR, $isDeptHr are available from session_check.php
 
+// Restrict access: Employees cannot view this detailed report page
+if (isset($isEmployee) && $isEmployee === true) {
+    header("Location: ./profile.php");
+    exit();
+}
+
 // --- Get Request Type ID for 'vacation_request' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'vacation_request' LIMIT 1");
 if (!$type_query || mysqli_num_rows($type_query) == 0) {
@@ -60,8 +66,8 @@ $all_statuses = [
 
 // 1. Set up variables
 $search_term = $_GET['search'] ?? '';
-$limit_options = [9, 12, 15];
-$perpage = 9;
+$limit_options = [8, 12, 15];
+$perpage = 8;
 $items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $perpage;
 $show_all = isset($_GET['limit']) && $_GET['limit'] == 'all';
 if ($show_all) {
@@ -90,6 +96,11 @@ $where_clauses = [];
 $params = [];
 $types = "";
 $join_sql = "";
+// Track whether we've already applied a department filter in a specific branch
+$dept_filter_applied = false;
+// Determine if the user can see records for all departments
+// Per requirement: Only HR and System Admin can see all departments
+$can_see_all_depts = ($is_system_admin ?? false) || ($isHR ?? false);
 
 // 3. Based on the effective filter, build the query
 $page_title = $all_statuses[$current_filter] ?? __('all_requests');
@@ -111,6 +122,7 @@ if ($current_filter === 'my_pending') {
     $where_clauses[] = "e.dept = ?";
     $params[] = $user_dept;
     $types .= "i";
+    $dept_filter_applied = true;
 
 } elseif ($current_filter === 'my_team') {
     // Show requests for the current user's direct reports (supervisor) or entire department (manager)
@@ -122,6 +134,7 @@ if ($current_filter === 'my_pending') {
         $where_clauses[] = "e.dept = ?";
         $params[] = $user_dept;
         $types .= "i";
+        $dept_filter_applied = true;
     } else {
         // Supervisors (or default): show only direct reports
         $where_clauses[] = "e.supervisor_id = ?";
@@ -142,7 +155,7 @@ if ($current_filter === 'my_pending') {
 }
 // 'all' adds no WHERE clause, but also applies 30-day filter for approved records when no search
 elseif ($current_filter === 'all' && empty($search_term)) {
-    // When viewing 'all' without search, limit approved records to last 30 days
+    // When viewing 'all' without search, limit approved records to last 15 days
     $where_clauses[] = "(v.current_status != 'approved' OR v.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY))";
 }
 
@@ -154,11 +167,14 @@ if (!empty($search_term)) {
     $types .= "sss";
 }
 
-// System admins see all departments. Other users (if not using 'my_pending' or 'all') are restricted to their dept.
-if (!$is_system_admin && !in_array($current_filter, ['my_pending', 'all', 'my_dept'])) {
-    $where_clauses[] = "e.dept = ?";
-    $params[] = $user_dept;
-    $types .= "i";
+// Enforce department scoping: Only HR and System Admin can see all departments.
+// Everyone else is restricted to their own department for history views.
+if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending') {
+    // Restrict to user's department OR any request where current user is in approval chain
+    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    array_push($params, $user_dept, $request_type_id, $empid);
+    $types .= "iii";
+    $dept_filter_applied = true;
 }
 
 
@@ -198,6 +214,7 @@ if ($total_items > 0) {
     $sql = "SELECT 
         v.*, 
         v.attachment_path,
+        v.travel_email_sent,
         e.name as employee_name,
         e.dept,
         e.supervisor_id,
@@ -264,10 +281,24 @@ if ($total_items > 0) {
     $stmt->close();
 }
 
-// Get the total unfiltered count
-$unfiltered_sql = "SELECT COUNT(id) as total FROM emp_vacation";
-$unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
-$unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
+// Get the total unfiltered count (respect department visibility rules)
+if ($can_see_all_depts) {
+    $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_vacation";
+    $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
+    $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
+} else {
+    // Respect the same scoping (dept OR in approval chain)
+    $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
+        $stmt_unf->bind_param('iii', $user_dept, $request_type_id, $empid);
+        $stmt_unf->execute();
+        $res_unf = $stmt_unf->get_result();
+        $unfiltered_total_items = ($res_unf && ($row_unf = $res_unf->fetch_assoc())) ? ($row_unf['total'] ?? 0) : 0;
+        $stmt_unf->close();
+    } else {
+        $unfiltered_total_items = 0;
+    }
+}
 
 ?>
     <!doctype html>
@@ -297,12 +328,26 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
             .request-card .card-body { padding: 1.5rem; }
             .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
             .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
-            .detail-item strong { color: #8a94a6; min-width: 100px; display: inline-block; }
-            .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; }
+            .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
+            .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; overflow: visible; }
+            /* Footer actions: responsive grid to avoid overflow and keep symmetry */
+            .vac-actions {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: .5rem;
+            }
+            .vac-actions .btn { white-space: normal; line-height: 1.2; }
+            .vac-actions .btn i { margin-inline-end: .35rem; }
+            /* Keep block buttons filling their grid cell */
+            .vac-actions .btn.btn-block { display: inline-flex; width: 100%; justify-content: center; align-items: center; }
             .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
 			.btn-block + .btn-block{ margin-top: 0rem !important; }
             
             /* --- NEW STYLES FOR APPROVER LIST --- */
+            /* Ensure dropdowns are not hidden behind adjacent cards */
+            .request-card { position: relative; }
+            .request-card:hover, .request-card:focus-within { z-index: 50; }
+            .request-card .dropdown-menu { z-index: 2000; }
             .swal-approval-chain .select2-container { width: 100% !important; }
             .swal-approval-chain label, .swal-payment-details label { font-weight: 600; margin-top: 10px; }
             .swal-approval-chain-builder { display: flex; align-items: center; margin-bottom: 10px; }
@@ -451,7 +496,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                     <?php if (!empty($requests)): ?>
                                         <div class="row">
                                             <?php foreach ($requests as $req): ?>
-												<div class="col-lg-4 col-md-6 mb-4">
+												<div class="col-lg-3 col-md-6 mb-3">
 													<div class="card request-card h-100">
 														<div class="card-header">
 															<?=parseName($req['employee_name']); ?>
@@ -462,6 +507,12 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 															<div class="detail-item"><i class="fad fa-suitcase-rolling duotone-info"></i><strong><?=__('type')?>:</strong> <?=htmlspecialchars(parseName($req['vac_type'], 'FIRST')." | ".$req['fly_type_translated']); ?></div>
 															<div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start')?>:</strong> <?=htmlspecialchars($req['start_date'] ?? 'N/A'); ?></div>
 															<div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?=__('return')?>:</strong> <?=htmlspecialchars($req['return_date'] ?? 'N/A'); ?></div>
+                                                            <?php if (!empty($req['departure_date']) && $req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual'): ?>
+															<div class="detail-item"><i class="fad fa-plane-departure duotone-info"></i><strong><?=__('departure_date')?>:</strong> <?=htmlspecialchars($req['departure_date']); ?></div>
+                                                            <?php endif; ?>
+                                                            <?php if (!empty($req['arrival_date']) && $req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual'): ?>
+															<div class="detail-item"><i class="fad fa-plane-arrival duotone-info"></i><strong><?=__('arrival_date')?>:</strong> <?=htmlspecialchars($req['arrival_date']); ?></div>
+                                                            <?php endif; ?>
 															<div class="detail-item"><i class="fad fa-sun duotone-info"></i><strong><?=__('days')?>:</strong> <?=htmlspecialchars($req['vacdays']); ?></div>
                                                             
                                                             <?php if (!empty($req['attachment_path'])): ?>
@@ -505,67 +556,75 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                                 <hr>
                                                                 <div class="detail-item"><i class="fad fa-wallet duotone-success"></i><strong><?=__('remaining')?>:</strong> <?=htmlspecialchars(number_format($req['remaining_balance'], 2)); ?> <?=__('days')?></div>
                                                             <?php endif; ?>
-														</div>
-														<div class="card-footer d-flex justify-content-between align-items-center btn-group">
-															<button class="btn btn-info btn-block waves-effect" onclick="window.open('vacation_report_details.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>')"><i class="fa fa-eye"></i> <?=__('view')?></button>
-												<button class="btn btn-secondary btn-block waves-effect" onclick="window.open('vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>')"><i class="fas fa-history"></i> <?=__('history')?></button>
-												
+                                                        </div>
+                                                        <div class="card-footer vac-actions">
+                                                            <button class="btn btn-primary btn-block waves-effect" onclick="window.open('vacation_report_details.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>')"><i class="fa fa-eye"></i> <?=__('view')?></button>
                                                             <?php
-                                                            // --- NEW SIMPLIFIED BUTTON LOGIC ---
-                                                            // Show buttons if the request is pending approval AND the current logged-in user is the one it's pending with.
-                                                            if ($req['current_status'] == 'pending_approval' && $req['current_approver_id'] == $empid):
+                                                                // Pre-compute action parameters
                                                                 $employee_name_js = htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES);
-                                                                $employee_id_js = htmlspecialchars($req['emp_id'], ENT_QUOTES); // Pass emp_id for asset loading
-                                                                $vac_type_js = htmlspecialchars($req['vac_type']); // Send the raw type 'Fly'
+                                                                $employee_id_js = htmlspecialchars($req['emp_id'], ENT_QUOTES);
+                                                                $vac_type_js = htmlspecialchars($req['vac_type']);
                                                                 $start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
                                                                 $end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
                                                                 $days_js = htmlspecialchars($req['vacdays']);
-                                                                $current_level_js = (int)$req['current_approval_level']; 
-                                                                
-                                                                // Pass user role and supervisor info
+                                                                $current_level_js = (int)$req['current_approval_level'];
                                                                 $user_role_js = htmlspecialchars($user_type, ENT_QUOTES);
                                                                 $has_supervisor_js = !empty($req['supervisor_id']) ? 'true' : 'false';
                                                                 $is_simple_leave_js = ($req['vac_type'] != 'Fly') ? 'true' : 'false';
+                                                                $is_pending_with_me = ($req['current_status'] == 'pending_approval' && $req['current_approver_id'] == $empid);
+
+                                                                // Determine other conditional actions
+                                                                $show_payment_button = false;
+                                                                $payments_entered = (!empty($req['ticket_pay']) && (float)$req['ticket_pay'] > 0) || (!empty($req['permit_fee']) && (float)$req['permit_fee'] > 0);
+                                                                if (
+                                                                    $req['vac_type'] == 'Fly' &&
+                                                                    $req['fly_type'] == 'annual' &&
+                                                                    $req['current_status'] == 'approved' &&
+                                                                    !empty($req['travel_email_sent']) && $req['travel_email_sent'] == 1 &&
+                                                                    !$payments_entered &&
+                                                                    ($isHR || $is_system_admin || $isDeptHr || $isGR_Officer)
+                                                                ) { $show_payment_button = true; }
+
+                                                                $show_travel_email_button = false;
+                                                                if (
+                                                                    $req['vac_type'] == 'Fly' &&
+                                                                    $req['fly_type'] == 'annual' &&
+                                                                    $req['current_status'] == 'approved' &&
+                                                                    !empty($req['departure_date']) &&
+                                                                    !empty($req['arrival_date']) &&
+                                                                    ($req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) &&
+                                                                    ($isHR || $is_system_admin || $isGR_Officer)
+                                                                ) { $show_travel_email_button = true; }
                                                             ?>
-                                                                <button class="btn btn-danger btn-block waves-effect" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
-                                                                <button class="btn btn-success btn-block waves-effect" onclick="approveRequest(<?=$req['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>', <?=$current_level_js; ?>, '<?=$user_role_js; ?>', <?=$has_supervisor_js; ?>, <?=$is_simple_leave_js; ?>)"><i class="fa fa-check"></i> <?=__('approve')?></button>
-                                                            <?php endif; // End approval button check ?>
-
-                                                            <?php
-                                                            // --- [FIXED] PAYMENT BUTTON LOGIC ---
-                                                            // Show this button if:
-                                                            // 1. It's a 'Fly' vacation AND
-                                                            // 2. (User is HR Manager/Admin AND status is pending/approved) OR
-                                                            // 3. (User is HR Assistant (isDeptHr) AND status is *only* approved) OR
-                                                            // 4. (User is GR Officer AND status is *only* approved)
-                                                            
-                                                            $show_payment_button = false; // Default
-                                                            // Show ONLY after final approval (last level), and ONLY for Fly requests
-                                                            if (
-                                                                $req['vac_type'] == 'Fly' &&
-                                                                $req['current_status'] == 'approved' &&
-                                                                ($isHR || $is_system_admin || $isDeptHr || $isGR_Officer)
-                                                            ) {
-                                                                $show_payment_button = true;
-                                                            }
-
-                                                            // [NEW] Check if payments are entered
-                                                            $payments_entered = (!empty($req['ticket_pay']) && (float)$req['ticket_pay'] > 0) || (!empty($req['permit_fee']) && (float)$req['permit_fee'] > 0);
-
-                                                            // Only show the button if it's meant to be shown AND payments have NOT been entered
-                                                            if ($show_payment_button && !$payments_entered):
-                                                            ?>
-                                                                <button class="btn btn-warning btn-block waves-effect" 
-                                                                        onclick="addVacationPayments(
-                                                                            <?=$req['id']; ?>, 
-                                                                            '<?=htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>',
-                                                                            '<?= $req['ticket_pay'] ?? '0.00'; ?>',
-                                                                            '<?= $req['permit_fee'] ?? '0.00'; ?>'
-                                                                        )">
-                                                                    <i class="fa fa-credit-card"></i> <?=__('payments')?>
+                                                            <div class="dropdown">
+                                                                <button class="btn btn-outline-secondary dropdown-toggle btn-block" type="button" id="actions-<?=$req['id']; ?>" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                                                    <?=__('actions')?>
                                                                 </button>
-                                                            <?php endif; // End payment button check ?>
-														</div>
+                                                                <div class="dropdown-menu dropdown-menu-right" aria-labelledby="actions-<?=$req['id']; ?>">
+                                                                    <a class="dropdown-item" href="javascript:void(0)" onclick="window.open('vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>')">
+                                                                        <i class="fas fa-history"></i> <?=__('history')?>
+                                                                    </a>
+                                                                    <?php if ($is_pending_with_me): ?>
+                                                                        <a class="dropdown-item text-success" href="javascript:void(0)" onclick="approveRequest(<?=$req['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>', <?=$current_level_js; ?>, '<?=$user_role_js; ?>', <?=$has_supervisor_js; ?>, <?=$is_simple_leave_js; ?>)">
+                                                                            <i class="fa fa-check"></i> <?=__('approve')?>
+                                                                        </a>
+                                                                        <a class="dropdown-item text-danger" href="javascript:void(0)" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')">
+                                                                            <i class="fa fa-times"></i> <?=__('reject')?>
+                                                                        </a>
+                                                                    <?php endif; ?>
+                                                                    <?php if ($show_payment_button): ?>
+                                                                        <a class="dropdown-item text-warning" href="javascript:void(0)" onclick="addVacationPayments(<?=$req['id']; ?>, '<?=htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>','<?= $req['ticket_pay'] ?? '0.00'; ?>','<?= $req['permit_fee'] ?? '0.00'; ?>')">
+                                                                            <i class="fa fa-credit-card"></i> <?=__('payments')?>
+                                                                        </a>
+                                                                    <?php endif; ?>
+                                                                    <?php if ($show_travel_email_button): ?>
+                                                                        <a class="dropdown-item text-primary" id="travel-email-btn-<?=$req['id']; ?>" href="javascript:void(0)" onclick="sendTravelEmail(<?=$req['id']; ?>, '<?=htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>')">
+                                                                            <i class="fa fa-paper-plane"></i> <?=__('send_travel_email')?>
+                                                                        </a>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
 													</div>
 												</div>
 											<?php endforeach; ?>
@@ -1128,7 +1187,17 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
          * Removed ticketPay/permitFee as that's separate logic.
          */
 		function sendApproval(vacationId, approveData) {
-			$.ajax({
+            // Show processing loader immediately after approval
+            Swal.fire({
+                title: __('processing_approval') || 'Processing approval...',
+                html: __('please_wait_processing') || 'Please wait while we process this approval.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            $.ajax({
 				url: './includes/ajaxFile/ajaxVacation.php',
 				type: 'POST',
 				dataType: 'JSON',
@@ -1142,13 +1211,21 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 				},
 			})
 			.done(function(response){
-				Swal.fire({
-					title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
-				}).then(function(isConfirm){(isConfirm)?location.reload():""});
+                Swal.fire({
+                    title: response.title || __('success') || 'Success',
+                    text: response.message || '',
+                    icon: response.type || 'success',
+                    allowOutsideClick: false
+                }).then(function(isConfirm){ if(isConfirm){ location.reload(); } });
 			})
 			.fail(function(jqXHR, textStatus, errorThrown) {
                 // Use SweetAlert to show the failure
-				Swal.fire('Error', 'An error occurred: ' + textStatus, 'error');
+                Swal.fire({
+                    title: __('error') || 'Error',
+                    text: (jqXHR.responseJSON && jqXHR.responseJSON.message) ? jqXHR.responseJSON.message : ('An error occurred: ' + textStatus),
+                    icon: 'error',
+                    allowOutsideClick: false
+                });
 			});
 		}
 
@@ -1266,6 +1343,233 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                         Swal.fire('Error', __('error_updating_payments'), 'error');
                     });
                 }
+            });
+        }
+
+        /**
+         * =================================================================
+         * == SEND TRAVEL EMAIL FUNCTION
+         * =================================================================
+         * Sends employee travel information to the traveling company
+         */
+        function sendTravelEmail(vacationId, employeeName) {
+            // First, fetch full traveler details
+            Swal.fire({
+                title: __('loading') || 'Loading...',
+                html: __('fetching_traveler_details') || 'Fetching traveler details...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            $.ajax({
+                url: './includes/ajaxFile/ajaxVacation.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: {
+                    ajaxType: 'getTravelerDetails',
+                    vacation_id: vacationId
+                },
+            })
+            .done(function(response) {
+                if (response.type === 'success' && response.data) {
+                    const data = response.data;
+
+                    // Compute passport validation: missing number or expiry within 3 months from departure (or today if no departure date)
+                    const missingPassport = !data.passport_number_raw || data.passport_number === 'Not Provided' || data.passport_number === 'N/A';
+                    const depBase = data.departure_date_raw ? new Date(data.departure_date_raw) : new Date();
+                    let expSoon = false;
+                    if (data.passport_exp_raw) {
+                        const expDate = new Date(data.passport_exp_raw);
+                        const diffMs = expDate.getTime() - depBase.getTime();
+                        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                        const diffMonths = diffDays / 30.44; // approx. months
+                        expSoon = diffMonths < 3; // less than 3 months validity
+                    } else {
+                        // No expiry provided -> treat as invalid
+                        expSoon = true;
+                    }
+                    const invalidPassport = missingPassport || expSoon;
+
+                    const passportWarningHtml = invalidPassport ? `
+                        <div style="background: #f8d7da; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #f5c2c7;">
+                            <p style="margin: 0; font-size: 13px; color: #842029;">
+                                <i class="fa fa-exclamation-circle" style="margin-right: 6px;"></i>
+                                <strong>${__('passport_validation_issue') || 'Passport Issue:'}</strong>
+                                ${missingPassport ? (__('passport_missing_message') || 'Passport number is missing.') : ''}
+                                ${missingPassport && expSoon ? ' ' : ''}
+                                ${!missingPassport && expSoon ? (__('passport_expiring_soon_message') || 'Passport expires within 3 months of travel.') : ''}
+                            </p>
+                        </div>
+                    ` : '';
+
+                    // Show confirmation with all traveler details
+                    Swal.fire({
+                        title: '<i class="fa fa-passport"></i> ' + (__('verify_traveler_information') || 'Verify Traveler Information'),
+                        html: `
+                            <div style="text-align: left; max-height: 500px; overflow-y: auto;">
+                                ${passportWarningHtml}
+                                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                                    <h5 style="color: #667eea; margin-top: 0; border-bottom: 2px solid #667eea; padding-bottom: 8px;">
+                                        <i class="fa fa-user"></i> ${__('employee_information') || 'Employee Information'}
+                                    </h5>
+                                    <table style="width: 100%; font-size: 14px;">
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666; width: 45%;"><i class="fa fa-id-card" style="margin-right: 5px; color: #667eea;"></i> ${__('employee_name') || 'Employee Name'}:</td>
+                                            <td style="padding: 8px;"><strong>${data.employee_name || 'N/A'}</strong></td>
+                                        </tr>
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-hashtag" style="margin-right: 5px; color: #667eea;"></i> ${__('emp_id') || 'Employee ID'}:</td>
+                                            <td style="padding: 8px;">${data.emp_id || 'N/A'}</td>
+                                        </tr>
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-passport" style="margin-right: 5px; color: #667eea;"></i> ${__('passport_no') || 'Passport No'}:</td>
+                                            <td style="padding: 8px;"><strong>${data.passport_number || 'N/A'}</strong></td>
+                                        </tr>
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-calendar-times" style="margin-right: 5px; color: #667eea;"></i> ${__('passport_expiry') || 'Passport Expiry'}:</td>
+                                            <td style="padding: 8px;">${data.passport_exp || 'N/A'}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+
+                                <div style="background: #fff9e6; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">
+                                    <h5 style="color: #856404; margin-top: 0; border-bottom: 2px solid #ffc107; padding-bottom: 8px;">
+                                        <i class="fa fa-plane"></i> ${__('travel_details') || 'Travel Details'}
+                                    </h5>
+                                    <table style="width: 100%; font-size: 14px;">
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666; width: 45%;"><i class="fa fa-map-marker-alt" style="margin-right: 5px; color: #ffc107;"></i> ${__('departure_to') || 'Departure To'}:</td>
+                                            <td style="padding: 8px;"><strong>${data.country_name || 'N/A'}</strong></td>
+                                        </tr>
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-plane-departure" style="margin-right: 5px; color: #ffc107;"></i> ${__('departure_date') || 'Departure Date'}:</td>
+                                            <td style="padding: 8px;"><strong>${data.departure_date || 'N/A'}</strong></td>
+                                        </tr>
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-plane-arrival" style="margin-right: 5px; color: #ffc107;"></i> ${__('arrival_date') || 'Arrival Date'}:</td>
+                                            <td style="padding: 8px;"><strong>${data.arrival_date || 'N/A'}</strong></td>
+                                        </tr>
+                                        <tr style="border-bottom: 1px solid #dee2e6;">
+                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-calendar-alt" style="margin-right: 5px; color: #ffc107;"></i> ${__('vacation_start') || 'Vacation Start'}:</td>
+                                            <td style="padding: 8px;">${data.start_date || 'N/A'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-calendar-check" style="margin-right: 5px; color: #ffc107;"></i> ${__('vacation_return') || 'Vacation Return'}:</td>
+                                            <td style="padding: 8px;">${data.return_date || 'N/A'}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+
+                                <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3085d6;">
+                                    <p style="margin: 0; font-size: 13px; color: #004085;">
+                                        <i class="fa fa-info-circle" style="margin-right: 5px;"></i>
+                                        <strong>${__('reference_number') || 'Reference Number'}:</strong> ${data.request_inv_no || 'N/A'}
+                                    </p>
+                                </div>
+
+                                <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-top: 15px; border: 1px solid #ffc107;">
+                                    <p style="margin: 0; font-size: 13px; color: #856404;">
+                                        <i class="fa fa-exclamation-triangle" style="margin-right: 5px;"></i>
+                                        <strong>${__('important') || 'Important'}:</strong> ${__('verify_information_notice') || 'Please verify all information is correct. If any information is incorrect, please contact HR for corrections before sending this email.'}
+                                    </p>
+                                </div>
+
+                                <div style="background: #f8d7da; padding: 12px; border-radius: 6px; margin-top: 10px; border: 1px solid #f5c2c7;">
+                                    <p style="margin: 0; font-size: 13px; color: #842029;">
+                                        <i class="fa fa-ban" style="margin-right: 5px;"></i>
+                                        <strong>${__('note') || 'Note'}:</strong> ${__('email_sent_once_warning') || 'This email can only be sent once. After sending, the button will be hidden.'}
+                                    </p>
+                                </div>
+                            </div>
+                        `,
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: '<i class="fa fa-check-circle"></i> ' + (__('confirm_and_send') || 'Confirm & Send Email'),
+                        cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
+                        confirmButtonColor: '#28a745',
+                        cancelButtonColor: '#dc3545',
+                        allowOutsideClick: false,
+                        width: '650px',
+                        customClass: {
+                            confirmButton: 'btn btn-success btn-lg',
+                            cancelButton: 'btn btn-danger btn-lg'
+                        },
+                        didOpen: () => {
+                            const confirmBtn = Swal.getConfirmButton();
+                            if (confirmBtn) {
+                                if (invalidPassport) {
+                                    confirmBtn.disabled = true;
+                                    confirmBtn.setAttribute('title', __('passport_fix_required') || 'Fix passport number/expiry before sending');
+                                } else {
+                                    confirmBtn.disabled = false;
+                                    confirmBtn.removeAttribute('title');
+                                }
+                            }
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            // Show loading
+                            Swal.fire({
+                                title: __('sending') || 'Sending...',
+                                html: __('please_wait_sending_email') || 'Please wait while we send the email to the traveling company.',
+                                allowOutsideClick: false,
+                                allowEscapeKey: false,
+                                didOpen: () => {
+                                    Swal.showLoading();
+                                }
+                            });
+
+                            $.ajax({
+                                url: './includes/ajaxFile/ajaxVacation.php',
+                                type: 'POST',
+                                dataType: 'JSON',
+                                data: {
+                                    ajaxType: 'sendTravelEmail',
+                                    vacation_id: vacationId
+                                },
+                            })
+                            .done(function(response){
+                                Swal.fire({
+                                    title: response.title || (__('success') || 'Success'),
+                                    text: response.message,
+                                    icon: response.type || 'success',
+                                    allowOutsideClick: false
+                                }).then(function(isConfirm){
+                                    if(isConfirm) {
+                                        // Hide the button after successful send
+                                        $('#travel-email-btn-' + vacationId).fadeOut();
+                                        location.reload();
+                                    }
+                                });
+                            })
+                            .fail(function(jqXHR, textStatus, errorThrown) {
+                                console.error('AJAX Error:', textStatus, errorThrown);
+                                Swal.fire(
+                                    __('error') || 'Error', 
+                                    __('error_sending_travel_email') || 'An error occurred while sending the travel email. Please try again.',
+                                    'error'
+                                );
+                            });
+                        }
+                    });
+                } else {
+                    Swal.fire(
+                        __('error') || 'Error',
+                        response.message || (__('error_fetching_details') || 'Could not fetch traveler details.'),
+                        'error'
+                    );
+                }
+            })
+            .fail(function(jqXHR, textStatus, errorThrown) {
+                console.error('AJAX Error:', textStatus, errorThrown);
+                Swal.fire(
+                    __('error') || 'Error',
+                    __('error_loading_traveler_info') || 'An error occurred while loading traveler information.',
+                    'error'
+                );
             });
         }
 

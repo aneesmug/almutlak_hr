@@ -144,6 +144,7 @@ if (mysqli_num_rows($query) == 1) {
 		$can_modify_employee = (
 			$is_system_admin || 
 			$user_type === 'hr_operations' ||
+			$user_type === 'hr_payroll' ||
 			$user_type === 'hr_recruitment'
 		);
 		

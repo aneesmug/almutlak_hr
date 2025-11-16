@@ -5,6 +5,12 @@ if (file_exists(__DIR__ . '/includes/functions.php')) {
     require_once __DIR__ . '/includes/functions.php';
 }
 
+// Restrict access: Employees cannot view this detailed report page
+if (isset($isEmployee) && $isEmployee === true) {
+    header("Location: ./profile.php");
+    exit();
+}
+
 // Input
 $request_inv_no = isset($_GET['request_inv_no']) ? trim($_GET['request_inv_no']) : '';
 if ($request_inv_no === '') {
@@ -14,7 +20,8 @@ if ($request_inv_no === '') {
 // Vacation details
 $vacation = null;
 $sql = "SELECT v.*, 
-               e.name AS employee_name, e.avatar, e.dept, d.dep_nme AS department_name,
+               e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp,
+               d.dep_nme AS department_name,
                b.remaining_balance, b.available_balance
         FROM emp_vacation v
         JOIN employees e ON v.emp_id = e.emp_id
@@ -34,6 +41,30 @@ if (!$vacation) {
     die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Vacation request not found.</div>');
 }
 
+// Enforce department scoping: Only HR and System Admin can view other departments,
+// otherwise allow if the user is part of the approval chain for this request
+$canSeeAll = ($is_system_admin ?? false) || ($isHR ?? false);
+if (!$canSeeAll) {
+    $userDeptId = $user_dept ?? null;
+    $sameDept = ($userDeptId !== null) ? ((int)$vacation['dept'] === (int)$userDeptId) : false;
+    $inChain = false;
+    if (!$sameDept) {
+        // Check if current user appears in approval chain for this vacation
+        if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'vacation_request' WHERE ra.request_inv_no = ? AND ra.approver_id = ? LIMIT 1")) {
+            $chk->bind_param('si', $request_inv_no, $empid);
+            if ($chk->execute()) {
+                $resChk = $chk->get_result();
+                $inChain = ($resChk && $resChk->num_rows > 0);
+            }
+            $chk->close();
+        }
+    }
+    if (!$sameDept && !$inChain) {
+        http_response_code(403);
+        die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">Access denied: You are not authorized to view this request.</div>');
+    }
+}
+
 // Status history
 $history = [];
 $stmt = $conDB->prepare("SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = ? ORDER BY created_at ASC");
@@ -45,17 +76,29 @@ while ($row = $hr->fetch_assoc()) {
 }
 $stmt->close();
 
-// Approval chain (request_type_id 1 assumed for vacations)
+// Approval chain
 $chain = [];
+
+// Resolve request_type_id for 'vacation_request' dynamically (fallback to 1)
+$request_type_id = 1;
+if ($typeStmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE type_name = 'vacation_request' LIMIT 1")) {
+    $typeStmt->execute();
+    $typeRes = $typeStmt->get_result();
+    if ($typeRow = $typeRes->fetch_assoc()) {
+        $request_type_id = (int)$typeRow['id'];
+    }
+    $typeStmt->close();
+}
+
 $stmt = $conDB->prepare("SELECT ra.approval_level, ra.status, ra.action_date,
                                 COALESCE(e.name, al.fullname, al.username) AS approver_name,
                                 al.user_type
                          FROM request_approvers ra
                          LEFT JOIN employees e ON ra.approver_id = e.emp_id
-                         LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
-                         WHERE ra.request_inv_no = ? AND ra.request_type_id = 1
+                         LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
+                         WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
                          ORDER BY ra.approval_level ASC");
-$stmt->bind_param('s', $request_inv_no);
+$stmt->bind_param('si', $request_inv_no, $request_type_id);
 $stmt->execute();
 $cr = $stmt->get_result();
 while ($row = $cr->fetch_assoc()) {
@@ -165,6 +208,12 @@ if ($vacation['fly_type'] === 'annual') {
                     <?php endif; ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-calendar-alt"></i> <?= function_exists('__') ? __('start_date') : 'Start Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['start_date'] ?? 'N/A') ?></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-calendar-check"></i> <?= function_exists('__') ? __('return_date') : 'Return Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['return_date'] ?? 'N/A') ?></div></div>
+                    <?php if (!empty($vacation['departure_date']) && $vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual'): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-plane-departure"></i> <?= function_exists('__') ? __('departure_date') : 'Departure Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['departure_date']) ?></div></div>
+                    <?php endif; ?>
+                    <?php if (!empty($vacation['arrival_date']) && $vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual'): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-plane-arrival"></i> <?= function_exists('__') ? __('arrival_date') : 'Arrival Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['arrival_date']) ?></div></div>
+                    <?php endif; ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-sun"></i> <?= function_exists('__') ? __('total_days') : 'Total Days' ?>:</div><div class="info-value"><strong><?= (int)$vacation['vacdays'] ?></strong> <?= function_exists('__') ? __('days') : 'days' ?></div></div>
                     <?php if (!empty($vacation['replacement_person'])): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-user-friends"></i> <?= function_exists('__') ? __('replacement') : 'Replacement' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['replacement_person']) ?></div></div>

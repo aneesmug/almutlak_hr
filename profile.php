@@ -307,12 +307,12 @@ $all_statuses = [
                                                                     <i class="fa fa-user-pen"></i> <?= __('update_information') ?>
                                                                 </a>
                                                             <?php endif; ?>
-                                                            <?php /* ?>
+                                                            <?php ?>
                                                             <?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
-                                                                <a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter">
-                                                                    <i class="fa fa-user-chart"></i> <?= __('apply_annual_vacation') ?>
+                                                                <a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter d-flex align-items-center">
+                                                                    <i class="fa fa-user-chart mr-2"></i> <?= __('apply_annual_vacation') ?>
                                                                 </a>
-                                                            <?php endif; ?>
+                                                            <?php endif; /* ?>
                                                             <?php if ($emprow['apd_review'] == "A" && $emprow['apd_status'] == "apply") : ?>
                                                                 <?php
                                                                 $status_text = $all_statuses[$emprow['apd_status']] ?? 'Unknown';

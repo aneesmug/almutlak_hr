@@ -235,7 +235,9 @@ elseif ($ajaxType == 'applyVacation') {
         $replacement_per = escape_string($_POST['replacement_per'] ?? '');
         $start_date = escape_string($_POST['start_date'] ?? '');
         $end_date = escape_string($_POST['end_date'] ?? '');
-        $notes = escape_string($_POST['notes'] ?? '');
+        $departure_date = escape_string($_POST['departure_date'] ?? '');
+        $arrival_date = escape_string($_POST['arrival_date'] ?? '');
+        $notes = escape_string($_POST['remarks'] ?? ''); // Changed from 'notes' to 'remarks' to match form field
         $vacation_salary_type = escape_string($_POST['vacation_salary_type'] ?? 'payroll');
 
         // 2. Validate critical data
@@ -525,23 +527,38 @@ elseif ($ajaxType == 'applyVacation') {
 
         // 8. Insert the main vacation request
         $sql = "INSERT INTO `emp_vacation` 
-                    (`emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `current_status`, `current_approval_level`) 
+                    (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `current_status`, `current_approval_level`) 
                 VALUES 
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', 1)";
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', 1)";
 
         $stmt_vac = mysqli_prepare($conDB, $sql);
-        if (!$stmt_vac) throw new Exception("Prepare failed (insert vac): " . mysqli_error($conDB));
+        if (!$stmt_vac) {
+            error_log("applyVacation: Prepare failed - " . mysqli_error($conDB));
+            throw new Exception("Prepare failed (insert vac): " . mysqli_error($conDB));
+        }
 
-            // Types: s (emp_id), s (vac_type), s (fly_type), s (replacement_person), s (start_date), s (end_date), i (vacdays), s (remarks), s (vacation_salary_type), s (attachment_path), d (encashment_amount), s (request_inv_no)
+            // Types: s (emp_id), i (submitted_by_emp_id), s (vac_type), s (fly_type), s (replacement_person), s (start_date), s (end_date), s (departure_date), s (arrival_date), i (vacdays), s (remarks), s (vacation_salary_type), s (attachment_path), d (encashment_amount), s (request_inv_no)
             $vacdays_int = (int)$vacdays;
             $encashment_amount_val = ($encashment_amount !== null ? (float)$encashment_amount : 0.0);
-            mysqli_stmt_bind_param($stmt_vac, "ssssssisssds", 
-                $emp_id, 
+            $submitted_by_val = ($current_user_id && (int)$current_user_id > 0) ? (int)$current_user_id : null;
+            
+            // Convert empty strings to NULL for date fields
+            $departure_date_val = (!empty($departure_date) ? $departure_date : null);
+            $arrival_date_val = (!empty($arrival_date) ? $arrival_date : null);
+            
+            // Log the values being inserted for debugging
+            error_log("applyVacation: Inserting - emp_id: $emp_id, vac_type: $vac_type, fly_type: $fly_type, start: $start_date, end: $end_date, departure: $departure_date_val, arrival: $arrival_date_val, vacdays: $vacdays_int, remarks: $notes");
+            
+            mysqli_stmt_bind_param($stmt_vac, "sissssssisssdss", 
+                $emp_id,
+                $submitted_by_val,
                 $vac_type, 
                 $fly_type, 
                 $replacement_per,
                 $start_date, 
                 $end_date,
+                $departure_date_val,
+                $arrival_date_val,
                 $vacdays_int,
                 $notes,
                 $vacation_salary_type,
@@ -551,6 +568,7 @@ elseif ($ajaxType == 'applyVacation') {
             );
 
         if (!mysqli_stmt_execute($stmt_vac)) {
+            error_log("applyVacation: Execute failed - " . mysqli_stmt_error($stmt_vac));
             throw new Exception("Execute failed (insert vac): " . mysqli_stmt_error($stmt_vac));
         }
         mysqli_stmt_close($stmt_vac);
@@ -696,6 +714,66 @@ elseif ($ajaxType == 'applyVacation') {
             if ($first_details && !empty($first_details['name'])) {
                 $label = function_exists('__') ? __('pending_with') : 'Pending with';
                 $pending_with_text = " $label: " . $first_details['name'] . ".";
+                
+                // --- [NEW] SEND NOTIFICATION TO FIRST APPROVER ---
+                error_log("applyVacation: Attempting to send notification to first_approver_id: $first_approver_id");
+                
+                if (function_exists('create_browser_notification')) {
+                    $notification_title = "New Annual Vacation Request";
+                    $notification_message = "A new vacation request ($request_inv_no) from employee ID $emp_id is pending your approval.";
+                    $notification_url = "all_applied_vac.php?status=my_pending";
+                    $notif_result = create_browser_notification($conDB, $first_approver_id, $notification_title, $notification_message, $notification_url);
+                    error_log("applyVacation: Browser notification result: " . ($notif_result ? 'SUCCESS' : 'FAILED'));
+                } else {
+                    error_log("applyVacation: create_browser_notification function NOT FOUND");
+                }
+                
+                if (!empty($first_details['email']) && function_exists('send_approval_email')) {
+                    error_log("applyVacation: Attempting to send email to: " . $first_details['email']);
+                    
+                    // Get employee name for template
+                    $employee_name = 'Employee';
+                    $emp_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$emp_id' LIMIT 1");
+                    if ($emp_result && $emp_row = mysqli_fetch_assoc($emp_result)) {
+                        $employee_name = $emp_row['name'];
+                    }
+                    if ($emp_result) mysqli_free_result($emp_result);
+                    
+                    // Prepare template data
+                    $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+                    $template_data = [
+                        'APPROVER_NAME' => $first_details['name'],
+                        'REQUEST_TYPE' => 'Annual Vacation Request',
+                        'REQUEST_TYPE_LOWER' => 'annual vacation request',
+                        'REQUEST_ID' => $request_inv_no,
+                        'EMPLOYEE_NAME' => $employee_name,
+                        'START_DATE' => date('d M Y', strtotime($start_date)),
+                        'END_DATE' => date('d M Y', strtotime($end_date)),
+                        'DURATION' => $vacdays,
+                        'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending'
+                    ];
+                    
+                    $email_subject = "New Annual Vacation Request Pending Approval";
+                    $email_result = send_approval_email($conDB, $first_details['email'], $first_details['name'], $email_subject, 'vacation_request', $template_data);
+                    error_log("applyVacation: Email result: " . ($email_result ? 'SUCCESS' : 'FAILED'));
+                } else {
+                    if (empty($first_details['email'])) {
+                        error_log("applyVacation: First approver has NO EMAIL in database");
+                    }
+                    if (!function_exists('send_approval_email')) {
+                        error_log("applyVacation: send_approval_email function NOT FOUND");
+                    }
+                }
+                // --- [END NEW] ---
+            } else {
+                error_log("applyVacation: Could not get first approver details or name is empty");
+            }
+        } else {
+            if (!function_exists('getEmployeeDetailsForApproval')) {
+                error_log("applyVacation: getEmployeeDetailsForApproval function NOT FOUND");
+            }
+            if (empty($first_approver_id)) {
+                error_log("applyVacation: first_approver_id is EMPTY");
             }
         }
         send_json_response("Success!", "Your vacation request ($request_inv_no) has been submitted for approval." . $pending_with_text, "success");
@@ -792,29 +870,33 @@ elseif ($ajaxType == 'approveVacation') {
                     $result_cc = mysqli_query($conDB, $sql_cc);
                     
                     if ($result_cc && mysqli_num_rows($result_cc) > 0) {
-                        // Prepare email content with dynamic request type in subject
+                        // Prepare email template data for CC notification
                         $reqType = trim($vac_data['vacation_type'] ?? 'Vacation Request');
                         $subject = "$reqType Approved (CC) - {$vac_data['emp_name']}";
-                        $message = "
-                            <h3>$reqType Approved - CC Notification</h3>
-                            <p>This is a CC notification. The following $reqType has been approved:</p>
-                            <ul>
-                                <li><strong>Employee:</strong> {$vac_data['emp_name']}</li>
-                                <li><strong>Vacation Type:</strong> {$vac_data['vacation_type']}</li>
-                                <li><strong>Start Date:</strong> {$vac_data['start_date']}</li>
-                                <li><strong>End Date:</strong> {$vac_data['end_date']}</li>
-                                <li><strong>Total Days:</strong> {$vac_data['total_days']}</li>
-                                <li><strong>Request Invoice:</strong> {$vac_data['request_inv_no']}</li>
-                            </ul>
-                            <p><em>You are receiving this as a CC notification from HR Senior BP.</em></p>
-                        ";
                         
-                        // Send email to each CC recipient (use existing approval email helper)
+                        // Determine if it's vacation or leave
+                        $vac_type_lower = strtolower($vac_data['vacation_type'] ?? '');
+                        $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+                        
+                        // Send email to each CC recipient using template system
                         while ($cc_rec = mysqli_fetch_assoc($result_cc)) {
                             if (!empty($cc_rec['email'])) {
                                 if (function_exists('send_approval_email')) {
-                                    // Reuse the HTML message prepared above
-                                    send_approval_email($conDB, $cc_rec['email'], $cc_rec['name'], $subject, $message);
+                                    // Prepare template data for this CC recipient
+                                    $cc_template_data = [
+                                        'APPROVER_NAME' => $cc_rec['name'],
+                                        'REQUEST_TYPE' => $reqType . ' (Approved - CC)',
+                                        'REQUEST_TYPE_LOWER' => strtolower($reqType) . ' (approved)',
+                                        'REQUEST_ID' => $vac_data['request_inv_no'],
+                                        'EMPLOYEE_NAME' => $vac_data['emp_name'],
+                                        'START_DATE' => date('d M Y', strtotime($vac_data['start_date'])),
+                                        'END_DATE' => date('d M Y', strtotime($vac_data['end_date'])),
+                                        'DURATION' => $vac_data['total_days'],
+                                        'REQUEST_URL' => $base_url . '/all_applied_vac.php'
+                                    ];
+                                    
+                                    send_approval_email($conDB, $cc_rec['email'], $cc_rec['name'], $subject, 'vacation_request', $cc_template_data);
+                                    error_log("CC email sent to: {$cc_rec['email']} for request {$vac_data['request_inv_no']}");
                                 } else {
                                     // Fallback log if helper not found
                                     error_log("send_approval_email function not available. Could not send CC email to {$cc_rec['email']}");
@@ -1050,6 +1132,221 @@ elseif ($ajaxType == 'updateVacationPayments') {
 
     } catch (Exception $e) {
         error_log("ajaxVacation.php (updateVacationPayments) Error: " . $e->getMessage());
+        send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+// --- [NEW] BLOCK TO HANDLE FETCHING TRAVELER DETAILS ---
+// ================================================================
+elseif ($ajaxType == 'getTravelerDetails') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+
+        if (empty($vacation_id)) {
+            throw new Exception("Vacation ID is missing.");
+        }
+
+        // Fetch vacation and employee details including passport info
+        $sql = "SELECT 
+                    v.id,
+                    v.emp_id,
+                    v.start_date,
+                    v.return_date,
+                    v.departure_date,
+                    v.arrival_date,
+                    v.request_inv_no,
+                    v.vac_type,
+                    v.fly_type,
+                    e.name as employee_name,
+                    e.passport_number,
+                    e.passport_exp,
+                    c.name as country_name
+                FROM emp_vacation v
+                JOIN employees e ON v.emp_id = e.emp_id
+                LEFT JOIN countries c ON e.country = c.id
+                WHERE v.id = ?";
+
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception("Database prepare error: " . mysqli_error($conDB));
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $vacation_id);
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception("Database execute error: " . mysqli_stmt_error($stmt));
+        }
+
+        $result = mysqli_stmt_get_result($stmt);
+        $vacation = mysqli_fetch_assoc($result);
+        mysqli_stmt_close($stmt);
+
+        if (!$vacation) {
+            throw new Exception("Vacation request not found.");
+        }
+
+        // Format dates for display and include raw values for client-side validation
+        $data = [
+            'emp_id' => $vacation['emp_id'],
+            'employee_name' => $vacation['employee_name'],
+            'passport_number' => !empty($vacation['passport_number']) ? $vacation['passport_number'] : 'Not Provided',
+            'passport_number_raw' => $vacation['passport_number'],
+            'passport_exp' => !empty($vacation['passport_exp']) ? date('d M Y', strtotime($vacation['passport_exp'])) : 'Not Provided',
+            'passport_exp_raw' => $vacation['passport_exp'],
+            'country_name' => !empty($vacation['country_name']) ? $vacation['country_name'] : 'Not Specified',
+            'departure_date' => !empty($vacation['departure_date']) ? date('d M Y', strtotime($vacation['departure_date'])) : 'Not Provided',
+            'departure_date_raw' => $vacation['departure_date'],
+            'arrival_date' => !empty($vacation['arrival_date']) ? date('d M Y', strtotime($vacation['arrival_date'])) : 'Not Provided',
+            'start_date' => !empty($vacation['start_date']) ? date('d M Y', strtotime($vacation['start_date'])) : 'Not Provided',
+            'return_date' => !empty($vacation['return_date']) ? date('d M Y', strtotime($vacation['return_date'])) : 'Not Provided',
+            'request_inv_no' => $vacation['request_inv_no'],
+            'vac_type' => $vacation['vac_type'],
+            'fly_type' => $vacation['fly_type']
+        ];
+
+        echo json_encode([
+            'type' => 'success',
+            'message' => 'Traveler details fetched successfully.',
+            'data' => $data
+        ]);
+
+    } catch (Exception $e) {
+        error_log("ajaxVacation.php (getTravelerDetails) Error: " . $e->getMessage());
+        echo json_encode([
+            'type' => 'error',
+            'message' => $e->getMessage(),
+            'data' => null
+        ]);
+    }
+    exit;
+}
+
+// --- [NEW] BLOCK TO HANDLE SENDING TRAVEL COMPANY EMAIL ---
+// ================================================================
+elseif ($ajaxType == 'sendTravelEmail') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+
+        if (empty($vacation_id)) {
+            throw new Exception("Vacation ID is missing.");
+        }
+
+        // Fetch vacation and employee details including passport info
+        $sql = "SELECT 
+                    v.*, 
+                    e.name as employee_name,
+                    e.passport_number,
+                    e.passport_exp,
+                    e.email as employee_email,
+                    c.name as country_name
+                FROM emp_vacation v
+                JOIN employees e ON v.emp_id = e.emp_id
+                LEFT JOIN countries c ON e.country = c.id
+                WHERE v.id = ?";
+
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception("Database prepare error: " . mysqli_error($conDB));
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $vacation_id);
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception("Database execute error: " . mysqli_stmt_error($stmt));
+        }
+
+        $result = mysqli_stmt_get_result($stmt);
+        $vacation = mysqli_fetch_assoc($result);
+        mysqli_stmt_close($stmt);
+
+        if (!$vacation) {
+            throw new Exception("Vacation request not found.");
+        }
+
+        // Validate this is an annual fly vacation
+        if ($vacation['vac_type'] !== 'Fly' || $vacation['fly_type'] !== 'annual') {
+            throw new Exception("Email can only be sent for Annual Fly vacations.");
+        }
+
+        // Validate vacation is approved
+        if ($vacation['current_status'] !== 'approved') {
+            throw new Exception("Vacation must be approved before sending travel email.");
+        }
+
+        // Check if flight dates are available
+        if (empty($vacation['departure_date']) || empty($vacation['arrival_date'])) {
+            throw new Exception("Flight dates (departure and arrival) are required.");
+        }
+
+        // Check if email has already been sent
+        if (!empty($vacation['travel_email_sent']) && $vacation['travel_email_sent'] == 1) {
+            throw new Exception("Travel email has already been sent for this vacation.");
+        }
+
+        // Get GR Officer email for CC
+        $gr_officer_email = get_setting($conDB, 'gr_officer_email');
+        if (empty($gr_officer_email)) {
+            // Try to get from admin_login table where user_type contains 'gr_officer'
+            $gr_query = mysqli_query($conDB, "SELECT email FROM admin_login WHERE user_type LIKE '%gr_officer%' AND email IS NOT NULL AND email != '' LIMIT 1");
+            if ($gr_query && $gr_row = mysqli_fetch_assoc($gr_query)) {
+                $gr_officer_email = $gr_row['email'];
+            }
+            if ($gr_query) mysqli_free_result($gr_query);
+        }
+
+        // Send email to traveling company with CC to GR Officer
+        require_once __DIR__ . '/../helper_functions.php';
+        
+        $email_sent = send_travel_company_email(
+            $conDB,
+            $vacation['employee_name'],
+            $vacation['passport_number'],
+            $vacation['passport_exp'],
+            $vacation['country_name'],
+            $vacation['departure_date'],
+            $vacation['arrival_date'],
+            $vacation['request_inv_no'],
+            $gr_officer_email // CC to GR Officer
+        );
+
+        if (!$email_sent) {
+            throw new Exception("Failed to send email. Please check SMTP settings and traveling company email configuration.");
+        }
+
+        // Update database to mark email as sent
+        $update_sql = "UPDATE `emp_vacation` SET `travel_email_sent` = 1 WHERE `id` = ?";
+        $update_stmt = mysqli_prepare($conDB, $update_sql);
+        if ($update_stmt) {
+            mysqli_stmt_bind_param($update_stmt, 'i', $vacation_id);
+            mysqli_stmt_execute($update_stmt);
+            mysqli_stmt_close($update_stmt);
+        }
+
+        // Log the action in status history
+        $status_note = "Travel company email sent to traveling company";
+        if (!empty($gr_officer_email)) {
+            $status_note .= " (CC: GR Officer)";
+        }
+        
+        $status_sql = "INSERT INTO `smt_request_status` 
+                       (`inv_no`, `status`, `note`, `emp_name`, `created_at`) 
+                       VALUES (?, 'email_sent', ?, ?, NOW())";
+        $status_stmt = mysqli_prepare($conDB, $status_sql);
+        if ($status_stmt) {
+            $current_user = $_SESSION['username'] ?? 'System';
+            mysqli_stmt_bind_param($status_stmt, 'sss', $vacation['request_inv_no'], $status_note, $current_user);
+            mysqli_stmt_execute($status_stmt);
+            mysqli_stmt_close($status_stmt);
+        }
+
+        error_log("Travel company email sent successfully for vacation ID: $vacation_id");
+        send_json_response(
+            "Success!", 
+            "Travel information has been sent to the traveling company" . (!empty($gr_officer_email) ? " with CC to GR Officer." : "."), 
+            "success"
+        );
+
+    } catch (Exception $e) {
+        error_log("ajaxVacation.php (sendTravelEmail) Error: " . $e->getMessage());
         send_json_response("Error", $e->getMessage(), "error", 500);
     }
     exit;
@@ -2014,9 +2311,66 @@ elseif ($ajaxType == 'applyLeave') {
         // Send notification to first approver (Direct Supervisor or Department Manager)
         if (function_exists('getEmployeeDetailsForApproval') && !empty($first_approver['emp_id'])) {
             $approver_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver['emp_id']);
-            if ($approver_details && !empty($approver_details['email'])) {
-                // Log notification
-                error_log("applyLeave: Leave request $request_inv_no submitted. Would notify " . $approver_details['email']);
+            if ($approver_details) {
+                // --- [UPDATED] SEND ACTUAL NOTIFICATIONS ---
+                error_log("applyLeave: Attempting to send notification to approver: " . $first_approver['emp_id']);
+                
+                if (function_exists('create_browser_notification')) {
+                    $notification_title = "New Leave Request";
+                    $notification_message = "A new leave request ($request_inv_no) for $leave_type from employee ID $empid is pending your approval.";
+                    $notification_url = "all_applied_vac.php?status=my_pending";
+                    $notif_result = create_browser_notification($conDB, $first_approver['emp_id'], $notification_title, $notification_message, $notification_url);
+                    error_log("applyLeave: Browser notification result: " . ($notif_result ? 'SUCCESS' : 'FAILED'));
+                } else {
+                    error_log("applyLeave: create_browser_notification function NOT FOUND");
+                }
+                
+                if (!empty($approver_details['email']) && function_exists('send_approval_email')) {
+                    error_log("applyLeave: Attempting to send email to: " . $approver_details['email']);
+                    
+                    // Get employee name for template
+                    $employee_name = 'Employee';
+                    $emp_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$empid' LIMIT 1");
+                    if ($emp_result && $emp_row = mysqli_fetch_assoc($emp_result)) {
+                        $employee_name = $emp_row['name'];
+                    }
+                    if ($emp_result) mysqli_free_result($emp_result);
+                    
+                    // Prepare template data
+                    $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+                    $template_data = [
+                        'APPROVER_NAME' => $approver_details['name'],
+                        'REQUEST_TYPE' => ucfirst($leave_type) . ' Leave Request',
+                        'REQUEST_TYPE_LOWER' => strtolower($leave_type) . ' leave request',
+                        'REQUEST_ID' => $request_inv_no,
+                        'EMPLOYEE_NAME' => $employee_name,
+                        'START_DATE' => date('d M Y', strtotime($start_date)),
+                        'END_DATE' => date('d M Y', strtotime($end_date)),
+                        'DURATION' => $vacdays,
+                        'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending'
+                    ];
+                    
+                    $email_subject = "New " . ucfirst($leave_type) . " Leave Request Pending Approval";
+                    $email_result = send_approval_email($conDB, $approver_details['email'], $approver_details['name'], $email_subject, 'leave_request', $template_data);
+                    error_log("applyLeave: Email result: " . ($email_result ? 'SUCCESS' : 'FAILED'));
+                } else {
+                    if (empty($approver_details['email'])) {
+                        error_log("applyLeave: Approver has NO EMAIL in database");
+                    }
+                    if (!function_exists('send_approval_email')) {
+                        error_log("applyLeave: send_approval_email function NOT FOUND");
+                    }
+                }
+                // --- [END UPDATED] ---
+            } else {
+                error_log("applyLeave: Could not get approver details for emp_id: " . $first_approver['emp_id']);
+            }
+        } else {
+            if (!function_exists('getEmployeeDetailsForApproval')) {
+                error_log("applyLeave: getEmployeeDetailsForApproval function NOT FOUND");
+            }
+            if (empty($first_approver['emp_id'])) {
+                error_log("applyLeave: first_approver emp_id is EMPTY");
             }
         }
         

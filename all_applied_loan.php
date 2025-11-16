@@ -15,6 +15,12 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
+// Restrict access: Employees cannot view this detailed report page
+if (isset($isEmployee) && $isEmployee === true) {
+    header("Location: ./profile.php");
+    exit();
+}
+
 // --- Get Request Type ID for 'loan_request' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'loan_request' LIMIT 1");
 if (!$type_query || mysqli_num_rows($type_query) == 0) {
@@ -62,6 +68,10 @@ $where_clauses = [];
 $params = [];
 $types = "";
 $join_sql = "";
+// Track department scoping application
+$dept_filter_applied = false;
+// Only HR and System Admin can view all departments
+$can_see_all_depts = ($is_system_admin ?? false) || ($isHR ?? false);
 
 $page_title = $all_statuses[$current_filter] ?? __('all_requests');
 
@@ -83,6 +93,7 @@ if ($current_filter === 'my_pending') {
     $where_clauses[] = "e.dept = ?";
     $params[] = $user_dept;
     $types .= "i";
+    $dept_filter_applied = true;
 } elseif (in_array($current_filter, ['pending_approval', 'approved', 'rejected'])) {
     $where_clauses[] = "l.status = ?";
     $params[] = $current_filter;
@@ -101,10 +112,14 @@ if (!empty($search_term)) {
     $types .= "sss";
 }
 
-if (!$is_system_admin && !in_array($current_filter, ['my_pending', 'all', 'my_dept'])) {
-    $where_clauses[] = "e.dept = ?";
-    $params[] = $user_dept;
-    $types .= "i";
+// Enforce department scoping for non-privileged users
+if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending') {
+    // Restrict to user's department OR any request where current user is in approval chain
+    // Resolve request type id is already available as $request_type_id
+    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    array_push($params, $user_dept, $request_type_id, $empid);
+    $types .= "iii";
+    $dept_filter_applied = true;
 }
 
 $where_sql = "";
@@ -186,9 +201,23 @@ if ($total_items > 0) {
     $stmt->close();
 }
 
-$unfiltered_sql = "SELECT COUNT(id) as total FROM emp_loan";
-$unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
-$unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
+// Unfiltered total respects department visibility
+if ($can_see_all_depts) {
+    $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_loan";
+    $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
+    $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
+} else {
+    $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
+        $stmt_unf->bind_param('iii', $user_dept, $request_type_id, $empid);
+        $stmt_unf->execute();
+        $res_unf = $stmt_unf->get_result();
+        $unfiltered_total_items = ($res_unf && ($row_unf = $res_unf->fetch_assoc())) ? ($row_unf['total'] ?? 0) : 0;
+        $stmt_unf->close();
+    } else {
+        $unfiltered_total_items = 0;
+    }
+}
 
 // --- Helper: Fallback next-approver name by status level when chain table isn't available ---
 function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {

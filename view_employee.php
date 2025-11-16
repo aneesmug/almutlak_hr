@@ -450,11 +450,13 @@ if (mysqli_num_rows($query) == 1) {
 												<i class="mdi mdi-book-open-page-variant mr-2"></i> <?= __('notes') ?> <?= ($emprow['empnote'] > 0) ? "(" . $emprow['empnote'] . ")" : "" ?>
 											</a>
 										</li>
+										<?php /* ?>
 										<li class="nav-item">
 											<a href="#evaluations" data-toggle="tab" aria-expanded="false" class="nav-link">
 												<i class="mdi mdi-chart-line mr-2"></i> <?= __('evaluations', 'Performance Evaluations') ?>
 											</a>
 										</li>
+										<?php */ ?>
 										<?php /*}*/ ?>
 
 										<?php /* ?>	
@@ -687,7 +689,7 @@ if (mysqli_num_rows($query) == 1) {
 
 														while ($rec = mysqli_fetch_array($query_emp_vac)) {
 															$id_emp_reg = $rec["id"];
-															$date_emp = $rec["date"];
+															//$date_emp = $rec["date"];
 															$note_emp = $rec["note"];
 															$user_update = $rec["user_update"];
 															$return_date_emp = $rec["return_date"];
@@ -704,7 +706,7 @@ if (mysqli_num_rows($query) == 1) {
 														?>
 															<tr>
 																<td><?= $note_emp; ?></td>
-																<td><?= $date_emp; ?></td>
+																<td><?//= $date_emp; ?></td>
 																<td><?= $return_date_emp; ?></td>
 																<td><?= $permit_no_emp; ?></td>
 																<td><?= $remarks_get; ?></td>
@@ -1135,7 +1137,7 @@ if (mysqli_num_rows($query) == 1) {
 
 											</div>
 										</div>
-
+										<?php /* ?>
 										<div class="tab-pane" id="evaluations">
 											<div class="card-box">
 												<h4 class="header-title m-b-30"><?= __('performance_evaluations', 'Performance Evaluations') ?></h4>
@@ -1213,6 +1215,7 @@ if (mysqli_num_rows($query) == 1) {
 												</table>
 											</div>
 										</div>
+										<?php */ ?>
 
 
 									</div>

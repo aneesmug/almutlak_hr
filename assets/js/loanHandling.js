@@ -72,6 +72,22 @@ $(document).on('click', '.applyLoan', async function(e) {
                     </style>
                 </div>
                 <div id="eligibility_info" class="alert alert-info" style="display:none; margin-bottom: 20px;"></div>
+                <div class="vacation-card" id="eos_info_card" style="display:none; margin-bottom: 20px;">
+                    <div class="vacation-card-header">
+                        <i class="fa fa-briefcase"></i>
+                        ${__('end_of_service_details') || 'End of Service Details'}
+                    </div>
+                    <div style="padding:15px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span><i class="fa fa-dollar-sign"></i> ${__('eos_total_benefit') || 'Calculated EOS Benefit'}:</span>
+                            <strong id="eos_total_span">-</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span><i class="fa fa-percent"></i> ${__('eos_max_40pct') || 'Max Allowed (40%)'}:</span>
+                            <strong id="eos_max_span">-</strong>
+                        </div>
+                    </div>
+                </div>
                 <div class="vacation-card" style="margin-bottom: 20px;">
                     <div class="vacation-card-header">
                         <i class="fa fa-money-bill-wave"></i>
@@ -205,16 +221,39 @@ $(document).on('click', '.applyLoan', async function(e) {
                         amountInput.prop('disabled', false);
                         eligibilityInfo.addClass('alert-info').text(message || '').show();
 
+                        // Show EOS details card only if allowed and EOS type
+                        const eosCard = $('#eos_info_card');
+                        if (type === 'end_of_service' && resp.show_full_details) {
+                            eosCard.show();
+                            const eosTotal = Number(resp.eos_benefit) || 0;
+                            const eosMax = Number(resp.max_amount) || (eosTotal * 0.4);
+                            $('#eos_total_span').text(eosTotal.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
+                            $('#eos_max_span').text(eosMax.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
+                        } else {
+                            eosCard.hide();
+                        }
+
                         // Configure installments visibility
                         if (type === 'end_of_service') {
                             installmentsGroup.show();
                             setInstallmentOptions(maxInstallments || 12);
+                            amountInput.closest('.vacation-card').show();
                         } else if (type === 'housing') {
-                            installmentsGroup.show();
-                            setInstallmentOptions(maxInstallments || 6);
+                            // Hide entire loan amount block if housing not eligible (allowance = 0)
+                            const amountBlock = amountInput.closest('.vacation-card');
+                            if (!resp.eligible) {
+                                amountBlock.hide();
+                                installmentsGroup.hide();
+                                deductionGroup.hide();
+                            } else {
+                                amountBlock.show();
+                                installmentsGroup.show();
+                                setInstallmentOptions(maxInstallments || 6);
+                            }
                         } else {
                             installmentsGroup.hide();
                             installmentsSelect.html('<option value="1">1 '+(__('month')||'Month')+'</option>');
+                            amountInput.closest('.vacation-card').show();
                         }
                         validateAmount();
                     } else {
@@ -230,7 +269,20 @@ $(document).on('click', '.applyLoan', async function(e) {
             // Start date is now determined by backend (next payroll); no datepicker needed.
 
             // Bind events
-            loanTypeInputs.on('change', function(){ fetchEligibility($(this).val()); });
+            loanTypeInputs.on('change', function(){ 
+                const selectedType = $(this).val();
+                fetchEligibility(selectedType);
+                // Disable housing radio if no allowance available
+                if (selectedType === 'housing' && housingAllowance <= 0) {
+                    $('#loan_type_housing').prop('disabled', true);
+                    $('#loan_type_housing').closest('.vac-radio-option').css({'opacity': '0.5', 'pointer-events': 'none'});
+                } else {
+                    $('#loan_type_housing').prop('disabled', false);
+                    $('#loan_type_housing').closest('.vac-radio-option').css({'opacity': '1', 'pointer-events': 'auto'});
+                }
+            });
+            // If changing away from EOS, hide eos card immediately
+            loanTypeInputs.on('change', function(){ if ($(this).val() !== 'end_of_service') { $('#eos_info_card').hide(); } });
             amountInput.on('input', validateAmount);
             installmentsSelect.on('change', updateDeduction);
 

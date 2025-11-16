@@ -1,15 +1,24 @@
 <?php
 
 // --- PHPMailer ---
-// Ensure the path is correct relative to this file's location
-// Assuming vendor folder is at the same level as the 'includes' directory. Adjust if needed.
-$mailerAutoloadPath = __DIR__ . '/../vendor/autoload.php'; // Example: Go up one level, then into vendor
-if (file_exists($mailerAutoloadPath)) {
-    require_once $mailerAutoloadPath;
-    // error_log("DEBUG: PHPMailer autoload successful from: " . $mailerAutoloadPath); // Optional: Confirm loading
-} else {
-    // Log an error if PHPMailer cannot be found. Email functionality will be disabled.
-    error_log("CRITICAL ERROR: PHPMailer autoload file not found at: " . $mailerAutoloadPath . ". Email notifications will NOT work.");
+// Try loading PHPMailer from includes/vendor first, then system/vendor
+$mailerAutoloadPaths = [
+    __DIR__ . '/vendor/autoload.php',      // includes/vendor (has PHPMailer)
+    __DIR__ . '/../vendor/autoload.php'     // system/vendor (backup)
+];
+
+$phpmailerLoaded = false;
+foreach ($mailerAutoloadPaths as $path) {
+    if (file_exists($path)) {
+        require_once $path;
+        $phpmailerLoaded = true;
+        error_log("PHPMailer autoload successful from: " . $path);
+        break;
+    }
+}
+
+if (!$phpmailerLoaded) {
+    error_log("CRITICAL ERROR: PHPMailer autoload file not found. Checked paths: " . implode(', ', $mailerAutoloadPaths) . ". Email notifications will NOT work.");
 }
 // --- End PHPMailer ---
 
@@ -1017,16 +1026,17 @@ if (!function_exists('append_approval_chain')) {
  * =================================================================
  * == NEW FUNCTION - EMAIL NOTIFICATION SENDER
  * =================================================================
- * Sends an email notification using PHPMailer.
+ * Sends an email notification using PHPMailer with HTML templates.
  * @param mysqli $conDB Database connection
  * @param string $to_email The recipient's email address
  * @param string $to_name The recipient's name
  * @param string $subject The email subject
- * @param string $body_html The HTML content of the email
+ * @param string $request_type Type of request: 'smart_request', 'vacation_request', 'leave_request', 'loan_request'
+ * @param array $template_data Array of data to populate the template
  * @return bool True on success, false on failure
  */
 if (!function_exists('send_approval_email')) {
-    function send_approval_email($conDB, $to_email, $to_name, $subject, $body_html) {
+    function send_approval_email($conDB, $to_email, $to_name, $subject, $request_type = 'smart_request', $template_data = []) {
         if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
             error_log("send_approval_email: PHPMailer class not found. Email not sent.");
             return false;
@@ -1050,6 +1060,13 @@ if (!function_exists('send_approval_email')) {
             return false;
         }
         // --- End Fetch SMTP settings ---
+        
+        // Load and populate email template
+        $body_html = load_email_template($request_type, $template_data);
+        if ($body_html === false) {
+            error_log("send_approval_email: Failed to load email template for type: $request_type");
+            return false;
+        }
 
         $mail = new PHPMailer(true);
 
@@ -1060,8 +1077,23 @@ if (!function_exists('send_approval_email')) {
             $mail->SMTPAuth   = true;
             $mail->Username   = $smtp_user;
             $mail->Password   = $smtp_pass;
-            $mail->SMTPSecure = ($smtp_secure == 'ssl') ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
+
+            // Set encryption based on setting (match login.php logic)
+            switch (strtolower($smtp_secure)) {
+                case 'tls':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    break;
+                case 'ssl':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    break;
+                default:
+                    // No encryption
+                    $mail->SMTPSecure = false;
+                    break;
+            }
+            
             $mail->Port       = $smtp_port;
+            $mail->CharSet    = 'UTF-8';
 
             // Recipients
             $mail->setFrom($smtp_from_email, $smtp_from_name);
@@ -1072,7 +1104,7 @@ if (!function_exists('send_approval_email')) {
             $mail->isHTML(true);
             $mail->Subject = $subject;
             $mail->Body    = $body_html;
-            // $mail->AltBody = strip_tags($body_html); // Optional: plain text version
+            $mail->AltBody = strip_tags($body_html); // Plain text version
 
             $mail->send();
             error_log("send_approval_email: Email sent successfully to $to_email.");
@@ -1083,6 +1115,211 @@ if (!function_exists('send_approval_email')) {
         }
     }
 }
+
+/**
+ * =================================================================
+ * Loads and populates email template with data.
+ * @param string $request_type Type of request
+ * @param array $data Template data
+ * @return string|false HTML content or false on failure
+ */
+if (!function_exists('load_email_template')) {
+    function load_email_template($request_type, $data = []) {
+        // Map request types to template files
+        $template_map = [
+            'smart_request' => 'smart_request_email_template.html',
+            'vacation_request' => 'vacation_request_email_template.html',
+            'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
+            'loan_request' => 'loan_request_email_template.html'
+        ];
+        
+        $template_file = $template_map[$request_type] ?? 'smart_request_email_template.html';
+        $template_path = __DIR__ . '/PHPMailerMaster/' . $template_file;
+        
+        if (!file_exists($template_path)) {
+            error_log("load_email_template: Template file not found: $template_path");
+            return false;
+        }
+        
+        $html = file_get_contents($template_path);
+        if ($html === false) {
+            error_log("load_email_template: Failed to read template file: $template_path");
+            return false;
+        }
+        
+        // Default logo URL - adjust to your actual logo path
+        $base_url = get_base_url();
+        $defaults = [
+            // 'LOGO_URL' => $base_url . '/assets/logo/logo_color_sm.png',
+            'LOGO_URL' => 'https://hr.almutlaksystem.com/assets/logo/logo_color_sm.png',
+            'APPROVER_NAME' => 'Approver',
+            'REQUEST_ID' => 'N/A',
+            'REQUEST_URL' => $base_url . '/dashboard.php'
+        ];
+        
+        $data = array_merge($defaults, $data);
+        
+        // Replace template placeholders
+        foreach ($data as $key => $value) {
+            $html = str_replace('{{' . $key . '}}', htmlspecialchars($value, ENT_QUOTES, 'UTF-8'), $html);
+        }
+        
+        return $html;
+    }
+}
+
+/**
+ * =================================================================
+ * Gets the base URL of the application.
+ * @return string Base URL
+ */
+if (!function_exists('get_base_url')) {
+    function get_base_url() {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $script_path = dirname($_SERVER['SCRIPT_NAME'] ?? '');
+        
+        // Clean up script path
+        if ($script_path === '/' || $script_path === '\\') {
+            $script_path = '';
+        }
+        
+        return $protocol . '://' . $host . $script_path;
+    }
+}
+
+/**
+ * =================================================================
+ * Fetches request details for email template based on request type.
+ * @param mysqli $conDB Database connection
+ * @param string $inv_no Request invoice number
+ * @param string $request_type Type of request
+ * @param string $approver_name Name of the approver
+ * @return array|false Template data array or false on failure
+ */
+if (!function_exists('get_request_details_for_email')) {
+    function get_request_details_for_email($conDB, $inv_no, $request_type, $approver_name) {
+        $base_url = get_base_url();
+        
+        $template_data = [
+            'APPROVER_NAME' => $approver_name,
+            'REQUEST_ID' => $inv_no
+        ];
+        
+        if ($request_type === 'vacation_request') {
+            // Fetch vacation details
+            $sql = "SELECT v.*, e.name as employee_name 
+                    FROM emp_vacation v 
+                    JOIN employees e ON v.emp_id = e.emp_id 
+                    WHERE v.request_inv_no = ? 
+                    LIMIT 1";
+            
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        // Determine if it's vacation or leave
+                        $vac_type = strtolower($row['vac_type'] ?? '');
+                        $fly_type = $row['fly_type'] ?? '';
+                        
+                        if (in_array($vac_type, ['sick', 'emergency', 'unpaid', 'maternity', 'paternity'])) {
+                            // It's a leave request
+                            $template_data['REQUEST_TYPE'] = ucfirst($vac_type) . ' Leave Request';
+                            $template_data['REQUEST_TYPE_LOWER'] = strtolower($vac_type) . ' leave request';
+                        } else {
+                            // It's a vacation request
+                            $template_data['REQUEST_TYPE'] = 'Annual Vacation Request';
+                            $template_data['REQUEST_TYPE_LOWER'] = 'annual vacation request';
+                        }
+                        
+                        $template_data['EMPLOYEE_NAME'] = $row['employee_name'];
+                        $template_data['START_DATE'] = date('d M Y', strtotime($row['start_date']));
+                        $template_data['END_DATE'] = date('d M Y', strtotime($row['return_date']));
+                        $template_data['DURATION'] = $row['vacdays'];
+                        $template_data['REQUEST_URL'] = $base_url . '/all_applied_vac.php?status=my_pending';
+                        
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            error_log("get_request_details_for_email: Failed to fetch vacation details for $inv_no");
+            return false;
+            
+        } elseif ($request_type === 'loan_request') {
+            // Fetch loan details
+            $sql = "SELECT l.*, e.name as employee_name 
+                    FROM emp_loan l 
+                    JOIN employees e ON l.emp_id = e.emp_id 
+                    WHERE l.inv_no = ? 
+                    LIMIT 1";
+            
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        $template_data['EMPLOYEE_NAME'] = $row['employee_name'];
+                        $template_data['LOAN_TYPE'] = str_replace('_', ' ', $row['loan_type']);
+                        $template_data['LOAN_AMOUNT'] = number_format($row['loan_amount'], 2);
+                        $template_data['INSTALLMENTS'] = $row['installments'];
+                        $template_data['REQUEST_URL'] = $base_url . '/all_applied_loan.php?status=my_pending';
+                        
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            error_log("get_request_details_for_email: Failed to fetch loan details for $inv_no");
+            return false;
+            
+        } elseif ($request_type === 'smart_request') {
+            // Fetch smart request details
+            $sql = "SELECT sr.*, e.name as employee_name, d.dep_nme as department_name
+                    FROM smart_request sr 
+                    LEFT JOIN employees e ON sr.emp_id = e.emp_id 
+                    LEFT JOIN department d ON sr.department = d.id
+                    WHERE sr.inv_no = ? 
+                    LIMIT 1";
+            
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        $template_data['REQUEST_TITLE'] = $row['sub_title'] ?? 'Smart Request';
+                        $template_data['SUBMITTED_BY'] = $row['employee_name'] ?? $row['prep_by'] ?? 'Employee';
+                        $template_data['DEPARTMENT'] = $row['department_name'] ?? 'N/A';
+                        $template_data['REQUEST_URL'] = $base_url . '/open_request.php?id=' . urlencode($inv_no);
+                        
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            error_log("get_request_details_for_email: Failed to fetch smart request details for $inv_no");
+            return false;
+        }
+        
+        // Unknown request type
+        error_log("get_request_details_for_email: Unknown request type '$request_type'");
+        return false;
+    }
+}
+
 
 
 /**
@@ -1266,14 +1503,25 @@ if (!function_exists('handle_approval_action')) {
                             $notification_url = "all_requests.php?status=pending_approval";
                         } elseif ($request_type === 'vacation_request') {
                             $notification_url = "all_applied_vac.php?status=my_pending";
+                        } elseif ($request_type === 'loan_request') {
+                            $notification_url = "all_applied_loan.php?status=my_pending";
                         } else {
                             $notification_url = "all_requests.php"; // Fallback
                         }
                         create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
                         
                         if ($next_approver_details['email']) {
-                            $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A new $friendly_label ($inv_no_safe) is pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
-                            send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $email_body);
+                            // Fetch request details for email template
+                            $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $next_approver_details['name']);
+                            
+                            if ($template_data) {
+                                send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $request_type, $template_data);
+                            } else {
+                                // Fallback to simple email if details not found
+                                error_log("handle_approval_action: Could not fetch request details for email template. Using fallback.");
+                                $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A new $friendly_label ($inv_no_safe) is pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                                send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $next_approver_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                            }
                         }
                         // --- [END FIX] ---
 
@@ -1327,14 +1575,25 @@ if (!function_exists('handle_approval_action')) {
                                 $notification_url = "all_requests.php?status=pending_approval";
                             } elseif ($request_type === 'vacation_request') {
                                 $notification_url = "all_applied_vac.php?status=my_pending";
+                            } elseif ($request_type === 'loan_request') {
+                                $notification_url = "all_applied_loan.php?status=my_pending";
                             } else {
                                 $notification_url = "all_requests.php"; // Fallback
                             }
                             create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
 
                             if ($next_approver_details['email']) {
-                                $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A $friendly_label ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
-                                send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $email_body);
+                                // Fetch request details for email template
+                                $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $next_approver_details['name']);
+                                
+                                if ($template_data) {
+                                    send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $request_type, $template_data);
+                                } else {
+                                    // Fallback to simple email if details not found
+                                    error_log("handle_approval_action: Could not fetch request details for email template. Using fallback.");
+                                    $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A $friendly_label ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                                    send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $next_approver_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                                }
                             }
                             // --- [END FIX] ---
 
@@ -1566,7 +1825,17 @@ if (!function_exists('handle_approval_action')) {
                         if ($creator_id > 0) {
                             $creator_details = getEmployeeDetailsForApproval($conDB, $creator_id);
                             if ($creator_details) {
-                                $notification_title = "$friendly_label Approved";
+                                // Create a more specific subject line for approval
+                                if ($request_type === 'vacation_request') {
+                                    $notification_title = "Vacation Request Approved - $inv_no_safe";
+                                } elseif ($request_type === 'loan_request') {
+                                    $notification_title = "Loan Request Approved - $inv_no_safe";
+                                } elseif ($request_type === 'smart_request') {
+                                    $notification_title = "Smart Request Approved - $inv_no_safe";
+                                } else {
+                                    $notification_title = "$friendly_label Approved";
+                                }
+                                
                                 $notification_message = "Your $friendly_label ($inv_no_safe) has been fully approved.";
                                 // Dynamic URL based on request type
                                 if ($request_type === 'smart_request') {
@@ -1579,8 +1848,21 @@ if (!function_exists('handle_approval_action')) {
                                 create_browser_notification($conDB, $creator_id, $notification_title, $notification_message, $notification_url);
 
                                 if ($creator_details['email']) {
-                                    $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>Your $friendly_label ($inv_no_safe) has been fully approved.<br><br>Thank you.";
-                                    send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $email_body);
+                                    // Fetch request details for email template
+                                    $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $creator_details['name']);
+                                    
+                                    if ($template_data) {
+                                        // Modify the template to indicate it's approved
+                                        if (isset($template_data['REQUEST_TYPE'])) {
+                                            $template_data['REQUEST_TYPE'] = $template_data['REQUEST_TYPE'] . ' - Approved';
+                                        }
+                                        send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, $template_data);
+                                        error_log("Final approval email sent to creator: {$creator_details['email']} for request $inv_no_safe");
+                                    } else {
+                                        // Fallback if details not found
+                                        error_log("handle_approval_action: Could not fetch request details for final approval email. Using fallback.");
+                                        send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $creator_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                                    }
                                 }
                             }
                         }
@@ -1607,7 +1889,17 @@ if (!function_exists('handle_approval_action')) {
 
 
                  // --- Rejection Notification Logic ---
-                 $notification_title = "Request Rejected";
+                 // Create a more specific subject line for rejection
+                 if ($request_type === 'vacation_request') {
+                     $notification_title = "Vacation Request Rejected - $inv_no_safe";
+                 } elseif ($request_type === 'loan_request') {
+                     $notification_title = "Loan Request Rejected - $inv_no_safe";
+                 } elseif ($request_type === 'smart_request') {
+                     $notification_title = "Smart Request Rejected - $inv_no_safe";
+                 } else {
+                     $notification_title = "Request Rejected";
+                 }
+                 
                  $notification_message = "Request " . htmlspecialchars($inv_no_safe) . " was rejected by " . htmlspecialchars($userwel ?? 'Approver') . ". Reason: " . htmlspecialchars($note_safe);
                  // MODIFICATION: Make URL dynamic based on request type
                  $notification_url = "my_vacations.php"; // Default for creator
@@ -1640,8 +1932,21 @@ if (!function_exists('handle_approval_action')) {
                      }
                      // --- [FIX] SEND REJECTION EMAIL TO CREATOR ---
                      if ($creator_details && $creator_details['email']) {
-                         $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>" . $notification_message . "<br><br>Thank you.";
-                         send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $email_body);
+                         // Fetch request details for email template
+                         $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $creator_details['name']);
+                         
+                         if ($template_data) {
+                             // Modify the template to indicate it's rejected
+                             if (isset($template_data['REQUEST_TYPE'])) {
+                                 $template_data['REQUEST_TYPE'] = $template_data['REQUEST_TYPE'] . ' - Rejected';
+                             }
+                             send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, $template_data);
+                             error_log("Rejection email sent to creator: {$creator_details['email']} for request $inv_no_safe");
+                         } else {
+                             // Fallback if details not found
+                             error_log("handle_approval_action: Could not fetch request details for rejection email. Using fallback.");
+                             send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $creator_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                         }
                      }
                      // --- [END FIX] ---
                   }
@@ -1662,8 +1967,21 @@ if (!function_exists('handle_approval_action')) {
                                  }
                                  // --- [FIX] SEND REJECTION EMAIL TO PREVIOUS APPROVERS ---
                                  if ($prev_approver_details && $prev_approver_details['email']) {
-                                    $email_body = "Dear " . htmlspecialchars($prev_approver_details['name']) . ",<br><br>The following request, which you previously approved, has now been rejected:<br>Request: $inv_no_safe<br>Rejected by: " . htmlspecialchars($userwel ?? 'Approver') . "<br>Reason: " . htmlspecialchars($note_safe);
-                                    send_approval_email($conDB, $prev_approver_details['email'], $prev_approver_details['name'], $notification_title, $email_body);
+                                    // Fetch request details for email template
+                                    $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $prev_approver_details['name']);
+                                    
+                                    if ($template_data) {
+                                        // Modify the template to indicate it's rejected
+                                        if (isset($template_data['REQUEST_TYPE'])) {
+                                            $template_data['REQUEST_TYPE'] = $template_data['REQUEST_TYPE'] . ' - Rejected';
+                                        }
+                                        send_approval_email($conDB, $prev_approver_details['email'], $prev_approver_details['name'], $notification_title, $request_type, $template_data);
+                                        error_log("Rejection email sent to previous approver: {$prev_approver_details['email']} for request $inv_no_safe");
+                                    } else {
+                                        // Fallback if details not found
+                                        error_log("handle_approval_action: Could not fetch request details for rejection email to previous approver.");
+                                        send_approval_email($conDB, $prev_approver_details['email'], $prev_approver_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $prev_approver_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                                    }
                                  }
                                  // --- [END FIX] ---
                              }
@@ -2598,6 +2916,198 @@ if (!function_exists('update_vacation_balance_on_approval')) {
                 mysqli_stmt_close($stmt_insert);
                 return false;
             }
+        }
+    }
+}
+
+/**
+ * =================================================================
+ * == TRAVEL COMPANY EMAIL NOTIFICATION FUNCTION
+ * =================================================================
+ * Sends employee travel information to the traveling company
+ * when an annual fly vacation is approved.
+ * 
+ * @param object $conDB Database connection
+ * @param string $employee_name Employee's full name
+ * @param string $passport_no Employee's passport number
+ * @param string $passport_expiry Employee's passport expiry date
+ * @param string $country_name Destination country name
+ * @param string $departure_date Flight departure date
+ * @param string $arrival_date Flight arrival date
+ * @param string $request_inv_no Vacation request invoice number (for reference)
+ * @param string $cc_email Optional CC email address (e.g., gr_officer)
+ * @return bool True if email sent successfully, false otherwise
+ */
+if (!function_exists('send_travel_company_email')) {
+    function send_travel_company_email($conDB, $employee_name, $passport_no, $passport_expiry, $country_name, $departure_date, $arrival_date, $request_inv_no = '', $cc_email = '') {
+        if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+            error_log("send_travel_company_email: PHPMailer class not found. Email not sent.");
+            return false;
+        }
+
+        // Fetch SMTP settings from app_settings table
+        $smtp_host = get_setting($conDB, 'smtp_host');
+        $smtp_port = (int)get_setting($conDB, 'smtp_port');
+        $smtp_user = get_setting($conDB, 'smtp_user');
+        $smtp_pass = get_setting($conDB, 'smtp_pass');
+        $smtp_from_email = get_setting($conDB, 'from_email');
+        $smtp_from_name = get_setting($conDB, 'from_name', 'Al Mutlak HR System');
+        $smtp_secure = get_setting($conDB, 'smtp_encryption');
+
+        // Get traveling company email (you should add this to app_settings table)
+        // For now, using a default value - you should create this setting in your database
+        $traveling_company_email = get_setting($conDB, 'traveling_company_email');
+        
+        if (empty($traveling_company_email)) {
+            error_log("send_travel_company_email: Traveling company email not configured in app_settings. Email not sent.");
+            return false;
+        }
+
+        if (!filter_var($traveling_company_email, FILTER_VALIDATE_EMAIL)) {
+            error_log("send_travel_company_email: Invalid traveling company email: $traveling_company_email. Email not sent.");
+            return false;
+        }
+
+        if (empty($smtp_host) || empty($smtp_port) || empty($smtp_user) || empty($smtp_pass) || empty($smtp_from_email)) {
+            error_log("send_travel_company_email: Missing SMTP settings. Email not sent.");
+            return false;
+        }
+
+        // Format dates for display
+        $departure_formatted = !empty($departure_date) ? date('d M Y', strtotime($departure_date)) : 'N/A';
+        $arrival_formatted = !empty($arrival_date) ? date('d M Y', strtotime($arrival_date)) : 'N/A';
+        $passport_expiry_formatted = !empty($passport_expiry) ? date('d M Y', strtotime($passport_expiry)) : 'N/A';
+
+        // Build email body
+        $site_title = get_setting($conDB, 'site_title', 'Al-Mutlak');
+        $logo_url = get_setting($conDB, 'logo', 'assets/images/logo.png');
+        
+        $body_html = '
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Travel Information</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; }
+        .email-container { max-width: 600px; margin: 30px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .email-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 30px; text-align: center; }
+        .email-header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+        .email-body { padding: 30px; }
+        .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .info-table tr { border-bottom: 1px solid #e9ecef; }
+        .info-table tr:last-child { border-bottom: none; }
+        .info-table td { padding: 15px 10px; }
+        .info-table td:first-child { font-weight: 600; color: #667eea; width: 40%; }
+        .info-table td:last-child { color: #333; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #6c757d; }
+        .highlight { background-color: #fff9e6; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>🛫 Employee Travel Information</h1>
+            <p style="margin: 5px 0 0 0; font-size: 14px;">New Vacation Travel Details</p>
+        </div>
+        <div class="email-body">
+            <p>Dear Travel Coordinator,</p>
+            <p>We are pleased to inform you that an employee has been approved for annual vacation travel. Below are the traveler details:</p>
+            
+            <table class="info-table">
+                <tr>
+                    <td>Traveler Name:</td>
+                    <td><strong>' . htmlspecialchars($employee_name) . '</strong></td>
+                </tr>
+                <tr>
+                    <td>Passport No:</td>
+                    <td>' . htmlspecialchars($passport_no ?: 'N/A') . '</td>
+                </tr>
+                <tr>
+                    <td>Passport Expiry:</td>
+                    <td>' . htmlspecialchars($passport_expiry_formatted) . '</td>
+                </tr>
+                <tr>
+                    <td>Departure To:</td>
+                    <td><strong>' . htmlspecialchars($country_name ?: 'N/A') . '</strong></td>
+                </tr>
+                <tr>
+                    <td>Departure Date:</td>
+                    <td>' . htmlspecialchars($departure_formatted) . '</td>
+                </tr>
+                <tr>
+                    <td>Arrival Date:</td>
+                    <td>' . htmlspecialchars($arrival_formatted) . '</td>
+                </tr>
+            </table>
+            
+            <div class="highlight">
+                <strong>📋 Reference Number:</strong> ' . htmlspecialchars($request_inv_no) . '
+            </div>
+            
+            <p>Please proceed with the necessary travel arrangements for the above employee.</p>
+            <p>If you have any questions or require additional information, please contact our HR department.</p>
+            
+            <p style="margin-top: 30px;">Best regards,<br><strong>' . htmlspecialchars($site_title) . ' HR Department</strong></p>
+        </div>
+        <div class="footer">
+            <p>This is an automated email from ' . htmlspecialchars($site_title) . ' HR System.</p>
+            <p>Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>';
+
+        $mail = new PHPMailer(true);
+
+        try {
+            // Server settings
+            $mail->isSMTP();
+            $mail->Host       = $smtp_host;
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $smtp_user;
+            $mail->Password   = $smtp_pass;
+
+            // Set encryption
+            switch (strtolower($smtp_secure)) {
+                case 'tls':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    break;
+                case 'ssl':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    break;
+                default:
+                    $mail->SMTPSecure = false;
+                    break;
+            }
+            
+            $mail->Port       = $smtp_port;
+            $mail->CharSet    = 'UTF-8';
+
+            // Recipients
+            $mail->setFrom($smtp_from_email, $smtp_from_name);
+            $mail->addAddress($traveling_company_email, 'Travel Company');
+            $mail->addReplyTo($smtp_from_email, $smtp_from_name);
+            
+            // Add CC if provided (e.g., gr_officer)
+            if (!empty($cc_email) && filter_var($cc_email, FILTER_VALIDATE_EMAIL)) {
+                $mail->addCC($cc_email, 'GR Officer');
+                error_log("send_travel_company_email: CC added to $cc_email");
+            }
+
+            // Content
+            $mail->isHTML(true);
+            $mail->Subject = 'Employee Travel Information - ' . $employee_name . ' - Ref: ' . $request_inv_no;
+            $mail->Body    = $body_html;
+            $mail->AltBody = strip_tags($body_html);
+
+            $mail->send();
+            error_log("send_travel_company_email: Email sent successfully to $traveling_company_email for employee: $employee_name");
+            return true;
+        } catch (Exception $e) {
+            error_log("send_travel_company_email: Failed to send email. Error: {$mail->ErrorInfo}");
+            return false;
         }
     }
 }
