@@ -9,21 +9,50 @@
     $current_user_id = $_SESSION['empid'] ?? 0;
     $userwel = $_SESSION['userwel'] ?? 'System';
 
-
-/****************************************************************
- * MODIFICATION SUMMARY:
- * 1. ADDED `mysqli_free_result()` after all `mysqli_query` loops to prevent "Commands out of sync" errors.
- * 2. This is critical for stabilizing the $conDB connection for complex functions.
- * 3. ADDED `applyVacation` block to handle new vacation submissions from `empVacationHandle.js`.
- * 4. ADDED `approveVacation` block to handle approvals from `all_applied_vac.php`.
- * 5. ADDED `rejectVacation` block to handle rejections from `all_applied_vac.php`.
- * 6. ADDED `updateVacationPayments` block to handle payment updates from `all_applied_vac.php`.
- * 7. [FIXED] Corrected `applyVacation` block to match the `emp_vacation` database schema:
- * - **REMOVED `dept_id` from the INSERT query and bind_param, as it does not exist in the user's provided schema.**
- * - Changed `replacement_per` to `replacement_person` (file already had this)
- * - Changed `notes` to `remarks` (file already had this)
- * - Updated the `mysqli_stmt_bind_param` types string to match the 10 columns.
- ****************************************************************/
+/**
+ * Calculate current vacation balance for an employee
+ * Uses VacationCalculator to get live balance until today
+ * 
+ * @param mysqli $conDB Database connection
+ * @param string $emp_id Employee ID
+ * @return float|null Current available balance or null on error
+ */
+function get_current_vacation_balance($conDB, $emp_id) {
+    $finalvacd = 0;
+    $dynamicBalance = null;
+    
+    if (empty($emp_id)) {
+        return null;
+    }
+    
+    // Get employee's available_balance from emp_vacation_balance as fallback
+    $stmt = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $emp_id) . "' ORDER BY `last_updated` DESC LIMIT 1");
+    if ($stmt && mysqli_num_rows($stmt) > 0) {
+        $row = mysqli_fetch_assoc($stmt);
+        $finalvacd = (float)$row['available_balance'];
+        mysqli_free_result($stmt);
+    }
+    
+    // Attempt live calculation using VacationCalculator
+    $calcFile = __DIR__ . '/../../includes/vacation_calculator.php';
+    if (file_exists($calcFile)) {
+        require_once $calcFile;
+        if (class_exists('VacationCalculator')) {
+            try {
+                $vc = new VacationCalculator($conDB);
+                $live = $vc->getCalculatedBalance($emp_id);
+                if ($live && isset($live['available_balance'])) {
+                    $dynamicBalance = (float)$live['available_balance'];
+                }
+            } catch (Throwable $e) {
+                
+            }
+        }
+    }
+    
+    // Return calculated balance if available, otherwise return static balance
+    return ($dynamicBalance !== null ? $dynamicBalance : $finalvacd);
+}
 
 $ajaxType = $_POST['ajaxType'] ?? null; // Use null coalescing
 
@@ -188,7 +217,7 @@ elseif ($ajaxType == 'canApplyVacation') {
             if ($current_status === 'approved') $status_text = 'Approved';
             elseif ($current_status === 'rejected') $status_text = 'Rejected';
 
-            $human_msg = "You already have a vacation request pending approval (" . htmlspecialchars($pending_inv) . ").";
+            $human_msg = __("you_already_have_a_vacation_request_pending_approval")." (" . htmlspecialchars($pending_inv) . ").";
             $extra = [];
             if ($status_text) $extra[] = "Current status: $status_text" . ($current_level ? " (Level $current_level)" : "");
             if ($approver_name) $extra[] = "Pending with: " . htmlspecialchars($approver_name);
@@ -238,16 +267,18 @@ elseif ($ajaxType == 'applyVacation') {
         $departure_date = escape_string($_POST['departure_date'] ?? '');
         $arrival_date = escape_string($_POST['arrival_date'] ?? '');
         $notes = escape_string($_POST['remarks'] ?? ''); // Changed from 'notes' to 'remarks' to match form field
-        $vacation_salary_type = escape_string($_POST['vacation_salary_type'] ?? 'payroll');
+        $vacation_salary_type = escape_string($_POST['vacation_salary_type'] ?? '');
+        $encash_days = isset($_POST['encash_days']) ? (float)$_POST['encash_days'] : 0;
+        $encashment_salary = isset($_POST['encashment_salary']) ? (float)str_replace(',', '', $_POST['encashment_salary']) : 0;
 
         // 2. Validate critical data
         if (empty($emp_id) || empty($vac_type) || empty($first_approver_id)) {
-            throw new Exception("Missing required fields (Employee, Vacation Type, or First Approver).");
+            throw new Exception(__("missing_required_fields_employee,_vacation_type_or_first_approver"));
         }
 
-        // Validate vacation_salary_type
-        if (!in_array($vacation_salary_type, ['payroll', 'end_of_service'])) {
-            $vacation_salary_type = 'payroll';
+        // Validate vacation_salary_type - only allow 'payroll' or 'end_of_service'
+        if (!empty($vacation_salary_type) && !in_array($vacation_salary_type, ['payroll', 'end_of_service'])) {
+            throw new Exception(__("invalid_vacation_salary_type_selected"));
         }
 
         // 3. Guard: prevent multiple applications while a request is pending final approval
@@ -267,8 +298,8 @@ elseif ($ajaxType == 'applyVacation') {
         }
         if (!empty($pending_inv)) {
             send_json_response(
-                "Pending Request Exists",
-                "You already have a vacation request pending approval (" . htmlspecialchars($pending_inv) . "). Please wait until it is finalized before applying again.",
+                __("pending_request_exists"),
+                __("you_already_have_a_vacation_request_pending_approval") . " (" . htmlspecialchars($pending_inv) . "). " . __("please_wait_until_it_is_finalized_before_applying_again"),
                 "info",
                 400
             );
@@ -304,7 +335,7 @@ elseif ($ajaxType == 'applyVacation') {
             usleep(30000);
         }
         if (!$request_inv_no) {
-            throw new Exception('Failed to generate unique request_inv_no'.($last_error?": $last_error":""));
+            throw new Exception(__('failed_to_generate_unique_request_inv_no').($last_error?": $last_error":""));
         }
 
         // 5. Calculate total vacation days
@@ -316,58 +347,80 @@ elseif ($ajaxType == 'applyVacation') {
             $vacdays = $diff->days + 1;
         }
 
-        // 5b. Check if employee is currently on an active approved vacation (can't apply while on vacation)
-        $today = date('Y-m-d');
-        $sql_active = "SELECT request_inv_no, start_date, return_date FROM emp_vacation 
-                       WHERE emp_id = ? 
-                         AND current_status = 'approved' 
-                         AND start_date <= ? 
-                         AND return_date >= ? 
-                       LIMIT 1";
-        $stmt_active = mysqli_prepare($conDB, $sql_active);
-        if ($stmt_active) {
-            mysqli_stmt_bind_param($stmt_active, 'sss', $emp_id, $today, $today);
-            if (mysqli_stmt_execute($stmt_active)) {
-                $res_active = mysqli_stmt_get_result($stmt_active);
-                if ($res_active && mysqli_num_rows($res_active) > 0) {
-                    $active_vac = mysqli_fetch_assoc($res_active);
+        // 5b. Check if employee is currently on an active approved/completed vacation that overlaps with requested dates
+        if (!empty($start_date) && !empty($end_date)) {
+            $sql_active = "SELECT request_inv_no, start_date, return_date, current_status FROM emp_vacation 
+                           WHERE emp_id = ? 
+                             AND current_status IN ('approved', 'completed')
+                             AND start_date <= ? 
+                             AND return_date >= ? 
+                           LIMIT 1";
+            $stmt_active = mysqli_prepare($conDB, $sql_active);
+            if ($stmt_active) {
+                mysqli_stmt_bind_param($stmt_active, 'sss', $emp_id, $end_date, $start_date);
+                
+                
+                
+                if (mysqli_stmt_execute($stmt_active)) {
+                    $res_active = mysqli_stmt_get_result($stmt_active);
+                    if ($res_active && mysqli_num_rows($res_active) > 0) {
+                        $active_vac = mysqli_fetch_assoc($res_active);
+                        
+                        
+                        
+                        if ($res_active) mysqli_free_result($res_active);
+                        mysqli_stmt_close($stmt_active);
+                        
+                        $status_display = ($active_vac['current_status'] === 'completed') ? __('completed') : __('approved');
+                        
+                        send_json_response(
+                            __('date_conflict_with_active_vacation'),
+                            __('your_requested_dates') . ' (' . htmlspecialchars($start_date) . ' ' . __('to') . ' ' . htmlspecialchars($end_date) . ') ' . __('overlap_with_an_existing') . ' ' . $status_display . ' ' . __('vacation') . ' (' . htmlspecialchars($active_vac['request_inv_no']) . ') ' . __('from') . ' ' . htmlspecialchars($active_vac['start_date']) . ' ' . __('to') . ' ' . htmlspecialchars($active_vac['return_date']) . '. ' . __('please_choose_different_dates'),
+                            'error',
+                            400
+                        );
+                        exit;
+                    }
                     if ($res_active) mysqli_free_result($res_active);
-                    mysqli_stmt_close($stmt_active);
-                    send_json_response(
-                        'Currently On Vacation',
-                        'You are currently on an approved vacation (' . htmlspecialchars($active_vac['request_inv_no']) . ') from ' . htmlspecialchars($active_vac['start_date']) . ' to ' . htmlspecialchars($active_vac['return_date']) . '. You cannot apply for another vacation while your current vacation is active.',
-                        'error',
-                        400
-                    );
-                    exit;
                 }
-                if ($res_active) mysqli_free_result($res_active);
+                mysqli_stmt_close($stmt_active);
             }
-            mysqli_stmt_close($stmt_active);
         }
 
-        // 5c. Prevent overlapping / duplicate vacation requests (pending or approved)
+        // 5c. Prevent overlapping / duplicate vacation requests (pending, approved, or completed)
         if (!empty($start_date) && !empty($end_date)) {
             $sql_overlap = "SELECT request_inv_no, start_date, return_date, current_status FROM emp_vacation 
                             WHERE emp_id = ? 
-                              AND current_status IN ('pending_approval','approved') 
+                              AND current_status IN ('pending_approval', 'approved', 'completed') 
                               AND start_date <= ? 
                               AND return_date >= ? ";
             $stmt_overlap = mysqli_prepare($conDB, $sql_overlap);
             if ($stmt_overlap) {
                 // bind as strings (emp_id may be varchar in schema)
                 mysqli_stmt_bind_param($stmt_overlap, 'sss', $emp_id, $end_date, $start_date);
+                
+                
+                
                 if (mysqli_stmt_execute($stmt_overlap)) {
                     $res_overlap = mysqli_stmt_get_result($stmt_overlap);
                     if ($res_overlap && mysqli_num_rows($res_overlap) > 0) {
                         $ov = mysqli_fetch_assoc($res_overlap);
+                        
+                        
+                        
                         if ($res_overlap) mysqli_free_result($res_overlap);
                         mysqli_stmt_close($stmt_overlap);
                         
-                        $status_text = ($ov['current_status'] === 'approved') ? 'approved' : 'pending';
+                        $status_text = 'pending';
+                        if ($ov['current_status'] === 'approved') {
+                            $status_text = 'approved';
+                        } elseif ($ov['current_status'] === 'completed') {
+                            $status_text = 'completed';
+                        }
+                        
                         send_json_response(
-                            'Date Conflict',
-                            'You already have a ' . $status_text . ' vacation request (' . htmlspecialchars($ov['request_inv_no']) . ') covering ' . htmlspecialchars($ov['start_date']) . ' to ' . htmlspecialchars($ov['return_date']) . '. Your requested dates (' . htmlspecialchars($start_date) . ' to ' . htmlspecialchars($end_date) . ') overlap with this existing request. Please choose different dates.',
+                            __('date_conflict'),
+                            __('you_already_have_a') . ' ' . $status_text . ' ' . __('vacation_request') . ' (' . htmlspecialchars($ov['request_inv_no']) . ') ' . __('covering') . ' ' . htmlspecialchars($ov['start_date']) . ' ' . __('to') . ' ' . htmlspecialchars($ov['return_date']) . '. ' . __('your_requested_dates') . ' (' . htmlspecialchars($start_date) . ' ' . __('to') . ' ' . htmlspecialchars($end_date) . ') ' . __('overlap_with_this_existing_request') . '. ' . __('please_choose_different_dates'),
                             'error',
                             400
                         );
@@ -377,13 +430,13 @@ elseif ($ajaxType == 'applyVacation') {
                 }
                 mysqli_stmt_close($stmt_overlap);
             } else {
-                error_log('applyVacation: Failed to prepare overlap check: ' . mysqli_error($conDB));
+                $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
             }
         }
 
-    // 6. Check balance before proceeding
-        require_once __DIR__ . '/../../includes/get_vacation_balance.php';
-        $remaining_balance = get_employee_vacation_balance($conDB, $emp_id);
+    // 6. Check balance before proceeding (use live calculated balance)
+        $remaining_balance = get_current_vacation_balance($conDB, $emp_id);
 
         // Fallback: calculate remaining from contract period if no balance row
         $effective_remaining = $remaining_balance;
@@ -447,20 +500,47 @@ elseif ($ajaxType == 'applyVacation') {
             $effective_remaining = 0.0;
         }
 
-        // [NEW] If this is an Encashment request, set vacdays to all available remaining days
+        // [NEW] If this is an Encashment request, use the user-entered encash_days
         $is_encashment_request = (trim(strtolower($notes)) === 'encashment') || (trim(strtolower($vac_type)) === 'encashed');
         if ($is_encashment_request) {
-            $vacdays = (int)floor($effective_remaining);
+            // Use user-entered days from the form
+            if ($encash_days > 0) {
+                $vacdays = $encash_days;
+            } else {
+                send_json_response(
+                    __('invalid_input'),
+                    __('please_enter_the_number_of_days_you_want_to_encash'),
+                    "error",
+                    400
+                );
+                exit;
+            }
+            // Validate user didn't request more than available
+            if ($encash_days > $effective_remaining) {
+                send_json_response(
+                    __('insufficient_balance'),
+                    sprintf(__("you_requested_to_encash_days_but_your_available_balance_is_only_days"), $encash_days, $effective_remaining),
+                    "error",
+                    400
+                );
+                exit;
+            }
         }
 
         if ($vacdays > $effective_remaining) {
             $details = '';
             if ($contract_days !== null && $period_start_str && $period_end_str) {
-                $details = " You are allowed $contract_days days per contract period. Used: $used_days_in_period days. Period: $period_start_str to $period_end_str.";
+                $details = sprintf(
+                    __("you_are_allowed_days_per_contract_period_used_days_period_start_to_period_end"),
+                    $contract_days,
+                    $used_days_in_period,
+                    $period_start_str,
+                    $period_end_str
+                );
             }
             send_json_response(
-                "Insufficient Balance",
-                "You requested $vacdays days, but your available balance is $effective_remaining days." . $details,
+                __('insufficient_balance'),
+                __("you_requested_days_but_your_available_balance_is_only_days", $vacdays, $effective_remaining) . $details,
                 "error",
                 400
             );
@@ -482,101 +562,71 @@ elseif ($ajaxType == 'applyVacation') {
             if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetPath)) {
                 $attachment_path = $targetPath;
             } else {
-                error_log("Vacation Apply: File upload failed. " . $_FILES['attachment']['error']);
+                
             }
         }
 
-            // [NEW] Calculate encashment amount if remarks = 'Encashment'
+            // [NEW] Use encashment amount calculated on frontend
             $encashment_amount = null;
             if ($is_encashment_request) {
-                // Get employee's salary details
-                $sql_salary = "SELECT * FROM `emp_salary` WHERE `emp_id` = ? ORDER BY id DESC LIMIT 1";
-                $stmt_salary = mysqli_prepare($conDB, $sql_salary);
-                if ($stmt_salary) {
-                    mysqli_stmt_bind_param($stmt_salary, "s", $emp_id);
-                    if (mysqli_stmt_execute($stmt_salary)) {
-                        $res_salary = mysqli_stmt_get_result($stmt_salary);
-                        if ($row_salary = mysqli_fetch_assoc($res_salary)) {
-                            // Calculate total monthly salary
-                            $total_monthly_salary = 
-                                ($row_salary['basic'] ?? 0) + 
-                                ($row_salary['housing'] ?? 0) + 
-                                ($row_salary['transport'] ?? 0) + 
-                                ($row_salary['food'] ?? 0) + 
-                                ($row_salary['misc'] ?? 0) + 
-                                ($row_salary['cashier'] ?? 0) + 
-                                ($row_salary['fuel'] ?? 0) + 
-                                ($row_salary['tel'] ?? 0) + 
-                                ($row_salary['other'] ?? 0) + 
-                                ($row_salary['guard'] ?? 0);
-                        
-                            // Calculate daily rate (monthly salary / 30)
-                            $daily_rate = $total_monthly_salary / 30;
-                        
-                            // Calculate encashment: daily_rate * encashed days
-                            $days_encashed = (int)floor($effective_remaining);
-                            $encashment_amount = $daily_rate * $days_encashed;
-                        
-                            error_log("Encashment Calculation: Employee $emp_id, Days: $effective_remaining, Daily Rate: $daily_rate, Total: $encashment_amount");
-                        }
-                        mysqli_free_result($res_salary);
-                    }
-                    mysqli_stmt_close($stmt_salary);
-                }
+                // Use the encashment_salary already calculated by frontend
+                $encashment_amount = $encashment_salary;
+                
             }
 
         // 8. Insert the main vacation request
+        // NOTE: For DATE columns that need NULL support, we build the SQL manually because mysqli_stmt_bind_param
+        // with 's' type doesn't properly handle NULL for DATE columns (converts to '0000-00-00')
+        
+        $vacdays_int = (int)$vacdays;
+        $encashment_amount_val = ($encashment_amount !== null ? (float)$encashment_amount : 0.0);
+        $submitted_by_val = ($current_user_id && (int)$current_user_id > 0) ? (int)$current_user_id : 'NULL';
+        
+        // Prepare date values - use NULL keyword for empty dates
+        $departure_date_sql = (!empty($departure_date) && $departure_date !== '0000-00-00') ? "'" . mysqli_real_escape_string($conDB, $departure_date) . "'" : 'NULL';
+        $arrival_date_sql = (!empty($arrival_date) && $arrival_date !== '0000-00-00') ? "'" . mysqli_real_escape_string($conDB, $arrival_date) . "'" : 'NULL';
+        
+        // Escape other string values
+        $emp_id_esc = mysqli_real_escape_string($conDB, $emp_id);
+        $vac_type_esc = mysqli_real_escape_string($conDB, $vac_type);
+        $fly_type_esc = mysqli_real_escape_string($conDB, $fly_type);
+        $replacement_per_esc = mysqli_real_escape_string($conDB, $replacement_per);
+        $start_date_esc = mysqli_real_escape_string($conDB, $start_date);
+        $end_date_esc = mysqli_real_escape_string($conDB, $end_date);
+        $notes_esc = mysqli_real_escape_string($conDB, $notes);
+        $vacation_salary_type_esc = mysqli_real_escape_string($conDB, $vacation_salary_type);
+        $attachment_path_esc = mysqli_real_escape_string($conDB, $attachment_path);
+        $request_inv_no_esc = mysqli_real_escape_string($conDB, $request_inv_no);
+        
+        // Determine is_deductible flag
+        // If vacation type is "Fly" OR "Local Vacation" with fly_type "annual", set is_deductible = 0
+        // This means the employee stays active in payroll with full salary (no deductions)
+        $is_deductible = 1; // Default: deductible (affects payroll)
+        if (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual') {
+            $is_deductible = 0; // Not deductible: employee remains in full payroll
+        }
+
+        
         $sql = "INSERT INTO `emp_vacation` 
-                    (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `current_status`, `current_approval_level`) 
+                    (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`) 
                 VALUES 
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', 1)";
+                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1)";
 
-        $stmt_vac = mysqli_prepare($conDB, $sql);
-        if (!$stmt_vac) {
-            error_log("applyVacation: Prepare failed - " . mysqli_error($conDB));
-            throw new Exception("Prepare failed (insert vac): " . mysqli_error($conDB));
+        
+        
+        if (!mysqli_query($conDB, $sql)) {
+            
+            throw new Exception("INSERT failed (insert vac): " . mysqli_error($conDB));
         }
-
-            // Types: s (emp_id), i (submitted_by_emp_id), s (vac_type), s (fly_type), s (replacement_person), s (start_date), s (end_date), s (departure_date), s (arrival_date), i (vacdays), s (remarks), s (vacation_salary_type), s (attachment_path), d (encashment_amount), s (request_inv_no)
-            $vacdays_int = (int)$vacdays;
-            $encashment_amount_val = ($encashment_amount !== null ? (float)$encashment_amount : 0.0);
-            $submitted_by_val = ($current_user_id && (int)$current_user_id > 0) ? (int)$current_user_id : null;
-            
-            // Convert empty strings to NULL for date fields
-            $departure_date_val = (!empty($departure_date) ? $departure_date : null);
-            $arrival_date_val = (!empty($arrival_date) ? $arrival_date : null);
-            
-            // Log the values being inserted for debugging
-            error_log("applyVacation: Inserting - emp_id: $emp_id, vac_type: $vac_type, fly_type: $fly_type, start: $start_date, end: $end_date, departure: $departure_date_val, arrival: $arrival_date_val, vacdays: $vacdays_int, remarks: $notes");
-            
-            mysqli_stmt_bind_param($stmt_vac, "sissssssisssdss", 
-                $emp_id,
-                $submitted_by_val,
-                $vac_type, 
-                $fly_type, 
-                $replacement_per,
-                $start_date, 
-                $end_date,
-                $departure_date_val,
-                $arrival_date_val,
-                $vacdays_int,
-                $notes,
-                $vacation_salary_type,
-                $attachment_path, 
-                $encashment_amount_val,
-                $request_inv_no
-            );
-
-        if (!mysqli_stmt_execute($stmt_vac)) {
-            error_log("applyVacation: Execute failed - " . mysqli_stmt_error($stmt_vac));
-            throw new Exception("Execute failed (insert vac): " . mysqli_stmt_error($stmt_vac));
-        }
-        mysqli_stmt_close($stmt_vac);
+        
+        // Get the inserted ID
+        $inserted_id = mysqli_insert_id($conDB);
+        
 
         // 9. Save the approval chain
         $approver_chain = [$first_approver_id];
         if (!save_approval_chain($conDB, $request_inv_no, 'vacation_request', $approver_chain)) {
-            throw new Exception("Vacation request $request_inv_no was created, but failed to save the approval chain.");
+            throw new Exception(sprintf(__("vacation_request_created_but_failed_to_save_approval_chain"), htmlspecialchars($request_inv_no)));
         }
 
     // 9b. Pre-build of remaining approvers DISABLED to avoid duplicate approver rows.
@@ -642,8 +692,9 @@ elseif ($ajaxType == 'applyVacation') {
                 }
             }
 
-            // STEP D: HR Payroll (only if vacation_salary_type = 'payroll')
-            if ($vacation_salary_type === 'payroll') {
+            // STEP D: HR Payroll (for ALL annual vacations to process overtime/deductions)
+            // All vacations must go to HR Payroll regardless of vacation_salary_type
+            if ($fly_type === 'annual') {
                 $res_hr_payroll = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
                 if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
                     $pushApprover($row_hr_payroll['emp_id']);
@@ -678,32 +729,39 @@ elseif ($ajaxType == 'applyVacation') {
                         if ($stmtIns) {
                             mysqli_stmt_bind_param($stmtIns, "siii", $request_inv_no, $request_type_id, $aid_safe, $level);
                             if (!mysqli_stmt_execute($stmtIns)) {
-                                error_log('applyVacation: Failed inserting approver '.$aid_safe.' level '.$level.' for '.$request_inv_no.' : '.mysqli_stmt_error($stmtIns));
+                                $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
                                 $ok = false; mysqli_stmt_close($stmtIns); break;
                             }
                             mysqli_stmt_close($stmtIns);
                             $level++;
                         } else {
-                            error_log('applyVacation: Prepare failed for approver insert level '.$level.' : '.mysqli_error($conDB));
+                            $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
                             $ok = false; break;
                         }
                     }
                     if ($ok) {
                         mysqli_commit($conDB);
-                        error_log('applyVacation: Pre-built chain appended for '.$request_inv_no.' additional approvers: '.json_encode($additional_approvers));
+                        $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
                     } else {
                         mysqli_rollback($conDB);
-                        error_log('applyVacation: Rolling back additional approvers append for '.$request_inv_no);
+                        $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
                     }
                 } else {
                     if ($type_q) mysqli_free_result($type_q);
-                    error_log('applyVacation: Could not fetch request_type_id for vacation_request to append chain for '.$request_inv_no);
+                    $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
                 }
             } else {
-                error_log('applyVacation: No additional approvers detected for '.$request_inv_no.' (emp '.$emp_id.')');
+                $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
             }
         } catch (Exception $chainEx) {
-            error_log('applyVacation: Exception while building additional chain for '.$request_inv_no.' : '.$chainEx->getMessage());
+            $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
             // Non-fatal: request remains valid with first approver only.
         }
 
@@ -716,20 +774,20 @@ elseif ($ajaxType == 'applyVacation') {
                 $pending_with_text = " $label: " . $first_details['name'] . ".";
                 
                 // --- [NEW] SEND NOTIFICATION TO FIRST APPROVER ---
-                error_log("applyVacation: Attempting to send notification to first_approver_id: $first_approver_id");
+                
                 
                 if (function_exists('create_browser_notification')) {
-                    $notification_title = "New Annual Vacation Request";
-                    $notification_message = "A new vacation request ($request_inv_no) from employee ID $emp_id is pending your approval.";
+                    $notification_title = __("new_vacation_request_pending_your_approval");
+                    $notification_message = sprintf(__("new_vacation_request_from_employee_pending_your_approval"), htmlspecialchars($request_inv_no), htmlspecialchars($emp_id));
                     $notification_url = "all_applied_vac.php?status=my_pending";
                     $notif_result = create_browser_notification($conDB, $first_approver_id, $notification_title, $notification_message, $notification_url);
-                    error_log("applyVacation: Browser notification result: " . ($notif_result ? 'SUCCESS' : 'FAILED'));
+                    
                 } else {
-                    error_log("applyVacation: create_browser_notification function NOT FOUND");
+                    
                 }
                 
                 if (!empty($first_details['email']) && function_exists('send_approval_email')) {
-                    error_log("applyVacation: Attempting to send email to: " . $first_details['email']);
+                    
                     
                     // Get employee name for template
                     $employee_name = 'Employee';
@@ -753,34 +811,34 @@ elseif ($ajaxType == 'applyVacation') {
                         'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending'
                     ];
                     
-                    $email_subject = "New Annual Vacation Request Pending Approval";
+                    $email_subject = __("new_vacation_request_pending_approval");
+                    
                     $email_result = send_approval_email($conDB, $first_details['email'], $first_details['name'], $email_subject, 'vacation_request', $template_data);
-                    error_log("applyVacation: Email result: " . ($email_result ? 'SUCCESS' : 'FAILED'));
+                    
                 } else {
                     if (empty($first_details['email'])) {
-                        error_log("applyVacation: First approver has NO EMAIL in database");
+                        
                     }
                     if (!function_exists('send_approval_email')) {
-                        error_log("applyVacation: send_approval_email function NOT FOUND");
+                        
                     }
                 }
                 // --- [END NEW] ---
             } else {
-                error_log("applyVacation: Could not get first approver details or name is empty");
+                
             }
         } else {
             if (!function_exists('getEmployeeDetailsForApproval')) {
-                error_log("applyVacation: getEmployeeDetailsForApproval function NOT FOUND");
+                
             }
             if (empty($first_approver_id)) {
-                error_log("applyVacation: first_approver_id is EMPTY");
+                
             }
         }
-        send_json_response("Success!", "Your vacation request ($request_inv_no) has been submitted for approval." . $pending_with_text, "success");
-
+        send_json_response("Success!", sprintf(__("your_vacation_request_submitted_for_approval"), htmlspecialchars($request_inv_no)) . $pending_with_text, "success");
     } catch (Exception $e) {
-        error_log("ajaxVacation.php (applyVacation) Error: " . $e->getMessage());
-        send_json_response("Error", "An error occurred: " . $e->getMessage(), "error", 500);
+        send_json_response("Error", __("an_error_occurred") . ": " . $e->getMessage(), "error", 500);
+        
     }
     exit;
 }
@@ -793,21 +851,32 @@ elseif ($ajaxType == 'approveVacation') {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
         $approver_chain = (array)($_POST['approver_chain'] ?? []);
         
-        // Payment details (only sent by HR)
+        // Payment and travel details (sent by HR Assistant or GR Officer)
+        $departure_date = trim($_POST['departure_date'] ?? '');
+        $arrival_date = trim($_POST['arrival_date'] ?? '');
         $ticket_pay = (float)($_POST['ticket_pay'] ?? 0);
         $permit_fee = (float)($_POST['permit_fee'] ?? 0);
+        
+        
+        
+        
+        // Payroll details (only sent by HR Payroll)
+        $overtime_hours = (float)($_POST['overtime_hours'] ?? 0);
+        $deduction_hours = (float)($_POST['deduction_hours'] ?? 0);
+        $deduction_days = (float)($_POST['deduction_days'] ?? 0);
+        $payroll_note = trim($_POST['payroll_note'] ?? '');
         
         // HR Team CC recipients (only sent by HR Senior BP)
         $hr_team_cc = (array)($_POST['hr_team_cc'] ?? []);
         
         // Log for debugging
-        error_log("approveVacation: vacation_id=$vacation_id, approver_chain=" . json_encode($approver_chain) . ", chain_count=" . count($approver_chain));
+        
 
         if (empty($vacation_id)) {
-            throw new Exception("Vacation ID is missing.");
+            throw new Exception(__("vacation_id_missing"));
         }
         if (empty($current_user_id)) {
-            throw new Exception("Your session has expired. Please log in again.");
+            throw new Exception(__("session_expired_please_log_in_again"));
         }
         
         // 1. Get the request_inv_no from the vacation ID
@@ -834,18 +903,117 @@ elseif ($ajaxType == 'approveVacation') {
         if ($result['status'] == 'error') {
             throw new Exception($result['message']);
         }
+
+        // 3. Always update travel dates if provided (by HR Assistant or GR Officer), regardless of payment amounts
+        // This ensures arrival_date gets saved even if there are no payments
+        // Update BOTH dates and payments in ONE query to ensure atomicity
+        $needs_update = false;
+        $update_fields = [];
+        $update_values = [];
+        $update_types = "";
         
-        // 3. If payments were included (by HR), update the main table
-        if ($ticket_pay > 0 || $permit_fee > 0) {
-            $sql_pay = "UPDATE `emp_vacation` SET `ticket_pay` = ?, `permit_fee` = ? WHERE `id` = ?";
-            $stmt_pay = mysqli_prepare($conDB, $sql_pay);
-            if ($stmt_pay) {
-                mysqli_stmt_bind_param($stmt_pay, "ddi", $ticket_pay, $permit_fee, $vacation_id);
-                if (!mysqli_stmt_execute($stmt_pay)) {
-                    error_log("approveVacation: Failed to update payments for vac_id $vacation_id. Error: " . mysqli_stmt_error($stmt_pay));
-                    // Don't fail the whole approval, just log this error
+        // Check if we have dates to update
+        if (!empty($departure_date)) {
+            $update_fields[] = "`departure_date` = ?";
+            $update_values[] = $departure_date;
+            $update_types .= "s";
+            $needs_update = true;
+            
+        }
+        
+        if (!empty($arrival_date)) {
+            $update_fields[] = "`arrival_date` = ?";
+            $update_values[] = $arrival_date;
+            $update_types .= "s";
+            $needs_update = true;
+            
+        }
+        
+        // Check if we have payment amounts to update
+        if ($ticket_pay > 0) {
+            $update_fields[] = "`ticket_pay` = ?";
+            $update_values[] = $ticket_pay;
+            $update_types .= "d";
+            $needs_update = true;
+            
+        }
+        
+        if ($permit_fee > 0) {
+            $update_fields[] = "`permit_fee` = ?";
+            $update_values[] = $permit_fee;
+            $update_types .= "d";
+            $needs_update = true;
+            
+        }
+        
+        // Execute the update if we have any fields to update
+        if ($needs_update) {
+            $sql_update = "UPDATE `emp_vacation` SET " . implode(", ", $update_fields) . " WHERE `id` = ?";
+            $update_values[] = $vacation_id;
+            $update_types .= "i";
+            
+            
+            
+            $stmt_update = mysqli_prepare($conDB, $sql_update);
+            if ($stmt_update) {
+                mysqli_stmt_bind_param($stmt_update, $update_types, ...$update_values);
+                if (!mysqli_stmt_execute($stmt_update)) {
+                    
+                } else {
+                    $affected = mysqli_stmt_affected_rows($stmt_update);
+                    
+                    
+                    // Verify the update by reading back
+                    $verify_sql = "SELECT departure_date, arrival_date, ticket_pay, permit_fee FROM emp_vacation WHERE id = ?";
+                    $verify_stmt = mysqli_prepare($conDB, $verify_sql);
+                    if ($verify_stmt) {
+                        mysqli_stmt_bind_param($verify_stmt, "i", $vacation_id);
+                        mysqli_stmt_execute($verify_stmt);
+                        $verify_result = mysqli_stmt_get_result($verify_stmt);
+                        if ($verify_row = mysqli_fetch_assoc($verify_result)) {
+                            
+                        }
+                        mysqli_stmt_close($verify_stmt);
+                    }
                 }
-                mysqli_stmt_close($stmt_pay);
+                mysqli_stmt_close($stmt_update);
+            } else {
+                
+            }
+        } else {
+            
+        }
+        
+        // 3.1 If payroll adjustments were included (by HR Payroll), save them
+        if ($overtime_hours > 0 || $deduction_hours > 0 || $deduction_days > 0 || !empty($payroll_note)) {
+            // Get employee ID from vacation record
+            $sql_emp = "SELECT emp_id FROM emp_vacation WHERE id = ?";
+            $stmt_emp = mysqli_prepare($conDB, $sql_emp);
+            if ($stmt_emp) {
+                mysqli_stmt_bind_param($stmt_emp, "i", $vacation_id);
+                mysqli_stmt_execute($stmt_emp);
+                $result_emp = mysqli_stmt_get_result($stmt_emp);
+                if ($emp_row = mysqli_fetch_assoc($result_emp)) {
+                    $emp_id = $emp_row['emp_id'];
+                    
+                    // Save payroll adjustments to vacation record or a separate table
+                    // Update emp_vacation with payroll adjustments (assuming columns exist)
+                    $sql_payroll = "UPDATE `emp_vacation` 
+                                   SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `payroll_note` = ? 
+                                   WHERE `id` = ?";
+                    $stmt_payroll = mysqli_prepare($conDB, $sql_payroll);
+                    if ($stmt_payroll) {
+                        mysqli_stmt_bind_param($stmt_payroll, "dddsi", $overtime_hours, $deduction_hours, $deduction_days, $payroll_note, $vacation_id);
+                        if (!mysqli_stmt_execute($stmt_payroll)) {
+                            
+                            // Don't fail the whole approval, just log this error
+                        } else {
+                            
+                        }
+                        mysqli_stmt_close($stmt_payroll);
+                    }
+                }
+                mysqli_stmt_close($stmt_emp);
             }
         }
         
@@ -890,19 +1058,19 @@ elseif ($ajaxType == 'approveVacation') {
                                         'REQUEST_ID' => $vac_data['request_inv_no'],
                                         'EMPLOYEE_NAME' => $vac_data['emp_name'],
                                         'START_DATE' => date('d M Y', strtotime($vac_data['start_date'])),
-                                        'END_DATE' => date('d M Y', strtotime($vac_data['end_date'])),
-                                        'DURATION' => $vac_data['total_days'],
+                                        'END_DATE' => date('d M Y', strtotime($vac_data['return_date'])),
+                                        'DURATION' => $vac_data['vacdays'],
                                         'REQUEST_URL' => $base_url . '/all_applied_vac.php'
                                     ];
                                     
                                     send_approval_email($conDB, $cc_rec['email'], $cc_rec['name'], $subject, 'vacation_request', $cc_template_data);
-                                    error_log("CC email sent to: {$cc_rec['email']} for request {$vac_data['request_inv_no']}");
+                                    
                                 } else {
                                     // Fallback log if helper not found
-                                    error_log("send_approval_email function not available. Could not send CC email to {$cc_rec['email']}");
+                                    
                                 }
                             } else {
-                                error_log("HR Team CC recipient '{$cc_rec['name']}' has no email; skipping");
+                                
                             }
                         }
                         mysqli_free_result($result_cc);
@@ -913,10 +1081,11 @@ elseif ($ajaxType == 'approveVacation') {
         }
         
         // 5. Send success response
-        send_json_response("Approved!", "The vacation request has been approved.", "success");
+        send_json_response("Approved!", __("the_vacation_request_has_been_approved"), "success");
+
 
     } catch (Exception $e) {
-        error_log("ajaxVacation.php (approveVacation) Error: " . $e->getMessage());
+        
         send_json_response("Error", $e->getMessage(), "error", 500);
     }
     exit;
@@ -931,20 +1100,22 @@ elseif ($ajaxType == 'rejectVacation') {
         $rejection_note = escape_string($_POST['rejection_note'] ?? 'Rejected');
 
         if (empty($vacation_id)) {
-            throw new Exception("Vacation ID is missing.");
+            throw new Exception(__("vacation_id_missing"));
+            
         }
          if (empty($current_user_id)) {
             throw new Exception("Your session has expired. Please log in again.");
         }
         if (empty($rejection_note)) {
-            throw new Exception("A rejection reason is required.");
+            throw new Exception(__("rejection_reason_required"));
+            
         }
 
         // 1. Get the request_inv_no from the vacation ID
         $query_inv = mysqli_query($conDB, "SELECT `request_inv_no` FROM `emp_vacation` WHERE `id` = " . $vacation_id);
          if (!$query_inv || mysqli_num_rows($query_inv) == 0) {
             if($query_inv) mysqli_free_result($query_inv);
-            throw new Exception("Invalid Vacation ID.");
+            throw new Exception(__("invalid_vacation_id"));
         }
         $row_inv = mysqli_fetch_assoc($query_inv);
         $request_inv_no = $row_inv['request_inv_no'];
@@ -966,10 +1137,9 @@ elseif ($ajaxType == 'rejectVacation') {
         }
 
         // 3. Send success response
-        send_json_response("Rejected!", "The vacation request has been rejected.", "success");
-
+        send_json_response("Rejected!", __("the_vacation_request_has_been_rejected"), "success");
     } catch (Exception $e) {
-        error_log("ajaxVacation.php (rejectVacation) Error: " . $e->getMessage());
+        
         send_json_response("Error", $e->getMessage(), "error", 500);
     }
     exit;
@@ -984,7 +1154,7 @@ elseif ($ajaxType == 'returnVacation') {
         $actual_return_date = escape_string($_POST['returnDate'] ?? '');
 
         if (empty($vacation_id)) {
-            throw new Exception("Vacation ID is missing.");
+            throw new Exception(__("vacation_id_is_missing"));
         }
         if (empty($actual_return_date)) {
             throw new Exception("Return date is required.");
@@ -994,7 +1164,7 @@ elseif ($ajaxType == 'returnVacation') {
         $sql_vac = "SELECT `emp_id`, `return_date`, `vacdays`, `id` FROM `emp_vacation` WHERE `id` = ?";
         $stmt_vac = mysqli_prepare($conDB, $sql_vac);
         if (!$stmt_vac) {
-            throw new Exception("Database prepare error: " . mysqli_error($conDB));
+            throw new Exception(__("database_prepare_error") . ": " . mysqli_error($conDB));
         }
         
         mysqli_stmt_bind_param($stmt_vac, "i", $vacation_id);
@@ -1002,7 +1172,8 @@ elseif ($ajaxType == 'returnVacation') {
         $res_vac = mysqli_stmt_get_result($stmt_vac);
         
         if (!$res_vac || !($row_vac = mysqli_fetch_assoc($res_vac))) {
-            throw new Exception("Vacation record not found.");
+            throw new Exception(__("vacation_record_not_found"));
+            
         }
         
         $emp_id = (int)$row_vac['emp_id'];
@@ -1070,24 +1241,43 @@ elseif ($ajaxType == 'returnVacation') {
         $sql_fly = "UPDATE `employees` SET `fly` = 0 WHERE `emp_id` = ?";
         $stmt_fly = mysqli_prepare($conDB, $sql_fly);
         if (!$stmt_fly) {
-            throw new Exception("Failed to update employee status: " . mysqli_error($conDB));
+            throw new Exception(__( "failed_to_prepare_employee_fly_update") . ": " . mysqli_error($conDB));
+            
         }
         
         mysqli_stmt_bind_param($stmt_fly, "i", $emp_id);
         if (!mysqli_stmt_execute($stmt_fly)) {
-            throw new Exception("Failed to mark employee as returned: " . mysqli_stmt_error($stmt_fly));
+            throw new Exception(__( "failed_to_mark_employee_as_returned") . ": " . mysqli_stmt_error($stmt_fly));
+            
         }
         mysqli_stmt_close($stmt_fly);
 
-        $message = "Employee has been marked as returned from vacation.";
+        // Mark vacation as completed so employee can apply for new vacation
+        $sql_complete_vac = "UPDATE `emp_vacation` SET `current_status` = 'completed', `arrived_date` = ? WHERE `id` = ?";
+        $stmt_complete_vac = mysqli_prepare($conDB, $sql_complete_vac);
+        if (!$stmt_complete_vac) {
+            throw new Exception(__( "failed_to_mark_vacation_as_completed") . ": " . mysqli_error($conDB));
+            
+        }
+        
+        mysqli_stmt_bind_param($stmt_complete_vac, "si", $actual_return_date, $vacation_id);
+        if (!mysqli_stmt_execute($stmt_complete_vac)) {
+            throw new Exception(__( "failed_to_update_vacation_status") . ": " . mysqli_stmt_error($stmt_complete_vac));
+            
+        }
+        mysqli_stmt_close($stmt_complete_vac);
+
+        $message = __("employee_marked_as_returned");
+        
         if ($extra_days > 0) {
-            $message .= " $extra_days extra day(s) have been deducted from their vacation balance.";
+            $message .= " " . sprintf(__("extra_days_deducted_from_balance"), $extra_days);
+            
         }
         
         send_json_response("Success!", $message, "success");
 
     } catch (Exception $e) {
-        error_log("ajaxVacation.php (returnVacation) Error: " . $e->getMessage());
+        
         send_json_response("Error", $e->getMessage(), "error", 500);
     }
     exit;
@@ -1102,37 +1292,96 @@ elseif ($ajaxType == 'updateVacationPayments') {
         // We assume the session check in all_applied_vac.php already handled this.
         
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $departure_date = trim($_POST['departure_date'] ?? '');
+        $arrival_date = trim($_POST['arrival_date'] ?? '');
         $ticket_pay = (float)($_POST['ticket_pay'] ?? 0);
         $permit_fee = (float)($_POST['permit_fee'] ?? 0);
 
-        if (empty($vacation_id)) {
-            throw new Exception("Vacation ID is missing.");
-        }
+        
 
-        $sql_pay = "UPDATE `emp_vacation` SET `ticket_pay` = ?, `permit_fee` = ? WHERE `id` = ?";
+        if (empty($vacation_id)) {
+            throw new Exception(__("vacation_id_is_missing"));
+        }
+        
+        // Convert empty strings to NULL for date fields
+        $departure_date_val = (!empty($departure_date) ? $departure_date : null);
+        $arrival_date_val = (!empty($arrival_date) ? $arrival_date : null);
+
+        
+
+        $sql_pay = "UPDATE `emp_vacation` SET `departure_date` = ?, `arrival_date` = ?, `ticket_pay` = ?, `permit_fee` = ? WHERE `id` = ?";
         $stmt_pay = mysqli_prepare($conDB, $sql_pay);
         if (!$stmt_pay) {
-            throw new Exception("Database prepare error: " . mysqli_error($conDB));
+            throw new Exception(__('database_prepare_error').": " . mysqli_error($conDB));
         }
         
-        mysqli_stmt_bind_param($stmt_pay, "ddi", $ticket_pay, $permit_fee, $vacation_id);
+        mysqli_stmt_bind_param($stmt_pay, "ssddi", $departure_date_val, $arrival_date_val, $ticket_pay, $permit_fee, $vacation_id);
+        
+        
         
         if (!mysqli_stmt_execute($stmt_pay)) {
-            throw new Exception("Database execute error: " . mysqli_stmt_error($stmt_pay));
+            
+            throw new Exception(__('database_prepare_error').": " . mysqli_stmt_error($stmt_pay));
         }
         
         $rows_affected = mysqli_stmt_affected_rows($stmt_pay);
+        
         mysqli_stmt_close($stmt_pay);
 
         if ($rows_affected > 0) {
-            send_json_response("Success!", "Payment details have been updated.", "success");
+            send_json_response("Success!", "payment_details_have_been_updated", "success");
+
         } else {
-            send_json_response("Info", "No changes were made to the payment details.", "info");
+            send_json_response("Info", "no_changes_were_made_to_the_payment_details", "info");
         }
 
     } catch (Exception $e) {
-        error_log("ajaxVacation.php (updateVacationPayments) Error: " . $e->getMessage());
+        
         send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+// ================================================================
+// --- GET VACATION DETAILS (for payment modal) ---
+// ================================================================
+elseif ($ajaxType == 'getVacationDetails') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        
+        if (empty($vacation_id)) {
+            throw new Exception(__("vacation_id_is_missing"));
+        }
+        
+        $sql = "SELECT departure_date, arrival_date FROM emp_vacation WHERE id = ?";
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception(__('database_prepare_error').": " . mysqli_error($conDB));
+        }
+        
+        mysqli_stmt_bind_param($stmt, "i", $vacation_id);
+        
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception(__('database_prepare_error').": " . mysqli_stmt_error($stmt));
+        }
+        
+        $result = mysqli_stmt_get_result($stmt);
+        $row = mysqli_fetch_assoc($result);
+        mysqli_stmt_close($stmt);
+        
+        if ($row) {
+            echo json_encode([
+                'status' => 200,
+                'departure_date' => $row['departure_date'] ?? '',
+                'arrival_date' => $row['arrival_date'] ?? ''
+            ]);
+        } else {
+            echo json_encode(['status' => 404, 'message' => 'Vacation not found']);
+        }
+        
+    } catch (Exception $e) {
+        
+        echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
     }
     exit;
 }
@@ -1144,7 +1393,7 @@ elseif ($ajaxType == 'getTravelerDetails') {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
 
         if (empty($vacation_id)) {
-            throw new Exception("Vacation ID is missing.");
+            throw new Exception(__("vacation_id_is_missing"));
         }
 
         // Fetch vacation and employee details including passport info
@@ -1169,12 +1418,12 @@ elseif ($ajaxType == 'getTravelerDetails') {
 
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
-            throw new Exception("Database prepare error: " . mysqli_error($conDB));
+            throw new Exception(__('database_prepare_error').": " . mysqli_error($conDB));
         }
 
         mysqli_stmt_bind_param($stmt, 'i', $vacation_id);
         if (!mysqli_stmt_execute($stmt)) {
-            throw new Exception("Database execute error: " . mysqli_stmt_error($stmt));
+            throw new Exception(__('database_prepare_error').": " . mysqli_stmt_error($stmt));
         }
 
         $result = mysqli_stmt_get_result($stmt);
@@ -1182,10 +1431,29 @@ elseif ($ajaxType == 'getTravelerDetails') {
         mysqli_stmt_close($stmt);
 
         if (!$vacation) {
-            throw new Exception("Vacation request not found.");
+            throw new Exception(__("vacation_request_not_found")); 
         }
 
         // Format dates for display and include raw values for client-side validation
+        // Fetch existing passport document if present (docu_typ contains 'passport')
+        $passport_doc = null;
+        $passport_sql = "SELECT id, docu_typ, path, docu_ext FROM emp_docu WHERE emp_id = ? AND (LOWER(docu_typ) LIKE '%passport%' OR LOWER(path) LIKE '%passport%') ORDER BY id DESC LIMIT 1";
+        if ($ps = mysqli_prepare($conDB, $passport_sql)) {
+            mysqli_stmt_bind_param($ps, 's', $vacation['emp_id']);
+            if (mysqli_stmt_execute($ps)) {
+                $pr = mysqli_stmt_get_result($ps);
+                $passport_doc = mysqli_fetch_assoc($pr);
+            }
+            mysqli_stmt_close($ps);
+        }
+        $passport_doc_url = '';
+        $passport_doc_ext = '';
+        $passport_doc_is_image = false;
+        if ($passport_doc && !empty($passport_doc['path'])) {
+            $passport_doc_url = './assets/emp_documents/' . $passport_doc['path'];
+            $passport_doc_ext = strtolower($passport_doc['docu_ext']);
+            $passport_doc_is_image = in_array($passport_doc_ext, ['jpg','jpeg','png','gif','webp']);
+        }
         $data = [
             'emp_id' => $vacation['emp_id'],
             'employee_name' => $vacation['employee_name'],
@@ -1201,7 +1469,10 @@ elseif ($ajaxType == 'getTravelerDetails') {
             'return_date' => !empty($vacation['return_date']) ? date('d M Y', strtotime($vacation['return_date'])) : 'Not Provided',
             'request_inv_no' => $vacation['request_inv_no'],
             'vac_type' => $vacation['vac_type'],
-            'fly_type' => $vacation['fly_type']
+            'fly_type' => $vacation['fly_type'],
+            'passport_doc_url' => $passport_doc_url,
+            'passport_doc_ext' => $passport_doc_ext,
+            'passport_doc_is_image' => $passport_doc_is_image
         ];
 
         echo json_encode([
@@ -1211,7 +1482,7 @@ elseif ($ajaxType == 'getTravelerDetails') {
         ]);
 
     } catch (Exception $e) {
-        error_log("ajaxVacation.php (getTravelerDetails) Error: " . $e->getMessage());
+        
         echo json_encode([
             'type' => 'error',
             'message' => $e->getMessage(),
@@ -1228,7 +1499,32 @@ elseif ($ajaxType == 'sendTravelEmail') {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
 
         if (empty($vacation_id)) {
-            throw new Exception("Vacation ID is missing.");
+            throw new Exception(__("vacation_id_is_missing"));
+        }
+
+        // Prepare passport file variables (can be new upload or existing stored doc)
+        $passport_file_path = '';
+        $passport_file_name = '';
+        $stored_doc_used = false;
+
+        $has_new_upload = (isset($_FILES['passport_file']) && $_FILES['passport_file']['error'] === UPLOAD_ERR_OK);
+        if ($has_new_upload) {
+            $passport_file = $_FILES['passport_file'];
+            $allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+            $max_size = 5 * 1024 * 1024; // 5MB
+            if ($passport_file['size'] > $max_size) {
+                throw new Exception("Passport file is too large. Maximum size is 5MB.");
+            }
+            $file_type = mime_content_type($passport_file['tmp_name']);
+            if (!in_array($file_type, $allowed_types)) {
+                throw new Exception("Invalid file type. Only PDF, JPG, and PNG files are allowed.");
+            }
+            $file_extension = strtolower(pathinfo($passport_file['name'], PATHINFO_EXTENSION));
+            // Persist the uploaded file into employee documents (emp_docu) so it can be reused later
+            // Build filename: EMPID_passport_TIMESTAMP.ext
+            // Need employee id first (will fetch vacation below; temporarily store ext and tmp path)
+        } else {
+            // No new upload; will attempt to use existing stored passport document after loading vacation
         }
 
         // Fetch vacation and employee details including passport info
@@ -1246,12 +1542,12 @@ elseif ($ajaxType == 'sendTravelEmail') {
 
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
-            throw new Exception("Database prepare error: " . mysqli_error($conDB));
+            throw new Exception(__('database_prepare_error').": " . mysqli_error($conDB));
         }
 
         mysqli_stmt_bind_param($stmt, 'i', $vacation_id);
         if (!mysqli_stmt_execute($stmt)) {
-            throw new Exception("Database execute error: " . mysqli_stmt_error($stmt));
+            throw new Exception(__('database_prepare_error').": " . mysqli_stmt_error($stmt));
         }
 
         $result = mysqli_stmt_get_result($stmt);
@@ -1259,7 +1555,7 @@ elseif ($ajaxType == 'sendTravelEmail') {
         mysqli_stmt_close($stmt);
 
         if (!$vacation) {
-            throw new Exception("Vacation request not found.");
+            throw new Exception(__("vacation_request_not_found"));
         }
 
         // Validate this is an annual fly vacation
@@ -1282,6 +1578,66 @@ elseif ($ajaxType == 'sendTravelEmail') {
             throw new Exception("Travel email has already been sent for this vacation.");
         }
 
+        // Handle passport file persistence or fallback to existing stored doc
+        if ($has_new_upload) {
+            $emp_id_for_passport = $vacation['emp_id'];
+            $file_extension = strtolower(pathinfo($_FILES['passport_file']['name'], PATHINFO_EXTENSION));
+            $new_filename = $emp_id_for_passport . '_passport_' . time() . '.' . $file_extension;
+            $destination_dir = __DIR__ . '/../../assets/emp_documents/';
+            if (!is_dir($destination_dir)) {
+                @mkdir($destination_dir, 0775, true);
+            }
+            $destination_path = $destination_dir . $new_filename;
+            if (!move_uploaded_file($_FILES['passport_file']['tmp_name'], $destination_path)) {
+                throw new Exception('Failed to store passport document.');
+            }
+            // Upsert into emp_docu
+            $existing_passport_doc = null;
+            $chk_sql = "SELECT id FROM emp_docu WHERE emp_id = ? AND LOWER(docu_typ) LIKE '%passport%' ORDER BY id DESC LIMIT 1";
+            if ($cs = mysqli_prepare($conDB, $chk_sql)) {
+                mysqli_stmt_bind_param($cs, 's', $emp_id_for_passport);
+                mysqli_stmt_execute($cs);
+                $cr = mysqli_stmt_get_result($cs);
+                $existing_passport_doc = mysqli_fetch_assoc($cr);
+                mysqli_stmt_close($cs);
+            }
+            if ($existing_passport_doc) {
+                $upd_sql = "UPDATE emp_docu SET path = ?, docu_ext = ?, created_at = NOW() WHERE id = ?";
+                if ($us = mysqli_prepare($conDB, $upd_sql)) {
+                    mysqli_stmt_bind_param($us, 'ssi', $new_filename, $file_extension, $existing_passport_doc['id']);
+                    mysqli_stmt_execute($us);
+                    mysqli_stmt_close($us);
+                }
+            } else {
+                $ins_sql = "INSERT INTO emp_docu (emp_id, docu_typ, path, docu_ext, pgid, status, created_at) VALUES (?, 'passport', ?, ?, 0, 'A', NOW())";
+                if ($is = mysqli_prepare($conDB, $ins_sql)) {
+                    mysqli_stmt_bind_param($is, 'sss', $emp_id_for_passport, $new_filename, $file_extension);
+                    mysqli_stmt_execute($is);
+                    mysqli_stmt_close($is);
+                }
+            }
+            $passport_file_path = $destination_path; // absolute path for attachment
+            $passport_file_name = $new_filename;
+        } else {
+            // Attempt to load existing passport document
+            $existing_sql = "SELECT path, docu_ext FROM emp_docu WHERE emp_id = ? AND LOWER(docu_typ) LIKE '%passport%' ORDER BY id DESC LIMIT 1";
+            if ($es = mysqli_prepare($conDB, $existing_sql)) {
+                mysqli_stmt_bind_param($es, 's', $vacation['emp_id']);
+                mysqli_stmt_execute($es);
+                $er = mysqli_stmt_get_result($es);
+                $existing_passport = mysqli_fetch_assoc($er);
+                mysqli_stmt_close($es);
+                if ($existing_passport && !empty($existing_passport['path'])) {
+                    $passport_file_name = $existing_passport['path'];
+                    $passport_file_path = __DIR__ . '/../../assets/emp_documents/' . $passport_file_name;
+                    $stored_doc_used = true;
+                }
+            }
+            if (empty($passport_file_path) || !file_exists($passport_file_path)) {
+                throw new Exception("Passport copy is required. Please attach a passport file.");
+            }
+        }
+
         // Get GR Officer email for CC
         $gr_officer_email = get_setting($conDB, 'gr_officer_email');
         if (empty($gr_officer_email)) {
@@ -1293,7 +1649,7 @@ elseif ($ajaxType == 'sendTravelEmail') {
             if ($gr_query) mysqli_free_result($gr_query);
         }
 
-        // Send email to traveling company with CC to GR Officer
+        // Send email to traveling company with CC to GR Officer and passport attachment
         require_once __DIR__ . '/../helper_functions.php';
         
         $email_sent = send_travel_company_email(
@@ -1305,15 +1661,17 @@ elseif ($ajaxType == 'sendTravelEmail') {
             $vacation['departure_date'],
             $vacation['arrival_date'],
             $vacation['request_inv_no'],
-            $gr_officer_email // CC to GR Officer
+            $gr_officer_email, // CC to GR Officer
+            $passport_file_path, // Passport file path
+            $passport_file_name  // Passport file name
         );
 
         if (!$email_sent) {
             throw new Exception("Failed to send email. Please check SMTP settings and traveling company email configuration.");
         }
 
-        // Update database to mark email as sent
-        $update_sql = "UPDATE `emp_vacation` SET `travel_email_sent` = 1 WHERE `id` = ?";
+        // Update database to mark email as sent AND set status to completed
+        $update_sql = "UPDATE `emp_vacation` SET `travel_email_sent` = 1, `current_status` = 'completed' WHERE `id` = ?";
         $update_stmt = mysqli_prepare($conDB, $update_sql);
         if ($update_stmt) {
             mysqli_stmt_bind_param($update_stmt, 'i', $vacation_id);
@@ -1325,6 +1683,11 @@ elseif ($ajaxType == 'sendTravelEmail') {
         $status_note = "Travel company email sent to traveling company";
         if (!empty($gr_officer_email)) {
             $status_note .= " (CC: GR Officer)";
+        }
+        if ($stored_doc_used) {
+            $status_note .= " (Existing passport doc used)";
+        } else {
+            $status_note .= " (New passport doc uploaded)";
         }
         
         $status_sql = "INSERT INTO `smt_request_status` 
@@ -1338,7 +1701,7 @@ elseif ($ajaxType == 'sendTravelEmail') {
             mysqli_stmt_close($status_stmt);
         }
 
-        error_log("Travel company email sent successfully for vacation ID: $vacation_id");
+        
         send_json_response(
             "Success!", 
             "Travel information has been sent to the traveling company" . (!empty($gr_officer_email) ? " with CC to GR Officer." : "."), 
@@ -1346,8 +1709,77 @@ elseif ($ajaxType == 'sendTravelEmail') {
         );
 
     } catch (Exception $e) {
-        error_log("ajaxVacation.php (sendTravelEmail) Error: " . $e->getMessage());
+        
         send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+// --- [NEW] BLOCK TO HANDLE REPLACING STORED PASSPORT DOCUMENT ONLY ---
+// Allows updating the employee's passport copy before sending email
+elseif ($ajaxType == 'replacePassportDoc') {
+    try {
+        $emp_id = trim($_POST['emp_id'] ?? '');
+        if (empty($emp_id)) {
+            throw new Exception('Employee ID missing.');
+        }
+        if (!isset($_FILES['passport_file']) || $_FILES['passport_file']['error'] !== UPLOAD_ERR_OK) {
+            throw new Exception('No passport file uploaded.');
+        }
+        $file = $_FILES['passport_file'];
+        $allowed_types = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+        $max_size = 5 * 1024 * 1024;
+        if ($file['size'] > $max_size) {
+            throw new Exception('File too large (max 5MB).');
+        }
+        $mime = mime_content_type($file['tmp_name']);
+        if (!in_array($mime, $allowed_types)) {
+            throw new Exception('Invalid file type. Use PDF/JPG/PNG.');
+        }
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $new_filename = $emp_id . '_passport_' . time() . '.' . $ext;
+        $destination_dir = __DIR__ . '/../../assets/emp_documents/';
+        if (!is_dir($destination_dir)) { @mkdir($destination_dir, 0775, true); }
+        $destination_path = $destination_dir . $new_filename;
+        if (!move_uploaded_file($file['tmp_name'], $destination_path)) {
+            throw new Exception('Failed moving uploaded file.');
+        }
+        // Upsert record
+        $existing_passport_doc = null;
+        $chk_sql = "SELECT id FROM emp_docu WHERE emp_id = ? AND LOWER(docu_typ) LIKE '%passport%' ORDER BY id DESC LIMIT 1";
+        if ($cs = mysqli_prepare($conDB, $chk_sql)) {
+            mysqli_stmt_bind_param($cs, 's', $emp_id);
+            mysqli_stmt_execute($cs);
+            $cr = mysqli_stmt_get_result($cs);
+            $existing_passport_doc = mysqli_fetch_assoc($cr);
+            mysqli_stmt_close($cs);
+        }
+        if ($existing_passport_doc) {
+            $upd_sql = "UPDATE emp_docu SET path = ?, docu_ext = ?, created_at = NOW() WHERE id = ?";
+            if ($us = mysqli_prepare($conDB, $upd_sql)) {
+                mysqli_stmt_bind_param($us, 'ssi', $new_filename, $ext, $existing_passport_doc['id']);
+                mysqli_stmt_execute($us);
+                mysqli_stmt_close($us);
+            }
+        } else {
+            $ins_sql = "INSERT INTO emp_docu (emp_id, docu_typ, path, docu_ext, pgid, status, created_at) VALUES (?, 'passport', ?, ?, 0, 'A', NOW())";
+            if ($is = mysqli_prepare($conDB, $ins_sql)) {
+                mysqli_stmt_bind_param($is, 'sss', $emp_id, $new_filename, $ext);
+                mysqli_stmt_execute($is);
+                mysqli_stmt_close($is);
+            }
+        }
+        echo json_encode([
+            'type' => 'success',
+            'message' => 'Passport document replaced successfully.',
+            'passport_doc_url' => './assets/emp_documents/' . $new_filename,
+            'passport_doc_ext' => $ext,
+            'passport_doc_is_image' => in_array($ext, ['jpg','jpeg','png','gif','webp'])
+        ]);
+    } catch (Exception $e) {
+        $last_error = mysqli_error($conDB);
+                throw new Exception(__('database_error_during_overlap_check') . $last_error);
+        echo json_encode(['type' => 'error', 'message' => $e->getMessage()]);
     }
     exit;
 }
@@ -2077,46 +2509,94 @@ elseif ($ajaxType == 'applyLeave') {
         }
         
         // Check if employee is currently on an active approved vacation/leave (can't apply while on leave)
-        $today = date('Y-m-d');
         
-        // Check: Is employee currently on ANY approved vacation or leave (VAC-* or LV-*)?
-        // We check both to prevent overlapping requests
-        $sql_active = "SELECT request_inv_no, vac_type, start_date, return_date FROM emp_vacation 
-                       WHERE emp_id = ? 
-                         AND current_status = 'approved' 
-                         AND start_date <= ? 
-                         AND return_date >= ? 
-                       LIMIT 1";
-        $stmt_active = mysqli_prepare($conDB, $sql_active);
-        if ($stmt_active) {
-            mysqli_stmt_bind_param($stmt_active, 'iss', $empid, $today, $today);
-            if (mysqli_stmt_execute($stmt_active)) {
-                $res_active = mysqli_stmt_get_result($stmt_active);
-                if ($res_active && mysqli_num_rows($res_active) > 0) {
-                    $active_request = mysqli_fetch_assoc($res_active);
+        // Check: Does the requested excuse leave overlap with ANY approved/completed vacation or leave?
+        if (!empty($start_date) && !empty($end_date)) {
+            $sql_active = "SELECT request_inv_no, vac_type, start_date, return_date, current_status FROM emp_vacation 
+                           WHERE emp_id = ? 
+                             AND current_status IN ('approved', 'completed')
+                             AND start_date <= ? 
+                             AND return_date >= ? 
+                           LIMIT 1";
+            $stmt_active = mysqli_prepare($conDB, $sql_active);
+            if ($stmt_active) {
+                mysqli_stmt_bind_param($stmt_active, 'iss', $empid, $end_date, $start_date);
+                
+                
+                
+                if (mysqli_stmt_execute($stmt_active)) {
+                    $res_active = mysqli_stmt_get_result($stmt_active);
+                    if ($res_active && mysqli_num_rows($res_active) > 0) {
+                        $active_request = mysqli_fetch_assoc($res_active);
+                        
+                        
+                        
+                        if ($res_active) mysqli_free_result($res_active);
+                        mysqli_stmt_close($stmt_active);
+                        
+                        $request_type_name = (strpos($active_request['request_inv_no'], 'VAC-') === 0) ? 'Annual Vacation' : 'Leave';
+                        $status_display = ($active_request['current_status'] === 'completed') ? 'completed' : 'approved';
+                        
+                        send_json_response(
+                            'Date Conflict',
+                            'Your requested dates (' . htmlspecialchars($start_date) . ' to ' . htmlspecialchars($end_date) . ') overlap with an existing ' . $status_display . ' ' . htmlspecialchars($active_request['vac_type']) . ' (' . htmlspecialchars($active_request['request_inv_no']) . ') from ' . htmlspecialchars($active_request['start_date']) . ' to ' . htmlspecialchars($active_request['return_date']) . '. Please choose different dates.',
+                            'error',
+                            400
+                        );
+                        exit;
+                    }
                     if ($res_active) mysqli_free_result($res_active);
-                    mysqli_stmt_close($stmt_active);
-                    
-                    $request_type_name = (strpos($active_request['request_inv_no'], 'VAC-') === 0) ? 'Annual Vacation' : 'Leave';
-                    
-                    send_json_response(
-                        'Currently On ' . $request_type_name,
-                        'You are currently on an approved ' . htmlspecialchars($active_request['vac_type']) . ' (' . htmlspecialchars($active_request['request_inv_no']) . ') from ' . htmlspecialchars($active_request['start_date']) . ' to ' . htmlspecialchars($active_request['return_date']) . '. You cannot apply for another leave/vacation while your current one is active.',
-                        'error',
-                        400
-                    );
-                    exit;
                 }
-                if ($res_active) mysqli_free_result($res_active);
+                mysqli_stmt_close($stmt_active);
             }
-            mysqli_stmt_close($stmt_active);
         }
         
-        // Check for overlapping leave requests (pending or approved)
+        // Check for overlapping leave requests (pending, approved, or completed)
+        // IMPORTANT: Excuse leave CANNOT overlap with approved/completed annual vacation
+        // If employee has approved/completed annual vacation, excuse leave must be AFTER return_date
         if (!empty($start_date) && !empty($end_date)) {
+            // First check for approved/completed annual vacation (VAC-*)
+            $sql_vacation = "SELECT request_inv_no, vac_type, start_date, return_date, current_status FROM emp_vacation 
+                            WHERE emp_id = ? 
+                              AND current_status IN ('approved', 'completed')
+                              AND request_inv_no LIKE 'VAC-%'
+                              AND start_date <= ? 
+                              AND return_date >= ? ";
+            $stmt_vacation = mysqli_prepare($conDB, $sql_vacation);
+            if ($stmt_vacation) {
+                mysqli_stmt_bind_param($stmt_vacation, 'iss', $empid, $end_date, $start_date);
+                
+                
+                
+                if (mysqli_stmt_execute($stmt_vacation)) {
+                    $res_vacation = mysqli_stmt_get_result($stmt_vacation);
+                    if ($res_vacation && mysqli_num_rows($res_vacation) > 0) {
+                        $vacation = mysqli_fetch_assoc($res_vacation);
+                        
+                        
+                        
+                        if ($res_vacation) mysqli_free_result($res_vacation);
+                        mysqli_stmt_close($stmt_vacation);
+                        
+                        $vac_status = ($vacation['current_status'] === 'completed') ? 'completed' : 'approved';
+                        
+                        send_json_response(
+                            'Cannot Apply During Annual Vacation',
+                            'You cannot apply for excuse leave during your ' . $vac_status . ' annual vacation period (' . htmlspecialchars($vacation['start_date']) . ' to ' . htmlspecialchars($vacation['return_date']) . '). Excuse leave must be applied AFTER your vacation return date: ' . htmlspecialchars($vacation['return_date']) . '.',
+                            'error',
+                            400
+                        );
+                        exit;
+                    }
+                    if ($res_vacation) mysqli_free_result($res_vacation);
+                }
+                mysqli_stmt_close($stmt_vacation);
+            }
+            
+            // Then check for other overlapping leave requests (pending, approved, or completed)
             $sql_overlap = "SELECT request_inv_no, vac_type, start_date, return_date, current_status FROM emp_vacation 
                             WHERE emp_id = ? 
-                              AND current_status IN ('pending_approval','approved') 
+                              AND current_status IN ('pending_approval', 'approved', 'completed') 
                               AND start_date <= ? 
                               AND return_date >= ? ";
             $stmt_overlap = mysqli_prepare($conDB, $sql_overlap);
@@ -2129,7 +2609,13 @@ elseif ($ajaxType == 'applyLeave') {
                         if ($res_overlap) mysqli_free_result($res_overlap);
                         mysqli_stmt_close($stmt_overlap);
                         
-                        $status_text = ($overlap['current_status'] === 'approved') ? 'approved' : 'pending';
+                        $status_text = 'pending';
+                        if ($overlap['current_status'] === 'approved') {
+                            $status_text = 'approved';
+                        } elseif ($overlap['current_status'] === 'completed') {
+                            $status_text = 'completed';
+                        }
+                        
                         send_json_response(
                             'Date Conflict',
                             'You already have a ' . $status_text . ' ' . htmlspecialchars($overlap['vac_type']) . ' request (' . htmlspecialchars($overlap['request_inv_no']) . ') covering ' . htmlspecialchars($overlap['start_date']) . ' to ' . htmlspecialchars($overlap['return_date']) . '. Your requested dates (' . htmlspecialchars($start_date) . ' to ' . htmlspecialchars($end_date) . ') overlap with this existing request. Please choose different dates.',
@@ -2221,9 +2707,12 @@ elseif ($ajaxType == 'applyLeave') {
         }
         
         // Determine if leave is deductible (affects payroll)
-        $deductible_types = ['Sick Leave', 'Casual Leave', 'Unpaid Leave'];
-        $is_deductible = in_array($leave_type, $deductible_types) ? 1 : 0;
+
+        //$deductible_types = ['Sick Leave', 'Casual Leave', 'Unpaid Leave'];
+        //$is_deductible = in_array($leave_type, $deductible_types) ? 1 : 0;
         
+        $is_deductible = 0; // All leave types are deductible by default
+
         // Generate unique request invoice number with LV- prefix (Leave Request)
         // Annual Vacation applications use the applyVacation handler which generates VAC- prefix
         $request_inv_no = 'LV-' . date('Ymd') . '-' . str_pad($empid, 4, '0', STR_PAD_LEFT) . '-' . substr(uniqid(), -4);
@@ -2305,7 +2794,7 @@ elseif ($ajaxType == 'applyLeave') {
         // Note: Using 'vacation_request' type since both vacation and leave use emp_vacation table
         $approver_chain = [(int)$first_approver['emp_id'], (int)$hr_bp['emp_id']];
         if (!save_approval_chain($conDB, $request_inv_no, 'vacation_request', $approver_chain)) {
-            error_log("applyLeave: Warning - Failed to save approval chain for request $request_inv_no");
+            
         }
         
         // Send notification to first approver (Direct Supervisor or Department Manager)
@@ -2313,20 +2802,20 @@ elseif ($ajaxType == 'applyLeave') {
             $approver_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver['emp_id']);
             if ($approver_details) {
                 // --- [UPDATED] SEND ACTUAL NOTIFICATIONS ---
-                error_log("applyLeave: Attempting to send notification to approver: " . $first_approver['emp_id']);
+                
                 
                 if (function_exists('create_browser_notification')) {
                     $notification_title = "New Leave Request";
                     $notification_message = "A new leave request ($request_inv_no) for $leave_type from employee ID $empid is pending your approval.";
                     $notification_url = "all_applied_vac.php?status=my_pending";
                     $notif_result = create_browser_notification($conDB, $first_approver['emp_id'], $notification_title, $notification_message, $notification_url);
-                    error_log("applyLeave: Browser notification result: " . ($notif_result ? 'SUCCESS' : 'FAILED'));
+                    
                 } else {
-                    error_log("applyLeave: create_browser_notification function NOT FOUND");
+                    
                 }
                 
                 if (!empty($approver_details['email']) && function_exists('send_approval_email')) {
-                    error_log("applyLeave: Attempting to send email to: " . $approver_details['email']);
+                    
                     
                     // Get employee name for template
                     $employee_name = 'Employee';
@@ -2352,25 +2841,25 @@ elseif ($ajaxType == 'applyLeave') {
                     
                     $email_subject = "New " . ucfirst($leave_type) . " Leave Request Pending Approval";
                     $email_result = send_approval_email($conDB, $approver_details['email'], $approver_details['name'], $email_subject, 'leave_request', $template_data);
-                    error_log("applyLeave: Email result: " . ($email_result ? 'SUCCESS' : 'FAILED'));
+                    
                 } else {
                     if (empty($approver_details['email'])) {
-                        error_log("applyLeave: Approver has NO EMAIL in database");
+                        
                     }
                     if (!function_exists('send_approval_email')) {
-                        error_log("applyLeave: send_approval_email function NOT FOUND");
+                        
                     }
                 }
                 // --- [END UPDATED] ---
             } else {
-                error_log("applyLeave: Could not get approver details for emp_id: " . $first_approver['emp_id']);
+                
             }
         } else {
             if (!function_exists('getEmployeeDetailsForApproval')) {
-                error_log("applyLeave: getEmployeeDetailsForApproval function NOT FOUND");
+                
             }
             if (empty($first_approver['emp_id'])) {
-                error_log("applyLeave: first_approver emp_id is EMPTY");
+                
             }
         }
         
@@ -2386,9 +2875,52 @@ elseif ($ajaxType == 'applyLeave') {
     exit;
 }
 
+// ================================================================
+// --- GET CURRENT VACATION BALANCE (Live Calculated) ---
+// ================================================================
+elseif ($ajaxType == 'getCurrentVacationBalance') {
+    try {
+        $emp_id = trim((string)($_POST['empid'] ?? $_POST['emp_id'] ?? ''));
+        
+        if (empty($emp_id)) {
+            echo json_encode([
+                'status' => 400,
+                'balance' => 0,
+                'message' => 'Employee ID is required.'
+            ]);
+            exit;
+        }
+        
+        $balance = get_current_vacation_balance($conDB, $emp_id);
+        
+        if ($balance === null) {
+            echo json_encode([
+                'status' => 404,
+                'balance' => 0,
+                'message' => 'Employee not found or balance unavailable.'
+            ]);
+            exit;
+        }
+        
+        echo json_encode([
+            'status' => 200,
+            'balance' => $balance,
+            'message' => 'Balance retrieved successfully.'
+        ]);
+        
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 500,
+            'balance' => 0,
+            'message' => 'Error: ' . $e->getMessage()
+        ]);
+    }
+    exit;
+}
+
 // Fallback for unknown ajaxType
 else {
-    error_log("ajaxVacation.php: Unknown ajaxType received: " . $ajaxType);
+    
     send_json_response("Error", "Invalid request type specified.", "error", 400);
     exit;
 }

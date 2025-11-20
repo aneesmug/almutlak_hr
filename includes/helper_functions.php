@@ -586,7 +586,7 @@ function generate_pagination_controls($current_page, $total_pages, $total_items,
                if ($unfiltered_total_items !== null && $unfiltered_total_items > $total_items) {
                    $single_page_text .= " (" . __('filtered_from') . " {$unfiltered_total_items} " . __('entries') . ")";
                }
-             return "<div class='row mt-4'><div class='col-12 text-muted'>{$single_page_text}</div></div>";
+             return "<div class='row mt-4' style=\"margin-top: 5rem !important;\"><div class='col-12 text-muted'>{$single_page_text}</div></div>";
          }
         return ''; // Return empty if no items
     }
@@ -1154,14 +1154,37 @@ if (!function_exists('load_email_template')) {
             'LOGO_URL' => 'https://hr.almutlaksystem.com/assets/logo/logo_color_sm.png',
             'APPROVER_NAME' => 'Approver',
             'REQUEST_ID' => 'N/A',
-            'REQUEST_URL' => $base_url . '/dashboard.php'
+            'REQUEST_URL' => $base_url . '/dashboard.php',
+            'EMAIL_MESSAGE' => 'A new request requires your attention.',
+            'REJECTION_BORDER' => 'border-bottom: 1px solid #404040;',
+            'REJECTION_BORDER_INST' => '',
+            'REJECTION_INFO' => ''
         ];
         
         $data = array_merge($defaults, $data);
         
+        // Handle rejection-specific placeholders for loan template
+        if ($request_type === 'loan_request') {
+            if (!empty($data['REJECTION_REASON'])) {
+                // This is a rejection email
+                $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'Unfortunately, a loan request has been rejected.';
+                $data['REJECTION_BORDER'] = 'border-bottom: 1px solid #404040;';
+                $data['REJECTION_BORDER_INST'] = 'border-bottom: 1px solid #404040;';
+                $data['REJECTION_INFO'] = '<tr><td style="padding: 8px 0; border-bottom: 1px solid #404040;"><span style="color: #a0a0a0; font-size: 14px;">Rejected By:</span><span style="color: #ff6b6b; font-size: 14px; float: right;">' . htmlspecialchars($data['REJECTED_BY'], ENT_QUOTES, 'UTF-8') . '</span></td></tr><tr><td style="padding: 12px 0;"><span style="color: #a0a0a0; font-size: 14px; display: block; margin-bottom: 8px;">Rejection Reason:</span><div style="background-color: #1e1e1e; padding: 12px; border-radius: 4px; border-left: 3px solid #ff6b6b;"><p style="margin: 0; color: #ffffff; font-size: 14px; line-height: 1.6;">' . nl2br(htmlspecialchars($data['REJECTION_REASON'], ENT_QUOTES, 'UTF-8')) . '</p></div></td></tr>';
+            } else {
+                // Normal approval request
+                $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'A new loan request has been submitted and requires your approval.';
+            }
+        }
+        
         // Replace template placeholders
         foreach ($data as $key => $value) {
-            $html = str_replace('{{' . $key . '}}', htmlspecialchars($value, ENT_QUOTES, 'UTF-8'), $html);
+            // Skip already processed rejection info
+            if ($key === 'REJECTION_INFO' || $key === 'REJECTION_BORDER' || $key === 'REJECTION_BORDER_INST') {
+                $html = str_replace('{{' . $key . '}}', $value, $html);
+            } else {
+                $html = str_replace('{{' . $key . '}}', htmlspecialchars($value, ENT_QUOTES, 'UTF-8'), $html);
+            }
         }
         
         return $html;
@@ -1648,6 +1671,11 @@ if (!function_exists('handle_approval_action')) {
                                     }
                                 };
 
+                                // HR Senior BP (ALWAYS the next approver after Direct Manager)
+                                $res_hr_bp = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_senior_bp' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
+                                if ($res_hr_bp && ($rhr_bp = mysqli_fetch_assoc($res_hr_bp))) { $pushDyn($rhr_bp['emp_id']); }
+                                if ($res_hr_bp) mysqli_free_result($res_hr_bp);
+
                                 // Assets → IT / Administration / Transportation
                                 $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea JOIN assets a ON ea.asset_id = a.id WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
                                 $stmt_assets = mysqli_prepare($conDB, $sql_assets);
@@ -1673,8 +1701,8 @@ if (!function_exists('handle_approval_action')) {
                                     }
                                 }
 
-                                // HR Payroll
-                                if ($vac_salary_type_val === 'payroll') {
+                                // HR Payroll (for ALL annual vacations to process overtime/deductions)
+                                if (strtolower($fly_type_val) === 'annual') {
                                     $res_pay = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
                                     if ($res_pay && ($rpay = mysqli_fetch_assoc($res_pay))) { $pushDyn($rpay['emp_id']); }
                                     if ($res_pay) mysqli_free_result($res_pay);
@@ -1702,8 +1730,12 @@ if (!function_exists('handle_approval_action')) {
 
                                 // Notify first of the newly added approvers
                                 $next_approver_id = $dynamic_next[0];
+                                error_log("handle_approval_action: Attempting to notify next approver (dynamic): emp_id=$next_approver_id for request $inv_no_safe");
+                                
                                 $next_details = getEmployeeDetailsForApproval($conDB, $next_approver_id);
                                 if ($next_details) {
+                                    error_log("handle_approval_action: Got next approver details: name={$next_details['name']}, email={$next_details['email']}");
+                                    
                                     $result_payload['next_approver'] = $next_details;
                                     $result_payload['next_approver_id'] = $next_approver_id;
                                     $notification_title = "New $friendly_label";
@@ -1716,11 +1748,43 @@ if (!function_exists('handle_approval_action')) {
                                     } else {
                                         $notification_url = "all_requests.php"; // Fallback
                                     }
-                                    create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
-                                    if ($next_details['email']) {
-                                        $email_body = "Dear " . htmlspecialchars($next_details['name']) . ",<br><br>A $friendly_label ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
-                                        send_approval_email($conDB, $next_details['email'], $next_details['name'], $notification_title, $email_body);
+                                    
+                                    // Send browser notification
+                                    if (function_exists('create_browser_notification')) {
+                                        create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
+                                        error_log("handle_approval_action: Browser notification sent to emp_id=$next_approver_id");
                                     }
+                                    
+                                    // Send email notification
+                                    if (!empty($next_details['email'])) {
+                                        error_log("handle_approval_action: Preparing to send email to {$next_details['email']}");
+                                        
+                                        // Get request details for proper email template
+                                        $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $next_details['name']);
+                                        
+                                        if ($template_data) {
+                                            error_log("handle_approval_action: Template data retrieved successfully for $inv_no_safe");
+                                            // Send email with full request details
+                                            if (function_exists('send_approval_email')) {
+                                                send_approval_email($conDB, $next_details['email'], $next_details['name'], $notification_title, $request_type, $template_data);
+                                                error_log("handle_approval_action: Email sent successfully to {$next_details['email']} for $inv_no_safe");
+                                            } else {
+                                                error_log("handle_approval_action: ERROR - send_approval_email function not found!");
+                                            }
+                                        } else {
+                                            // Fallback to simple email if template data not available
+                                            error_log("handle_approval_action: Template data not available, using fallback email for $inv_no_safe");
+                                            $email_body = "Dear " . htmlspecialchars($next_details['name']) . ",<br><br>A $friendly_label ($inv_no_safe) is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
+                                            if (function_exists('send_approval_email')) {
+                                                send_approval_email($conDB, $next_details['email'], $next_details['name'], $notification_title, $request_type, ['EMAIL_MESSAGE' => $email_body, 'REQUEST_ID' => $inv_no_safe]);
+                                                error_log("handle_approval_action: Fallback email sent to {$next_details['email']} for $inv_no_safe");
+                                            }
+                                        }
+                                    } else {
+                                        error_log("handle_approval_action: WARNING - Next approver (emp_id=$next_approver_id) has no email address!");
+                                    }
+                                } else {
+                                    error_log("handle_approval_action: ERROR - Could not get details for next approver emp_id=$next_approver_id");
                                 }
 
                                 // Commit and return success early (skip finalization)
@@ -1730,12 +1794,42 @@ if (!function_exists('handle_approval_action')) {
                         }
 
                         // --- 2b: This is FINAL APPROVAL (no more approvers in chain) ---
-                        $update_main_approved_sql = "UPDATE `$main_table_name` SET `current_status` = 'approved', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                        // For vacation requests, check if it's annual fly vacation that needs travel email
+                        // If so, set status to 'approved' (not 'completed') so GR Officer can send travel email
+                        $final_status = 'approved'; // Default to 'approved' for all requests
+                        
+                        if ($request_type === 'vacation_request') {
+                            // Check if this is an annual fly vacation
+                            $sql_vac_check = "SELECT `vac_type`, `fly_type` FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
+                            $stmt_vac_check = mysqli_prepare($conDB, $sql_vac_check);
+                            $is_annual_fly = false;
+                            
+                            if ($stmt_vac_check) {
+                                mysqli_stmt_bind_param($stmt_vac_check, "s", $inv_no_safe);
+                                if (mysqli_stmt_execute($stmt_vac_check)) {
+                                    $res_vac = mysqli_stmt_get_result($stmt_vac_check);
+                                    if ($row_vac = mysqli_fetch_assoc($res_vac)) {
+                                        $is_annual_fly = (strtolower($row_vac['vac_type']) === 'fly' && strtolower($row_vac['fly_type']) === 'annual');
+                                    }
+                                    if ($res_vac) mysqli_free_result($res_vac);
+                                }
+                                mysqli_stmt_close($stmt_vac_check);
+                            }
+                            
+                            // Only set to 'completed' for non-annual-fly vacations
+                            // Annual fly vacations stay at 'approved' until travel email is sent
+                            if (!$is_annual_fly) {
+                                $final_status = 'completed';
+                            }
+                        }
+                        
+                        $update_main_approved_sql = "UPDATE `$main_table_name` SET `current_status` = ?, `current_approval_level` = ? WHERE `$inv_column_name` = ?";
                         $stmt_main_approved = mysqli_prepare($conDB, $update_main_approved_sql);
                         if (!$stmt_main_approved) throw new Exception("Prepare failed (update main approved): " . mysqli_error($conDB));
-                        mysqli_stmt_bind_param($stmt_main_approved, "is", $current_level, $inv_no_safe);
+                        mysqli_stmt_bind_param($stmt_main_approved, "sis", $final_status, $current_level, $inv_no_safe);
                         if (!mysqli_stmt_execute($stmt_main_approved)) throw new Exception("Execute failed (update main approved): " . mysqli_stmt_error($stmt_main_approved));
                         mysqli_stmt_close($stmt_main_approved);
+                        error_log("handle_approval_action: Vacation request $inv_no_safe set to FINAL STATUS: $final_status");
 
 
                         // --- [NEW] UPDATE VACATION BALANCE ON FINAL APPROVAL ---
@@ -1779,34 +1873,20 @@ if (!function_exists('handle_approval_action')) {
                                      error_log("INFO: handle_approval_action: Successfully updated vacation balance for vac_id $vacation_id ($inv_no_safe).");
                                 }
 
-                                // --- [UPDATED] Set employee fly status ONLY for REGULAR VACATION (not Leave Requests) ---
-                                // Leave Requests (LV-*) do NOT set fly=1
-                                // Only regular vacation (annual vacation - VAC-*) sets fly=1
+                                // --- [UPDATED] Fly Status Management ---
+                                // DO NOT set fly=1 at approval time
+                                // Fly status is now managed by update_employee_fly_status_on_session() in session_check.php
+                                // That function runs on every page load and:
+                                // 1. Sets fly=1 when vacation start_date arrives (not at approval)
+                                // 2. Resets fly=0 when vacation return_date passes
+                                // 3. Only affects regular vacation (VAC-*) with is_deductible=1
+                                
                                 $is_leave_request = !empty($request_inv_no) && strpos($request_inv_no, 'LV-') === 0;
                                 
-                                if (!$is_leave_request && !empty($vacation_emp_id) && (!isset($vacation_type) || strtolower($vacation_type) !== 'encashed')) {
-                                    // Only set fly=1 if the vacation has actually started (start_date <= today)
-                                    $today = date('Y-m-d');
-                                    if (!empty($vacation_start_date) && $vacation_start_date <= $today) {
-                                        $sql_set_fly = "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?";
-                                        $stmt_set_fly = mysqli_prepare($conDB, $sql_set_fly);
-                                        if ($stmt_set_fly) {
-                                            // emp_id can be numeric or string in schema; bind as string for safety
-                                            mysqli_stmt_bind_param($stmt_set_fly, "s", $vacation_emp_id);
-                                            if (!mysqli_stmt_execute($stmt_set_fly)) {
-                                                error_log("handle_approval_action: Failed to set fly=1 for emp_id $vacation_emp_id on final approval of $inv_no_safe. Error: " . mysqli_stmt_error($stmt_set_fly));
-                                            } else {
-                                                error_log("handle_approval_action: Set fly=1 for emp_id $vacation_emp_id (regular vacation started on $vacation_start_date).");
-                                            }
-                                            mysqli_stmt_close($stmt_set_fly);
-                                        } else {
-                                            error_log("handle_approval_action: Prepare failed when setting fly=1 for emp_id $vacation_emp_id. Error: " . mysqli_error($conDB));
-                                        }
-                                    } else {
-                                        error_log("handle_approval_action: Skipped setting fly=1 for emp_id $vacation_emp_id - vacation starts in future ($vacation_start_date).");
-                                    }
-                                } elseif ($is_leave_request) {
-                                    error_log("handle_approval_action: Skipped setting fly=1 for emp_id $vacation_emp_id - this is a Leave Request ($request_inv_no), fly status not changed.");
+                                if (!$is_leave_request) {
+                                    error_log("handle_approval_action: Regular vacation approved for emp_id $vacation_emp_id. Fly status will be auto-updated by session_check when start_date ($vacation_start_date) arrives.");
+                                } else {
+                                    error_log("handle_approval_action: Leave Request approved for emp_id $vacation_emp_id - fly status not affected.");
                                 }
                             } else {
                                  error_log("CRITICAL: handle_approval_action: Final approval for $inv_no_safe succeeded, but could NOT find matching vacation ID to update balance.");
@@ -1878,7 +1958,8 @@ if (!function_exists('handle_approval_action')) {
                     if ($find_next_result) mysqli_free_result($find_next_result);
                 } // End if/else (new chain vs existing chain)
 
-            } else {
+            } // End if ($action == 'approve')
+            else {
                 // --- Action was 'reject' ---
                  $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
                  $stmt_main_rejected = mysqli_prepare($conDB, $update_main_rejected_sql);
@@ -2939,7 +3020,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
  * @return bool True if email sent successfully, false otherwise
  */
 if (!function_exists('send_travel_company_email')) {
-    function send_travel_company_email($conDB, $employee_name, $passport_no, $passport_expiry, $country_name, $departure_date, $arrival_date, $request_inv_no = '', $cc_email = '') {
+    function send_travel_company_email($conDB, $employee_name, $passport_no, $passport_expiry, $country_name, $departure_date, $arrival_date, $request_inv_no = '', $cc_email = '', $passport_file_path = '', $passport_file_name = '') {
         if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
             error_log("send_travel_company_email: PHPMailer class not found. Email not sent.");
             return false;
@@ -3102,12 +3183,90 @@ if (!function_exists('send_travel_company_email')) {
             $mail->Body    = $body_html;
             $mail->AltBody = strip_tags($body_html);
 
+            // Attach passport file if provided
+            if (!empty($passport_file_path) && file_exists($passport_file_path)) {
+                $mail->addAttachment($passport_file_path, $passport_file_name);
+                error_log("send_travel_company_email: Passport file attached: $passport_file_name");
+            }
+
             $mail->send();
             error_log("send_travel_company_email: Email sent successfully to $traveling_company_email for employee: $employee_name");
             return true;
         } catch (Exception $e) {
             error_log("send_travel_company_email: Failed to send email. Error: {$mail->ErrorInfo}");
             return false;
+        }
+    }
+}
+
+/**
+ * Get employee's current vacation balance from database
+ * Reads from emp_vacation_balance table (updated daily by cron job)
+ * 
+ * @param mysqli $conDB Database connection
+ * @param string $emp_id Employee ID
+ * @return float Current available balance (returns 0 if not found)
+ */
+if (!function_exists('get_employee_vacation_balance_from_db')) {
+    function get_employee_vacation_balance_from_db($conDB, $emp_id) {
+        if (empty($emp_id)) {
+            return 0.0;
+        }
+        
+        $stmt = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $emp_id) . "' ORDER BY `last_updated` DESC LIMIT 1");
+        
+        if ($stmt && mysqli_num_rows($stmt) > 0) {
+            $row = mysqli_fetch_assoc($stmt);
+            $balance = (float)$row['available_balance'];
+            mysqli_free_result($stmt);
+            return $balance;
+        }
+        
+        return 0.0;
+    }
+}
+
+/**
+ * Calculate LIVE vacation balance for an employee using VacationCalculator
+ * This performs real-time calculation based on current date, contract, and vacation history
+ * Use this when you need the most up-to-date balance calculation
+ * 
+ * @param mysqli $conDB Database connection
+ * @param string $emp_id Employee ID
+ * @return float|null Current calculated available balance or null on error
+ */
+if (!function_exists('get_live_vacation_balance')) {
+    function get_live_vacation_balance($conDB, $emp_id) {
+        if (empty($emp_id)) {
+            return null;
+        }
+        
+        // Load VacationCalculator
+        $calcFile = __DIR__ . '/vacation_calculator.php';
+        if (!file_exists($calcFile)) {
+            error_log("get_live_vacation_balance: vacation_calculator.php not found at $calcFile");
+            return null;
+        }
+        
+        require_once $calcFile;
+        
+        if (!class_exists('VacationCalculator')) {
+            error_log("get_live_vacation_balance: VacationCalculator class not found");
+            return null;
+        }
+        
+        try {
+            $vc = new VacationCalculator($conDB);
+            $result = $vc->getCalculatedBalance($emp_id);
+            
+            if ($result && isset($result['available_balance'])) {
+                return (float)$result['available_balance'];
+            }
+            
+            return null;
+        } catch (Throwable $e) {
+            error_log("get_live_vacation_balance: Error calculating balance for emp_id=$emp_id - " . $e->getMessage());
+            return null;
         }
     }
 }

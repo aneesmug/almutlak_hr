@@ -15,18 +15,18 @@
     "use strict";
 
     // --- Enhanced Logging ---
-    function logDebug(message, data) {
-        console.log("DEBUG: " + message, data !== undefined ? data : '');
-    }
-    function logWarn(message, data) {
-        console.warn("WARN: " + message, data !== undefined ? data : '');
-    }
-    function logError(message, error) {
-        console.error("ERROR: " + message, error !== undefined ? error : '');
-    }
+    // function logDebug(message, data) {
+    //     console.log("DEBUG: " + message, data !== undefined ? data : '');
+    // }
+    // function logWarn(message, data) {
+    //     console.warn("WARN: " + message, data !== undefined ? data : '');
+    // }
+    // function logError(message, error) {
+    //     console.error("ERROR: " + message, error !== undefined ? error : '');
+    // }
     // --- End Enhanced Logging ---
 
-    logDebug("notifications.js loaded successfully.");
+    // logDebug("notifications.js loaded successfully.");
 
     var notificationInterval; // Keep track of the interval timer
     var iconCheckCache = {}; // Cache for icon checks
@@ -49,23 +49,23 @@
 
     // Function to request notification permission
     function requestNotificationPermission() {
-        logDebug("Checking notification permission...");
+        // logDebug("Checking notification permission...");
         if (!("Notification" in window)) {
             logError("This browser does not support desktop notification.");
             return false;
         }
 
         const currentPermission = Notification.permission;
-        logDebug("Current notification permission state: " + currentPermission);
+        // logDebug("Current notification permission state: " + currentPermission);
 
         if (currentPermission === "granted") {
-            logDebug("Permission is already granted.");
+            // logDebug("Permission is already granted.");
             return true;
         } else if (currentPermission !== 'denied') {
-            logDebug("Requesting permission from user...");
+            // logDebug("Requesting permission from user...");
             Notification.requestPermission().then(function (permission) {
                 if (permission === "granted") {
-                    logDebug("Notification permission granted by user.");
+                    // logDebug("Notification permission granted by user.");
                     $('#enable-notifications-link').fadeOut(); // Hide smoothly
                     pollingStopped = false; // Reset flag if permission granted now
                     startNotificationPolling(); // Start polling immediately
@@ -88,7 +88,7 @@
     // Function: Mark notification as read via AJAX
     function markNotificationReadAJAX(notificationId) {
         if (!notificationId) return;
-        logDebug("Sending AJAX request to mark notification ID as read:", notificationId);
+        //logDebug("Sending AJAX request to mark notification ID as read:", notificationId);
         $.ajax({
             url: 'includes/mark_notification_read.php', // *** Verify this path is correct ***
             type: 'POST',
@@ -96,7 +96,7 @@
             dataType: 'json',
             success: function(response) {
                 if (response && response.status === 'success') {
-                    logDebug("Notification marked as read successfully on server:", notificationId);
+                    //logDebug("Notification marked as read successfully on server:", notificationId);
                     // Update count immediately after successful mark as read
                     updateBadgeCountBasedOnUI();
                 } else {
@@ -114,7 +114,7 @@
          // Count items excluding the placeholder
         var currentCount = $('#notification-dropdown-menu .slimscroll').find('.notify-item:not(#notification-placeholder)').length;
         var $badge = $('#notification-badge');
-        logDebug("Updating badge count based on UI. Current items in dropdown:", currentCount);
+        //logDebug("Updating badge count based on UI. Current items in dropdown:", currentCount);
         if (currentCount > 0) {
             $badge.text(currentCount).fadeIn();
         } else {
@@ -129,7 +129,7 @@
             return; // Don't make the request if stopped
         }
 
-        logDebug("Polling... Making AJAX request to includes/notification.php");
+        //logDebug("Polling... Making AJAX request to includes/notification.php");
 
         $.ajax({
             url: 'includes/notification.php', // *** Verify this path is correct ***
@@ -137,7 +137,7 @@
             dataType: 'json',
             cache: false, // Prevent browser caching of the API response
             success: function(response) {
-                logDebug("Response from includes/notification.php:", response);
+                //logDebug("Response from includes/notification.php:", response);
 
                 if (response && response.status === 'success' && Array.isArray(response.notifications)) {
                     var notifications = response.notifications;
@@ -157,21 +157,21 @@
                         // Don't necessarily stop polling, but log it
                     }
 
-                    logDebug(`Found ${count} unread notification(s) from server.`);
+                    //logDebug(`Found ${count} unread notification(s) from server.`);
 
                     // Clear previous items from dropdown (excluding placeholder)
                     $dropdownMenu.find('.notify-item:not(#notification-placeholder)').remove();
 
                     // Update Badge Logic FIRST
-                    logDebug("Attempting to update badge count to:", count);
+                    //logDebug("Attempting to update badge count to:", count);
                     if (count > 0) {
                         $badge.text(count).fadeIn(); // Show smoothly
                         $placeholder.hide();
-                         logDebug("Badge updated and shown.");
+                         //logDebug("Badge updated and shown.");
                     } else {
                         $badge.text('0').fadeOut(); // Hide smoothly
                         $placeholder.show();
-                        logDebug("Badge updated and hidden.");
+                        //logDebug("Badge updated and hidden.");
                     }
 
                     // Populate dropdown and trigger browser notifications only if count > 0
@@ -194,14 +194,14 @@
 
                             // 1. Show browser notification ONLY if it's NEW (timestamp > last known)
                              if (notificationTimestamp > 0 && notificationTimestamp > lastNotificationTimestamp) {
-                                logDebug("Calling showNotification() for NEW notification:", notification.id);
+                                //logDebug("Calling showNotification() for NEW notification:", notification.id);
                                 showNotification(notification);
                                 // Update latest timestamp found in this batch
                                 if (notificationTimestamp > latestTimestampInBatch) {
                                     latestTimestampInBatch = notificationTimestamp;
                                 }
                              } else {
-                                 logDebug("Skipping pop-up for already processed or timestamp-less notification ID:", notification.id);
+                                 //logDebug("Skipping pop-up for already processed or timestamp-less notification ID:", notification.id);
                              }
 
                             // 2. Populate dropdown
@@ -223,13 +223,13 @@
                         // Update the global last timestamp *only if* new notifications were found in this batch
                         if (latestTimestampInBatch > lastNotificationTimestamp) {
                             lastNotificationTimestamp = latestTimestampInBatch;
-                             logDebug("Updated lastNotificationTimestamp to:", new Date(lastNotificationTimestamp));
+                             //logDebug("Updated lastNotificationTimestamp to:", new Date(lastNotificationTimestamp));
                         }
 
-                        logDebug("Dropdown populated.");
+                        //logDebug("Dropdown populated.");
                     } else {
                         // lastNotificationTimestamp = 0; // Reset if no notifications? Maybe not, keep last known.
-                        logDebug("Dropdown cleared, placeholder shown.");
+                        //logDebug("Dropdown cleared, placeholder shown.");
                     }
 
                 } else if (response && response.status === 'error') {
@@ -264,7 +264,7 @@
     function showNotification(notificationData) {
         const permission = Notification.permission;
         if (permission === "granted") {
-            logDebug("Permission granted. Attempting to create 'new Notification()' pop-up for ID:", notificationData.id);
+            //logDebug("Permission granted. Attempting to create 'new Notification()' pop-up for ID:", notificationData.id);
 
             if (!notificationData || !notificationData.title || !notificationData.message) {
                 logError("Notification failed: Title or message is missing.", notificationData);
@@ -290,15 +290,15 @@
                 try {
                      // Check for active Service Worker - useful for more complex notification handling later
                      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                       logDebug("ServiceWorker active. Note: Standard 'new Notification' used here.");
+                       //logDebug("ServiceWorker active. Note: Standard 'new Notification' used here.");
                        // If using SW for notifications, the logic would differ significantly.
                      }
 
                     const notification = new Notification(notificationData.title, options);
-                    logDebug("Pop-up notification object created successfully:", notification);
+                    //logDebug("Pop-up notification object created successfully:", notification);
 
                     notification.onclick = function(event) {
-                        logDebug("Notification clicked:", event);
+                        //logDebug("Notification clicked:", event);
                         event.preventDefault(); // Prevent default action (like focusing browser) initially
                         markNotificationReadAJAX(notificationData.id); // Mark as read on server
                         if (notificationData.url) {
@@ -307,7 +307,7 @@
                              // Basic check if it's potentially relative and needs root path
                             if (!urlToOpen.startsWith('http') && !urlToOpen.startsWith('/')) {
                                 urlToOpen = '/' + urlToOpen; // Assuming relative from root
-                                logDebug("Relative URL detected, prefixing with /:", urlToOpen);
+                                //logDebug("Relative URL detected, prefixing with /:", urlToOpen);
                             }
                             window.open(urlToOpen, '_blank'); // Open in new tab
                         } else {
@@ -325,11 +325,11 @@
                     };
 
                     notification.onshow = function(event) {
-                         logDebug("Browser notification shown successfully:", event);
+                         //logDebug("Browser notification shown successfully:", event);
                     };
 
                     notification.onclose = function(event) {
-                         logDebug("Browser notification closed:", event);
+                         //logDebug("Browser notification closed:", event);
                          // Note: This also fires after clicking if notification.close() is called.
                     };
 
@@ -358,11 +358,11 @@
         if (!notificationInterval) {
              lastNotificationTimestamp = 0; // Reset timestamp when starting
              pollingStopped = false; // Ensure flag is reset
-            logDebug("Starting notification polling (every 30 seconds)...");
+            //logDebug("Starting notification polling (every 30 seconds)...");
             fetchAndShowNotifications(); // Fetch immediately
             notificationInterval = setInterval(fetchAndShowNotifications, 30000); // Poll every 30 seconds
         } else {
-            logDebug("Polling already running.");
+            //logDebug("Polling already running.");
         }
     }
 
@@ -378,22 +378,22 @@
 
     // Initialize notification system on document ready
     $(document).ready(function() {
-        logDebug("Document ready. Initializing notification check.");
+        //logDebug("Document ready. Initializing notification check.");
 
         // Use a small delay to ensure other scripts/UI elements might be ready
         setTimeout(function() {
             const initialPermission = Notification.permission;
-            logDebug("Checking permission on document ready (after delay): " + initialPermission);
+            //logDebug("Checking permission on document ready (after delay): " + initialPermission);
 
             if (initialPermission === "granted") {
-                logDebug("Permission was already granted on load.");
+                //logDebug("Permission was already granted on load.");
                 startNotificationPolling();
                 $('#enable-notifications-link').hide();
             } else if (initialPermission === 'denied') {
                  logWarn("Permission was 'denied' on load. Cannot ask again via script. User must change browser settings.");
                  $('#enable-notifications-link').hide(); // Hide the link, it won't work
             } else { // 'default'
-                logDebug("Permission not granted ('" + initialPermission + "'). Showing 'Enable Notifications' link.");
+                //logDebug("Permission not granted ('" + initialPermission + "'). Showing 'Enable Notifications' link.");
                  $('#enable-notifications-link').show().off('click').on('click', function(e) { // Use .off('click') to prevent multiple bindings
                     e.preventDefault();
                     requestNotificationPermission(); // Ask when user clicks
@@ -404,7 +404,7 @@
         // UI: Clear All button - Now also marks all as read on the server
         $('#clear-all-notifications').off('click').on('click', function(e) {
             e.preventDefault();
-            logDebug("Clear All clicked: marking all unread notifications as read via AJAX.");
+            //logDebug("Clear All clicked: marking all unread notifications as read via AJAX.");
 
             $.ajax({
                 url: 'includes/notification.php',
@@ -412,7 +412,7 @@
                 dataType: 'json',
                 data: { action: 'mark_all_read' },
                 success: function(resp) {
-                    logDebug('Mark all read response:', resp);
+                    //logDebug('Mark all read response:', resp);
                     // Optimistically update UI regardless; warn if server error
                     if (!resp || resp.status !== 'success') {
                         logWarn('Mark all read did not return success.');
@@ -438,7 +438,7 @@
             var notificationId = $item.data('id');
             var itemUrl = $item.attr('href');
 
-            logDebug("Notification item clicked in dropdown, ID:", notificationId);
+            //logDebug("Notification item clicked in dropdown, ID:", notificationId);
 
             // 1. Mark as read on the server
             markNotificationReadAJAX(notificationId);

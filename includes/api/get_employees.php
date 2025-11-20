@@ -37,6 +37,7 @@ if (!$can_see_all_employees && isset($user_dept)) {
 try {
     // Modified to include employees on vacation (fly=1) if they have a vacation starting this month
     // This allows us to generate payroll for their working days before vacation
+    // ALSO include employees with is_deductible=0 (Fly+Annual) who remain in full payroll
     $sql = "SELECT DISTINCT
             e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept, 
             es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard,
@@ -46,7 +47,8 @@ try {
             e.country,
             s.sponsor,
             c.comp_name,
-            e.fly
+            e.fly,
+            v.is_deductible as vacation_is_deductible
         FROM employees e
         LEFT JOIN emp_salary es ON e.emp_id = es.emp_id AND es.status = 1
         LEFT JOIN payrolls gp ON e.emp_id = gp.emp_id AND gp.month_year = :month_year_param
@@ -57,7 +59,11 @@ try {
             AND v.current_status = 'approved'
             AND DATE_FORMAT(v.start_date, '%Y-%m') = :month_year_param2
         WHERE e.status = 1 
-        AND (e.fly = 0 OR (e.fly = 1 AND v.id IS NOT NULL))" . $dept_filter . "
+        AND (
+            e.fly = 0 
+            OR (e.fly = 1 AND v.id IS NOT NULL)
+            OR (v.is_deductible = 0)
+        )" . $dept_filter . "
         ORDER BY e.dept, e.name
     ";
 

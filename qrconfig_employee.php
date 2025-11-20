@@ -38,7 +38,7 @@ $verification = $_GET['verification'];
 
 $tempDir = "./assets/qrcodes/";
 $pngAbsoluteFilePath = $tempDir.$verification.$param.".png";
-$urlPath = 'http://sys.almutlak.com/emp_card/index.php?hashcode='.$param.'&verification='.$verification;
+$urlPath = 'https://hr.almutlaksystem.com/emp_card/index.php?hashcode='.$param.'&verification='.$verification;
 
 QRcode::png($urlPath, $pngAbsoluteFilePath, QR_ECLEVEL_L, 4, 1, false);
 // header("refresh:0; url= ./view_employee.php?id=".$verification);

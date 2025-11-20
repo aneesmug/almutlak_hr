@@ -162,7 +162,7 @@ $isEmployee = ($user_type === 'employee');
 // --- 7. Page Access Control ---
 $current_page = strtolower(basename($_SERVER['PHP_SELF']));
 
-const EMPLOYEE_ALLOWED_PAGES = ['profile.php', 'all_applied_loan.php','all_applied_vac.php'];
+const EMPLOYEE_ALLOWED_PAGES = ['profile.php', 'all_applied_loan.php','vacation_report_details.php', 'employee_vacation_history.php','employee_loan_history.php'];
 const ASSISTANT_RESTRICTED_PAGES = ['dashbydepart.php', 'filter_employee.php', 'reg_employee.php', 'search.php', 'manual_vacation.php'];
 
 
@@ -180,53 +180,89 @@ if (!$isSpecialAssistant && ($user_type ?? null) === 'assistant' && in_array($cu
 // --- 8. Auto-Update Fly Status on Every Page Load ---
 update_employee_fly_status_on_session($conDB);
 
+// --- 9. DISABLED: Auto-Update Vacation Balance on Every Page Load ---
+// NOTE: Balance should be calculated LIVE only when needed, never persisted on session load
+// The live balance is calculated by get_current_vacation_balance() in balance_calculator.php
+// and used in the UI. The emp_vacation_balance table is for historical records only.
+// update_employee_vacation_balance_on_session($conDB, $empid);
+
 include(__DIR__ . "/menu_active_class.php");
 
 /**
- * Automatically resets employees.fly to 0 when their approved vacation/leave has ended.
- * Runs on EVERY page load to ensure immediate updates (no throttle).
+ * Automatically updates employees.fly status based on approved vacation dates.
+ * Runs on EVERY page load to ensure immediate updates.
  * 
  * How it works:
- * - Regular Vacation (annual vacation - VAC-*): Sets fly=1 on approval, auto-resets when ended
- * - Leave Requests (LV-*): Does NOT set fly=1, only restricts application during vacation
+ * 1. Sets fly=1 when vacation start_date arrives (NOT at approval time)
+ * 2. Resets fly=0 when vacation return_date passes
+ * 3. Only affects regular vacation (VAC-*), NOT leave requests (LV-*)
+ * 4. Only sets fly=1 if is_deductible=1 (deductible vacations)
  * 
  * @param mysqli $conDB Database connection
  * @return void
  */
 function update_employee_fly_status_on_session($conDB) {
-    // Run on every page load - no throttle
-    // The query is optimized with EXISTS subquery and only affects rows where fly=1
-    
     try {
-        // Reset fly=0 for employees who have fly=1 but no active approved vacation/leave covering today
-        // This works automatically for both vacation and leave requests
-        $sql = "
+        $today = date('Y-m-d');
+        
+                // STEP 1: Set fly=1 for employees with approved vacation that has STARTED today
+                // (Only for regular vacation VAC-*, not leave requests LV-*)
+                // Note: Annual Fly vacations may have is_deductible = 0 but employee is away → still set fly=1
+        $sql_set_fly = "
+            UPDATE employees e
+            INNER JOIN emp_vacation v ON v.emp_id = e.emp_id
+            SET e.fly = 1
+                        WHERE (e.fly = 0 OR e.fly = '0' OR LOWER(e.fly) = 'no' OR e.fly IS NULL)
+                            AND v.current_status = 'approved'
+              AND v.start_date <= ?
+              AND v.return_date >= ?
+              AND v.request_inv_no LIKE 'VAC-%'
+                            AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
+        ";
+        
+        $stmt_set = mysqli_prepare($conDB, $sql_set_fly);
+        if ($stmt_set) {
+            mysqli_stmt_bind_param($stmt_set, 'ss', $today, $today);
+            if (mysqli_stmt_execute($stmt_set)) {
+                $affected = mysqli_stmt_affected_rows($stmt_set);
+                if ($affected > 0) {
+                    error_log("update_employee_fly_status: Set fly=1 for $affected employee(s) whose vacation started.");
+                }
+            }
+            mysqli_stmt_close($stmt_set);
+        }
+        
+        // STEP 2: Reset fly=0 for employees whose approved vacation/leave has ENDED
+                $sql_reset_fly = "
             UPDATE employees e
             SET e.fly = 0
-            WHERE e.fly = 1
+                        WHERE (e.fly = 1 OR e.fly = '1' OR LOWER(e.fly) = 'yes')
               AND NOT EXISTS (
                   SELECT 1
                   FROM emp_vacation v
                   WHERE v.emp_id = e.emp_id
                     AND v.current_status = 'approved'
-                    AND v.start_date <= CURDATE()
-                    AND v.return_date >= CURDATE()
+                    AND v.start_date <= ?
+                    AND v.return_date >= ?
+                    AND v.request_inv_no LIKE 'VAC-%'
+                                        AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
               )
         ";
         
-        if (mysqli_query($conDB, $sql)) {
-            // Optional: log affected rows for debugging
-            $affected = mysqli_affected_rows($conDB);
-            if ($affected > 0) {
-                error_log("update_employee_fly_status: Reset fly=0 for $affected employee(s) with no active vacation/leave.");
+        $stmt_reset = mysqli_prepare($conDB, $sql_reset_fly);
+        if ($stmt_reset) {
+            mysqli_stmt_bind_param($stmt_reset, 'ss', $today, $today);
+            if (mysqli_stmt_execute($stmt_reset)) {
+                $affected = mysqli_stmt_affected_rows($stmt_reset);
+                if ($affected > 0) {
+                    error_log("update_employee_fly_status: Reset fly=0 for $affected employee(s) whose vacation ended.");
+                }
             }
-        } else {
-            error_log("update_employee_fly_status: Query failed - " . mysqli_error($conDB));
+            mysqli_stmt_close($stmt_reset);
         }
+        
     } catch (Exception $e) {
         // Silently fail to avoid breaking page loads
         error_log("update_employee_fly_status: Exception - " . $e->getMessage());
     }
 }
-
-?>

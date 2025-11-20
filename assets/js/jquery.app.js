@@ -3392,7 +3392,7 @@ $(document).on('click', '.contantChk', function (e) {
     });
 });
 
-$('#startUpdateRequest').on('click', function() {
+$(document).on('click', '#startUpdateRequest', function() {
     const empid = $(this).data('empid');
     const avatarLoad = $(this).data('avatar');
     const mobile = $(this).data('mobile');
@@ -3400,6 +3400,13 @@ $('#startUpdateRequest').on('click', function() {
     const address = $(this).data('address');
     const passport_number = $(this).data('passport_number');
     const passport_exp = $(this).data('passport_exp');
+    
+    // Show field selection modal - pending check happens after field selection
+    showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passport_number, passport_exp);
+});
+
+// Extracted function to show the update request modal
+function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passport_number, passport_exp) {
     // --- First Modal: Ask WHAT to update ---
     Swal.fire({
         title: __('what_to_update_title'),
@@ -3430,6 +3437,43 @@ $('#startUpdateRequest').on('click', function() {
         // If the user clicked "Next" and selected a field
         if (result.isConfirmed && result.value) {
             const field = result.value;
+            
+            // Check if there's a pending request for THIS specific field type
+            $.ajax({
+                url: './includes/ajaxFile/ajaxEmployee.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: { ajaxType: 'check_pending_update', empid: empid, type: field },
+                success: function(response) {
+                    if (response.has_pending) {
+                        Swal.fire({
+                            title: __('pending_request_title', 'Request Pending'),
+                            html: __('pending_request_message', 'You already have a modification request for this field sent and waiting for approval.') + 
+                                  '<br><br><strong>' + __('pending_type', 'Field') + ':</strong> ' + response.pending_type + 
+                                  '<br><strong>' + __('submitted_on', 'Submitted On') + ':</strong> ' + response.created_at,
+                            icon: 'info',
+                            confirmButtonText: __('ok'),
+                            allowOutsideClick: false
+                        }).then(() => {
+                            // Return to field selection modal
+                            showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passport_number, passport_exp);
+                        });
+                        return;
+                    }
+                    
+                    // No pending request for this field, proceed with the update modal
+                    proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address, passport_number, passport_exp);
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    handleAjaxFailure(jqXHR, textStatus);
+                }
+            });
+        }
+    });
+}
+
+// Separate function to handle the actual field update after validation
+function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address, passport_number, passport_exp) {
             // --- Handle Profile Picture with Croppie ---
             if (field === 'Profile Picture') {
                 const empData = {
@@ -3576,9 +3620,7 @@ $('#startUpdateRequest').on('click', function() {
                     }
                 });
             }
-        }
-    });
-});
+}
 
 /*$(document).on('click', '.editEmpInfo', function (e) {
     e.preventDefault();
@@ -4864,6 +4906,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
     var empid = $(this).data('empid');
     var deptId = $(this).data('dept');
     var country = $(this).data('country');
+    var currentBalance = $(this).data('balance') || 0;
 
     // Quick pre-check: block opening the modal if there's already a pending request
     try {
@@ -4927,7 +4970,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
             }
 
             // Proceed to open the modal as usual
-            openVacationApplyModal(empid, deptId, country);
+            openVacationApplyModal(empid, deptId, country, currentBalance);
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
@@ -4939,42 +4982,12 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 });
 
 // Extracted function to open the Apply Vacation modal after eligibility check
-function openVacationApplyModal(empid, deptId, country) {
-
-
-    // --- NEW: HTML for vacation salary type selection (initially hidden) ---
-    let salaryTypeHtml = `
-        <div class="vacation-card d-none" id="salaryTypeSection" style="margin-top: 20px;">
-            <div class="vacation-card-header">
-                <i class="fa fa-wallet"></i>
-                ${__('vacation_salary_payment')} <span class="text-danger">*</span>
-            </div>
-            <div class="vac-radio-group">
-                <div class="vac-radio-option">
-                    <input type="radio" id="salary_with_payroll" value="payroll" name="vacation_salary_type" checked>
-                    <label for="salary_with_payroll" class="vac-radio-label">
-                        <i class="fa fa-money-check-alt"></i>
-                        <span>${__('yes')}</span>
-                    </label>
-                </div>
-                <div class="vac-radio-option">
-                    <input type="radio" id="salary_with_eos" value="end_of_service" name="vacation_salary_type">
-                    <label for="salary_with_eos" class="vac-radio-label">
-                        <i class="fa fa-piggy-bank"></i>
-                        <span>${__('no')}</span>
-                    </label>
-                </div>
-            </div>
-            <small class="form-text text-muted" style="margin-top: 10px; display: block; font-size: 12px; color: #858796;">
-                ${__('vacation_salary_type_help')}
-            </small>
-        </div>
-    `;
+function openVacationApplyModal(empid, deptId, country, currentBalance) {
+    currentBalance = currentBalance || 0;
 
     Swal.fire({
         title: '<i class="fa fa-umbrella-beach"></i> ' + __('apply_vacation_info_title'),
-        // --- MODIFICATION: Add the approver dropdown HTML and salary type selection ---
-    html: vacationApply_HTML(country) + salaryTypeHtml,
+        html: vacationApply_HTML(country),
         showCancelButton: true,
         confirmButtonColor: '#4e73df',
         cancelButtonColor: '#e74a3b',
@@ -5004,6 +5017,8 @@ function openVacationApplyModal(empid, deptId, country) {
                 // Update flight date pickers to respect new start date
                 $('#departure_date').datepicker('setStartDate', startDate);
                 $('#arrival_date').datepicker('setStartDate', startDate);
+                // Calculate vacation days
+                calculateVacationDays();
             });
 
             $('#end_date').datepicker({
@@ -5016,7 +5031,27 @@ function openVacationApplyModal(empid, deptId, country) {
                 // Update flight date pickers to respect new end date
                 $('#departure_date').datepicker('setEndDate', endDate);
                 $('#arrival_date').datepicker('setEndDate', endDate);
+                // Calculate vacation days
+                calculateVacationDays();
             });
+
+            // Function to calculate and display vacation days
+            function calculateVacationDays() {
+                var startDate = $('#start_date').datepicker('getDate');
+                var endDate = $('#end_date').datepicker('getDate');
+                
+                if (startDate && endDate) {
+                    // Calculate difference in days (inclusive)
+                    var timeDiff = endDate.getTime() - startDate.getTime();
+                    var daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
+                    
+                    // Display the vacation days
+                    $('#vacation_days_count').text(daysDiff);
+                    $('#vacation_days_display').removeClass('d-none');
+                } else {
+                    $('#vacation_days_display').addClass('d-none');
+                }
+            }
 
             // Initialize departure and arrival date pickers
             $('#departure_date').datepicker({
@@ -5045,7 +5080,7 @@ function openVacationApplyModal(empid, deptId, country) {
                 url: './includes/ajaxFile/ajaxEmployee.php',
                 dataType: 'JSON',
                 type: 'POST',
-                data: {ajaxType: "emp_department", dept: deptId},
+                data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid},
                 success: function(res) {
                     if (res.status == 200) {
                         let options = '';
@@ -5079,13 +5114,78 @@ function openVacationApplyModal(empid, deptId, country) {
 
             // ...existing code...
             
-            // MODIFIED: Toggle Fields Logic - now includes salary type section, flight dates, and remarks
+            // MODIFIED: Toggle Fields Logic - now includes salary type section, flight dates, remarks, and encashment
             function toggleVacationFields() {
                 const selectedVac = document.querySelector('input[name="vac_type"]:checked');
-                $('#flyTypeSection, #replacementSection, #date_select, #notesSection, #salaryTypeSection, #flightDatesSection').addClass('d-none');
+                $('#flyTypeSection, #replacementSection, #date_select, #notesSection, #salaryTypeSection, #flightDatesSection, #encashSection').addClass('d-none');
                 if (!selectedVac) return;
                 const vacValue = selectedVac.value;
-                if (vacValue === 'Local Vacation' || vacValue === 'Fly') {
+                if (vacValue === 'Encashed') {
+                    // Show encashment section
+                    $('#encashSection').removeClass('d-none');
+                    
+                    // Show loading state
+                    $('#vacation_balance_display').text('Loading...');
+                    
+                    // Fetch current balance from server
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'JSON',
+                        data: {ajaxType: "getCurrentVacationBalance", empid: empid},
+                        success: function(res) {
+                            console.log('Balance Response:', res);
+                            if (res && res.status == 200) {
+                                var balance = parseFloat(res.balance) || 0;
+                                $('#vacation_balance_display').text(balance.toFixed(2));
+                                $('#encash_days').attr('max', balance.toFixed(2));
+                            } else {
+                                console.error('Failed to fetch balance:', res);
+                                $('#vacation_balance_display').text('0.00');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Balance AJAX Error:', error);
+                            console.error('Response Text:', xhr.responseText);
+                            $('#vacation_balance_display').text('0.00');
+                        }
+                    });
+                    
+                    // Calculate salary on input - using 'off' first to prevent duplicate bindings
+                    $('#encash_days').off('input').on('input', function() {
+                        var days = parseFloat($(this).val()) || 0;
+                        var balance = parseFloat($('#vacation_balance_display').text()) || 0;
+                        
+                        if (days > balance) {
+                            $(this).val(balance.toFixed(2));
+                            days = balance;
+                        }
+                        
+                        if (days > 0) {
+                            // Fetch salary from backend
+                            $.ajax({
+                                url: './includes/ajaxFile/ajaxEmployee.php',
+                                type: 'POST',
+                                dataType: 'JSON',
+                                data: {ajaxType: "calculate_encash_salary", empid: empid, days: days},
+                                success: function(res) {
+                                    console.log('Salary Calculation Response:', res);
+                                    if (res && res.status == 200) {
+                                        $('#encashment_salary_display').text(res.salary);
+                                    } else {
+                                        $('#encashment_salary_display').text('0');
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error('Salary Calculation Error:', error, xhr.responseText);
+                                    $('#encashment_salary_display').text('0');
+                                }
+                            });
+                        } else {
+                            $('#encashment_salary_display').text('0');
+                        }
+                    });
+                } else if (vacValue === 'Local Vacation' || vacValue === 'Fly') {
                     $('#flyTypeSection').removeClass('d-none');
                     const selectedFlyType = document.querySelector('input[name="fly_type"]:checked');
                     if (selectedFlyType) {
@@ -5095,9 +5195,12 @@ function openVacationApplyModal(empid, deptId, country) {
                             // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                             if (flyVal === 'annual') {
                                 $('#salaryTypeSection').removeClass('d-none');
-                                // Show flight dates AND remarks ONLY for Fly + Annual
+                                // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation)
                                 if (vacValue === 'Fly') {
                                     $('#flightDatesSection, #notesSection').removeClass('d-none');
+                                } else {
+                                    // Explicitly hide flight dates for Local Vacation
+                                    $('#flightDatesSection, #notesSection').addClass('d-none');
                                 }
                             }
                         }
@@ -5105,14 +5208,20 @@ function openVacationApplyModal(empid, deptId, country) {
                     document.querySelectorAll('input[name="fly_type"]').forEach(flyRadio => {
                         flyRadio.addEventListener('change', function () {
                             const flyVal = this.value;
+                            // Re-check the current vacation type (don't use stale vacValue)
+                            const currentVacType = document.querySelector('input[name="vac_type"]:checked');
+                            const currentVacValue = currentVacType ? currentVacType.value : '';
                             if (flyVal === 'annual' || flyVal === 'emergency') {
                                 $('#replacementSection, #date_select').removeClass('d-none');
                                 // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                                 if (flyVal === 'annual') {
                                     $('#salaryTypeSection').removeClass('d-none');
                                     // Show flight dates AND remarks ONLY for Fly + Annual
-                                    if (vacValue === 'Fly') {
+                                    if (currentVacValue === 'Fly') {
                                         $('#flightDatesSection, #notesSection').removeClass('d-none');
+                                    } else {
+                                        // Explicitly hide for Local Vacation
+                                        $('#flightDatesSection, #notesSection').addClass('d-none');
                                     }
                                 } else {
                                     $('#salaryTypeSection, #flightDatesSection, #notesSection').addClass('d-none');
@@ -5139,12 +5248,27 @@ function openVacationApplyModal(empid, deptId, country) {
             formData.append("emp_id", empid);
             formData.append("dept_id", deptId);
 
+
             const selectedRadio = $('input[name="vac_type"]:checked').val();
             if (!selectedRadio) {
                 Swal.showValidationMessage(__('select_vacation_type_validation'));
                 return false;
             }
-            if (selectedRadio === 'Local Vacation' || selectedRadio === 'Fly') {
+            if (selectedRadio === 'Encashed') {
+                const encashDays = parseFloat($('#encash_days').val()) || 0;
+                const balance = parseFloat($('#vacation_balance_display').text()) || 0;
+                if (!encashDays || encashDays < 0.01) {
+                    Swal.showValidationMessage(__('enter_days_to_encash_validation') || 'Please enter number of days to encash');
+                    return false;
+                }
+                if (encashDays > balance) {
+                    Swal.showValidationMessage(__('encash_days_exceeds_balance') || 'You cannot encash more than your balance');
+                    return false;
+                }
+                // Attach encashment info to formData
+                formData.append('encash_days', encashDays);
+                formData.append('encashment_salary', $('#encashment_salary_display').text());
+            } else if (selectedRadio === 'Local Vacation' || selectedRadio === 'Fly') {
                 const flyType = $('input[name="fly_type"]:checked').val();
                 if (!flyType) {
                     Swal.showValidationMessage(__('select_vacation_type_validation'));
@@ -5162,7 +5286,6 @@ function openVacationApplyModal(empid, deptId, country) {
                         Swal.showValidationMessage(__('replacement_person_required_validation'));
                         return false;
                     }
-                    
                     // Validate flight dates for Fly + Annual vacation
                     if (selectedRadio === 'Fly' && flyType === 'annual') {
                         const departureDate = $('#departure_date').val();
@@ -5171,20 +5294,25 @@ function openVacationApplyModal(empid, deptId, country) {
                             Swal.showValidationMessage(__('flight_dates_required_validation') || 'Please select departure and arrival dates');
                             return false;
                         }
-                        
                         // Validate that flight dates are within vacation period
                         const start = new Date(startDate);
                         const end = new Date(endDate);
                         const departure = new Date(departureDate);
                         const arrival = new Date(arrivalDate);
-                        
                         if (departure < start || departure > end) {
                             Swal.showValidationMessage(__('departure_date_must_be_between_vacation_dates') || 'Departure date must be between start date and return date');
                             return false;
                         }
-                        
                         if (arrival < start || arrival > end) {
                             Swal.showValidationMessage(__('arrival_date_must_be_between_vacation_dates') || 'Arrival date must be between start date and return date');
+                            return false;
+                        }
+                    }
+                    // NEW: Validate vacation salary type selection for annual vacations
+                    if (flyType === 'annual') {
+                        const salaryType = $('input[name="vacation_salary_type"]:checked').val();
+                        if (!salaryType) {
+                            Swal.showValidationMessage(__('vacation_salary_type_required') || 'Please select vacation salary payment option');
                             return false;
                         }
                     }
@@ -5202,6 +5330,17 @@ function openVacationApplyModal(empid, deptId, country) {
                     if (res && res.supervisor_id) {
                         formData.append('first_approver_id', res.supervisor_id);
                     }
+                    
+                    // DEBUG: Log FormData contents
+                    console.log('=== FormData Contents ===');
+                    for (let pair of formData.entries()) {
+                        console.log(pair[0] + ': ' + pair[1]);
+                    }
+                    console.log('departure_date value:', $('#departure_date').val());
+                    console.log('arrival_date value:', $('#arrival_date').val());
+                    console.log('vacation_salary_type checked:', $('input[name="vacation_salary_type"]:checked').val());
+                    console.log('========================');
+                    
                     $.ajax({
                         url: './includes/ajaxFile/ajaxVacation.php',
                         type: 'POST',
@@ -6694,6 +6833,7 @@ function vacationApply_HTML(country) {
                 </div>
             </div>
 
+
             <!-- Vacation Type Selection -->
             <div class="vacation-card">
                 <div class="vacation-card-header">
@@ -6707,20 +6847,15 @@ function vacationApply_HTML(country) {
                             <i class="fa fa-map-marker-alt"></i>
                             <span>${__('local_vacation')}</span>
                         </label>
-                    </div>`;
-             
-                if (country != 191 && country != 150) {
-                    strView += `
+                    </div>
+                    ${(country != 191 && country != 150) ? `
                     <div class="vac-radio-option">
                         <input type="radio" id="inlineRadio1" value="Fly" name="vac_type">
                         <label for="inlineRadio1" class="vac-radio-label">
                             <i class="fa fa-plane-departure"></i>
                             <span>${__('fly')}</span>
                         </label>
-                    </div>`;
-                }
-
-                strView += `
+                    </div>` : ''}
                     <div class="vac-radio-option">
                         <input type="radio" id="inlineRadio2" value="Encashed" name="vac_type">
                         <label for="inlineRadio2" class="vac-radio-label">
@@ -6728,6 +6863,24 @@ function vacationApply_HTML(country) {
                             <span>${__('encashed')}</span>
                         </label>
                     </div>
+                </div>
+            </div>
+
+            <!-- Encashment Section -->
+            <div class="vacation-card d-none" id="encashSection">
+                <div class="vacation-card-header">
+                    <i class="fa fa-coins"></i> ${__('vacation_balance') || 'Vacation Balance'}
+                </div>
+                <div style="margin-bottom:8px; color:#4e73df; font-weight:600;">
+                    <span id="vacation_balance_display">0</span> ${__('days') || 'days'}
+                </div>
+                <div class="form-group">
+                    <label for="encash_days">${__('enter_days_to_encash') || 'Enter number of days to encash'}<span class="text-danger">*</span></label>
+                    <input type="number" min="1" max="999" class="form-control" id="encash_days" name="encash_days" placeholder="${__('enter_days_to_encash_placeholder') || 'Days'}">
+                </div>
+                <div class="form-group">
+                    <label>${__('encashment_salary_label') || 'Encashment Salary'}:</label>
+                    <div style="font-weight:600; color:#28a745;" id="encashment_salary_display">0</div>
                 </div>
             </div>
 
@@ -6771,6 +6924,12 @@ function vacationApply_HTML(country) {
                         <input type="text" name="end_date" placeholder="${__('select_return_date_placeholder')}" class="form-control form-control-modern" id="end_date">
                     </div>
                 </div>
+                <div id="vacation_days_display" class="d-none" style="margin-top: 15px; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; text-align: center;">
+                    <div style="color: white; font-size: 14px; font-weight: 500; margin-bottom: 5px;">
+                        <i class="fa fa-calendar-check"></i> ${__('vacation_days') || 'Vacation Days'}
+                    </div>
+                    <div style="color: white; font-size: 24px; font-weight: 700;" id="vacation_days_count">0</div>
+                </div>
             </div>
 
             <!-- Flight Dates (Departure & Arrival) -->
@@ -6809,6 +6968,33 @@ function vacationApply_HTML(country) {
                     ${__('notes')}
                 </div>
                 <input type="text" name="remarks" class="form-control form-control-modern" id="remarks" autocomplete="off" placeholder="${__('enter_notes_placeholder') || 'Enter additional notes...'}">
+            </div>
+
+            <!-- Vacation Salary Type Selection -->
+            <div class="vacation-card d-none" id="salaryTypeSection" style="margin-top: 20px;">
+                <div class="vacation-card-header">
+                    <i class="fa fa-wallet"></i>
+                    ${__('vacation_salary_payment')} <span class="text-danger">*</span>
+                </div>
+                <div class="vac-radio-group">
+                    <div class="vac-radio-option">
+                        <input type="radio" id="salary_with_payroll" value="payroll" name="vacation_salary_type">
+                        <label for="salary_with_payroll" class="vac-radio-label">
+                            <i class="fa fa-money-check-alt"></i>
+                            <span>${__('yes')}</span>
+                        </label>
+                    </div>
+                    <div class="vac-radio-option">
+                        <input type="radio" id="salary_with_eos" value="end_of_service" name="vacation_salary_type">
+                        <label for="salary_with_eos" class="vac-radio-label">
+                            <i class="fa fa-piggy-bank"></i>
+                            <span>${__('no')}</span>
+                        </label>
+                    </div>
+                </div>
+                <small class="form-text text-muted" style="margin-top: 10px; display: block; font-size: 12px; color: #858796;">
+                    ${__('vacation_salary_type_help')}
+                </small>
             </div>
 
             <input type="hidden" class="cid" name="cid">

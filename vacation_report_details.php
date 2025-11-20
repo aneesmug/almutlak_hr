@@ -13,10 +13,10 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
 // Restrict access: Employees cannot view this detailed report page
-if (isset($isEmployee) && $isEmployee === true) {
-    header("Location: ./profile.php");
-    exit();
-}
+// if (isset($isEmployee) && $isEmployee === true) {
+//     header("Location: ./profile.php");
+//     exit();
+// }
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
@@ -30,7 +30,7 @@ if (mysqli_num_rows($query) == 1) {
         die("Invalid request parameters.");
     }
 
-    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type)
+    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note)
     $sql = "SELECT 
                 v.*, 
                 v.fly_type as raw_fly_type,
@@ -38,6 +38,10 @@ if (mysqli_num_rows($query) == 1) {
                 v.vacation_salary_type,
                 v.departure_date,
                 v.arrival_date,
+                v.overtime_hours,
+                v.deduction_hours,
+                v.deduction_days,
+                v.payroll_note,
                 e.name as employee_name,
                 e.avatar,
                 e.joining_date,
@@ -105,64 +109,118 @@ if (mysqli_num_rows($query) == 1) {
     $gosi_deduction = 0;
     $ticket_fee = 0;
     $permit_fee = 0;
+    $overtime_amount = 0;
+    $deduction_amount = 0;
     $applied_days = (float)($request['vacdays'] ?? 0);
     
-    $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
-    $is_payable_leave = !in_array($request['vac_type'], $non_payable_leave_types);
-
-    // If fly_type is emergency, it is not payable.
-    if (isset($request['raw_fly_type']) && $request['raw_fly_type'] === 'emergency') {
-        $is_payable_leave = false;
-    }    // NEW: Check vacation_salary_type - if 'end_of_service', don't calculate vacation salary in payroll
+    // Get payroll overtime/deduction values
+    $overtime_hours = (float)($request['overtime_hours'] ?? 0);
+    $deduction_hours = (float)($request['deduction_hours'] ?? 0);
+    $deduction_days = (float)($request['deduction_days'] ?? 0);
+    $payroll_note = $request['payroll_note'] ?? '';
+    
+    // Determine vacation salary type
     $vacation_salary_type = $request['vacation_salary_type'] ?? 'payroll';
-    $show_vacation_salary = ($vacation_salary_type === 'payroll');
+    $vac_type = $request['vac_type'] ?? '';
+    $fly_type = $request['raw_fly_type'] ?? '';
+    
+    // === PAYROLL LOGIC RULES ===
+    // 1. Fly + Annual: Employee EXCLUDED from payroll → Show vacation salary (if vacation_salary_type = payroll)
+    // 2. Local Vacation + Annual: Employee ACTIVE in payroll → NO vacation salary, only deduct days
+    // 3. Encashment: Show ONLY encashment amount (no working days salary)
+    // 4. Emergency: Not payable
+    // 5. Other leave types: Not payable
+    
+    $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+    $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+    $is_encashment = ($vac_type === 'Encashed');
+    $is_emergency = ($fly_type === 'emergency');
+    
+    // Non-payable leave types
+    $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+    $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
+    
+    // Determine if this vacation gets any payment calculation
+    $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+    
+    if ($calculate_payments && $salary) {
+        $basic_salary = (float)($salary['basic'] ?? 0);
+        $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
+        $daily_rate = $total_monthly_salary / 30;
+        
+        // --- CALCULATE OVERTIME AND DEDUCTIONS (EOS Logic) ---
+        $DEDUCTION_BASE = $total_monthly_salary;
+        $dailyRateDeduction = $DEDUCTION_BASE / 30;
+        $hourlyRateDeduction = $dailyRateDeduction / 8;
+        
+        // OVERTIME CALCULATION (per EOS file):
+        // per-hour overtime rate = (basic/240)/2 + (full/240)
+        $overtimeHourlyRate = (($basic_salary / 240) / 2) + ($total_monthly_salary / 240);
+        
+        // Calculate amounts
+        if ($overtime_hours > 0) {
+            $overtime_amount = $overtimeHourlyRate * $overtime_hours;
+        }
+        
+        if ($deduction_hours > 0 || $deduction_days > 0) {
+            $deduction_hours_amount = $hourlyRateDeduction * $deduction_hours;
+            $deduction_days_amount = $dailyRateDeduction * $deduction_days;
+            $deduction_amount = $deduction_hours_amount + $deduction_days_amount;
+        }
 
-    if ($is_payable_leave) {
-        if ($salary) {
-            $total_monthly_salary = ($salary['basic'] ?? 0) + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
-            $daily_rate = $total_monthly_salary / 30;
-
-            // Calculate working days salary (from 1st day of month until day before vacation starts)
+        // === WORKING DAYS SALARY ===
+        // Only for Fly + Annual (employee excluded from payroll)
+        // NOT for Encashment or Local Vacation + Annual
+        if ($is_fly_annual && !empty($request['start_date'])) {
             $start_date_obj = new DateTime($request['start_date']);
             $working_days = (int)$start_date_obj->format('d') - 1; // Days before vacation starts
             $working_days_salary = $daily_rate * $working_days;
+        }
 
-            // Only calculate vacation salary if type is 'payroll'
-            if ($show_vacation_salary) {
-                // Calculate vacation days salary
-                $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
-                if ($contract_days > 0 && $applied_days == $contract_days) {
-                    $vacation_salary = $total_monthly_salary;
-                } else {
-                    $vacation_salary = $daily_rate * $applied_days;
-                }
+        // === VACATION SALARY ===
+        // Only for Fly + Annual AND vacation_salary_type = 'payroll'
+        // NOT for Local Vacation + Annual (stays in payroll)
+        // NOT for Encashment (handled separately)
+        if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+            $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
+            if ($contract_days > 0 && $applied_days == $contract_days) {
+                $vacation_salary = $total_monthly_salary;
+            } else {
+                $vacation_salary = $daily_rate * $applied_days;
             }
+        }
 
-            // GOSI deduction calculation
-            if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
-                $gosi_percentage = (float)$request['gosi'];
-                if ($show_vacation_salary) {
-                    // Both working days + vacation salary
-                    $gosi_deduction = (($vacation_salary + $working_days_salary) * $gosi_percentage) / 100;
-                } else {
-                    // Only working days salary
-                    $gosi_deduction = ($working_days_salary * $gosi_percentage) / 100;
-                }
+        // === GOSI DEDUCTION ===
+        if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
+            $gosi_percentage = (float)$request['gosi'];
+            if ($is_fly_annual) {
+                // For Fly + Annual: Apply GOSI on working days + vacation salary
+                $gosi_base = $working_days_salary + $vacation_salary;
+                $gosi_deduction = ($gosi_base * $gosi_percentage) / 100;
+            } elseif ($is_encashment) {
+                // For Encashment: GOSI calculated separately in encashment section
+                $gosi_deduction = 0;
             }
         }
         
-        // Ticket and permit fees (applicable for both types)
-        if (($request['vac_type'] === 'Fly' || $request['vac_type'] === 'Local Vacation') && $request['country_id'] != 191) {
+        // === TICKET AND PERMIT FEES ===
+        // Only for Fly + Annual (non-Saudi employees)
+        if ($is_fly_annual && $request['country_id'] != 191) {
             $ticket_fee = $request['ticket_pay'] ?? 0;
             $permit_fee = $request['permit_fee'] ?? 0;
         }
     }
 
-
-    if ($request['vac_type'] !== 'Encashed'){
-        $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee - $gosi_deduction;
+    // === TOTAL PAYABLE CALCULATION ===
+    if ($is_encashment) {
+        // Encashment: Total is handled in encashment section
+        $total_payable = 0;
+    } elseif ($is_fly_annual) {
+        // Fly + Annual: Working days + vacation salary + fees - deductions
+        $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee + $overtime_amount - $gosi_deduction - $deduction_amount;
     } else {
-        $total_payable = $vacation_salary + $ticket_fee + $permit_fee - $gosi_deduction;
+        // Local Vacation + Annual or other: No payment (stays in payroll)
+        $total_payable = 0;
     }
 
     // Approval Timeline Logic - NEW CHAIN APPROVAL SYSTEM
@@ -362,15 +420,30 @@ if (mysqli_num_rows($query) == 1) {
                                     <h5 class="section-title"><i class="fa fa-calendar-alt"></i><?= __('vacation_details') ?></h5>
                                     <div class="grid-details">
                                         <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></small></span></div>
+                                        <?php if ($request['vac_type'] !== 'Encashed'): ?>
                                         <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></small></span></div>
+                                        <?php endif; ?>
+                                        <div class="detail-item"><span class="label"><?= __('vacation_days') ?></span> <span class="value highlight"><small><?=htmlspecialchars($request['vacdays']); ?> <?= __('days') ?></small></span></div>
+                                        <?php 
+                                        // Calculate flight days if both departure and arrival dates exist
+                                        $flight_days = 0;
+                                        if (!empty($request['departure_date']) && !empty($request['arrival_date'])) {
+                                            $departure_date_obj = new DateTime($request['departure_date']);
+                                            $arrival_date_obj = new DateTime($request['arrival_date']);
+                                            $flight_interval = $departure_date_obj->diff($arrival_date_obj);
+                                            $flight_days = $flight_interval->days + 1; // Include both departure and arrival days
+                                        }
+                                        ?>
                                         <?php if (!empty($request['departure_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
                                             <div class="detail-item"><span class="label"><?= __('departure_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['departure_date']))); ?></small></span></div>
                                         <?php endif; ?>
                                         <?php if (!empty($request['arrival_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
                                             <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['arrival_date']))); ?></small></span></div>
                                         <?php endif; ?>
-                                        <div class="detail-item"><span class="label"><?= __('total_days') ?></span> <span class="value highlight"><small><?=htmlspecialchars($request['vacdays']); ?> <?= __('days') ?></small></span></div>
+                                        <?php if ($flight_days > 0): ?>
+                                            <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?=htmlspecialchars($flight_days); ?> <?= __('days') ?></small></span></div>
+                                        <?php endif; ?>
                                         <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></small></span></div>
                                          <?php if (!empty($request['attachment_path'])): ?>
@@ -382,56 +455,76 @@ if (mysqli_num_rows($query) == 1) {
                                 <?php 
                                 // Hide payment details if:
                                 // 1. Emergency vacation, OR
-                                // 2. Encashment request (will show separate section)
+                                // 2. Encashment request (but show custom encashment section), OR
+                                // 3. Fly + Annual OR Local Vacation + Annual (is_deductible = 0, employee stays in full payroll)
                                 // Note: end_of_service type will show payment details but only working days salary
-                                $is_encashment_request = (trim(strtolower($request['remarks'] ?? '')) === 'encashment');
-                                $hide_payment_details = ($request['raw_fly_type'] === 'emergency') || $is_encashment_request;
+                                $is_encashment_request = (trim(strtolower($request['vac_type'] ?? '')) === 'encashed');
+                                $is_annual_non_deductible = (
+                                    ($request['vac_type'] === 'Fly' || $request['vac_type'] === 'Local Vacation') && 
+                                    $request['raw_fly_type'] === 'annual' && 
+                                    isset($request['is_deductible']) && 
+                                    $request['is_deductible'] == 0
+                                );
+                                $hide_payment_details = ($request['raw_fly_type'] === 'emergency') || $is_encashment_request || $is_annual_non_deductible;
                                 ?>
                                 
-                                    <?php if ($is_encashment_request): ?>
+                                    <?php if ($is_encashment_request): 
+                                        // Get encashment details from database
+                                        $encashment_amount = (float)($request['encashment_amount'] ?? 0);
+                                        $days_encashed = (float)($request['vacdays'] ?? 0);
+                                        $daily_rate_display = ($days_encashed > 0) ? ($encashment_amount / $days_encashed) : 0;
+                                        
+                                        // Calculate GOSI deduction for encashment if applicable
+                                        $encash_gosi = 0;
+                                        if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
+                                            $gosi_percentage = (float)$request['gosi'];
+                                            $encash_gosi = ($encashment_amount * $gosi_percentage) / 100;
+                                        }
+                                        $net_encashment = $encashment_amount - $encash_gosi;
+                                    ?>
                                     <div class="report-section">
-                                        <h5 class="section-title"><i class="fa fa-coins"></i><?= __('encashment_payment_details') ?></h5>
+                                        <h5 class="section-title"><i class="fa fa-coins"></i><?= __('encashment_payment_details') ?? 'Encashment Payment Details' ?></h5>
                                         <div class="alert alert-success mb-3">
-                                            <i class="fa fa-info-circle"></i> <strong><?= __('vacation_balance_encashment') ?></strong>
-                                            <p class="mb-0 mt-2"><?= __('employee_opted_encash_message') ?></p>
+                                            <i class="fa fa-info-circle"></i> <strong><?= __('vacation_balance_encashment') ?? 'Vacation Balance Encashment' ?></strong>
+                                            <p class="mb-0 mt-2"><?= __('employee_opted_encash_message') ?? 'The employee has chosen to encash vacation days instead of taking time off.' ?></p>
                                         </div>
                                         <div class="payment-summary">
                                             <ul>
                                                 <li>
                                                     <div>
-                                                        <span class="label"><?= __('encashed_vacation_days') ?></span>
-                                                        <small class="text-muted d-block"><?= __('based_on_available_balance') ?></small>
+                                                        <span class="label"><?= __('encashed_vacation_days') ?? 'Encashed Vacation Days' ?></span>
+                                                        <small class="text-muted d-block"><?= __('days_converted_to_cash') ?? 'Days converted to cash payment' ?></small>
                                                     </div>
-                                                    <span class="value"><?= htmlspecialchars($effective_remaining ?? $request['vacdays'] ?? 0); ?> <?= __('day_s') ?></span>
+                                                    <span class="value"><?= number_format($days_encashed, 2); ?> <?= __('day_s') ?? 'Days' ?></span>
                                                 </li>
                                                 <li>
                                                     <div>
-                                                        <span class="label"><?= __('daily_salary_rate') ?></span>
-                                                        <small class="text-muted d-block"><?= __('monthly_salary_divided_30') ?></small>
+                                                        <span class="label"><?= __('daily_salary_rate') ?? 'Daily Salary Rate' ?></span>
+                                                        <small class="text-muted d-block"><?= __('monthly_salary_divided_30') ?? 'Monthly salary ÷ 30 days' ?></small>
                                                     </div>
-                                                    <span class="value">
-                                                        <?php 
-                                                        $encashment_amount = $request['encashment_amount'] ?? 0;
-                                                        $days_encashed = $effective_remaining ?? $request['vacdays'] ?? 1;
-                                                        $daily_rate_display = ($days_encashed > 0) ? ($encashment_amount / $days_encashed) : 0;
-                                                        echo number_format($daily_rate_display, 2); 
-                                                        ?> SAR
-                                                    </span>
+                                                    <span class="value"><?= number_format($daily_rate_display, 2); ?> SAR</span>
                                                 </li>
-                                                <?php if ($gosi_deduction > 0): ?>
                                                 <li>
-                                                    <span class="label text-danger"><?= __('gosi_deduction') ?></span>
-                                                    <span class="value text-danger">-<?= number_format($gosi_deduction, 2); ?> SAR</span>
+                                                    <div>
+                                                        <span class="label"><?= __('gross_encashment_amount') ?? 'Gross Encashment Amount' ?></span>
+                                                        <small class="text-muted d-block"><?= __('days_x_daily_rate') ?? 'Days × Daily Rate' ?></small>
+                                                    </div>
+                                                    <span class="value"><?= number_format($encashment_amount, 2); ?> SAR</span>
+                                                </li>
+                                                <?php if ($encash_gosi > 0): ?>
+                                                <li>
+                                                    <span class="label text-danger"><?= __('gosi_deduction') ?? 'GOSI Deduction' ?> (<?= number_format($request['gosi'], 1); ?>%)</span>
+                                                    <span class="value text-danger">-<?= number_format($encash_gosi, 2); ?> SAR</span>
                                                 </li>
                                                 <?php endif; ?>
                                                 <li class="total-payable">
-                                                    <span class="label"><?= __('total_encashment_payment') ?></span>
-                                                    <span class="value"><?= number_format($encashment_amount - $gosi_deduction, 2); ?> SAR</span>
+                                                    <span class="label"><?= __('total_encashment_payment') ?? 'Total Encashment Payment' ?></span>
+                                                    <span class="value"><?= number_format($net_encashment, 2); ?> SAR</span>
                                                 </li>
                                             </ul>
                                         </div>
-                                        <div class="alert alert-warning mt-3 mb-0">
-                                            <i class="fa fa-exclamation-triangle"></i> <strong><?= __('note') ?>:</strong> <?= __('encashment_balance_warning') ?> <strong><?= __('zero_days') ?></strong>.
+                                        <div class="alert alert-info mt-3 mb-0">
+                                            <i class="fa fa-info-circle"></i> <strong><?= __('note') ?? 'Note' ?>:</strong> <?= __('encashment_deducts_balance') ?? 'This encashment will deduct the specified days from the employee vacation balance.' ?>
                                         </div>
                                     </div>
                                     <?php endif; ?>
@@ -451,42 +544,113 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php endif; ?>
                                 
-                                <?php if (!$hide_payment_details): ?>
+                                <?php if ($is_local_annual): ?>
                                 <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?></h5>
-                                    <?php if (!$is_payable_leave): ?>
-                                        <div class="alert alert-info"><?= __('salary_benefits_not_applicable') ?></div>
-                                    <?php else: ?>
-                                        <div class="payment-summary">
-                                            <ul>
-                                                <?php if($request['vac_type'] !== 'Encashed'): ?>
-                                                <li>
-                                                    <div>
-                                                        <span class="label"><?= __('working_days_salary') ?></span>
-                                                        <small class="text-muted d-block"><?= str_replace('{days}', htmlspecialchars($working_days), __('calculated_for_days_before_vacation')) ?></small>
-                                                    </div>
-                                                    <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
-                                                </li>
-                                                <?php endif; ?>
-                                                <?php if ($show_vacation_salary): ?>
-                                                <li>
-                                                    <div>
-                                                        <span class="label"><?= __('vacation_salary') ?></span>
-                                                        <small class="text-muted d-block"><?= str_replace('{days}', htmlspecialchars($applied_days), __('calculated_for_days')) ?></small>
-                                                    </div>
-                                                    <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>
-                                                </li>
-                                                <?php endif; ?>
-                                                <?php if ($ticket_fee > 0): ?><li><span class="label"><?= __('ticket_payment') ?></span> <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span></li><?php endif; ?>
-                                                <?php if ($permit_fee > 0): ?><li><span class="label"><?= __('permit_fee') ?></span> <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span></li><?php endif; ?>
-                                                <?php if ($gosi_deduction > 0): ?><li><span class="label text-danger"><?= __('gosi_deduction') ?></span> <span class="value text-danger">-<?=number_format($gosi_deduction, 2); ?> SAR</span></li><?php endif; ?>
-                                                <li class="total-payable"><span class="label"><?= __('total_payable') ?></span> <span class="value"><?=number_format($total_payable, 2); ?> SAR</span></li>
-                                            </ul>
-                                        </div>
+                                    <h5 class="section-title"><i class="fa fa-briefcase"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
+                                    <div class="alert alert-success mb-0">
+                                        <i class="fa fa-check-circle"></i> <strong><?= __('employee_active_in_payroll') ?? 'Employee Active in Payroll' ?></strong>
+                                        <p class="mb-2 mt-2"><?= __('local_annual_vacation_payroll_message') ?? 'This is a Local Annual vacation. The employee will remain active in the payroll system and receive their complete monthly salary as per normal.' ?></p>
+                                        <ul class="mb-0 pl-4">
+                                            <li><?= __('vacation_type') ?>: <strong><?= htmlspecialchars($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
+                                            <li><?= __('payroll_status') ?>: <strong><?= __('active_full_salary') ?? 'Active - Full Salary' ?></strong></li>
+                                            <li><?= __('vacation_days_deducted') ?? 'Vacation Days Deducted' ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
+                                            <li><?= __('salary_deduction') ?? 'Salary Deduction' ?>: <strong><?= __('none') ?? 'None' ?></strong></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                                
+                                <?php if ($is_fly_annual && $vacation_salary_type === 'end_of_service'): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-info-circle"></i><?= __('vacation_salary_information') ?? 'Vacation Salary Information' ?></h5>
+                                    <div class="alert alert-info mb-0">
+                                        <i class="fa fa-piggy-bank"></i> <strong><?= __('vacation_salary_deferred_eos') ?? 'Vacation Salary Deferred to End of Service' ?></strong>
+                                        <p class="mb-2 mt-2"><?= __('employee_chosen_receive_vacation_salary_eos') ?? 'The employee has chosen to receive their vacation salary as part of their end of service settlement instead of with payroll.' ?></p>
+                                        <ul class="mb-0 pl-4">
+                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
+                                            <li><?= __('payment') ?>: <strong><?= __('end_of_service_settlement') ?? 'End of Service Settlement' ?></strong></li>
+                                            <li><?= __('amount_calculated_added_final_settlement') ?? 'The vacation salary amount will be calculated and added to the final settlement.' ?></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                                
+                                <?php if ($is_fly_annual && $vacation_salary_type === 'payroll'): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?? 'Payment Details' ?></h5>
+                                    <div class="payment-summary">
+                                        <ul>
+                                            <li>
+                                                <div>
+                                                    <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
+                                                    <small class="text-muted d-block"><?= __('calculated_for_days_before_vacation') ?? 'Calculated for {days} days before vacation' ?> (<?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?>)</small>
+                                                </div>
+                                                <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
+                                            </li>
+                                            <li>
+                                                <div>
+                                                    <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?></span>
+                                                    <small class="text-muted d-block"><?= __('calculated_for_days') ?? 'Calculated for {days} days' ?> (<?= htmlspecialchars($applied_days); ?> <?= __('days') ?? 'days' ?>)</small>
+                                                </div>
+                                                <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>
+                                            </li>
+                                            <?php if ($overtime_amount > 0): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label text-success"><?= __('overtime_payment') ?? 'Overtime Payment' ?></span>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($overtime_hours) ?> <?= __('hours') ?? 'hours' ?> @ <?= number_format($overtimeHourlyRate ?? 0, 2) ?> SAR/hr</small>
+                                                </div>
+                                                <span class="value text-success">+<?=number_format($overtime_amount, 2); ?> SAR</span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($ticket_fee > 0): ?>
+                                            <li>
+                                                <span class="label"><?= __('ticket_payment') ?? 'Ticket Payment' ?></span>
+                                                <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($permit_fee > 0): ?>
+                                            <li>
+                                                <span class="label"><?= __('permit_fee') ?? 'Permit Fee' ?></span>
+                                                <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($deduction_amount > 0): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label text-danger"><?= __('deductions') ?? 'Deductions' ?></span>
+                                                    <small class="text-muted d-block">
+                                                        <?php if ($deduction_hours > 0): ?>
+                                                            <?= htmlspecialchars($deduction_hours) ?> <?= __('hours') ?? 'hours' ?> @ <?= number_format($hourlyRateDeduction ?? 0, 2) ?> SAR/hr
+                                                        <?php endif; ?>
+                                                        <?php if ($deduction_days > 0): ?>
+                                                            <?php if ($deduction_hours > 0) echo ' + '; ?>
+                                                            <?= htmlspecialchars($deduction_days) ?> <?= __('days') ?? 'days' ?> @ <?= number_format($dailyRateDeduction ?? 0, 2) ?> SAR/day
+                                                        <?php endif; ?>
+                                                    </small>
+                                                </div>
+                                                <span class="value text-danger">-<?=number_format($deduction_amount, 2); ?> SAR</span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($gosi_deduction > 0): ?>
+                                            <li>
+                                                <span class="label text-danger"><?= __('gosi_deduction') ?? 'GOSI Deduction' ?> (<?= number_format($request['gosi'] ?? 0, 1); ?>%)</span>
+                                                <span class="value text-danger">-<?=number_format($gosi_deduction, 2); ?> SAR</span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <li class="total-payable">
+                                                <span class="label"><?= __('total_payable') ?? 'Total Payable' ?></span>
+                                                <span class="value"><?=number_format($total_payable, 2); ?> SAR</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <?php if (!empty($payroll_note)): ?>
+                                    <div class="alert alert-warning mt-3 mb-0">
+                                        <i class="fa fa-sticky-note"></i> <strong><?= __('payroll_note') ?? 'Payroll Note' ?>:</strong> <?= htmlspecialchars($payroll_note); ?>
+                                    </div>
                                     <?php endif; ?>
                                 </div>
                                 <?php endif; ?>
-
                                 <div class="row">
                                     <div class="col-md-7">
                                         <div class="report-section">
@@ -664,7 +828,12 @@ if (mysqli_num_rows($query) == 1) {
                                                     <th><?= __('serial_number') ?></th>
                                                     <th><?= __('asset_type') ?></th>
                                                     <th><?= __('clearance_status') ?></th>
-                                                </tr>
+                                                        <div class="icon"><i class="fa <?= $status_icon ?>"></i></div>
+                                                        <span class="status ml-3 <?= $status_class ?>">
+                                                            <strong><?= htmlspecialchars($approver['approver_name']) ?></strong>
+                                                            <small class="text-muted">(<?= __('level') ?? 'Level' ?> <?= $approver['approval_level'] ?>)</small>
+                                                            - <span class="<?= $status_class ?>"><?= $status_text ?></span>
+                                                        </span>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($assigned_assets as $asset): 

@@ -1,0 +1,27 @@
+=== BALANCE UPDATE DEBUG TEST ===
+
+Database connection loaded
+
+--- Step 1: Check Current Record ---
+Record found: ID=135
+  OLD period: 2025-09-01 to 2025-09-30
+  OLD available_balance: 0.31
+
+--- Step 2: VacationCalculator ---
+Calculator returned:
+  NEW period: 2024-11-01 to 2026-11-01
+  NEW available_balance: 1.41
+
+--- Step 3: UPDATE Query ---
+Prepared statement created
+Binding: start=2024-11-01, end=2026-11-01, total=42, used=19, remaining=23, available=1.41, carryover=0, id=135
+Bind successful
+EXECUTE SUCCESS - Affected rows: 1
+
+--- Step 4: Verify Update ---
+After update:
+  period_start: 2024-11-01
+  period_end: 2026-11-01
+  available_balance: 1.41
+
+=== COMPLETE ===

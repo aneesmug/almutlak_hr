@@ -106,7 +106,35 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
         allowOutsideClick: false,
     }).then((result) => {
         if (result.isConfirmed) {
-            sendLoanUpdate(loanId, role, 'approve_loan');
+            // Show loader while processing
+            Swal.fire({
+                title: __('processing_approval'),
+                text: __('please_wait_processing'),
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            // Send the approval request
+            sendLoanUpdate(loanId, role, 'approve_loan').then((response) => {
+                Swal.fire({
+                    title: response.title,
+                    text: response.message,
+                    icon: response.type,
+                    allowOutsideClick: false
+                }).then(() => {
+                    if (response.status === 'success') {
+                        location.reload();
+                    }
+                });
+            }).catch((error) => {
+                Swal.fire({
+                    title: __('error_title'),
+                    text: error.message || __('unknown_error_occurred'),
+                    icon: 'error',
+                    allowOutsideClick: false
+                });
+            });
         }
     });
     }
@@ -130,6 +158,20 @@ function rejectLoanRequest(loanId, role) {
         },
         preConfirm: (reason) => {
             return sendLoanUpdate(loanId, role, 'reject_loan', { rejection_note: reason });
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const response = result.value;
+            Swal.fire({
+                title: response.title,
+                text: response.message,
+                icon: response.type,
+                allowOutsideClick: false
+            }).then(() => {
+                if (response.status === 'success') {
+                    location.reload();
+                }
+            });
         }
     });
 }
@@ -213,25 +255,6 @@ function sendLoanUpdate(loanId, role, ajaxType, additionalData = {}) {
         type: 'POST',
         dataType: 'JSON',
         data: data,
-    })
-    .done(function(response){
-        Swal.fire({
-            title: response.title,
-            text: response.message,
-            icon: response.type,
-            allowOutsideClick: false
-        }).then(function(isConfirm){
-            if(isConfirm.value){
-                location.reload();
-            }
-        });
-    })
-    .fail(function(jqXHR, textStatus) {
-        const error = handleAjaxFailure(jqXHR, textStatus);
-        Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
-        if (!additionalData.rejection_note) {
-             Swal.fire(error.title, error.message, error.type);
-        }
     });
 }
 

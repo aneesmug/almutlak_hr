@@ -145,6 +145,7 @@ if (mysqli_num_rows($query) == 1) {
 			$is_system_admin || 
 			$user_type === 'hr_operations' ||
 			$user_type === 'hr_payroll' ||
+			$isHR_Assistant ||
 			$user_type === 'hr_recruitment'
 		);
 		
@@ -746,22 +747,6 @@ if (mysqli_num_rows($query) == 1) {
 
 		<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.js"></script> -->
 
-		<script type="text/javascript">
-			$(document).ready(function() {
-				// $('.editEmployeeAttr').ready(function() {
-				/*var status      = $(this).data('status');
-				var user_type   = $(this).data('user_type');
-				$('input[name="status"][value="'+status+'"]').prop('checked', true);
-				$('#user_type option[value="'+user_type+'"]').prop("selected", "selected");
-				$('.department option').removeAttr('selected').filter('[value='+department+']').attr('selected', true);*/
-				// var department   = "<? //=$emprow['dept']
-										?>";
-				// var vac_period = "<?//= $vac_period_get ?>";
-				// $('.department option[value="'+department+'"]').prop("selected", "selected");
-				// $('.vac_period option[value="' + vac_period + '"]').prop("selected", "selected");
-
-			});
-		</script>
 		<script type="text/javascript">
 			$uploadCrop = $('#upload_emp_img').croppie({
 				url: "<?= substr($emprow['avatar'], 2); ?>",

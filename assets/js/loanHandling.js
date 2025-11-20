@@ -29,6 +29,7 @@
 $(document).on('click', '.applyLoan', async function(e) {
     e.preventDefault();
     const emp_id = $(this).data('emp_id');
+    const user_type = $(this).data('user_type');
 
     // Build new requirement form without EOS/40% blocks
     Swal.fire({
@@ -173,7 +174,21 @@ $(document).on('click', '.applyLoan', async function(e) {
                 if (isNaN(amt) || amt <= 0) ok = false;
                 if (maxAmount && amt > maxAmount) ok = false;
                 if (minAmount && amt < minAmount) ok = false;
-                $('#loan_feedback').text(!ok ? `${__('amount_must_be_between') || 'Amount must be between'} ${minAmount.toFixed(2)} - ${maxAmount.toFixed(2)}` : '');
+                
+                // Show different messages based on user type
+                if (user_type === 'employee') {
+                    // For employees: generic message without revealing limits
+                    if (!ok && amt > maxAmount) {
+                        $('#loan_feedback').text(__('entered_amount_exceeds_allowed_limit') || 'The entered amount exceeds the allowed limit for this loan type.');
+                    } else if (!ok) {
+                        $('#loan_feedback').text(__('please_enter_valid_amount') || 'Please enter a valid amount.');
+                    } else {
+                        $('#loan_feedback').text('');
+                    }
+                } else {
+                    // For non-employees: detailed message with limits
+                    $('#loan_feedback').text(!ok ? `${__('amount_must_be_between') || 'Amount must be between'} ${minAmount.toFixed(2)} - ${maxAmount.toFixed(2)}` : '');
+                }
                 confirmButton.disabled = !ok;
                 updateDeduction();
             }
@@ -219,7 +234,10 @@ $(document).on('click', '.applyLoan', async function(e) {
                         amountInput.prop('min', minAmount || 0);
                         if (maxAmount) amountInput.prop('max', maxAmount);
                         amountInput.prop('disabled', false);
-                        eligibilityInfo.addClass('alert-info').text(message || '').show();
+                        // Hide maximum value for employees (user_type = employee)
+                        if (user_type !== 'employee') {
+                            eligibilityInfo.addClass('alert-info').text(message || '').show();
+                        }
 
                         // Show EOS details card only if allowed and EOS type
                         const eosCard = $('#eos_info_card');

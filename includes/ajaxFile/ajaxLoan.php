@@ -382,11 +382,31 @@ function approve_loan() {
                         create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
                     }
                     
-                    // Send email
+                    // Send email with template
                     if (!empty($next_approver_details['email']) && function_exists('send_approval_email')) {
-                        $email_subject = "Loan Request for Approval - " . $inv_no;
-                        $email_body = "Dear " . htmlspecialchars($next_approver_details['name']) . ",<br><br>A loan request (" . htmlspecialchars($inv_no) . ") has been approved and is now pending your approval. Please log in to the portal to review it.<br><br>Thank you.";
-                        send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $email_subject, $email_body);
+                        // Fetch loan details for email template
+                        $loan_details_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.inv_no = ? LIMIT 1");
+                        $loan_details_stmt->bind_param("s", $inv_no);
+                        $loan_details_stmt->execute();
+                        $loan_details = $loan_details_stmt->get_result()->fetch_assoc();
+                        $loan_details_stmt->close();
+                        
+                        if ($loan_details) {
+                            $base_url = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com');
+                            $template_data = [
+                                'APPROVER_NAME' => $next_approver_details['name'],
+                                'REQUEST_ID' => $inv_no,
+                                'EMPLOYEE_NAME' => $loan_details['employee_name'] ?? 'Employee',
+                                'LOAN_TYPE' => str_replace('_', ' ', $loan_details['loan_type']),
+                                'LOAN_AMOUNT' => number_format($loan_details['loan_amount'], 2),
+                                'INSTALLMENTS' => $loan_details['installments'],
+                                'REQUEST_URL' => $base_url . '/all_applied_loan.php?status=my_pending',
+                                'EMAIL_MESSAGE' => 'A loan request has been approved at a previous level and now requires your approval.'
+                            ];
+                            
+                            $email_subject = "Loan Request Pending Your Approval - " . ucfirst(str_replace('_', ' ', $loan_details['loan_type'])) . " (" . $inv_no . ")";
+                            send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $email_subject, 'loan_request', $template_data);
+                        }
                     }
                 }
             }
@@ -428,11 +448,31 @@ function approve_loan() {
                         create_browser_notification($conDB, $creator_emp_id, $notification_title, $notification_message, $notification_url);
                     }
                     
-                    // Send email
+                    // Send email with template
                     if (!empty($creator_details['email']) && function_exists('send_approval_email')) {
-                        $email_subject = "Loan Request Approved - " . $inv_no;
-                        $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>Great news! Your loan request (" . htmlspecialchars($inv_no) . ") has been fully approved and will be processed.<br><br>Thank you.";
-                        send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $email_subject, $email_body);
+                        // Fetch loan details for email template
+                        $loan_details_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.inv_no = ? LIMIT 1");
+                        $loan_details_stmt->bind_param("s", $inv_no);
+                        $loan_details_stmt->execute();
+                        $loan_details = $loan_details_stmt->get_result()->fetch_assoc();
+                        $loan_details_stmt->close();
+                        
+                        if ($loan_details) {
+                            $base_url = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com');
+                            $template_data = [
+                                'APPROVER_NAME' => $creator_details['name'],
+                                'REQUEST_ID' => $inv_no,
+                                'EMPLOYEE_NAME' => $loan_details['employee_name'] ?? 'Employee',
+                                'LOAN_TYPE' => str_replace('_', ' ', $loan_details['loan_type']),
+                                'LOAN_AMOUNT' => number_format($loan_details['loan_amount'], 2),
+                                'INSTALLMENTS' => $loan_details['installments'],
+                                'REQUEST_URL' => $base_url . '/loan_status_history.php?inv_no=' . urlencode($inv_no),
+                                'EMAIL_MESSAGE' => 'Great news! Your loan request has been fully approved and will be processed.'
+                            ];
+                            
+                            $email_subject = "Loan Request Fully Approved - " . ucfirst(str_replace('_', ' ', $loan_details['loan_type'])) . " (" . $inv_no . ")";
+                            send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $email_subject, 'loan_request', $template_data);
+                        }
                     }
                 }
             }
@@ -714,7 +754,8 @@ function apply_for_loan() {
         return;
     }
     $submitted_by = isset($_SESSION['empid']) ? (int)$_SESSION['empid'] : null;
-    $stmt->bind_param("ssissididdss", $inv_no, $emp_id, $submitted_by, $loan_type, $loan_amount, $installments, $interest_rate, $total_payable, $monthly_deduction, $start_date_str_db, $end_date_str);
+    // Corrected type string: 11 placeholders => ssisdidddss (s:string, i:int, d:double)
+    $stmt->bind_param("ssisdidddss", $inv_no, $emp_id, $submitted_by, $loan_type, $loan_amount, $installments, $interest_rate, $total_payable, $monthly_deduction, $start_date_str_db, $end_date_str);
     if ($stmt->execute()) {
         $loan_id = $stmt->insert_id;
         $stmt->close();
@@ -950,11 +991,33 @@ function reject_loan() {
                             create_browser_notification($conDB, $creator_emp_id, $notification_title, $notification_message, $notification_url);
                         }
                         
-                        // Send email
+                        // Send email with template
                         if (!empty($creator_details['email']) && function_exists('send_approval_email')) {
-                            $email_subject = "Loan Request Rejected - " . $inv_no;
-                            $email_body = "Dear " . htmlspecialchars($creator_details['name']) . ",<br><br>Unfortunately, your loan request (" . htmlspecialchars($inv_no) . ") was rejected by " . htmlspecialchars($approver_name) . ".<br><br><strong>Reason:</strong> " . htmlspecialchars($rejection_note) . "<br><br>Thank you.";
-                            send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $email_subject, $email_body);
+                            // Fetch loan details for email template
+                            $loan_details_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.inv_no = ? LIMIT 1");
+                            $loan_details_stmt->bind_param("s", $inv_no);
+                            $loan_details_stmt->execute();
+                            $loan_details = $loan_details_stmt->get_result()->fetch_assoc();
+                            $loan_details_stmt->close();
+                            
+                            if ($loan_details) {
+                                $base_url = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com');
+                                $template_data = [
+                                    'APPROVER_NAME' => $creator_details['name'],
+                                    'REQUEST_ID' => $inv_no,
+                                    'EMPLOYEE_NAME' => $loan_details['employee_name'] ?? 'Employee',
+                                    'LOAN_TYPE' => str_replace('_', ' ', $loan_details['loan_type']),
+                                    'LOAN_AMOUNT' => number_format($loan_details['loan_amount'], 2),
+                                    'INSTALLMENTS' => $loan_details['installments'],
+                                    'REQUEST_URL' => $base_url . '/loan_status_history.php?inv_no=' . urlencode($inv_no),
+                                    'REJECTION_REASON' => $rejection_note,
+                                    'REJECTED_BY' => $approver_name,
+                                    'EMAIL_MESSAGE' => 'Unfortunately, your loan request has been rejected.'
+                                ];
+                                
+                                $email_subject = "Loan Request Rejected - " . ucfirst(str_replace('_', ' ', $loan_details['loan_type'])) . " (" . $inv_no . ")";
+                                send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $email_subject, 'loan_request', $template_data);
+                            }
                         }
                     }
                 }
@@ -986,11 +1049,33 @@ function reject_loan() {
                                 create_browser_notification($conDB, $prev_approver_id, $notification_title, $notification_message, $notification_url);
                             }
                             
-                            // Send email (optional - you may want to only email the creator)
+                            // Send email with template (optional - you may want to only email the creator)
                             if (!empty($prev_approver_details['email']) && function_exists('send_approval_email')) {
-                                $email_subject = "Loan Request Rejected - " . $inv_no;
-                                $email_body = "Dear " . htmlspecialchars($prev_approver_details['name']) . ",<br><br>Loan request (" . htmlspecialchars($inv_no) . ") that you previously approved has been rejected by " . htmlspecialchars($approver_name) . ".<br><br><strong>Reason:</strong> " . htmlspecialchars($rejection_note) . "<br><br>Thank you.";
-                                send_approval_email($conDB, $prev_approver_details['email'], $prev_approver_details['name'], $email_subject, $email_body);
+                                // Fetch loan details for email template
+                                $loan_details_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.inv_no = ? LIMIT 1");
+                                $loan_details_stmt->bind_param("s", $inv_no);
+                                $loan_details_stmt->execute();
+                                $loan_details = $loan_details_stmt->get_result()->fetch_assoc();
+                                $loan_details_stmt->close();
+                                
+                                if ($loan_details) {
+                                    $base_url = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com');
+                                    $template_data = [
+                                        'APPROVER_NAME' => $prev_approver_details['name'],
+                                        'REQUEST_ID' => $inv_no,
+                                        'EMPLOYEE_NAME' => $loan_details['employee_name'] ?? 'Employee',
+                                        'LOAN_TYPE' => str_replace('_', ' ', $loan_details['loan_type']),
+                                        'LOAN_AMOUNT' => number_format($loan_details['loan_amount'], 2),
+                                        'INSTALLMENTS' => $loan_details['installments'],
+                                        'REQUEST_URL' => $base_url . '/loan_status_history.php?inv_no=' . urlencode($inv_no),
+                                        'REJECTION_REASON' => $rejection_note,
+                                        'REJECTED_BY' => $approver_name,
+                                        'EMAIL_MESSAGE' => 'A loan request that you previously approved has been rejected at a later approval stage.'
+                                    ];
+                                    
+                                    $email_subject = "Loan Request Rejected - " . ucfirst(str_replace('_', ' ', $loan_details['loan_type'])) . " (" . $inv_no . ")";
+                                    send_approval_email($conDB, $prev_approver_details['email'], $prev_approver_details['name'], $email_subject, 'loan_request', $template_data);
+                                }
                             }
                         }
                     }

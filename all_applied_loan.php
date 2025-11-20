@@ -404,13 +404,29 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                 $can_take_action = true;
                                                             }
                                                         ?>
-                                                        <div class="card-footer d-flex justify-content-between align-items-center btn-group">
-                                                            <a href="loan_report_details.php?id=<?=$loan['id']; ?>&emp_id=<?=$loan['emp_id']; ?>" target="_blank" class="btn btn-info btn-block waves-effect"><i class="fa fa-eye"></i> <?=__('view')?></a>
-                                                            <a href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank" class="btn btn-secondary btn-block waves-effect"><i class="fa fa-history"></i> <?=__('history')?></a>
-                                                            <?php if($can_take_action): ?>
-                                                                <button class="btn btn-danger btn-block waves-effect" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=$loan['employee_name']?>')"><i class="fa fa-times"></i> <?=__('reject')?></button>
-                                                                <button class="btn btn-success btn-block waves-effect" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=$loan['employee_name']?>', <?=$loan['total_payable']; ?>, '<?=$loan['current_approver_user_type'] ?? ''?>', <?=$loan['current_approval_level'] ?? 0?>)"><i class="fa fa-check"></i> <?=__('approve')?></button>
-                                                            <?php endif; ?>
+                                                        <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
+                                                            <a href="loan_report_details.php?id=<?=$loan['id']; ?>&emp_id=<?=$loan['emp_id']; ?>" target="_blank" class="btn btn-info btn-block waves-effect">
+                                                                <i class="fa fa-eye"></i> <?=__('view')?>
+                                                            </a>
+                                                            <div class="btn-group flex-fill" style="position: relative; z-index: 1000;">
+                                                                <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                                                    <?=__('actions')?> <span class="caret"></span>
+                                                                </button>
+                                                                <div class="dropdown-menu dropdown-menu-right" style="z-index: 1050; position: absolute;">
+                                                                    <a class="dropdown-item" href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank" style="cursor: pointer;">
+                                                                        <i class="fa fa-history"></i> <?=__('history')?>
+                                                                    </a>
+                                                                    <?php if($can_take_action): ?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['loan_amount']; ?>, '<?=$loan['current_approver_user_type'] ?? ''?>', <?=$loan['current_approval_level'] ?? 0?>)">
+                                                                            <i class="fa fa-check text-success"></i> <?=__('approve')?>
+                                                                        </button>
+                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>')">
+                                                                            <i class="fa fa-times text-danger"></i> <?=__('reject')?>
+                                                                        </button>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

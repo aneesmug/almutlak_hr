@@ -325,11 +325,14 @@ function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
  * Calculates and inserts benefits for employees on vacation:
  * 1. Working days salary before vacation starts (prorated monthly salary)
  * 2. Vacation salary benefit (if vacation_salary_type = 'payroll')
+ * 
+ * MODIFIED: Now checks is_deductible flag. If is_deductible = 0 (e.g., Fly + Annual),
+ * the vacation does NOT add any payroll benefits. Employee receives their full regular salary.
  */
 function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary) {
     // Find approved vacation starting this month
     $stmtVacation = $pdo->prepare("
-        SELECT id, start_date, return_date, vac_type, fly_type, vacation_salary_type, vacdays
+        SELECT id, start_date, return_date, vac_type, fly_type, vacation_salary_type, vacdays, is_deductible
         FROM emp_vacation
         WHERE emp_id = :emp_id
         AND current_status = 'approved'
@@ -348,6 +351,19 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
             AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')");
         $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
         return;
+    }
+    
+    // NEW: Check is_deductible flag
+    // If is_deductible = 0 (e.g., Fly + Annual vacation), employee stays in full payroll
+    // Do NOT add vacation benefits - they get their complete regular salary
+    if (isset($vacation['is_deductible']) && $vacation['is_deductible'] == 0) {
+        // Remove any existing vacation benefits (shouldn't exist, but clean up just in case)
+        $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits 
+            WHERE emp_id = :emp_id 
+            AND month = :month_year 
+            AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')");
+        $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        return; // Exit - employee remains in normal payroll with full salary
     }
     
     // Check if vacation benefits already exist for this specific vacation ID

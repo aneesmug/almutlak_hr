@@ -15,17 +15,17 @@ $current_page_name = basename($_SERVER['PHP_SELF']);
 // --- 6. Forced Action Redirects for Employees ---
 if ($emprow['user_type'] !== 'employee') {
 	// -- QR Code Check --
-	$eid = $emprow['id'];
+	$eid = $emprow['eid'];
 	$empid = $emprow['emp_id'];
 	$qr_file = "./assets/qrcodes/" . $eid . $empid . ".png";
 
-	if (!file_exists($qr_file) && $current_page !== 'qrconfig_employee.php') {
+	if (!file_exists($qr_file) && $current_page_name !== 'qrconfig_employee.php') {
 		header("Location: qrconfig_employee.php?hashcode=" . urlencode($empid) . "&verification=" . urlencode($eid));
 		exit();
 	}
 	// -- NEW: Salary Information Check --
 	// If basic salary is 0 and we are not on the salary page, redirect.
-	if (($emprow['basic'] ?? 0) == 0 && $current_page !== 'add_emp_slry.php') {
+	if (($emprow['basic'] ?? 0) == 0 && $current_page_name !== 'add_emp_slry.php') {
 		header("Location: add_emp_slry.php?emp_id=" . urlencode($empid));
 		exit();
 	}
@@ -80,89 +80,24 @@ if ($emprow['user_type'] !== 'employee') {
 						<p class="text-light mb-0"><?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>
 						<p class="text-light mb-0"><?= __('balance_vacations') ?>:
 							<?php
-							// Dynamic current-day available vacation balance calculation
-							$finalvacd = $emprow["total_remaining_leave"];
-							$dynamicBalance = null;
-							$calculatedDetails = null;
+							// Get available balance directly from emp_vacation_balance table
+							// (Updated daily by cron job - no need for live calculation)
+							$displayBalance = 0;
 							$empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];
 							
 							if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
-							    // Attempt live calculation using VacationCalculator
-							    $calcFile = __DIR__ . '/vacation_calculator.php';
-							    if (file_exists($calcFile)) {
-							        require_once $calcFile;
-							        if (class_exists('VacationCalculator')) {
-							            try {
-							                $vc = new VacationCalculator($conDB);
-							                $live = $vc->getCalculatedBalance($empid_for_calc);
-							                if ($live && isset($live['available_balance'])) {
-							                    // Use available_balance (earned + carryover - used)
-							                    $dynamicBalance = (float)$live['available_balance'];
-							                    $calculatedDetails = $live; // Store full details for tooltip
-							                    
-							                    // Persist (upsert) latest live balance for transparency
-							                    if (isset($live['contract_id'], $live['period_start'], $live['period_end'])) {
-							                        $vac_id_null = null;
-							                        $period_start_str = $live['period_start'] instanceof DateTime ? $live['period_start']->format('Y-m-d') : (string)$live['period_start'];
-							                        $period_end_str = $live['period_end'] instanceof DateTime ? $live['period_end']->format('Y-m-d') : (string)$live['period_end'];
-							                        
-							                        $stmt_up = $conDB->prepare("INSERT INTO `emp_vacation_balance` (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `used_days`=VALUES(`used_days`), `remaining_balance`=VALUES(`remaining_balance`), `available_balance`=VALUES(`available_balance`), `carryover_days`=VALUES(`carryover_days`), `last_updated`=NOW()");
-							                        if ($stmt_up) {
-							                            $total_d = (int)$live['total_days'];
-							                            $used_d = (int)$live['used_days'];
-							                            $remain_d = (float)$live['remaining_balance'];
-							                            $avail_d = (float)$live['available_balance'];
-							                            $carry_d = (float)$live['carryover_days'];
-							                            $stmt_up->bind_param(
-							                                'ssissiddd',
-							                                $empid_for_calc,
-							                                $vac_id_null,
-							                                $live['contract_id'],
-							                                $period_start_str,
-							                                $period_end_str,
-							                                $total_d,
-							                                $used_d,
-							                                $remain_d,
-							                                $avail_d,
-							                                $carry_d
-							                            );
-							                            @$stmt_up->execute();
-							                            $stmt_up->close();
-							                        }
-							                    }
-							                }
-							            } catch (Throwable $e) {
-							                // Silently fail; fallback to existing static value
-							                error_log("VacationCalculator error: " . $e->getMessage());
-							            }
-							        }
-							    }
-							}
-							$displayBalance = ($dynamicBalance !== null ? $dynamicBalance : $finalvacd);
-							// Build tooltip with calculated breakdown
-							$tooltipText = '';
-							if ($calculatedDetails) {
-							    $earned = (float)$calculatedDetails['available_balance'] + (float)$calculatedDetails['used_days'] - (float)$calculatedDetails['carryover_days'];
-							    $tooltipText = 'Calculated: ' 
-							        . 'Total=' . number_format((float)$calculatedDetails['total_days'], 2) . 'd, '
-							        . 'Used=' . number_format((float)$calculatedDetails['used_days'], 2) . 'd, '
-							        . 'Earned=' . number_format($earned, 2) . 'd, '
-							        . 'Carryover=' . number_format((float)$calculatedDetails['carryover_days'], 2) . 'd';
+								$balance_query = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' ORDER BY `last_updated` DESC LIMIT 1");
+								if ($balance_query && mysqli_num_rows($balance_query) > 0) {
+									$balance_row = mysqli_fetch_assoc($balance_query);
+									$displayBalance = (float)$balance_row['available_balance'];
+									mysqli_free_result($balance_query);
+								}
 							}
 							?>
-							<?php if ($tooltipText): ?>
-								<span title="<?= htmlspecialchars($tooltipText) ?>" style="cursor: help; border-bottom: 1px dotted rgba(255,255,255,0.5);">
-							<?php endif; ?>
-								<?= $displayBalance < 0 
-								    ? "<span class='badge badge-danger badge-pill'>" . number_format($displayBalance, 2) . __('days') . " </span>" 
-								    : number_format($displayBalance, 2) . " " . __('days'); 
-								?>
-							<?php if ($tooltipText): ?>
-								</span>
-							<?php endif; ?>
-							<?php if ($dynamicBalance !== null && $dynamicBalance != $finalvacd): ?>
-								<br/><small class="text-muted">(Master: <?= number_format($finalvacd, 2) ?> <?= __('days') ?>)</small>
-							<?php endif; ?>
+							<?= $displayBalance < 0 
+							    ? "<span class='badge badge-danger badge-pill'>" . number_format($displayBalance, 2) . __('days') . " </span>" 
+							    : number_format($displayBalance, 2) . " " . __('days'); 
+							?>
 						</p>
 						<?php if ($emprow["status"] == 0) : ?>
 							<p class="text-light mb-0">
@@ -206,13 +141,13 @@ if ($emprow['user_type'] !== 'employee') {
 											</a>
 										<?php endif; ?>
 										<?php */ ?>
-										<?php if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) : ?>
+									<?php if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) : ?>
 
-											<?php if ($emprow['emp_sup_type'] != "man_power") : ?>
-												<?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
-													<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter d-flex align-items-center">
-														<i class="fa fa-user-chart mr-2"></i> <?= __('apply_annual_vacation') ?>
-													</a>
+										<?php if ($emprow['emp_sup_type'] != "man_power") : ?>
+											<?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
+												<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" data-balance="<?= $displayBalance ?>" class="text-dark dropdown-item applyvacationAtter d-flex align-items-center">
+													<i class="fa fa-user-chart mr-2"></i> <?= __('apply_annual_vacation') ?>
+												</a>
 												<?php endif; ?>
 												<?php if ($emprow['apd_review'] == "A" && $emprow['apd_status'] == "apply") : ?>
 													<?php
@@ -279,6 +214,7 @@ if ($emprow['user_type'] !== 'employee') {
 											$is_system_admin || 
 											$user_type === 'hr_operations' ||
 											$user_type === 'hr_payroll' ||
+											$isHR_Assistant ||
 											$user_type === 'hr_recruitment'
 										);
 										?>

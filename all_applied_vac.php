@@ -66,8 +66,8 @@ $all_statuses = [
 
 // 1. Set up variables
 $search_term = $_GET['search'] ?? '';
-$limit_options = [8, 12, 15];
-$perpage = 8;
+$limit_options = [9, 12, 15];
+$perpage = 9;
 $items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $perpage;
 $show_all = isset($_GET['limit']) && $_GET['limit'] == 'all';
 if ($show_all) {
@@ -166,6 +166,9 @@ if (!empty($search_term)) {
     array_push($params, $search_param, $search_param, $search_param);
     $types .= "sss";
 }
+
+// Exclude legacy-imported requests by invoice id prefix
+$where_clauses[] = "v.request_inv_no NOT LIKE 'LEGACY-%'";
 
 // Enforce department scoping: Only HR and System Admin can see all departments.
 // Everyone else is restricted to their own department for history views.
@@ -283,12 +286,12 @@ if ($total_items > 0) {
 
 // Get the total unfiltered count (respect department visibility rules)
 if ($can_see_all_depts) {
-    $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_vacation";
+    $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_vacation WHERE request_inv_no NOT LIKE 'LEGACY-%'";
     $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
     $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
 } else {
-    // Respect the same scoping (dept OR in approval chain)
-    $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    // Respect the same scoping (dept OR in approval chain) and exclude LEGACY invoices
+    $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?)) AND v.request_inv_no NOT LIKE 'LEGACY-%'";
     if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
         $stmt_unf->bind_param('iii', $user_dept, $request_type_id, $empid);
         $stmt_unf->execute();
@@ -327,7 +330,7 @@ if ($can_see_all_depts) {
             .request-card .card-header span { font-size: 0.9em; color: #8a94a6; }
             .request-card .card-body { padding: 1.5rem; }
             .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
-            .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
+            .detail-item i.fad { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
             .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
             .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; overflow: visible; }
             /* Footer actions: responsive grid to avoid overflow and keep symmetry */
@@ -496,7 +499,7 @@ if ($can_see_all_depts) {
                                     <?php if (!empty($requests)): ?>
                                         <div class="row">
                                             <?php foreach ($requests as $req): ?>
-												<div class="col-lg-3 col-md-6 mb-3">
+												<div class="col-lg-4 col-md-6 mb-4">
 													<div class="card request-card h-100">
 														<div class="card-header">
 															<?=parseName($req['employee_name']); ?>
@@ -528,28 +531,33 @@ if ($can_see_all_depts) {
                                                                     // --- NEW DYNAMIC STATUS LOGIC ---
                                                                     $badge_class = 'secondary';
                                                                     $status_text = '';
+                                                                    $status_icon = '';
 
                                                                     switch ($req['current_status']) {
                                                                         case 'pending_approval':
                                                                             $badge_class = 'warning';
                                                                             $approver_name = $req['current_approver_name'] ? parseName($req['current_approver_name']) : 'next approver';
                                                                             $status_text = __('pending_with') . ' ' . htmlspecialchars($approver_name);
+                                                                            $status_icon = "<i class='fa fa-solid fa-hourglass-half text-white'></i>";
                                                                             break;
                                                                         case 'approved':
                                                                             $badge_class = 'success';
                                                                             $status_text = __('approved');
+                                                                            $status_icon = "<i class='fa fa-solid fa-check text-white'></i>";
                                                                             break;
                                                                         case 'rejected':
                                                                             $badge_class = 'danger';
                                                                             $status_text = __('rejected');
+                                                                            $status_icon = "<i class='fa fa-solid fa-times text-white'></i>";
                                                                             break;
                                                                         default:
                                                                             $status_text = htmlspecialchars($req['current_status']);
+                                                                            $status_icon = "";
                                                                             break;
                                                                     }
 																?>
 																<i class="fad fa-info-circle duotone-info"></i>
-																<strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=htmlspecialchars($status_text); ?></span>
+																<strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=$status_icon." ".htmlspecialchars($status_text); ?></span>
                                                             </div>
                                                             
                                                             <?php if ($req['current_status'] == 'approved' && isset($req['remaining_balance'])): ?>
@@ -557,69 +565,73 @@ if ($can_see_all_depts) {
                                                                 <div class="detail-item"><i class="fad fa-wallet duotone-success"></i><strong><?=__('remaining')?>:</strong> <?=htmlspecialchars(number_format($req['remaining_balance'], 2)); ?> <?=__('days')?></div>
                                                             <?php endif; ?>
                                                         </div>
-                                                        <div class="card-footer vac-actions">
-                                                            <button class="btn btn-primary btn-block waves-effect" onclick="window.open('vacation_report_details.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>')"><i class="fa fa-eye"></i> <?=__('view')?></button>
-                                                            <?php
-                                                                // Pre-compute action parameters
-                                                                $employee_name_js = htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES);
-                                                                $employee_id_js = htmlspecialchars($req['emp_id'], ENT_QUOTES);
-                                                                $vac_type_js = htmlspecialchars($req['vac_type']);
-                                                                $start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
-                                                                $end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
-                                                                $days_js = htmlspecialchars($req['vacdays']);
-                                                                $current_level_js = (int)$req['current_approval_level'];
-                                                                $user_role_js = htmlspecialchars($user_type, ENT_QUOTES);
-                                                                $has_supervisor_js = !empty($req['supervisor_id']) ? 'true' : 'false';
-                                                                $is_simple_leave_js = ($req['vac_type'] != 'Fly') ? 'true' : 'false';
-                                                                $is_pending_with_me = ($req['current_status'] == 'pending_approval' && $req['current_approver_id'] == $empid);
+                                                        <?php
+                                                            // Pre-compute action parameters
+                                                            $employee_name_js = htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES);
+                                                            $employee_id_js = htmlspecialchars($req['emp_id'], ENT_QUOTES);
+                                                            $vac_type_js = htmlspecialchars($req['vac_type']);
+                                                            $start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
+                                                            $end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
+                                                            $days_js = htmlspecialchars($req['vacdays']);
+                                                            $current_level_js = (int)$req['current_approval_level'];
+                                                            $user_role_js = htmlspecialchars($user_type, ENT_QUOTES);
+                                                            $has_supervisor_js = !empty($req['supervisor_id']) ? 'true' : 'false';
+                                                            $is_simple_leave_js = ($req['vac_type'] != 'Fly') ? 'true' : 'false';
+                                                            $is_pending_with_me = ($req['current_status'] == 'pending_approval' && $req['current_approver_id'] == $empid);
 
-                                                                // Determine other conditional actions
-                                                                $show_payment_button = false;
-                                                                $payments_entered = (!empty($req['ticket_pay']) && (float)$req['ticket_pay'] > 0) || (!empty($req['permit_fee']) && (float)$req['permit_fee'] > 0);
-                                                                if (
-                                                                    $req['vac_type'] == 'Fly' &&
-                                                                    $req['fly_type'] == 'annual' &&
-                                                                    $req['current_status'] == 'approved' &&
-                                                                    !empty($req['travel_email_sent']) && $req['travel_email_sent'] == 1 &&
-                                                                    !$payments_entered &&
-                                                                    ($isHR || $is_system_admin || $isDeptHr || $isGR_Officer)
-                                                                ) { $show_payment_button = true; }
+                                                            // Determine other conditional actions
+                                                            $show_payment_button = false;
+                                                            $payments_entered = (!empty($req['ticket_pay']) && (float)$req['ticket_pay'] > 0) || (!empty($req['permit_fee']) && (float)$req['permit_fee'] > 0);
+                                                            if (
+                                                                $req['vac_type'] == 'Fly' &&
+                                                                $req['fly_type'] == 'annual' &&
+                                                                $req['current_status'] == 'approved' &&
+                                                                !empty($req['travel_email_sent']) && $req['travel_email_sent'] == 1 &&
+                                                                !$payments_entered &&
+                                                                ($isHR || $is_system_admin || $isDeptHr || $isGR_Officer)
+                                                            ) { $show_payment_button = true; }
 
-                                                                $show_travel_email_button = false;
-                                                                if (
-                                                                    $req['vac_type'] == 'Fly' &&
-                                                                    $req['fly_type'] == 'annual' &&
-                                                                    $req['current_status'] == 'approved' &&
-                                                                    !empty($req['departure_date']) &&
-                                                                    !empty($req['arrival_date']) &&
-                                                                    ($req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) &&
-                                                                    ($isHR || $is_system_admin || $isGR_Officer)
-                                                                ) { $show_travel_email_button = true; }
-                                                            ?>
-                                                            <div class="dropdown">
-                                                                <button class="btn btn-outline-secondary dropdown-toggle btn-block" type="button" id="actions-<?=$req['id']; ?>" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                    <?=__('actions')?>
+                                                            $show_travel_email_button = false;
+                                                            if (
+                                                                $req['vac_type'] == 'Fly' &&
+                                                                $req['fly_type'] == 'annual' &&
+                                                                $req['current_status'] == 'approved' &&
+                                                                !empty($req['departure_date']) &&
+                                                                !empty($req['arrival_date']) &&
+                                                                ($req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) &&
+                                                                ($isHR || $is_system_admin || $isGR_Officer)
+                                                            ) { $show_travel_email_button = true; }
+                                                        ?>
+                                                        <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
+                                                            <a href="vacation_report_details.php?id=<?=$req['id']; ?>&emp_id=<?=$req['emp_id']; ?>" target="_blank" class="btn btn-info btn-block waves-effect">
+                                                                <i class="fa fa-eye"></i> <?=__('view')?>
+                                                            </a>
+                                                            <div class="btn-group flex-fill">
+                                                                <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                                                    <?=__('actions')?> <span class="caret"></span>
                                                                 </button>
-                                                                <div class="dropdown-menu dropdown-menu-right" aria-labelledby="actions-<?=$req['id']; ?>">
-                                                                    <a class="dropdown-item" href="javascript:void(0)" onclick="window.open('vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>')">
-                                                                        <i class="fas fa-history"></i> <?=__('history')?>
+                                                                <div class="dropdown-menu dropdown-menu-right">
+                                                                    <a class="dropdown-item" href="vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank">
+                                                                        <i class="fa fa-history"></i> <?=__('history')?>
                                                                     </a>
                                                                     <?php if ($is_pending_with_me): ?>
-                                                                        <a class="dropdown-item text-success" href="javascript:void(0)" onclick="approveRequest(<?=$req['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>', <?=$current_level_js; ?>, '<?=$user_role_js; ?>', <?=$has_supervisor_js; ?>, <?=$is_simple_leave_js; ?>)">
-                                                                            <i class="fa fa-check"></i> <?=__('approve')?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="approveRequest(<?=$req['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>', <?=$current_level_js; ?>, '<?=$user_role_js; ?>', <?=$has_supervisor_js; ?>, <?=$is_simple_leave_js; ?>)">
+                                                                            <i class="fa fa-check text-success"></i> <?=__('approve')?>
                                                                         </a>
-                                                                        <a class="dropdown-item text-danger" href="javascript:void(0)" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')">
-                                                                            <i class="fa fa-times"></i> <?=__('reject')?>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$employee_name_js; ?>', '<?=$vac_type_js; ?>', '<?=$start_date_js; ?>', '<?=$end_date_js; ?>', '<?=$days_js; ?>')">
+                                                                            <i class="fa fa-times text-danger"></i> <?=__('reject')?>
                                                                         </a>
                                                                     <?php endif; ?>
                                                                     <?php if ($show_payment_button): ?>
-                                                                        <a class="dropdown-item text-warning" href="javascript:void(0)" onclick="addVacationPayments(<?=$req['id']; ?>, '<?=htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>','<?= $req['ticket_pay'] ?? '0.00'; ?>','<?= $req['permit_fee'] ?? '0.00'; ?>')">
-                                                                            <i class="fa fa-credit-card"></i> <?=__('payments')?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="addVacationPayments(<?=$req['id']; ?>, '<?=htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>','<?= $req['ticket_pay'] ?? '0.00'; ?>','<?= $req['permit_fee'] ?? '0.00'; ?>')">
+                                                                            <i class="fa fa-credit-card text-warning"></i> <?=__('payments')?>
                                                                         </a>
                                                                     <?php endif; ?>
                                                                     <?php if ($show_travel_email_button): ?>
-                                                                        <a class="dropdown-item text-primary" id="travel-email-btn-<?=$req['id']; ?>" href="javascript:void(0)" onclick="sendTravelEmail(<?=$req['id']; ?>, '<?=htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>')">
-                                                                            <i class="fa fa-paper-plane"></i> <?=__('send_travel_email')?>
+                                                                        <a class="dropdown-item" id="travel-email-btn-<?=$req['id']; ?>" href="javascript:void(0);" onclick="sendTravelEmail(<?=$req['id']; ?>, '<?=htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>')">
+                                                                            <i class="fa fa-paper-plane text-primary"></i> <?=__('send_travel_email')?>
                                                                         </a>
                                                                     <?php endif; ?>
                                                                 </div>
@@ -700,10 +712,16 @@ if ($can_see_all_depts) {
             // Remove request details panel from the approval modal per requirement
             let infoHtml = '';
             
+            // Parse vacation date range for date picker validation
+            const vacStartDate = startDate; // Format: YYYY-MM-DD
+            const vacEndDate = endDate;     // Format: YYYY-MM-DD
+            
             // --- Define approval flow conditions ---
             const isLevel1 = (currentLevel == 1);
             const isHR_Assistant = (userRole === 'assistant');
             const isHR_SeniorBP = (userRole === 'hr_senior_bp');
+            const isHR_Payroll = (userRole === 'hr_payroll');
+            const isGR_Officer = (userRole === 'gr_officer');
             const isAnnualFly = (vacType === 'Fly');
             
             // Check if user is asset clearance role (IT, Admin, Transport manager)
@@ -716,41 +734,134 @@ if ($can_see_all_depts) {
             // Determine approval flow:
             // 1. Simple Leave with Supervisor: Level 1 = Supervisor → Level 2 = HR Senior BP
             // 2. Simple Leave without Supervisor: Level 1 = Dept Manager → Level 2 = HR Senior BP
-            // 3. Annual Vacation: Level 1 = Manager → Level 2 = HR Assistant → Level 3+ = Chain
+            // 3. Annual Vacation: Level 1 = Manager → Level 2 = HR Senior BP → Level 3+ = Chain
             
             let paymentHtml = '';
             let chainHtml = '';
             let hrTeamCCHtml = '';
             let assetHtml = '';
+            let hrPayrollHtml = '';
             let confirmButtonText = __('yes_approve_it');
             let showDenyButton = false;
             
             // --- Condition 1: Show Payment Fields? ---
-            // Only for HR Assistant approving annual vacation (Fly)
-            if (isHR_Assistant && isAnnualFly) {
+            // For HR Assistant OR GR Officer approving annual vacation (Fly)
+            if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
                 paymentHtml = `
                     <div class="swal-payment-details text-left mt-3">
                         <hr>
                         <h6 class="text-primary mb-3"><i class="fa fa-money-bill-wave"></i> ${__('payment_information')}</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="swal_departure_date" class="font-weight-bold">
+                                        <i class="fa fa-plane-departure"></i> ${__('departure_date')}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="text" id="swal_departure_date" class="form-control" placeholder="Select departure date" readonly required style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="swal_arrival_date" class="font-weight-bold">
+                                        <i class="fa fa-plane-arrival"></i> ${__('arrival_date')}
+                                        <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="text" id="swal_arrival_date" class="form-control" placeholder="Select arrival date" readonly required style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                                </div>
+                            </div>
+                        </div>
                         <div class="form-group">
                             <label for="swal_ticket_fares" class="font-weight-bold">
                                 <i class="fa fa-plane"></i> ${__('ticket_fares')} 
-                                <span class="text-muted">(${__('optional')})</span>
+                                <span class="text-danger">*</span>
                             </label>
-                            <input type="number" id="swal_ticket_fares" class="form-control" placeholder="0.00" step="0.01" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            <input type="number" id="swal_ticket_fares" class="form-control" placeholder="0.00" step="0.01" required min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
                         </div>
                         <div class="form-group mt-2">
                             <label for="swal_permit_fee" class="font-weight-bold">
                                 <i class="fa fa-passport"></i> ${__('exit_re-entry_fee')} 
-                                <span class="text-muted">(${__('optional')})</span>
+                                <span class="text-danger">*</span>
                             </label>
-                            <input type="number" id="swal_permit_fee" class="form-control" placeholder="0.00" step="0.01" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            <input type="number" id="swal_permit_fee" class="form-control" placeholder="0.00" step="0.01" required min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
                         </div>
                     </div>
                 `;
             }
 
-            // --- Condition 1.5: Show HR Team CC Selection? ---
+            // --- Condition 2: Show HR Payroll Fields? ---
+            // For HR Payroll: Add overtime and deduction fields
+            if (isHR_Payroll) {
+                hrPayrollHtml = `
+                    <div class="swal-payroll-details text-left mt-3">
+                        <hr>
+                        <h6 class="text-primary mb-3"><i class="fa fa-calculator"></i> ${__('payroll_adjustments') || 'Payroll Adjustments'}</h6>
+                        <input type="hidden" id="employee_salary" value="0">
+                        <input type="hidden" id="employee_basic_salary" value="0">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="swal_overtime_hours" class="font-weight-bold">
+                                        <i class="fa fa-clock"></i> ${__('overtime_hours') || 'Overtime (Hours)'} 
+                                        <span class="text-muted">(${__('optional')})</span>
+                                    </label>
+                                    <input type="number" id="swal_overtime_hours" class="form-control payroll-calc-input" placeholder="0" step="0.5" min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                                    <small class="text-success font-weight-bold" id="overtime_calc" style="display:none;">
+                                        <i class="fa fa-plus-circle"></i> <span id="overtime_amount">0.00</span> SAR
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="swal_deduction_hours" class="font-weight-bold">
+                                        <i class="fa fa-minus-circle"></i> ${__('deduction_hours') || 'Deduction (Hours)'} 
+                                        <span class="text-muted">(${__('optional')})</span>
+                                    </label>
+                                    <input type="number" id="swal_deduction_hours" class="form-control payroll-calc-input" placeholder="0" step="0.5" min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                                    <small class="text-danger font-weight-bold" id="deduction_hours_calc" style="display:none;">
+                                        <i class="fa fa-minus-circle"></i> <span id="deduction_hours_amount">0.00</span> SAR
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group mt-2">
+                            <label for="swal_deduction_days" class="font-weight-bold">
+                                <i class="fa fa-calendar-minus"></i> ${__('deduction_days') || 'Deduction (Days)'} 
+                                <span class="text-muted">(${__('optional')})</span>
+                            </label>
+                            <input type="number" id="swal_deduction_days" class="form-control payroll-calc-input" placeholder="0" step="0.5" min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            <small class="text-danger font-weight-bold" id="deduction_days_calc" style="display:none;">
+                                <i class="fa fa-minus-circle"></i> <span id="deduction_days_amount">0.00</span> SAR
+                            </small>
+                        </div>
+                        <div class="form-group mt-3" id="payroll_summary" style="display:none; background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #007bff;">
+                            <h6 class="mb-2"><i class="fa fa-calculator"></i> ${__('payroll_summary') || 'Payroll Summary'}</h6>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>${__('total_overtime') || 'Total Overtime'}:</span>
+                                <span class="text-success font-weight-bold">+<span id="total_overtime">0.00</span> SAR</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span>${__('total_deductions') || 'Total Deductions'}:</span>
+                                <span class="text-danger font-weight-bold">-<span id="total_deductions">0.00</span> SAR</span>
+                            </div>
+                            <hr style="margin: 10px 0;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span class="font-weight-bold">${__('net_adjustment') || 'Net Adjustment'}:</span>
+                                <span class="font-weight-bold" id="net_adjustment_display">0.00 SAR</span>
+                            </div>
+                        </div>
+                        <div class="form-group mt-2">
+                            <label for="swal_payroll_note" class="font-weight-bold">
+                                <i class="fa fa-sticky-note"></i> ${__('payroll_note') || 'Note'} 
+                                <span class="text-muted">(${__('optional')})</span>
+                            </label>
+                            <textarea id="swal_payroll_note" class="form-control" rows="2" placeholder="${__('payroll_note_placeholder') || 'Add any notes about overtime/deductions...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;"></textarea>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // --- Condition 3: Show HR Team CC Selection? ---
             // Only for HR Senior BP approving (to notify HR team members)
             if (isHR_SeniorBP) {
                 hrTeamCCHtml = `
@@ -849,9 +960,9 @@ if ($can_see_all_depts) {
 
             Swal.fire({
                 title: isAssetClearanceRole ? (__('asset_clearance_confirmation') || 'Asset Clearance Confirmation') : __('confirm_approval'),
-                html: infoHtml + assetHtml + paymentHtml + hrTeamCCHtml + chainHtml, // Combine all HTML parts (assets first)
+                html: infoHtml + assetHtml + paymentHtml + hrPayrollHtml + hrTeamCCHtml + chainHtml, // Combine all HTML parts
                 icon: isAssetClearanceRole ? 'question' : 'warning',
-                width: '40%', // Set modal width
+                // width: '40%', // Set modal width
                 showCancelButton: true,
                 showDenyButton: showDenyButton,
                 confirmButtonColor: '#28a745',
@@ -872,6 +983,79 @@ if ($can_see_all_depts) {
                             closeOnSelect: true
                         });
                     };
+                    
+                    // --- Initialize Date Pickers for Payment Fields ---
+                    if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+                        // Fetch existing departure and arrival dates from database
+                        $.ajax({
+                            url: './includes/ajaxFile/ajaxVacation.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            data: {
+                                ajaxType: 'getVacationDetails',
+                                vacation_id: vacationId
+                            },
+                            success: function(res) {
+                                if (res.status === 200) {
+                                    // Initialize departure date picker (Bootstrap Datepicker)
+                                    $('#swal_departure_date').datepicker({
+                                        format: "yyyy-mm-dd",
+                                        startDate: vacStartDate,
+                                        endDate: vacEndDate,
+                                        todayHighlight: true,
+                                        autoclose: true
+                                    }).on('changeDate', function (e) {
+                                        var departureDate = e.date;
+                                        $('#swal_arrival_date').datepicker('setStartDate', departureDate);
+                                    });
+                                    
+                                    // Initialize arrival date picker (Bootstrap Datepicker)
+                                    $('#swal_arrival_date').datepicker({
+                                        format: "yyyy-mm-dd",
+                                        startDate: vacStartDate,
+                                        endDate: vacEndDate,
+                                        todayHighlight: true,
+                                        autoclose: true
+                                    }).on('changeDate', function (e) {
+                                        var arrivalDate = e.date;
+                                        $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
+                                    });
+                                    
+                                    // Set initial values if they exist
+                                    if (res.departure_date) {
+                                        $('#swal_departure_date').datepicker('setDate', res.departure_date);
+                                    }
+                                    if (res.arrival_date) {
+                                        $('#swal_arrival_date').datepicker('setDate', res.arrival_date);
+                                    }
+                                }
+                            },
+                            error: function() {
+                                // Initialize with default vacation range even if fetch fails
+                                $('#swal_departure_date').datepicker({
+                                    format: "yyyy-mm-dd",
+                                    startDate: vacStartDate,
+                                    endDate: vacEndDate,
+                                    todayHighlight: true,
+                                    autoclose: true
+                                }).on('changeDate', function (e) {
+                                    var departureDate = e.date;
+                                    $('#swal_arrival_date').datepicker('setStartDate', departureDate);
+                                });
+                                
+                                $('#swal_arrival_date').datepicker({
+                                    format: "yyyy-mm-dd",
+                                    startDate: vacStartDate,
+                                    endDate: vacEndDate,
+                                    todayHighlight: true,
+                                    autoclose: true
+                                }).on('changeDate', function (e) {
+                                    var arrivalDate = e.date;
+                                    $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
+                                });
+                            }
+                        });
+                    }
 
                     // --- SIMPLE LEAVE LOGIC ---
                     if (isSimpleLeave && isLevel1) {
@@ -1071,6 +1255,140 @@ if ($can_see_all_depts) {
                             reorderList();
                         });
                     } // --- End if (isHR_Assistant) ---
+                    
+                    // --- HR PAYROLL CALCULATIONS ---
+                    if (isHR_Payroll) {
+                        console.log('HR Payroll calculations initialized');
+                        
+                        let basicSalary = 0;
+                        let contractSalaryBase = 0;
+                        
+                        // Fetch employee salary from backend
+                        $.ajax({
+                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            data: {
+                                ajaxType: 'get_employee_salary',
+                                emp_id: employeeId
+                            },
+                            success: function(res) {
+                                console.log('Salary response:', res);
+                                if (res.status === 200 && res.salary) {
+                                    contractSalaryBase = parseFloat(res.salary) || 0;
+                                    basicSalary = parseFloat(res.basic_salary) || 0;
+                                    $('#employee_salary').val(contractSalaryBase);
+                                    $('#employee_basic_salary').val(basicSalary);
+                                    console.log('Employee salary loaded - Contract Base:', contractSalaryBase, 'Basic:', basicSalary);
+                                    // Trigger calculation after salary is loaded
+                                    calculatePayrollAdjustments();
+                                } else {
+                                    console.warn('Failed to load employee salary:', res.message);
+                                }
+                            },
+                            error: function(xhr, status, error) {
+                                console.error('Error loading employee salary:', status, error);
+                                console.error('Response:', xhr.responseText);
+                            }
+                        });
+                        
+                        // Function to calculate and display payroll adjustments
+                        // Uses EOS file calculation logic (emp_end_of_service.php lines 627-638)
+                        function calculatePayrollAdjustments() {
+                            const salary = parseFloat($('#employee_salary').val()) || 0;
+                            const basic = parseFloat($('#employee_basic_salary').val()) || 0;
+                            
+                            console.log('Calculating with salary:', salary, 'basic:', basic);
+                            
+                            // Get input values
+                            const overtimeHours = parseFloat($('#swal_overtime_hours').val()) || 0;
+                            const deductionHours = parseFloat($('#swal_deduction_hours').val()) || 0;
+                            const deductionDays = parseFloat($('#swal_deduction_days').val()) || 0;
+                            
+                            console.log('Values:', {overtimeHours, deductionHours, deductionDays});
+                            
+                            // --- CALCULATION LOGIC MATCHING EOS FILE (emp_end_of_service.php) ---
+                            
+                            // DEDUCTION BASE RULE: Use contract base for deductions
+                            const DEDUCTION_BASE = salary; // contractSalaryBase
+                            const dailyRateDeduction = DEDUCTION_BASE / 30;
+                            const hourlyRateDeduction = dailyRateDeduction / 8;
+                            
+                            // OVERTIME CALCULATION (per EOS file lines 630-635):
+                            // per-hour overtime rate = (basic/240)/2 + (full/240)
+                            // hours amount = overtimeHourlyRate * overtime_hours
+                            // days amount  = overtimeHourlyRate * 8 * overtime_days
+                            const overtimeHourlyRate = ((basic / 240) / 2) + (salary / 240);
+                            
+                            // Calculate amounts
+                            const overtimeAmount = overtimeHourlyRate * overtimeHours;
+                            const deductionHoursAmount = hourlyRateDeduction * deductionHours;
+                            const deductionDaysAmount = dailyRateDeduction * deductionDays;
+                            
+                            console.log('Rates:', {
+                                dailyRateDeduction: dailyRateDeduction.toFixed(4),
+                                hourlyRateDeduction: hourlyRateDeduction.toFixed(4),
+                                overtimeHourlyRate: overtimeHourlyRate.toFixed(4)
+                            });
+                            console.log('Calculated amounts:', {overtimeAmount, deductionHoursAmount, deductionDaysAmount});
+                            
+                            // Update individual field calculations
+                            if (overtimeHours > 0 && salary > 0) {
+                                $('#overtime_amount').text(overtimeAmount.toFixed(2));
+                                $('#overtime_calc').show();
+                            } else {
+                                $('#overtime_calc').hide();
+                            }
+                            
+                            if (deductionHours > 0 && salary > 0) {
+                                $('#deduction_hours_amount').text(deductionHoursAmount.toFixed(2));
+                                $('#deduction_hours_calc').show();
+                            } else {
+                                $('#deduction_hours_calc').hide();
+                            }
+                            
+                            if (deductionDays > 0 && salary > 0) {
+                                $('#deduction_days_amount').text(deductionDaysAmount.toFixed(2));
+                                $('#deduction_days_calc').show();
+                            } else {
+                                $('#deduction_days_calc').hide();
+                            }
+                            
+                            // Calculate and update summary
+                            const totalOvertime = overtimeAmount;
+                            const totalDeductions = deductionHoursAmount + deductionDaysAmount;
+                            const netAdjustment = totalOvertime - totalDeductions;
+                            
+                            if ((overtimeHours > 0 || deductionHours > 0 || deductionDays > 0) && salary > 0) {
+                                $('#total_overtime').text(totalOvertime.toFixed(2));
+                                $('#total_deductions').text(totalDeductions.toFixed(2));
+                                
+                                // Format net adjustment with +/- sign and color
+                                const netText = (netAdjustment >= 0 ? '+' : '') + netAdjustment.toFixed(2) + ' SAR';
+                                const netColor = netAdjustment >= 0 ? 'text-success' : 'text-danger';
+                                $('#net_adjustment_display')
+                                    .text(netText)
+                                    .removeClass('text-success text-danger')
+                                    .addClass(netColor);
+                                
+                                $('#payroll_summary').show();
+                            } else {
+                                $('#payroll_summary').hide();
+                            }
+                        }
+                        
+                        // Attach input event listeners to payroll calculation inputs directly
+                        $(document).on('input', '#swal_overtime_hours, #swal_deduction_hours, #swal_deduction_days', function() {
+                            console.log('Input detected on:', this.id, 'Value:', $(this).val());
+                            calculatePayrollAdjustments();
+                        });
+                        
+                        // Initial calculation
+                        setTimeout(function() {
+                            console.log('Running initial calculation');
+                            calculatePayrollAdjustments();
+                        }, 800);
+                    } // --- End if (isHR_Payroll) ---
                 },
                 preConfirm: () => {
                     const swalModal = Swal.getHtmlContainer();
@@ -1080,12 +1398,43 @@ if ($can_see_all_depts) {
                     let ticket_pay = $(swalModal).find('#swal_ticket_fares').val() || null;
                     let permit_fee = $(swalModal).find('#swal_permit_fee').val() || null;
                     
+                    // A.1) Get HR Payroll details (if they exist)
+                    let overtime_hours = $(swalModal).find('#swal_overtime_hours').val() || null;
+                    let deduction_hours = $(swalModal).find('#swal_deduction_hours').val() || null;
+                    let deduction_days = $(swalModal).find('#swal_deduction_days').val() || null;
+                    let payroll_note = $(swalModal).find('#swal_payroll_note').val() || null;
+                    
                     // A.5) Get HR Team CC members (if HR Senior BP is approving)
                     let hr_team_cc = [];
                     if (isHR_SeniorBP) {
                         let selectedCC = $(swalModal).find('#hr_team_cc_select').val();
                         if (selectedCC && Array.isArray(selectedCC)) {
                             hr_team_cc = selectedCC;
+                        }
+                    }
+
+                    // A.2) Validate payment fields if HR Assistant or GR Officer
+                    if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+                        const departure = $(swalModal).find('#swal_departure_date').val();
+                        const arrival = $(swalModal).find('#swal_arrival_date').val();
+                        const ticket = $(swalModal).find('#swal_ticket_fares').val();
+                        const permit = $(swalModal).find('#swal_permit_fee').val();
+                        
+                        if (!departure || departure.trim() === '') {
+                            Swal.showValidationMessage(__('departure_date_required') || 'Departure date is required');
+                            return false;
+                        }
+                        if (!arrival || arrival.trim() === '') {
+                            Swal.showValidationMessage(__('arrival_date_required') || 'Arrival date is required');
+                            return false;
+                        }
+                        if (!ticket || parseFloat(ticket) <= 0) {
+                            Swal.showValidationMessage(__('ticket_pay_required') || 'Ticket payment amount is required');
+                            return false;
+                        }
+                        if (!permit || parseFloat(permit) <= 0) {
+                            Swal.showValidationMessage(__('permit_fee_required') || 'Exit re-entry fee is required');
+                            return false;
                         }
                     }
 
@@ -1117,11 +1466,19 @@ if ($can_see_all_depts) {
                                     Swal.showValidationMessage('Unable to build approval chain');
                                     return reject('Unable to build approval chain');
                                 }
-                                // Chain might be empty if no more approvers needed
+                                // Use the chain returned from the backend (HR Senior BP, GR Officer, etc.)
+                                console.log('Level 1 vacation approval - Retrieved chain:', res.chain);
                                 resolve({
-                                    approver_chain: res.chain,
+                                    approver_chain: res.chain, // Use the actual chain from backend!
+                                    departure_date: $(swalModal).find('#swal_departure_date').val() || null,
+                                    arrival_date: $(swalModal).find('#swal_arrival_date').val() || null,
                                     ticket_pay: $(swalModal).find('#swal_ticket_fares').val() || null,
-                                    permit_fee: $(swalModal).find('#swal_permit_fee').val() || null
+                                    permit_fee: $(swalModal).find('#swal_permit_fee').val() || null,
+                                    overtime_hours: $(swalModal).find('#swal_overtime_hours').val() || null,
+                                    deduction_hours: $(swalModal).find('#swal_deduction_hours').val() || null,
+                                    deduction_days: $(swalModal).find('#swal_deduction_days').val() || null,
+                                    payroll_note: $(swalModal).find('#swal_payroll_note').val() || null,
+                                    hr_team_cc: []
                                 });
                             }).fail(function(){
                                 Swal.showValidationMessage('Unable to build approval chain');
@@ -1144,11 +1501,26 @@ if ($can_see_all_depts) {
                     // For L2+, approver_chain remains empty, which is correct
                     
                     // Return all gathered data
+                    const departureDateVal = $(swalModal).find('#swal_departure_date').val() || '';
+                    const arrivalDateVal = $(swalModal).find('#swal_arrival_date').val() || '';
+                    
+                    // Log for debugging
+                    console.log('sendApproval preConfirm - departure_date:', departureDateVal);
+                    console.log('sendApproval preConfirm - arrival_date:', arrivalDateVal);
+                    console.log('sendApproval preConfirm - ticket_pay:', ticket_pay);
+                    console.log('sendApproval preConfirm - permit_fee:', permit_fee);
+                    
                     return {
                         approver_chain: approver_chain,
+                        departure_date: departureDateVal,
+                        arrival_date: arrivalDateVal,
                         ticket_pay: ticket_pay,
                         permit_fee: permit_fee,
-                        hr_team_cc: hr_team_cc
+                        hr_team_cc: hr_team_cc,
+                        overtime_hours: overtime_hours,
+                        deduction_hours: deduction_hours,
+                        deduction_days: deduction_days,
+                        payroll_note: payroll_note
                     }
                 }
             }).then(function(result) {
@@ -1197,6 +1569,11 @@ if ($can_see_all_depts) {
                 didOpen: () => { Swal.showLoading(); }
             });
 
+            // Log all data being sent
+            console.log('sendApproval - Complete approveData:', approveData);
+            console.log('sendApproval - departure_date to send:', approveData.departure_date);
+            console.log('sendApproval - arrival_date to send:', approveData.arrival_date);
+
             $.ajax({
 				url: './includes/ajaxFile/ajaxVacation.php',
 				type: 'POST',
@@ -1205,12 +1582,22 @@ if ($can_see_all_depts) {
 					ajaxType: 'approveVacation',
 					vacation_id: vacationId,
                     approver_chain: approveData.approver_chain || [], // Send the dynamic chain
+                    departure_date: approveData.departure_date || null, // Send departure date
+                    arrival_date: approveData.arrival_date || null,     // Send arrival date
                     ticket_pay: approveData.ticket_pay || null,       // Send ticket pay
                     permit_fee: approveData.permit_fee || null,       // Send permit fee
-                    hr_team_cc: approveData.hr_team_cc || []          // Send HR team CC
+                    hr_team_cc: approveData.hr_team_cc || [],         // Send HR team CC
+                    overtime_hours: approveData.overtime_hours || null, // Send overtime hours
+                    deduction_hours: approveData.deduction_hours || null, // Send deduction hours
+                    deduction_days: approveData.deduction_days || null, // Send deduction days
+                    payroll_note: approveData.payroll_note || null    // Send payroll note
 				},
 			})
 			.done(function(response){
+                console.log('sendApproval - Backend response:', response);
+                console.log('sendApproval - Response success:', response.success);
+                console.log('sendApproval - Response message:', response.message);
+                
                 Swal.fire({
                     title: response.title || __('success') || 'Success',
                     text: response.message || '',
@@ -1219,6 +1606,11 @@ if ($can_see_all_depts) {
                 }).then(function(isConfirm){ if(isConfirm){ location.reload(); } });
 			})
 			.fail(function(jqXHR, textStatus, errorThrown) {
+                console.log('sendApproval - AJAX failed');
+                console.log('sendApproval - Text Status:', textStatus);
+                console.log('sendApproval - Error Thrown:', errorThrown);
+                console.log('sendApproval - Full Response:', jqXHR);
+                
                 // Use SweetAlert to show the failure
                 Swal.fire({
                     title: __('error') || 'Error',
@@ -1290,11 +1682,48 @@ if ($can_see_all_depts) {
          * addVacationPayments - This is for editing/adding payments *outside* the approval flow
          */
         function addVacationPayments(vacationId, employeeName, currentTicketPay, currentPermitFee) {
+            // First fetch current departure and arrival dates
+            $.ajax({
+                url: './includes/ajaxFile/ajaxVacation.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: {
+                    ajaxType: 'getVacationDetails',
+                    vacation_id: vacationId
+                },
+                success: function(data) {
+                    if (data.status === 200) {
+                        showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, data.departure_date, data.arrival_date);
+                    } else {
+                        showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, '', '');
+                    }
+                },
+                error: function() {
+                    showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, '', '');
+                }
+            });
+        }
+        
+        function showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, currentDepartureDate, currentArrivalDate) {
             Swal.fire({
                 title: __('add_edit_payments_for').replace('{0}', employeeName),
                 html: `
                     <div class="text-left" style="padding: 10px 20px;">
                         <p class="mt-3 mb-4"><strong>${__('enter_update_payment_details')}</strong></p>
+                        
+                        <div class="form-group mb-3">
+                            <label for="departure_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                <i class="fa fa-plane-departure"></i> ${__('departure_date')}
+                            </label>
+                            <input type="date" id="departure_date_update" class="form-control" value="${currentDepartureDate || ''}" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="arrival_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                <i class="fa fa-plane-arrival"></i> ${__('arrival_date')}
+                            </label>
+                            <input type="date" id="arrival_date_update" class="form-control" value="${currentArrivalDate || ''}" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                        </div>
                         
                         <div class="form-group mb-3">
                             <label for="ticket_pay_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
@@ -1317,6 +1746,8 @@ if ($can_see_all_depts) {
                 width: '500px',
                 preConfirm: () => {
                     return {
+                        departure_date: document.getElementById('departure_date_update').value,
+                        arrival_date: document.getElementById('arrival_date_update').value,
                         ticket_pay: document.getElementById('ticket_pay_update').value,
                         permit_fee: document.getElementById('permit_fee_update').value
                     }
@@ -1330,6 +1761,8 @@ if ($can_see_all_depts) {
                         data: {
                             ajaxType: 'updateVacationPayments',
                             vacation_id: vacationId,
+                            departure_date: result.value.departure_date,
+                            arrival_date: result.value.arrival_date,
                             ticket_pay: result.value.ticket_pay,
                             permit_fee: result.value.permit_fee
                         },
@@ -1337,16 +1770,14 @@ if ($can_see_all_depts) {
                     .done(function(response){
                         Swal.fire({
                             title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
-                        }).then(function(isConfirm){(isConfirm)?location.reload():""});
+                        }).then(function(isConfirm){(isConfirm)?location.reload():""}); 
                     })
                     .fail(function(jqXHR, textStatus, errorThrown) {
                         Swal.fire('Error', __('error_updating_payments'), 'error');
                     });
                 }
             });
-        }
-
-        /**
+        }        /**
          * =================================================================
          * == SEND TRAVEL EMAIL FUNCTION
          * =================================================================
@@ -1405,6 +1836,46 @@ if ($can_see_all_depts) {
                         </div>
                     ` : '';
 
+                    // Build existing passport doc HTML if present
+                    let existingPassportHtml = '';
+                    if (data.passport_doc_url) {
+                        const isImg = data.passport_doc_is_image;
+                        const ext = data.passport_doc_ext || '';
+                        const viewContent = isImg ? `<img src="${data.passport_doc_url}" alt="Passport Copy" style="max-width:100%; max-height:180px; border:1px solid #ddd; border-radius:6px;"/>` : `<a href="${data.passport_doc_url}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fa fa-file"></i> View Passport (${ext.toUpperCase()})</a>`;
+                        existingPassportHtml = `
+                            <div id="existing-passport-doc" style="background:#eef7ff; padding:12px; border-radius:6px; margin-top:15px; border:1px solid #c5e0ff;">
+                                <h6 style="margin:0 0 10px; color:#0b5eb7;"><i class="fa fa-file"></i> ${__('current_passport_copy') || 'Current Passport Copy'}</h6>
+                                <div style="margin-bottom:10px;">${viewContent}</div>
+                                <button type="button" id="open-passport-btn" class="btn btn-sm btn-primary" style="margin-right:8px;"><i class="fa fa-external-link-alt"></i> ${__('open_passport_file') || 'Open Passport'}</button>
+                                <button type="button" id="replace-passport-btn" class="btn btn-sm btn-warning"><i class="fa fa-sync-alt"></i> ${__('replace_passport_copy') || 'Replace Passport Copy'}</button>
+                                <input type="file" id="replace_passport_input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" />
+                                <small class="form-text text-muted" id="replace-passport-hint" style="display:none;">
+                                    <i class="fa fa-info-circle"></i> ${__('upload_new_passport_hint') || 'Select a new file to replace the stored passport copy.'}
+                                </small>
+                            </div>
+                        `;
+                    }
+                    // Build passport section: show upload only if no existing doc
+                    const requireUpload = !data.passport_doc_url;
+                    const passportSectionHtml = `
+                        <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #3085d6;">
+                            <h5 style="color: #004085; margin-top: 0; border-bottom: 2px solid #3085d6; padding-bottom: 8px;">
+                                <i class="fa fa-file-upload"></i> ${__('passport_copy') || 'Passport Copy'} ${requireUpload ? '<span class="text-danger">*</span>' : ''}
+                            </h5>
+                            ${requireUpload ? `
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="passport_file" style="font-weight: 600; color: #666; margin-bottom: 8px; display: block;">
+                                        <i class="fa fa-passport" style="margin-right: 5px; color: #3085d6;"></i> ${__('select_passport_file') || 'Select passport copy (PDF, JPG, PNG)'}
+                                    </label>
+                                    <input type="file" id="passport_file" accept=".pdf,.jpg,.jpeg,.png" class="form-control-file" style="padding: 10px; border: 2px dashed #3085d6; border-radius: 6px; background: #f8f9fa; width: 100%;">
+                                    <small class="form-text text-muted" style="margin-top: 8px; display: block;">
+                                        <i class="fa fa-info-circle"></i> ${__('passport_file_help') || 'Please upload a clear copy of the employee\'s passport. Accepted formats: PDF, JPG, PNG (Max 5MB)'}
+                                    </small>
+                                </div>
+                            ` : ''}
+                            ${existingPassportHtml}
+                        </div>
+                    `;
                     // Show confirmation with all traveler details
                     Swal.fire({
                         title: '<i class="fa fa-passport"></i> ' + (__('verify_traveler_information') || 'Verify Traveler Information'),
@@ -1483,6 +1954,8 @@ if ($can_see_all_depts) {
                                         <strong>${__('note') || 'Note'}:</strong> ${__('email_sent_once_warning') || 'This email can only be sent once. After sending, the button will be hidden.'}
                                     </p>
                                 </div>
+
+                                ${passportSectionHtml}
                             </div>
                         `,
                         icon: 'question',
@@ -1499,18 +1972,118 @@ if ($can_see_all_depts) {
                         },
                         didOpen: () => {
                             const confirmBtn = Swal.getConfirmButton();
-                            if (confirmBtn) {
-                                if (invalidPassport) {
-                                    confirmBtn.disabled = true;
-                                    confirmBtn.setAttribute('title', __('passport_fix_required') || 'Fix passport number/expiry before sending');
-                                } else {
-                                    confirmBtn.disabled = false;
-                                    confirmBtn.removeAttribute('title');
+                            const passportFileInput = document.getElementById('passport_file');
+                            const replaceBtn = document.getElementById('replace-passport-btn');
+                            const openBtn = document.getElementById('open-passport-btn');
+                            const replaceInput = document.getElementById('replace_passport_input');
+                            const replaceHint = document.getElementById('replace-passport-hint');
+                            const hasExistingPassportDoc = !!data.passport_doc_url;
+                                                        if (openBtn) {
+                                                            openBtn.addEventListener('click', function() {
+                                                                window.open(data.passport_doc_url, '_blank');
+                                                            });
+                                                        }
+                            
+                            // Function to update confirm button state
+                            const updateConfirmButton = () => {
+                                if (confirmBtn) {
+                                    if (invalidPassport) {
+                                        confirmBtn.disabled = true;
+                                        confirmBtn.setAttribute('title', __('passport_fix_required') || 'Fix passport number/expiry before sending');
+                                    } else if (!hasExistingPassportDoc && (!passportFileInput || !passportFileInput.files || passportFileInput.files.length === 0)) {
+                                        confirmBtn.disabled = true;
+                                        confirmBtn.setAttribute('title', __('passport_file_required') || 'Please attach passport copy before sending');
+                                    } else {
+                                        confirmBtn.disabled = false;
+                                        confirmBtn.removeAttribute('title');
+                                    }
                                 }
+                            };
+                            
+                            // Initial state - disable button
+                            updateConfirmButton();
+                            
+                            // Add event listener to enable button when file is selected
+                            if (passportFileInput) {
+                                passportFileInput.addEventListener('change', function() {
+                                    updateConfirmButton();
+                                });
+                            }
+                            if (replaceBtn && replaceInput) {
+                                replaceBtn.addEventListener('click', () => {
+                                    replaceInput.click();
+                                });
+                                replaceInput.addEventListener('change', () => {
+                                    if (replaceInput.files && replaceInput.files.length > 0) {
+                                        if (replaceHint) replaceHint.style.display = 'block';
+                                        // Upload replacement immediately
+                                        const f = replaceInput.files[0];
+                                        const fd = new FormData();
+                                        fd.append('ajaxType', 'replacePassportDoc');
+                                        fd.append('emp_id', data.emp_id);
+                                        fd.append('passport_file', f);
+                                        Swal.showLoading();
+                                        $.ajax({
+                                            url: './includes/ajaxFile/ajaxVacation.php',
+                                            type: 'POST',
+                                            dataType: 'JSON',
+                                            data: fd,
+                                            processData: false,
+                                            contentType: false,
+                                            success: function(r){
+                                                Swal.hideLoading();
+                                                if (r.type === 'success') {
+                                                    // Update preview
+                                                    const container = document.getElementById('existing-passport-doc');
+                                                    if (container) {
+                                                        const isImage = r.passport_doc_is_image;
+                                                        container.innerHTML = `
+                                                            <h6 style="margin:0 0 10px; color:#0b5eb7;"><i class='fa fa-file'></i> ${__('current_passport_copy') || 'Current Passport Copy'}</h6>
+                                                            <div style="margin-bottom:10px;">${isImage ? `<img src='${r.passport_doc_url}' style='max-width:100%; max-height:180px; border:1px solid #ddd; border-radius:6px;'/>` : `<a href='${r.passport_doc_url}' target='_blank' class='btn btn-sm btn-outline-primary'><i class='fa fa-file'></i> View Passport (${(r.passport_doc_ext||'').toUpperCase()})</a>`}</div>
+                                                            <button type='button' id='replace-passport-btn' class='btn btn-sm btn-warning'><i class='fa fa-sync-alt'></i> ${__('replace_passport_copy') || 'Replace Passport Copy'}</button>
+                                                            <input type='file' id='replace_passport_input' accept='.pdf,.jpg,.jpeg,.png' style='display:none;' />
+                                                            <small class='form-text text-muted'><i class='fa fa-info-circle'></i> ${__('upload_new_passport_hint') || 'Select a new file to replace again if needed.'}</small>
+                                                        `;
+                                                    }
+                                                    updateConfirmButton();
+                                                } else {
+                                                    Swal.fire(__('error')||'Error', r.message || 'Failed replacing passport copy.', 'error');
+                                                }
+                                            },
+                                            error: function(){
+                                                Swal.hideLoading();
+                                                Swal.fire(__('error')||'Error', __('error_replacing_passport')||'Could not replace passport copy.', 'error');
+                                            }
+                                        });
+                                    }
+                                });
                             }
                         }
                     }).then((result) => {
                         if (result.isConfirmed) {
+                            // Validate passport file is selected
+                            const passportFile = document.getElementById('passport_file');
+                            const hasExistingPassportDoc = !!data.passport_doc_url;
+                            if (!hasExistingPassportDoc && (!passportFile || !passportFile.files || passportFile.files.length === 0)) {
+                                Swal.fire({
+                                    title: __('validation_error') || 'Validation Error',
+                                    text: __('passport_file_required') || 'Please attach a passport copy before sending the email.',
+                                    icon: 'error'
+                                });
+                                return;
+                            }
+
+                            // Validate file size (max 5MB)
+                            const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+                            if (passportFile && passportFile.files && passportFile.files.length > 0 && passportFile.files[0].size > maxSize) {
+                                Swal.fire({
+                                    title: __('file_too_large') || 'File Too Large',
+                                    text: __('passport_file_size_limit') || 'Passport file must be less than 5MB. Please compress or select a smaller file.',
+                                    icon: 'error'
+                                });
+                                return;
+                            }
+
                             // Show loading
                             Swal.fire({
                                 title: __('sending') || 'Sending...',
@@ -1522,14 +2095,21 @@ if ($can_see_all_depts) {
                                 }
                             });
 
+                            // Create FormData to include file upload
+                            const formData = new FormData();
+                            formData.append('ajaxType', 'sendTravelEmail');
+                            formData.append('vacation_id', vacationId);
+                            if (passportFile && passportFile.files && passportFile.files.length > 0) {
+                                formData.append('passport_file', passportFile.files[0]);
+                            }
+
                             $.ajax({
                                 url: './includes/ajaxFile/ajaxVacation.php',
                                 type: 'POST',
                                 dataType: 'JSON',
-                                data: {
-                                    ajaxType: 'sendTravelEmail',
-                                    vacation_id: vacationId
-                                },
+                                data: formData,
+                                processData: false,
+                                contentType: false,
                             })
                             .done(function(response){
                                 Swal.fire({

@@ -76,12 +76,20 @@ if($ajaxType == 'emp_search') {
         ]);
     }
 } elseif($ajaxType == 'emp_department') {
+    $dept = (int)$_POST['dept'];
+    $exclude_emp_id = isset($_POST['exclude_emp_id']) ? mysqli_real_escape_string($conDB, $_POST['exclude_emp_id']) : '';
+    
+    $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept";
+    if (!empty($exclude_emp_id)) {
+        $where_clause .= " AND `e`.`emp_id` != '$exclude_emp_id'";
+    }
+    
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`dept`=".(int)$_POST['dept']." "); // Cast to int
+    WHERE $where_clause");
     $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -234,6 +242,70 @@ elseif($ajaxType == 'get_hr_team_members') {
 }
 
 // =================================================================
+// == Get Employee Salary
+// == Fetches the salary details for a given employee
+// == Returns contract salary base (for deductions/overtime calculations)
+// =================================================================
+elseif($ajaxType == 'get_employee_salary') {
+    $emp_id = mysqli_real_escape_string($conDB, $_POST['emp_id'] ?? '');
+    
+    if (empty($emp_id)) {
+        echo json_encode(['status' => 400, 'message' => 'Employee ID is required']);
+        exit;
+    }
+    
+    // Get full salary details for accurate calculations - ONLY active salary (status = 1)
+    $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='{$emp_id}' AND `status` = 1 ORDER BY `id` DESC LIMIT 1");
+    
+    if (!$get_salary_data) {
+        echo json_encode(['status' => 500, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        exit;
+    }
+    
+    $salaryrow = mysqli_fetch_assoc($get_salary_data);
+    
+    if (!$salaryrow) {
+        echo json_encode(['status' => 404, 'message' => 'No active salary record found for this employee']);
+        exit;
+    }
+    
+    // Calculate contract salary base (WITHOUT calculated housing - actual package only)
+    // This is used for deduction and overtime calculations per EOS file logic
+    $contract_salary_base = 0;
+    $contract_salary_base += (float)($salaryrow['basic'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['housing'] ?? 0); // Actual housing only
+    $contract_salary_base += (float)($salaryrow['transport'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['food'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['misc'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['cashier'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['fuel'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['tel'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['guard'] ?? 0);
+    $contract_salary_base += (float)($salaryrow['other'] ?? 0);
+    
+    $basic_salary = (float)($salaryrow['basic'] ?? 0);
+    
+    echo json_encode([
+        'status' => 200, 
+        'salary' => $contract_salary_base,
+        'basic_salary' => $basic_salary,
+        'breakdown' => [
+            'basic' => (float)($salaryrow['basic'] ?? 0),
+            'housing' => (float)($salaryrow['housing'] ?? 0),
+            'transport' => (float)($salaryrow['transport'] ?? 0),
+            'food' => (float)($salaryrow['food'] ?? 0),
+            'misc' => (float)($salaryrow['misc'] ?? 0),
+            'cashier' => (float)($salaryrow['cashier'] ?? 0),
+            'fuel' => (float)($salaryrow['fuel'] ?? 0),
+            'tel' => (float)($salaryrow['tel'] ?? 0),
+            'guard' => (float)($salaryrow['guard'] ?? 0),
+            'other' => (float)($salaryrow['other'] ?? 0)
+        ]
+    ]);
+    exit;
+}
+
+// =================================================================
 // == WRAPPER: Get Asset Clearance Chain (for backward compatibility)
 // == This endpoint wraps build_vacation_approval_chain
 // == Takes vacation_id and fetches employee details automatically
@@ -343,43 +415,8 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
             }
         }
         
-        // STEP 3: Check if supervisor has their own supervisor
-        if (!empty($supervisor_id) && $supervisor_id != '0') {
-            $sql_sup_mgr = "SELECT supervisor_id, name FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
-            $stmt_sup_mgr = mysqli_prepare($conDB, $sql_sup_mgr);
-            if ($stmt_sup_mgr) {
-                mysqli_stmt_bind_param($stmt_sup_mgr, "s", $supervisor_id);
-                mysqli_stmt_execute($stmt_sup_mgr);
-                $res_sup_mgr = mysqli_stmt_get_result($stmt_sup_mgr);
-                if ($row_sup_mgr = mysqli_fetch_assoc($res_sup_mgr)) {
-                    $supervisor_mgr_id = $row_sup_mgr['supervisor_id'];
-                    if (!empty($supervisor_mgr_id) && $supervisor_mgr_id != '0' && !in_array($supervisor_mgr_id, $chain)) {
-                        $sql_mgr = "SELECT emp_id, name FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1";
-                        $stmt_mgr = mysqli_prepare($conDB, $sql_mgr);
-                        if ($stmt_mgr) {
-                            mysqli_stmt_bind_param($stmt_mgr, "s", $supervisor_mgr_id);
-                            mysqli_stmt_execute($stmt_mgr);
-                            $res_mgr = mysqli_stmt_get_result($stmt_mgr);
-                            if ($row_mgr = mysqli_fetch_assoc($res_mgr)) {
-                                $chain[] = $row_mgr['emp_id'];
-                                $chain_details[] = [
-                                    'emp_id' => $row_mgr['emp_id'],
-                                    'name' => $row_mgr['name'],
-                                    'label' => "Supervisor's Manager",
-                                    'level' => count($chain)
-                                ];
-                            }
-                            if ($res_mgr) mysqli_free_result($res_mgr);
-                            mysqli_stmt_close($stmt_mgr);
-                        }
-                    }
-                }
-                if ($res_sup_mgr) mysqli_free_result($res_sup_mgr);
-                mysqli_stmt_close($stmt_sup_mgr);
-            }
-        }
-        
-        // STEP 4: Add HR Senior BP
+        // STEP 3: Add HR Senior BP (ALWAYS Level 2 after Direct Manager)
+        // This ensures HR Senior BP is in the chain immediately after the direct manager approves
         $sql_hr_bp = "SELECT e.emp_id, e.name FROM employees e 
                       JOIN admin_login al ON e.emp_id = al.emp_id 
                       WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 
@@ -398,7 +435,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         }
         if ($res_hr_bp) mysqli_free_result($res_hr_bp);
         
-        // STEP 5: Add Asset Clearance Teams
+        // STEP 4: Add Asset Clearance Teams
         $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea 
                        JOIN assets a ON ea.asset_id = a.id 
                        WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
@@ -488,8 +525,9 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
             }
         }
         
-        // STEP 6: Add HR Payroll (ONLY if vacation_salary_type = 'payroll')
-        if ($vacation_salary_type === 'payroll') {
+        // STEP 5: Add HR Payroll (for ALL annual vacations to process overtime/deductions)
+        // All annual vacations must go to HR Payroll regardless of vacation_salary_type
+        if ($fly_type === 'annual') {
             $sql_hr_payroll = "SELECT e.emp_id, e.name FROM employees e 
                                JOIN admin_login al ON e.emp_id = al.emp_id 
                                WHERE al.user_type = 'hr_payroll' AND e.status = 1 
@@ -509,7 +547,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
             if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
         }
         
-        // STEP 7: Add GR Officer (ONLY if vac_type = 'Fly' AND fly_type = 'annual')
+        // STEP 6: Add GR Officer (ONLY if vac_type = 'Fly' AND fly_type = 'annual')
         // GR Officer handles ticket payments and exit-reentry permits for annual fly vacations
         // Note: vac_type is fetched from emp_vacation.vac_type column
         $sql_vac_type = "SELECT vac_type FROM emp_vacation WHERE id = ? LIMIT 1";
@@ -1193,6 +1231,47 @@ elseif($ajaxType == 'unassign_asset') {
         'status'    => 200
     ];
     echo json_encode($data);  
+} elseif ($ajaxType == "check_pending_update") {
+    // Check if employee has any pending update requests for a specific type
+    $empid = isset($_POST['empid']) ? mysqli_real_escape_string($conDB, $_POST['empid']) : '';
+    $type = isset($_POST['type']) ? mysqli_real_escape_string($conDB, $_POST['type']) : '';
+    
+    if (empty($empid)) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Employee ID is required'
+        ]);
+        exit;
+    }
+    
+    if (empty($type)) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Type is required'
+        ]);
+        exit;
+    }
+    
+    $query = "SELECT `type`, `created_at` FROM `employee_temp_contants` 
+              WHERE `emp_id` = '$empid' AND `type` = '$type' AND `status` = 'Pending' 
+              ORDER BY `created_at` DESC LIMIT 1";
+    $result = mysqli_query($conDB, $query);
+    
+    if ($result && mysqli_num_rows($result) > 0) {
+        $row = mysqli_fetch_assoc($result);
+        echo json_encode([
+            'status' => 200,
+            'has_pending' => true,
+            'pending_type' => $row['type'],
+            'created_at' => date('Y-m-d H:i', strtotime($row['created_at']))
+        ]);
+        mysqli_free_result($result);
+    } else {
+        echo json_encode([
+            'status' => 200,
+            'has_pending' => false
+        ]);
+    }
 }elseif ($ajaxType == "emp_edit_contannt") {
     $sql = "INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES ('".(int)$_POST['empid']."', '".$_POST['edit_contant_check']."', '".$_POST[$_POST['edit_contant_check']]."')";
     if(mysqli_query($conDB, $sql)){
@@ -1490,6 +1569,92 @@ elseif($ajaxType == 'unassign_asset') {
     $result->free(); // <-- FIX
     $stmt->close(); // <-- FIX
     echo json_encode(['data' => $employees]);
+    exit;
+} elseif($ajaxType == 'get_vacation_balance') {
+    // Get employee's remaining vacation days balance
+    $empid = isset($_POST['empid']) ? (int)$_POST['empid'] : 0;
+    
+    if ($empid > 0) {
+        // Fetch available_balance from emp_vacation_balance table (latest record)
+        $stmt = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = {$empid} ORDER BY `last_updated` DESC LIMIT 1");
+        
+        if ($stmt && mysqli_num_rows($stmt) > 0) {
+            $row = mysqli_fetch_assoc($stmt);
+            $balance = (float)$row['available_balance'];
+            mysqli_free_result($stmt);
+            
+            echo json_encode([
+                'status' => 200,
+                'balance' => $balance
+            ]);
+        } else {
+            if ($stmt) mysqli_free_result($stmt);
+            echo json_encode([
+                'status' => 404,
+                'balance' => 0,
+                'message' => 'No vacation balance record found.'
+            ]);
+        }
+    } else {
+        echo json_encode([
+            'status' => 400,
+            'balance' => 0,
+            'message' => 'Invalid employee ID.'
+        ]);
+    }
+    exit;
+} elseif($ajaxType == 'calculate_encash_salary') {
+    // Calculate encashment salary based on daily rate (matches VacationCalculator logic)
+    $empid = isset($_POST['empid']) ? (int)$_POST['empid'] : 0;
+    $days = isset($_POST['days']) ? (float)$_POST['days'] : 0;
+    
+    if ($empid > 0 && $days > 0) {
+        // Get active salary record with all components
+        $stmt = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id` = {$empid} AND `status` = 1 ORDER BY `id` DESC LIMIT 1");
+        
+        if ($stmt && mysqli_num_rows($stmt) > 0) {
+            $row = mysqli_fetch_assoc($stmt);
+            mysqli_free_result($stmt);
+            
+            // Calculate total monthly salary from all components (same as VacationCalculator)
+            $total_monthly_salary = 
+                (float)($row['basic'] ?? 0) + 
+                (float)($row['housing'] ?? 0) + 
+                (float)($row['transport'] ?? 0) + 
+                (float)($row['food'] ?? 0) + 
+                (float)($row['misc'] ?? 0) + 
+                (float)($row['cashier'] ?? 0) + 
+                (float)($row['fuel'] ?? 0) + 
+                (float)($row['tel'] ?? 0) + 
+                (float)($row['other'] ?? 0) + 
+                (float)($row['guard'] ?? 0);
+            
+            // Calculate daily rate: monthly_salary / 30 days (30/360 day-count convention)
+            // Then multiply by requested days
+            $daily_rate = $total_monthly_salary / 30;
+            $encash_amount = $daily_rate * $days;
+            
+            echo json_encode([
+                'status' => 200,
+                'salary' => number_format($encash_amount, 2, '.', ''),
+                'daily_rate' => number_format($daily_rate, 2, '.', ''),
+                'total_monthly_salary' => number_format($total_monthly_salary, 2, '.', '')
+            ]);
+        } else {
+            if ($stmt) mysqli_free_result($stmt);
+            echo json_encode([
+                'status' => 404,
+                'salary' => '0.00',
+                'message' => 'Employee salary data not found.'
+            ]);
+        }
+    } else {
+        echo json_encode([
+            'status' => 400,
+            'salary' => '0.00',
+            'message' => 'Invalid employee ID or days.'
+        ]);
+    }
     exit;
 }
 

@@ -1,885 +1,1277 @@
 <?php
+    require_once("./includes/init.php");
+    require_once("./includes/session_check.php");
+    include('./includes/MainClass.php');
+    include("./includes/avatar_select.php");
+    include("./includes/Hijri_GregorianConvert.php");
+    $DateConv = new Hijri_GregorianConvert;
+    $format = "YYYY-MM-DD";
 
-/****************************************************************
- * MODIFICATION SUMMARY (002-profile.php):
- * 1. UNIFIED SESSION HANDLING: Replaced conditional logic with a single, unconditional call to `session_check.php`. This ensures that all required user data and security checks are consistently performed for every user, fixing potential errors when an employee accesses the page directly.
- * 2. REMOVED REDUNDANT CODE: Deleted a duplicate database query for user data that was already being handled within `session_check.php` and its corresponding `if` block that wrapped the entire page.
- * 3. SIMPLIFIED DATA FETCHING: Replaced a `fetch_all` and `foreach` loop with a more direct `mysqli_fetch_assoc` to retrieve the detailed employee record from `emp_query.php`, making the code cleaner and more efficient.
- ****************************************************************/
-require_once("./includes/session_check.php");
-include('./includes/MainClass.php');
-include("./includes/avatar_select.php");
-include("./includes/Hijri_GregorianConvert.php");
-$DateConv = new Hijri_GregorianConvert;
-// $format="DD/MM/YYYY";
-$format = "YYYY-MM-DD";
+    require("./includes/emp_query.php");
+    $emprow = mysqli_fetch_assoc($get_emp_data);
 
-require("./includes/emp_query.php");
-
-// Fetch the detailed employee record and overwrite the basic $emprow from session_check
-$emprow = mysqli_fetch_assoc($get_emp_data);
-
-// Check if employee data was actually found before proceeding
-if (!$emprow) {
-    // Handle case where employee with the given ID doesn't exist
-    // For now, we can just exit to prevent errors. A proper error page would be better.
-    die("Employee data not found.");
-}
-
-$hours_in_day       = 24;
-$minutes_in_hour    = 60;
-$seconds_in_mins    = 60;
-$birth_date         = new DateTime($emprow['dob']);
-$current_date       = new DateTime();
-$diff               = $birth_date->diff($current_date);
-$years                   = $diff->y . " " . __('years');
-
-if ($emprow['status'] == 0 && $note_get == "expired") {
-    $note_get = "Expired";
-} elseif ($emprow['status'] == 0 && $note_get == "terminat") {
-    $note_get = "Terminated";
-}
-
-$date = $DateConv->HijriToGregorian($emprow['iqama_exp'], $format);
-$exprydte = date('m-', strtotime($date)); //
-$today = date('m');
-//      if($exprydte == $today){
-//          $thismonthexp = "<div class='alert alert-danger bg-danger text-white border-0' role='alert'>Upcomming Iqama Expiry <strong>".date('d-m',strtotime($date))."</strong> alert—check it out!</div>";
-//      }
-
-$salaryItems = ['basic', 'housing', 'transport', 'food', 'misc', 'cashier', 'fuel', 'tel', 'other', 'guard'];
-$shownItems = [];
-foreach ($salaryItems as $item) {
-    if (!empty($emprow[$item]) && $emprow[$item] != "0") {
-        $shownItems[] = $item;
+    if (!$emprow) {
+        die("Employee data not found.");
     }
-}
-$countItems = count($shownItems); // Salary items only
-$totalBoxes = $countItems + 1; // +1 for Total Salary box
-$colsm = "col-sm-" . floor(12 / $totalBoxes); // Default column for all boxes
-// Special case: if 5 items, give Total Salary more space (col-sm-4)
-$totalColsm = ($countItems == 4) ? "col-sm-4" : $colsm;
 
+    // Compute age in years from DOB for header and personal info
+    $years = '';
+    if (!empty($emprow['dob']) && $emprow['dob'] !== '0000-00-00') {
+        try {
+            $dobDate = new DateTime($emprow['dob']);
+            $today = new DateTime();
+            $years = $dobDate->diff($today)->y;
+        } catch (Exception $e) {
+            $years = '';
+        }
+    }
 
-$all_statuses = [
-    'apply' => 'Applied',
-    'pending' => 'Assistant Pending',
-    'hr_assistant_approved' => 'HR Assistant Approved',
-    'hr_manager_approved' => 'HR Manager Approved',
-    'gm_approved' => 'GM Approved',
-    'rejected' => 'Rejected'
-];
-
+    // Build More Actions HTML for SweetAlert2
+    $moreActionsHtml = '';
+    if ($emprow['status'] == 1) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit\" id=\"startUpdateRequest\" data-avatar=\"" . htmlspecialchars($emprow['avatar']) . "\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-mobile=\"" . htmlspecialchars($emprow['mobile']) . "\" data-email=\"" . htmlspecialchars($emprow['email']) . "\" data-address=\"" . htmlspecialchars($emprow['address']) . "\" data-passport_number=\"" . htmlspecialchars($emprow['passport_number']) . "\" data-passport_exp=\"" . htmlspecialchars($emprow['passport_exp']) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-hourglass-end\"></i><span>" . __('excuse_leave') . "</span></a>";
+        // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+    } else {
+        $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
+    }
+    // Add HR and Sign Out button
+    $moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a>";
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
 <head>
     <meta charset="utf-8" />
-    <title><?= $site_title ?> - View Employee <?= $emprow['name'] ?> Details</title>
+    <title><?= $site_title ?> - Employee Profile</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
-    <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-    <!-- App favicon -->
-    <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
+    <!-- Favicon -->
+    <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
-    <!-- Modal -->
-    <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
-
-    <!-- Plugins css -->
-    <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
-    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
-    <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-    <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
-
-    <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.css" rel="stylesheet">
-    <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.min.css" rel="stylesheet">
-
-    <link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
-    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-
-    <!-- DataTables -->
-    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <!-- Responsive datatable examples -->
-    <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-    <!-- Multi Item Selection examples -->
-    <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-    <link href="./plugins/summernote/summernote.min.css" rel="stylesheet" />
-
-
-    <!-- App css -->
+    <!-- App CSS -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <!-- <link href="assets/css/icons.css" rel="stylesheet" type="text/css" /> -->
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    <script src="assets/js/modernizr.min.js"></script>
+    <!-- Latest compiled and minified CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/css/bootstrap-datepicker.min.css" rel="stylesheet" />
 
-    <link rel="stylesheet" href="./plugins/croppie/croppie.css">
-    <style type="text/css">
-        .card-box.social {
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-            transition: all 0.2s ease-in-out;
-            border-radius: 10px !important;
+    <!-- Plugins CSS -->
+    
+    <!-- Additional Plugins -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        :root {
+            --primary: #007bff;
+            --secondary: #6c757d;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --info: #17a2b8;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --white: #ffffff;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+            --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
+            --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.2);
         }
 
-        .card-box.social:hover {
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            transform: scale(1.005);
-            cursor: pointer;
+        * {
+            margin: 0;
+            padding: 0;
         }
 
-        .info-item {
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* ===== HEADER SECTION ===== */
+        .profile-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--info) 100%);
+            border-radius: 16px;
+            padding: 40px;
+            color: white;
+            margin-bottom: 40px;
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            position: relative;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Inactive employee header color */
+        .profile-header.inactive {
+            background: linear-gradient(135deg, var(--danger) 0%, #b02a37 100%);
+        }
+
+        .profile-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 500px;
+            height: 500px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+
+        .profile-header .container-custom {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto auto;
+            gap: 40px;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .profile-avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            object-fit: cover;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .profile-header-info h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .profile-header-info p {
+            font-size: 14px;
+            opacity: 0.9;
+            margin: 4px 0;
+        }
+
+        .profile-quick-stats {
+            display: flex;
+            gap: 30px;
+            justify-content: flex-end;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .qr-code {
+            width: 130px;
+            height: 130px;
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        .profile-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* ===== CARDS GRID ===== */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* ===== INFO CARD ===== */
+        .info-card {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow-md);
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-4px);
+        }
+
+        .info-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--light);
+        }
+
+        .info-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: white;
+        }
+
+        .info-card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .info-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.85rem 0.5rem;
-            border-bottom: 1px solid #f1f5f7;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--light);
         }
 
-        .info-item:last-child {
+        .info-row:last-child {
             border-bottom: none;
         }
 
         .info-label {
-            color: #6c757d;
+            font-size: 13px;
+            color: var(--secondary);
             font-weight: 500;
         }
 
         .info-value {
+            font-size: 14px;
+            color: var(--dark);
             font-weight: 500;
+            text-align: right;
         }
 
-        .edit-btn {
-            font-size: 0.8rem;
-            padding: .2rem .5rem;
+        /* ===== ACTION CARDS ===== */
+        .action-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 40px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .action-card {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            box-shadow: var(--shadow-md);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-top: 4px solid var(--primary);
+        }
+
+        .action-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-8px);
+        }
+
+        .action-card.blue {
+            border-top-color: var(--primary);
+        }
+
+        .action-card.green {
+            border-top-color: var(--success);
+        }
+
+        .action-card.info {
+            border-top-color: var(--info);
+        }
+
+        .action-card.warning {
+            border-top-color: var(--warning);
+        }
+
+        .action-card.danger {
+            border-top-color: var(--danger);
+        }
+
+        .action-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .action-card.blue .action-icon {
+            color: var(--primary);
+        }
+
+        .action-card.green .action-icon {
+            color: var(--success);
+        }
+
+        .action-card.info .action-icon {
+            color: var(--info);
+        }
+
+        .action-card.warning .action-icon {
+            color: var(--warning);
+        }
+
+        .action-card.danger .action-icon {
+            color: var(--danger);
+        }
+
+        .action-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 8px;
+        }
+
+        .action-desc {
+            font-size: 12px;
+            color: var(--secondary);
+            margin-bottom: 12px;
+        }
+
+        .action-btn {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            background: var(--light);
+            color: var(--dark);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .action-card.blue .action-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+        .action-card.green .action-btn:hover {
+            background: var(--success);
+            color: white;
+        }
+
+        .action-card.info .action-btn:hover {
+            background: var(--info);
+            color: white;
+        }
+
+        .action-card.warning .action-btn:hover {
+            background: var(--warning);
+            color: white;
+        }
+
+        .action-card.danger .action-btn:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .profile-header {
+                padding: 24px;
+            }
+
+            .profile-header .container-custom {
+                grid-template-columns: auto 1fr auto;
+                gap: 20px;
+            }
+
+            .profile-quick-stats {
+                grid-column: 1 / -1;
+                justify-content: space-around;
+                gap: 15px;
+            }
+
+            .header-buttons {
+                grid-column: 1 / -1;
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .buttons-left {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .more-actions-btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .qr-code {
+                width: 120px;
+                height: 120px;
+            }
+
+            .profile-avatar {
+                width: 80px;
+                height: 80px;
+            }
+
+            .profile-header-info h1 {
+                font-size: 22px;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .action-cards-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+
+            .action-card {
+                padding: 16px;
+            }
+
+            .action-icon {
+                font-size: 28px;
+            }
+
+            .action-title {
+                font-size: 13px;
+            }
+
+            .action-desc {
+                font-size: 11px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .profile-header {
+                padding: 16px;
+                margin-bottom: 20px;
+            }
+
+            .profile-header .container-custom {
+                grid-template-columns: auto;
+                gap: 16px;
+            }
+
+            .profile-quick-stats {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .qr-code {
+                width: 120px;
+                height: 120px;
+                justify-self: center;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .action-cards-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .info-card {
+                padding: 16px;
+            }
+
+            .info-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+
+            .info-value {
+                text-align: left;
+            }
+        }
+
+        /* ===== UTILITY ===== */
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .section-title i {
+            font-size: 24px;
+            color: var(--primary);
+        }
+
+        .copy-btn {
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .copy-btn:hover {
+            opacity: 1;
+        }
+
+        /* ===== MORE ACTIONS MODAL ===== */
+        .more-actions-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .more-actions-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .more-actions-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-overlay.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Modal Window */
+        .more-actions-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: var(--white);
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            z-index: 1000;
+            min-width: 380px;
+            max-width: 95vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .more-actions-modal.active {
+            display: block;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -40%) scale(0.9);
+            }
+
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        .modal-header {
+            padding: 24px;
+            border-bottom: 2px solid var(--light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--secondary);
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+
+        .modal-close-btn:hover {
+            background: var(--light);
+            color: var(--dark);
+        }
+
+        .modal-content {
+            padding: 0;
+        }
+
+        .menu-item {
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: var(--dark);
+            text-decoration: none;
+            font-size: 15px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--light);
+            transition: background-color 0.2s ease;
+        }
+
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+
+        .menu-item:hover {
+            background-color: var(--light);
+        }
+
+        .menu-item i {
+            font-size: 20px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .menu-item.add-documents i {
+            color: var(--primary);
+        }
+
+        .menu-item.assign-asset i {
+            color: var(--secondary);
+        }
+
+        .menu-item.apply-loan i {
+            color: var(--warning);
+        }
+
+        .menu-item.annual-vac i {
+            color: var(--info);
+        }
+
+        .menu-item.apply-leave i {
+            color: var(--success);
+        }
+
+        .menu-item.edit i {
+            color: var(--primary);
+        }
+
+        .menu-item.note i {
+            color: #ffc107;
+        }
+
+        .menu-item.end-service i {
+            color: var(--danger);
+        }
+
+        /* RTL Support */
+        [dir="rtl"] .profile-header .container-custom {
+            grid-template-columns: auto auto 1fr auto;
+        }
+
+        [dir="rtl"] .profile-quick-stats {
+            justify-content: flex-start;
+        }
+
+        [dir="rtl"] .info-row {
+            flex-direction: row-reverse;
+        }
+
+        [dir="rtl"] .info-label,
+        [dir="rtl"] .info-value {
+            text-align: left;
+        }
+
+        /* Select2 alignment with Bootstrap form controls */
+        .select2-container { width: 100% !important; }
+        .select2-container .select2-selection--single { 
+            height: 38px; 
+            border: 1px solid #ced4da; 
+            border-radius: 4px;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered { 
+            line-height: 36px; 
+            padding-left: 12px;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow { 
+            height: 36px; 
+        }
+
+        /* Ensure dropdowns appear above SweetAlert2 */
+        .select2-container--open { z-index: 99999 !important; }
+        .select2-dropdown { 
+            z-index: 99999 !important; 
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .select2-results__option { 
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        .select2-results__option--highlighted { 
+            background-color: #4e73df !important;
+            color: white !important;
+        }
+        .select2-results__option[aria-selected="true"] {
+            background-color: #e9ecef;
+        }
+        .select2-search--dropdown {
+            padding: 8px;
+        }
+        .select2-search__field {
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            padding: 6px 12px;
+            width: 100% !important;
+        }
+        .datepicker-dropdown { z-index: 99999 !important; }
+        .daterangepicker { z-index: 99999 !important; }
+        .datepicker table tr td.disabled,
+        .datepicker table tr td.disabled:hover {
+            color: #ff0000;
+            background: #ffeeee;
         }
     </style>
-    <?php if ($is_rtl): ?>
-        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
-    <?php endif; ?>
-    <script>
-        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
-    </script>
+
+    <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
+
 </head>
 
-<body class="enlarged" data-keep-enlarged="true">
+<body>
+    <div class="profile-container">
+        <!-- HEADER SECTION -->
+        <div class="profile-header<?= ((int)($emprow['status'] ?? 1) === 0 ? ' inactive' : '') ?>">
+            <div class="container-custom">
+                <img src="<?= $emprow['avatar'] ?>" alt="<?= $emprow['name'] ?>" class="profile-avatar">
 
-    <!-- This hidden file input is used by the croppie modal -->
-    <input type="file" name="image" class="image" hidden id="img-crop-input" accept="image/*">
-
-    <!-- Begin page -->
-    <div id="wrapper">
-
-        <!-- ========== Left Sidebar Start ========== -->
-        <div class="left side-menu">
-
-            <div class="slimscroll-menu" id="remove-scroll">
-
-                <!-- LOGO -->
-                <div class="topbar-left">
-                    <a href="dashboard.php" class="logo">
-                        <span>
-                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
-                        </span>
-                        <i>
-                            <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
-                        </i>
-                    </a>
+                <div class="profile-header-info">
+                    <h1><?= htmlspecialchars($emprow['name']) ?></h1>
+                    <p><strong><?= __('employee_id') ?>:</strong> <?= htmlspecialchars($emprow['empid']) ?></p>
+                    <p><strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></p>
+                    <p><strong><?= __('actual_job_label') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["jobname_ar"] : $emprow["jobname"] ?></p>
                 </div>
 
-                <!-- User box -->
+                <div class="profile-quick-stats">
+                    <div class="stat-item">
+                        <div class="stat-number"><?= $years ?></div>
+                        <div class="stat-label"><?= __('age') ?></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="liveVacationDays" data-empid="<?= htmlspecialchars($emprow['empid']) ?>"><?= htmlspecialchars($emprow['vacation_days']) ?></div>
+                        <div class="stat-label"><?= __('vacation_days') ?></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number"><?= number_format($emprow['salary'], 0) ?></div>
+                        <div class="stat-label"><?= __('salary') ?> (SAR)</div>
+                    </div>
+                </div>
 
-                <!--- Sidemenu -->
-                <?php include("./includes/main_menu.php"); ?>
-                <!-- Sidebar -->
+                <?php if (file_exists("./assets/qrcodes/" . $emprow['eid'] . $emprow['empid'] . ".png")): ?>
+                    <img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] . ".png" ?>" alt="QR Code" class="qr-code">
+                <?php endif; ?>
 
-                <div class="clearfix"></div>
-
-            </div>
-            <!-- Sidebar -left -->
-
-        </div>
-        <!-- Left Sidebar End -->
-
-
-
-        <!-- ============================================================== -->
-        <!-- Start right Content here -->
-        <!-- ============================================================== -->
-
-        <div class="content-page">
-
-            <!-- Top Bar Start -->
-            <?php include("./includes/topbar.php"); ?>
-            <!-- Top Bar End -->
-
-            <!-- Start Page content -->
-            <div class="content">
-                <div class="container-fluid">
-
-                    <!-- /*************************************************/ -->
-                    <?php
-
-                    $current_page_name = basename($_SERVER['PHP_SELF']);
-
-                    $file = "./assets/qrcodes/" . $emprow['eid'] . $emprow['empid'] . ".png";
-                    (file_exists($file)) ? "" : header("Location: qrconfig_employee.php?hashcode=" . $emprow['empid'] . "&verification=" . $emprow['eid']);
-                    $checkGander = ($emprow['sex'] == 1) ? './assets/emp_pics/defult.png' : './assets/emp_pics/defultFemale.jpg';
-                    $emp_avatar_get = (file_exists("./assets/emp_pics/" . explode("/", $emprow['avatar'])[3])) ? $emprow['avatar'] : $checkGander;
-
-                    ?>
-
-                    <div class="row">
-                        <div class="col-xl-12">
-                            <!-- meta -->
-                            <div class="profile-user-box card-box <?= ($emprow['status'] == 1 && $emprow['fly'] == 0 ? "bg-dark" : ($emprow['fly'] == 1 ? "bg-warning" : "bg-danger")) ?>">
-                                <div class="row">
-                                    <div class="col-sm-1">
-                                        <div>
-                                            <img src="<?= $emprow['avatar'] ?>" alt="<?= $emprow['name'] ?>" class="thumb-lg rounded-circle emp_avat_img">
-                                        </div>
-                                        <input type="file" name="image" class="image" hidden="" id="img-crop" accept="image/*">
-                                    </div>
-                                    <div class="col-sm-5">
-                                        <div class="media-body text-white">
-                                            <h4 class="mt-1 mb-1 font-18"><?= __('name') ?>: <span class="copyToClipboard"><?= htmlspecialchars($emprow['name']) ?></span> <i class="fa fa-clipboard"></i></h4>
-                                            <p class="text-light mb-0"><?= __('joining_date') ?>: <?= date('M d Y', strtotime(str_replace('/', '-', $emprow['joining_date']))) ?></p>
-                                            <p class="text-light mb-0"><?= __('mobile') ?>: <span class='copyToClipboard'><?= htmlspecialchars($emprow['mobile']) ?></span> <i class='fa fa-clipboard'></i></p>
-                                            <p class="text-light mb-0"><?= __('vacation_days') ?>: <?= htmlspecialchars($emprow['vacation_days']) ?></p>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-2">
-                                        <div class="media-body text-white float-right">
-                                            <a href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank">
-                                                <img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] . ".png" ?>" />
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-4">
-                                        <div class="text-left">
-                                            <p class="text-light mb-0">
-                                                <?= __('iqama_id') . ": <span class='copyToClipboard'>" . htmlspecialchars($emprow['iqama']) . "</span> <i class='fa fa-clipboard'></i>"; ?>
-                                            </p>
-                                            <p class="text-light mb-0"><?= __('employee_no') ?>: <span class='copyToClipboard'><?= htmlspecialchars($emprow['empid']) ?></span> <i class='fa fa-clipboard'></i></p>
-                                            <p class="text-light mb-0"><?= __('department') ?>: <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . $emprow["sectin_nme"]) ?></p>
-                                            <p class="text-light mb-0"><?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>
-                                            <p class="text-light mb-0"><?= __('balance_vacations') ?>:
-                                                <?php
-                                                $finalvacd = $emprow["total_remaining_leave"];
-                                                echo $finalvacd < 0 ? "<span class='badge badge-danger badge-pill'>" . $finalvacd . __('days') . " </span>" : $finalvacd . " " . __('days');
-                                                ?>
-                                            </p>
-                                            <?php if ($emprow["status"] == 0) : ?>
-                                                <p class="text-light mb-0">
-                                                    <?= $note_get . __('date') . " " . date('d M Y', strtotime($emprow["ter_date"])); ?>
-                                                </p>
-                                            <?php endif; ?>
-                                        </div>
-
-                                        <?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
-                                            <div class="text-right">
-                                                <?php if ($emprow["status"] == 1) : ?>
-                                                    <div class="btn-group" role="group" aria-label="Edit Button">
-                                                        <button type="button" class="btn btn-sm btn-light dropdown-toggle waves-effect" data-toggle="dropdown" aria-expanded="false">
-                                                            <i class="fa fa-chart-simple-horizontal font-18 vertical-middle"></i> <?= __('more') ?>
-                                                        </button>
-                                                        <div class="dropdown-menu">
-                                                            <?php /*if (empty($emprow['has_active_regular_loan'])) : ?>
-                                                                <a href="javascript:void(0);" class="text-warning dropdown-item applyLoan" data-emp_id="<?= $emprow['empid'] ?>">
-                                                                    <i class="fa fa-money-bill-trend-up"></i> <?= __('apply_loan') ?>
-                                                                </a>
-                                                            <?php endif; ?>
-                                                            <?php if (empty($emprow['has_active_emergency_loan'])) : ?>
-                                                                <a href="javascript:void(0);" class="text-info dropdown-item applyEmergencyLoan" data-emp_id="<?= $emprow['empid'] ?>">
-                                                                    <i class="fa fa-money-bill-wheat"></i> <?= __('emergency_loan') ?>
-                                                                </a>
-                                                            <?php endif; ?>
-                                                            <?php */ ?>
-                                                            <?php if ($isEmployee || $isAssistant) : ?>
-                                                                <a href="javascript:void(0);" id="startUpdateRequest" data-avatar="<?= $emprow['avatar'] ?>" data-empid="<?= $emprow['empid'] ?>" class="text-primary dropdown-item">
-                                                                    <i class="fa fa-user-pen"></i> <?= __('update_information') ?>
-                                                                </a>
-                                                            <?php endif; ?>
-                                                            <?php ?>
-                                                            <?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
-                                                                <a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" class="text-dark dropdown-item applyvacationAtter d-flex align-items-center">
-                                                                    <i class="fa fa-user-chart mr-2"></i> <?= __('apply_annual_vacation') ?>
-                                                                </a>
-                                                            <?php endif; /* ?>
-                                                            <?php if ($emprow['apd_review'] == "A" && $emprow['apd_status'] == "apply") : ?>
-                                                                <?php
-                                                                $status_text = $all_statuses[$emprow['apd_status']] ?? 'Unknown';
-                                                                $badge_class = 'secondary';
-                                                                switch ($req['approval_status']) {
-                                                                    case 'apply':
-                                                                        $badge_class = 'info';
-                                                                        break;
-                                                                    case 'pending':
-                                                                        $badge_class = 'warning';
-                                                                        break;
-                                                                    case 'gm_approved':
-                                                                        $badge_class = 'success';
-                                                                        break;
-                                                                    case 'rejected':
-                                                                        $badge_class = 'danger';
-                                                                        break;
-                                                                    default:
-                                                                        $badge_class = 'primary';
-                                                                        break;
-                                                                }
-                                                                ?>
-                                                                <a class="text-warning dropdown-item">
-                                                                    <i class="fa fa-user-check"></i> <?= htmlspecialchars($status_text) ?>
-                                                                </a>
-                                                            <?php endif; */ ?>
-                                                            <a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" class="text-info dropdown-item applyLeaveRequest">
-                                                                <i class="fa fa-user-clock"></i> <?= __('apply_leave') ?>
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        <?php endif; ?>
-
-                                    </div>
-                                </div>
-
-                            </div>
-                            <!--/ meta -->
-                            <?php /*if (mysqli_num_rows($getquerysocial) >= 1): ?>
-
-    <div class="row">
-    <?php
-        $socquery = mysqli_query($conDB, "SELECT `social_list`.*, `social`.*, `social`.`id` AS `eslid` FROM `social_list` LEFT JOIN `social` ON `social`.`social_id` = `social_list`.`id` WHERE `social`.`emp_id`='".$emprow['empid']."' ORDER BY `social_list`.`id` ASC ");
-        while($rec = mysqli_fetch_assoc($socquery)){
-            $mainlink = parse_url($rec['link']);
-            $social = explode('//',$mainlink['host'])[0];
-            $link = ucfirst(explode('.',$social)[0]);
-    ?>
-        <div class="col-md-2 col-xl-2">
-        <div class="card-box tilebox-one social">
-        <?php if ($emprow['user_type'] == $access1 AND $current_page_name <> "view_employee.php"): ?> 
-            <a href="javascript:void(0);" style="margin-top:-15px; margin-right: -15px;" class="float-right text-danger deleteAjax" data-id="<?=$rec['eslid']?>" data-tbl='social' data-file='0'>
-                <i class='fa fa-minus-circle font-18 vertical-middle'></i>
-            </a>
-        <?php endif ?>
-            <div onclick="window.open('<?=$rec["link"].$rec["s_link"]?>', '_blank')">                   
-                <i class="<?=$rec['icon']?> float-right" style="color:<?=$rec['color']?>; font-size: 48px"></i>
-                <h6 class="text-uppercase mt-0" style="color:<?=$rec['color']?>" ><?=$link?></h6>
-                <a href="javascript:void(0);" class="text-muted" style="font-size: 10px;">@<?=$rec['s_link']?></a>
-            </div>
-        </div>
-    </div>
-    <?php } ?>
-    </div>
-<?php endif  ?>
-
-<div class="row">
-    <div class="col-sm-6">
-        
-    </div>
-    <div class="col-sm-6">
-        <div class="btn-group float-right" role="group" aria-label="Edit Button">
-        <?php if ($emprow['status'] == "1"): ?>
-            <?php if ($empsocialcount_get < 9): ?>
-                <a href="javascript:void(0);" class="btn-sm btn btn-info waves-effect btn-rounded addSocial" data-emp_id="<?=$emprow['empid']?>">
-                    <i class="mdi mdi-link-variant"></i> Add Social Media
+                <!-- LANGUAGE SWITCHER -->
+                <?php
+                $switch_to_lang = ($current_lang == 'en') ? 'ar' : 'en';
+                $button_text = ($current_lang == 'en') ? 'العربية' : 'English';
+                $query_params = [];
+                if (!empty($_SERVER['QUERY_STRING'])) {
+                    parse_str($_SERVER['QUERY_STRING'], $query_params);
+                }
+                $query_params['change_lang'] = $switch_to_lang;
+                $base_path = strtok($_SERVER['REQUEST_URI'], '?');
+                $new_query_string = http_build_query($query_params);
+                $switch_url = htmlspecialchars($base_path . '?' . $new_query_string);
+                ?>
+                <a href="<?= $switch_url ?>" class="more-actions-btn" style="text-decoration: none;">
+                    <i class="fa fa-language"></i> <?= $button_text ?>
                 </a>
-            <?php endif ?>
-            <?php if (!$description_get): ?>
-                <a href="javascript:void(0);" class="btn-sm btn btn-dark waves-effect btn-rounded addPortfolio" data-emp_id="<?=$emprow['empid']?>">
-                    <i class="mdi mdi mdi-account-card-details"></i> Add Portfolio Dedails
-                </a>
-            <?php endif ?>
-        <?php endif ?>
-        </div>
-    </div>
-</div>
 
-<?php */ ?>
-
-                            <br>
-                        </div>
-                    </div>
-
-                    <!-- /*************************************************/ -->
-                    <div class="alert alert-custom-mocha alert-dismissible bg-custom-mocha text-white border-0 fade show" role="alert">
-                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                            <span aria-hidden="true">×</span>
-                        </button>
-                        <div style="color: #fff; font-size: 23px;"> <?= __('happy_life_with_us') . " " . ageDOB($emprow['joining_date']) ?></div>
-                    </div>
-                    <!-- /*************************************************/ -->
-
-
-                    <div class="row">
-                        <div class="col-xl-12">
-
-                            <div class="row">
-                                <?php foreach ($shownItems as $item): ?>
-                                    <div class="<?= $colsm ?>">
-                                        <div class="card-box tilebox-one">
-                                            <?php
-                                            $icons = [
-                                                'basic' => 'fa-money-bill-alt duotone-success',
-                                                'housing' => 'fa-home duotone-info',
-                                                'transport' => 'fa-car duotone-danger',
-                                                'food' => 'fa-money-bill-wheat duotone-info',
-                                                'misc' => 'fa-diamond-half duotone-dark',
-                                                'cashier' => 'fa-cash-register duotone-success',
-                                                'fuel' => 'fa-car-wash duotone-info',
-                                                'tel' => 'fa-user-headset duotone-info',
-                                                'other' => 'fa-person-carry duotone-dark',
-                                                'guard' => 'fa-hands-holding-diamond duotone-success',
-                                            ];
-                                            $icon = $icons[$item] ?? 'fa-money-bill duotone-secondary';
-                                            ?>
-                                            <i class="fad <?= $icon ?> float-right"></i>
-                                            <h6 class="text-muted text-uppercase mt-0"><?= __($item, ucfirst($item)) ?></h6>
-                                            <h2 class="m-b-20" data-plugin="counterup"><?= $emprow[$item] ?> <i class="icon-saudi_riyal"></i></h2>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                                <div class="<?= $totalColsm ?>">
-                                    <div class="card-box tilebox-one">
-                                        <i class="fad fa-money-bill-trend-up float-right duotone-success"></i>
-                                        <h6 class="text-muted text-uppercase mt-0"><?= __('total_salary') ?></h6>
-                                        <h2 class="m-b-20" data-plugin="counterup"><?= (!$salary_get) ? $emprow["salary"] : $salary_get ?> <i class="icon-saudi_riyal"></i></h2>
-                                    </div>
-                                </div>
-                            </div><!-- end row -->
-
-                            <?php if ($emprow["emp_sup_type"] <> "man_power") { ?>
-
-                                <div class="row">
-                                    <div class="col-sm-6">
-                                        <div class="card-box tilebox-one">
-                                            <i class="fad fa-truck-plane float-right duotone-info"></i>
-                                            <h6 class="text-uppercase mt-0 text-muted">
-                                                <?php
-                                                if ($emprow["country"] == 191 or $emprow["country"] == 150) {
-                                                    echo __('encashed');
-                                                } else {
-                                                    echo __('flys');
-                                                }
-                                                ?>
-                                            </h6>
-                                            <h2 class="m-b-20" data-plugin="counterup"><?= $emprow['flystus'] ?></h2>
-                                        </div>
-                                    </div><!-- end col -->
-                                    <div class="col-sm-6">
-                                        <div class="card-box tilebox-one">
-                                            <i class="fad fa-money-from-bracket float-right duotone-info"></i>
-                                            <h6 class="text-uppercase mt-0 text-muted"><?= __('encashed') ?></h6>
-                                            <h2 class="m-b-20"><span data-plugin="counterup"><?= $emprow['encashstus'] ?></span></h2>
-                                        </div>
-                                    </div><!-- end col -->
-                                </div><!-- end col -->
-
-                            <?php } ?>
-
-
-                        </div>
-                    </div>
-
-
-
-
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?= __('employee_information') ?></h4>
-
-                                <table class="table table-hover mb-0">
-                                    <tbody>
-                                        <tr>
-                                            <th><?= __('name_of_employee') ?>:</th>
-                                            <td><span class="copyToClipboard"><?= $emprow['name']; ?></span> <i class="fa fa-clipboard"></i></td>
-                                            <th><?= __('email') ?>:</th>
-                                            <td><?= ($emprow['c_email']) ? "<b>" . __('personal') . "</b> : <span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i> | <b>" . __('company') . "</b> : <span class='copyToClipboard'>" . $emprow['c_email'] . "</span> <i class='fa fa-clipboard'></i>" : "<span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i>" ?></td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('iqama_id') ?>:</th>
-                                            <td><span class="copyToClipboard"><?= $emprow['iqama']; ?></span> <i class="fa fa-clipboard"></i></td>
-                                            <th><?= __('id_expiry') ?>:</th>
-                                            <td>
-                                                <span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $emprow['iqama_exp']; ?></span>
-                                                <span class="date-batch-g float-right" data-prefix="<?= __('gregorian') ?>"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('passport_no') ?>:</th>
-                                            <td>
-                                                <span class="copyToClipboard"><?= $emprow['passport_number']; ?></span> <i class="fa fa-clipboard"></i>
-                                            </td>
-                                            <th><?= __('passport_expiry') ?>:</th>
-                                            <td>
-                                                <?php if ($emprow['passport_exp']): ?>
-                                                    <span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
-                                                <?php endif ?>
-                                                <!-- <span class="date-batch-h float-right"><? //=$DateConv->GregorianToHijri($emprow['passport_exp'], $format); 
-                                                                                            ?></span> -->
-                                                <?php if ($emprow['passport_exp']): ?>
-                                                    <span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
-                                                <?php endif ?>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('date_of_birth') ?>:</th>
-                                            <td>
-                                                <span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["dob"]; ?></span>
-                                                <span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
-                                            </td>
-                                            <th><?= __('age') ?>:</th>
-                                            <td><?= ($emprow["dob"] <> "") ? $years : "" ?></td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('gender_blood_group') ?>:</th>
-                                            <td><?= ucfirst(__($emprow["sex"])) . " | " . $emprow['blood_type']; ?></td>
-                                            <th><?= __('marital_status') ?>:</th>
-                                            <td><?= ucfirst(__($emprow["mar_status"])); ?></td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('tshirt_size') ?>:</th>
-                                            <td><?= ucfirst($emprow['t_shirt_size']); ?></td>
-                                            <th><?= __('contract_period') ?>:</th>
-                                            <td><?= formatPeriod($emprow["period"]) ?></td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('mobile') ?>:</th>
-                                            <td><span class="copyToClipboard"><?= $emprow['mobile']; ?></span> <i class="fa fa-clipboard"></i></td>
-                                            <th><?= __('country') ?>:</th>
-                                            <td><?= ($is_rtl ?? false) ? $emprow["country_name_ar"] : $emprow["country_name"]; ?></td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('joining_date') ?>:</th>
-                                            <td>
-                                                <span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["joining_date"]; ?></span>
-                                                <span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
-                                            </td>
-                                            <th><?= __('department') ?>:</th>
-                                            <td><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></td>
-                                        </tr>
-
-                                        <?php if (car_get_info($emprow["car_id"])) { ?>
-                                            <tr class="table-info">
-                                                <th><?= __('car_maker') ?>:</th>
-                                                <td><?= car_get_info($emprow["car_id"])['maker_name'] . " | " . car_get_info($emprow["car_id"])['made_year'] ?></td>
-                                                <th><?= __('car_model') ?>:</th>
-                                                <td><?= car_get_info($emprow["car_id"])['model'] ?></td>
-                                            </tr>
-                                        <?php } ?>
-
-                                        <tr>
-                                            <th><?= __('section_area_sponsorship') ?>:</th>
-                                            <td><?= $emprow["sectin_nme"] . " | " . $emprow['sponsor'] ?></td>
-                                            <th><?= __('total_salary') ?>:</th>
-                                            <td><?= $emprow['salary']; ?><i class="icon-saudi_riyal" style="font-size: 14px !important;"></i> -
-                                                <?= ($emprow['payment_type'] == 1 ? __('bank_transfer') : ($emprow['payment_type'] == 2 ? __('cash_payment') : __('about_to_hold'))) ?>
-                                            </td>
-                                        </tr>
-
-                                        <tr>
-                                            <th><?= __('bank_name') ?>:</th>
-                                            <td><?= ($is_rtl ?? false) ? $emprow["b_name_ar"] : $emprow["b_name"] ?></td>
-                                            <th><?= __('iban') ?>:</th>
-                                            <td><?= $emprow["iban"] ?></td>
-                                        </tr>
-                                        <?php //if($emprow["country"] == 191){ 
-                                        ?>
-                                        <tr>
-                                            <th><?= __('gosi_gosi_no') ?>:</th>
-                                            <td><?= $emprow["gosi"] . " | " . $emprow["gosi_no"] ?></td>
-                                            <th><?= __('gosi_expiry') ?>:</th>
-                                            <td><?= $emprow["date_hijri"] . " | " . $emprow["date_greg"] ?></td>
-                                        </tr>
-                                        <?php //} 
-                                        ?>
-                                        <tr>
-                                            <th><?= __('actual_job') ?>:</th>
-                                            <td><?= ($is_rtl ?? false ? $emprow["jobname_ar"] : $emprow["jobname"]) ?></td>
-                                            <th><?= __('probation_period') ?>:</th>
-                                            <td><?= $probationStatus ?></td>
-                                        </tr>
-
-                                        <tr>
-                                            <th><?= __('insurance_no_class') ?>:</th>
-                                            <td><?= $emprow['insurance_no'] . " | " . $emprow['insurance_class'] ?></td>
-                                            <th><?= __('insurance_expiry') ?>:</th>
-                                            <td>
-                                                <?php if ($emprow['insurance_exp']): ?>
-                                                    <span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
-                                                <?php endif ?>
-                                                <?php if ($emprow['insurance_exp']): ?>
-                                                    <span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
-                                                <?php endif ?>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <th><?= __('emergency_contact') ?>:</th>
-                                            <td><?= $emprow["emg_mobile"] . " | " . $emprow['emg_name'] ?></td>
-                                            <th><?= __('address') ?>:</th>
-                                            <td><?= ucfirst($emprow['address']) ?></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-
-                            </div>
-
-                        </div>
-                    </div>
-
-
-                </div> <!-- container -->
-
-            </div> <!-- content -->
-
-            <footer class="footer">
-                <?= $site_footer ?>
-            </footer>
-
+                <!-- MORE ACTIONS BUTTON -->
+                <div class="more-actions-wrapper">
+                    <button class="more-actions-btn" id="moreActionsBtn">
+                        <i class="fa fa-ellipsis-v"></i> <?= __('more') ?>
+                    </button>
+                </div>
+            </div>
         </div>
 
-        <!-- ============================================================== -->
-        <!-- End Right content here -->
-        <!-- ============================================================== -->
-    </div>
-    <!-- END wrapper -->
+        <!-- More Actions handled by SweetAlert2 -->
 
-
-    <!-- jQuery  -->
-    <script src="assets/js/jquery.min.js"></script>
-    <!--        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>-->
-    <script src="assets/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/metisMenu.min.js"></script>
-    <script src="assets/js/waves.js"></script>
-    <script src="assets/js/jquery.slimscroll.js"></script>
-
-
-    <!-- Modal-Effect -->
-    <script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
-    <script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script>
-    <script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
-
-
-    <!-- <script src="./plugins/moment/moment.js"></script> -->
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.min.js"></script>
-
-    <script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
-    <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-
-    <!-- <script src="./assets/pages/jquery.form-pickers.init.js"></script> -->
-    <script src="./plugins/croppie/croppie.js" type="text/javascript"></script>
-    <script src="./plugins/croppie/croppie.min.js" type="text/javascript"></script>
-    <script src="./plugins/croppie/exif.js" type="text/javascript"></script>
-
-    <script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js"></script>
-    <script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js"></script>
-    <script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js"></script>
-
-    <script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script>
-
-    <!-- App js -->
-
-    <!-- Required datatable js -->
-    <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
-    <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
-    <!-- Buttons examples -->
-    <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
-    <script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
-    <script src="./plugins/datatables/jszip.min.js"></script>
-    <script src="./plugins/datatables/pdfmake.min.js"></script>
-    <script src="./plugins/datatables/vfs_fonts.js"></script>
-    <script src="./plugins/datatables/buttons.html5.min.js"></script>
-    <script src="./plugins/datatables/buttons.print.min.js"></script>
-
-    <!-- Key Tables -->
-    <script src="./plugins/datatables/dataTables.keyTable.min.js"></script>
-
-    <!-- Responsive examples -->
-    <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
-    <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
-
-
-    <!-- Selection table -->
-    <script src="./plugins/datatables/dataTables.select.min.js"></script>
-
-
-    <!-- App js -->
-    <script src="assets/js/jquery.app.js"></script>
-
-    <script src="./plugins/summernote/summernote.min.js"></script>
-    <!-- <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-bs4.min.js"></script> -->
-    <script src="assets/js/loanHandling.js"></script>
-
-    <!--/***************************************/-->
-
-    <script type="text/javascript">
-        $(document).ready(function() {
-
-            var buttonConfig = [];
-            var exportTitle = "Name: <?= $emprow['name'] ?>"
-            buttonConfig.push({
-                extend: 'excel',
-                exportOptions: {
-                    columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                },
-                title: exportTitle,
-                className: 'btn-success'
-            });
-            buttonConfig.push({
-                extend: 'pdf',
-                exportOptions: {
-                    columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                },
-                title: exportTitle,
-                className: 'btn-danger'
-            });
-            buttonConfig.push({
-                extend: 'print',
-                exportOptions: {
-                    columns: [0, 1, 2, 3, 4, 5, 6, 7]
-                },
-                title: exportTitle,
-                className: 'btn-dark'
-            });
-            // buttonConfig.push({text: '<i class="fa fa-plus"></i> Add Machine', action: function ( e, dt, button, config ) {window.location = './add_machine.php' } ,className: 'btn-info'});
-            $('form').parsley();
-
-            //Buttons examples
-            var table = $('#employee_vac').DataTable({
-                lengthChange: false,
-                buttons: buttonConfig,
-                order: [
-                    [0, "desc"]
-                ],
-                "columnDefs": [{
-                    targets: [0],
-                    visible: false,
-                    searchable: false
-                }, ],
-            });
-
-            table.buttons().container()
-                .appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
-
-        });
-        jQuery(function($) {
-            $('.autonumber').autoNumeric('init');
-        });
-        jQuery.browser = {};
-        (function() {
-            jQuery.browser.msie = false;
-            jQuery.browser.version = 0;
-            if (navigator.userAgent.match(/MSIE ([0-9]+)\./)) {
-                jQuery.browser.msie = true;
-                jQuery.browser.version = RegExp.$1;
-            }
-        })();
-
-        $(document).on('click', '.empAvatarShowProfile', function(e) {
-            e.preventDefault();
-            var id = $(this).data('id');
-            var emp_id = $(this).data('emp_id');
-            var emp_name = $(this).data('emp_name');
-            var img = $(this).data('img');
-            var emptype = $(this).data('emptype');
-            Swal.fire({
-                title: 'Chnage Employee Image',
-                html: `
-        <div class="row customSweetAlertMLR" >
-            <div class="col-md-6 text-center">
-                <div id="emp-img" style="width:350px"></div>
-            </div>
-            <div class="col-md-6" style="align-items: center; display: grid; justify-content: center;">
-                <img src="${img}" style="width:200px;height:200px" />
-            </div>
-        </div>`,
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, Update!',
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
-                width: '40%',
-                willOpen: function(e) {
-                    $('.image').trigger('click');
-                    var reader, file;
-                    $uploadCrop = $('#emp-img').croppie({
-                        enableExif: true,
-                        viewport: {
-                            width: 300,
-                            height: 300,
-                            type: 'circle', //type: 'circle',square
-                        },
-                        boundary: {
-                            width: 350,
-                            height: 350,
-                        }
-                    });
-                    $('#img-crop').on('change', function() {
-                        var reader = new FileReader();
-                        reader.onload = function(e) {
-                            $uploadCrop.croppie('bind', {
-                                url: e.target.result
-                            }).then(function() {
-                                console.log('jQuery bind complete');
-                            }).catch(function(error) {
-                                Swal.fire({
-                                    title: "File error..",
-                                    text: 'Please select JPG format only.',
-                                    icon: 'error',
-                                    allowOutsideClick: false
-                                })
-                            });
-                        };
-                        reader.readAsDataURL(this.files[0]);
-                    });
-                },
-                preConfirm: function() {
-                    return new Promise(function(resolve) {
-                        $uploadCrop.croppie('result', {
-                            type: 'canvas',
-                            format: 'jpeg' | 'png' | 'webp',
-                            size: 'viewport'
-                        }).then(function(resp) {
-                            $.ajax({
-                                url: "./includes/ajaxFile/ajaxEmployee.php",
-                                type: "POST",
-                                dataType: "JSON",
-                                data: {
-                                    "image": resp,
-                                    "id": id,
-                                    "emp_id": emp_id,
-                                    "emp_name": emp_name,
-                                    "emptype": emptype,
-                                    ajaxType: 'avatar'
-                                },
-                                success: function(response) {
-                                    Swal.fire({
-                                        title: response.title,
-                                        text: response.message,
-                                        icon: response.type,
-                                        allowOutsideClick: false
-                                    }).then(function(isConfirm) {
-                                        (isConfirm) ? location.reload(): ""
-                                    });
+        <!-- PERSONAL INFORMATION -->
+        <div style="margin-bottom: 40px;">
+            <h3 class="section-title"><i class="fa fa-user-circle"></i> <?= __('personal_information') ?></h3>
+            <div class="cards-grid">
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <div class="info-card-icon" style="background: var(--primary);"><i class="fa fa-id-card"></i></div>
+                        <div class="info-card-title"><?= __('identity') ?></div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('iqama_id_label') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['iqama']) ?> <i class="fa fa-copy copy-btn"></i></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('iqama_id_expiry') ?></span>
+                        <span class="info-value">
+                            <?php
+                                $iqama_h = trim($emprow['iqama_exp'] ?? '');
+                                $iqama_g = trim($emprow['iqama_exp_g'] ?? '');
+                                if ($iqama_h) {
+                                    echo htmlspecialchars($iqama_h) . ' (' . __('hijri') . ')';
+                                    try {
+                                        $convG = $DateConv->HijriToGregorian($iqama_h, $format);
+                                        if (!empty($convG)) echo ' / ' . htmlspecialchars($convG) . ' (' . __('gregorian') . ')';
+                                    } catch (Exception $e) { /* ignore */ }
+                                } elseif ($iqama_g) {
+                                    echo htmlspecialchars($iqama_g) . ' (' . __('gregorian') . ')';
+                                    try {
+                                        $convH = $DateConv->GregorianToHijri($iqama_g, $format);
+                                        if (!empty($convH)) echo ' / ' . htmlspecialchars($convH) . ' (' . __('hijri') . ')';
+                                    } catch (Exception $e) { /* ignore */ }
+                                } else {
+                                    echo 'N/A';
                                 }
-                            });
-                        });
+                            ?>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('passport_no_label') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['passport_number']) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('passport_expiry') ?></span>
+                        <span class="info-value">
+                            <?php if (!empty($emprow['passport_exp'])): 
+                                $pexp_g = $emprow['passport_exp'];
+                                echo htmlspecialchars($pexp_g) . ' (' . __('gregorian') . ')';
+                                try {
+                                    $pexp_h = $DateConv->GregorianToHijri($pexp_g, $format);
+                                    if (!empty($pexp_h)) echo ' / ' . htmlspecialchars($pexp_h) . ' (' . __('hijri') . ')';
+                                } catch (Exception $e) { /* ignore */ }
+                              else: echo 'N/A'; endif; ?>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('dob_label') ?></span>
+                        <span class="info-value"><?= $emprow['dob'] ?> (<?= $years ?> <?= __('yrs') ?>)</span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <div class="info-card-icon" style="background: var(--success);"><i class="fa fa-envelope"></i></div>
+                        <div class="info-card-title"><?= __('contact') ?></div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('email') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['email']) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('mobile') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['mobile']) ?> <i class="fa fa-copy copy-btn"></i></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('address') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['address'] ?? '') ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('country') ?></span>
+                        <span class="info-value"><?= ($is_rtl ?? false) ? $emprow["country_name_ar"] : $emprow["country_name"] ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('emergency_contact') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['emg_name'] ?? '') ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('emergency_mobile_no_label') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['emg_mobile'] ?? '') ?> <i class="fa fa-copy copy-btn"></i></span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <div class="info-card-icon" style="background: var(--info);"><i class="fa fa-briefcase"></i></div>
+                        <div class="info-card-title"><?= __('employment') ?></div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('joining_date_label') ?></span>
+                        <span class="info-value"><?= $emprow['joining_date'] ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('section_name_header') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['sectin_nme']) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('contract_period_label') ?></span>
+                        <span class="info-value"><?= formatPeriod($emprow["period"]) ?></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EMPLOYMENT DETAILS -->
+        <div style="margin-bottom: 40px;">
+            <h3 class="section-title"><i class="fa fa-file-contract"></i> <?= __('employment_details') ?></h3>
+            <div class="cards-grid">
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <div class="info-card-icon" style="background: var(--warning);"><i class="fa fa-money-bill"></i></div>
+                        <div class="info-card-title"><?= __('salary') ?></div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('total_salary') ?></span>
+                        <span class="info-value"><?= number_format($emprow['salary'], 2) ?> SAR</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('basic') ?></span>
+                        <span class="info-value"><?= number_format($emprow['basic'], 2) ?> SAR</span>
+                    </div>
+                    <?php
+                        // Dynamically list all additional salary components (allowances/benefits)
+                        $salary_components = [
+                            'housing'   => __('housing', 'Housing Allowance'),
+                            'transport' => __('transport_allowance', 'Transport Allowance'),
+                            'food'      => __('food_allowance', 'Food Allowance'),
+                            'fuel'      => __('fuel_allowance', 'Fuel Allowance'),
+                            'tel'       => __('telephone_allowance', 'Telephone Allowance'),
+                            'cashier'   => __('cashier_allowance', 'Cashier Allowance'),
+                            'misc'      => __('misc_allowance', 'Misc Allowance'),
+                            'other'     => __('other_allowance', 'Other Allowance'),
+                            'guard'     => __('guard_allowance', 'Guard Allowance'),
+                        ];
+
+                        foreach ($salary_components as $field => $label) {
+                            if (isset($emprow[$field]) && floatval($emprow[$field]) > 0) {
+                                echo '<div class="info-row">'
+                                    . '<span class="info-label">' . htmlspecialchars($label) . '</span>'
+                                    . '<span class="info-value">' . number_format((float)$emprow[$field], 2) . ' SAR</span>'
+                                    . '</div>';
+                            }
+                        }
+                    ?>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <div class="info-card-icon" style="background: var(--danger);"><i class="fa fa-shield"></i></div>
+                        <div class="info-card-title"><?= __('gosi_label') ?></div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('status') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['gosi']) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('gosi_no') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['gosi_no']) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('bank_name_label') ?></span>
+                        <span class="info-value"><?= ($is_rtl ?? false) ? $emprow["b_name_ar"] : $emprow["b_name"] ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('iban', 'IBAN') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['iban'] ?? '') ?> <i class="fa fa-copy copy-btn"></i></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('insurance_no', 'Insurance No.') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['insurance_no'] ?? '') ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('insurance_class', 'Insurance Class') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['insurance_class'] ?? '') ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('insurance_expiry', 'Insurance Expiry') ?></span>
+                        <span class="info-value"><?= !empty($emprow['insurance_exp']) ? htmlspecialchars($emprow['insurance_exp']) : 'N/A' ?></span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-card-header">
+                        <div class="info-card-icon" style="background: #6f42c1;"><i class="fa fa-car"></i></div>
+                        <div class="info-card-title"><?= __('assets') ?></div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('salary_payment_type_label') ?></span>
+                        <span class="info-value"><?= ($emprow['payment_type'] == 1 ? __('bank_option') : __('cash_option')) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('sponsorship_label') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['sponsor']) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('status') ?></span>
+                        <span class="info-value">
+                            <?php if ($emprow['status'] == 1): ?>
+                                <span style="color: var(--success); font-weight: 600;"><?= __('active') ?></span>
+                            <?php else: ?>
+                                <span style="color: var(--danger); font-weight: 600;"><?= __('inactive') ?></span>
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('fly_trips', 'Fly Trips') ?></span>
+                        <span class="info-value"><?= (int)($emprow['flystus'] ?? 0) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('encashed') ?></span>
+                        <span class="info-value"><?= (int)($emprow['encashstus'] ?? 0) ?></span>
+                    </div>
+                    <?php 
+                        $carInfo = null;
+                        if (!empty($emprow['car_id']) && function_exists('car_get_info')) {
+                            $carInfo = car_get_info($emprow['car_id']);
+                        }
+                    ?>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('assigned_car', 'Assigned Car') ?></span>
+                        <span class="info-value">
+                            <?php if ($carInfo): ?>
+                                <?= htmlspecialchars(trim(($carInfo['maker_name'] ?? '') . ' ' . ($carInfo['model'] ?? ''))) ?>
+                                <?php if (!empty($carInfo['plate_no'])): ?> - <?= htmlspecialchars($carInfo['plate_no']) ?><?php endif; ?>
+                            <?php else: ?>
+                                <?= __('none', 'None') ?>
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                    <?php if (!empty($emprow['leaving_reason']) || !empty($emprow['end_date'])): ?>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('eos_leaving_reason', 'Leaving Reason') ?></span>
+                        <span class="info-value"><?= htmlspecialchars(($is_rtl ?? false) ? ($emprow['leaving_reason_ar'] ?? $emprow['leaving_reason']) : ($emprow['leaving_reason'] ?? '')) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('eos_end_date', 'End Date') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['end_date'] ?? '') ?></span>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTION CARDS -->
+        <div>
+            <h3 class="section-title"><i class="fa fa-folder-open"></i> <?= __('employee_records') ?></h3>
+            <div class="action-cards-grid">
+                <a href="employee_vacation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card blue">
+                    <i class="fa fa-calendar-check action-icon"></i>
+                    <div class="action-title"><?= __('vacation_history') ?></div>
+                    <div class="action-desc"><?= __('view_all_vacation_records') ?></div>
+                    <button class="action-btn"><?= __('view') ?></button>
+                </a>
+
+                <a href="employee_loan_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card green">
+                    <i class="fa fa-money-bill action-icon"></i>
+                    <div class="action-title"><?= __('loan_history') ?></div>
+                    <div class="action-desc"><?= __('view_loan_applications') ?></div>
+                    <button class="action-btn"><?= __('view') ?></button>
+                </a>
+
+                <a href="employee_assigned_assets.php?emp_id=<?= $emprow['empid'] ?>" class="action-card info">
+                    <i class="fa fa-car action-icon"></i>
+                    <div class="action-title"><?= __('assigned_assets') ?></div>
+                    <div class="action-desc"><?= __('view_equipment_vehicles') ?></div>
+                    <button class="action-btn"><?= __('view') ?></button>
+                </a>
+
+                <a href="employee_payroll_slip.php?emp_id=<?= $emprow['empid'] ?>" class="action-card warning">
+                    <i class="fa fa-file-invoice action-icon"></i>
+                    <div class="action-title"><?= __('payroll_slips') ?></div>
+                    <div class="action-desc"><?= __('download_salary_slips') ?></div>
+                    <button class="action-btn"><?= __('view') ?></button>
+                </a>
+
+                <a href="employee_warnings.php?emp_id=<?= $emprow['empid'] ?>" class="action-card danger">
+                    <i class="fa fa-exclamation-circle action-icon"></i>
+                    <div class="action-title"><?= __('warnings') ?></div>
+                    <div class="action-desc"><?= __('view_disciplinary_records') ?></div>
+                    <button class="action-btn"><?= __('view') ?></button>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for image cropping -->
+    <input type="file" id="img-crop-input" accept="image/*" style="display: none;">
+
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script>
+    <!-- Moment.js for date manipulation -->
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <!-- Date Pickers -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/js/bootstrap-datepicker.min.js"></script>
+    <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
+    <!-- Select2 -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <!-- Main App JS -->
+    <script src="assets/js/employee_profile.js"></script>
+    <script src="assets/js/loanHandling.js"></script>
+    <script>
+        $(document).ready(function() {
+            var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
+                // Fetch and render live vacation days balance in header
+                (function() {
+                    var $vacEl = $('#liveVacationDays');
+                    if ($vacEl.length === 0) return;
+                    var empId = $vacEl.data('empid');
+                    if (!empId) return;
+                    $vacEl.text('Loading…');
+                    $.ajax({
+                        url: 'includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: { ajaxType: 'getCurrentVacationBalance', empid: empId },
+                        success: function(resp){
+                            if (resp && resp.status === 200) {
+                                var bal = parseFloat(resp.balance);
+                                if (isNaN(bal)) { $vacEl.text('—'); return; }
+                                var display = (Math.floor(bal) === bal) ? bal.toFixed(0) : bal.toFixed(2);
+                                $vacEl.text(display);
+                            } else {
+                                $vacEl.text('—');
+                            }
+                        },
+                        error: function(){ $vacEl.text('—'); }
                     });
-                },
-            })
+                })();
+
+            $('#moreActionsBtn').on('click', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    title: '<?= __('more_actions') ?>',
+                    html: '<div class="swal-more-actions">' + moreActionsHtml + '</div>',
+                    showConfirmButton: false,
+                    showCancelButton: true,
+                    cancelButtonText: '<?= __('close') ?>',
+                    cancelButtonColor: '#d33',
+                    width: 600,
+                    padding: '0 0 10px',
+                    customClass: {
+                        popup: 'more-actions-swal'
+                    },
+                    allowOutsideClick: false
+                });
+            });
+
+            // Close SweetAlert when selecting an action (except for startUpdateRequest and signout)
+            $(document).on('click', '.swal-more-actions .menu-item', function() {
+                // Don't auto-close for startUpdateRequest, applyLeaveRequest, or signout (they handle their own logic)
+                if (
+                    $(this).attr('id') !== 'startUpdateRequest' && 
+                    !$(this).hasClass('applyLeaveRequest') && 
+                    !$(this).hasClass('applyLoan') && 
+                    !$(this).hasClass('signout') 
+                ) {
+                    Swal.close();
+                }
+            });
+
+            // Copy to clipboard functionality (robust + works on mobile)
+            $(document).on('click', '.copy-btn', function(e) {
+                e.preventDefault();
+                var $icon = $(this);
+                var $container = $icon.closest('.info-value');
+                // Get text content excluding the icon itself
+                var text = $container.clone().find('.copy-btn').remove().end().text().trim();
+
+                if (!text) return;
+
+                function showSuccess() {
+                    $icon.removeClass('fa-copy').addClass('fa-check').css('color', 'var(--success)');
+                    setTimeout(function() {
+                        $icon.removeClass('fa-check').addClass('fa-copy').removeAttr('style');
+                    }, 2000);
+                }
+
+                function fallbackCopy(t) {
+                    var $temp = $('<textarea>').css({ position: 'fixed', left: '-9999px', top: '-9999px' }).val(t).appendTo('body');
+                    $temp[0].focus();
+                    $temp[0].select();
+                    try {
+                        document.execCommand('copy');
+                        showSuccess();
+                    } catch (err) {
+                        console.error('Copy failed:', err);
+                    } finally {
+                        $temp.remove();
+                    }
+                }
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(showSuccess).catch(function() { fallbackCopy(text); });
+                } else {
+                    fallbackCopy(text);
+                }
+            });
         });
     </script>
-
 </body>
 
 </html>
