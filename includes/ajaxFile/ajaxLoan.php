@@ -116,6 +116,15 @@ if (isset($_POST['ajaxType'])) {
         case 'check_loan_eligibility':
             check_loan_eligibility();
             break;
+        case 'updateLoanInstallments':
+            updateLoanInstallments();
+            break;
+        case 'updateDeductionMode':
+            updateDeductionMode();
+            break;
+        case 'purgeAndRegenerateLoanDeductions':
+            purgeAndRegenerateLoanDeductions();
+            break;
         default:
             echo json_encode(['status' => 'error','title' => 'Error','message' => 'Invalid AJAX type specified.','type' => 'error']);
             break;
@@ -766,19 +775,24 @@ function apply_for_loan() {
         $type_row = $type_result->fetch_assoc();
         $type_stmt->close();
         $request_type_id = $type_row ? $type_row['id'] : 2;
-        // Build approval chain (replace with your actual logic to get approvers)
-        $approvers = get_loan_approvers($emp_id); // Returns array of [level => emp_id]
+        // Build approval chain using new dynamic function (ordered levels)
+        $approvers = get_dynamic_loan_approvers($conDB, $emp_id); // [level => emp_id]
+        $first_real_approval_level = null;
         foreach ($approvers as $level => $approver_id) {
-            $ins = $conDB->prepare("INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')");
-            $ins->bind_param("siii", $inv_no, $request_type_id, $approver_id, $level);
+            // Employee (level 1) is the submitter: mark as 'submitted' not awaiting
+            $status = ($level === 1 && $approver_id == $emp_id) ? 'submitted' : 'awaiting';
+            if ($status === 'awaiting' && $first_real_approval_level === null) {
+                $first_real_approval_level = $level;
+            }
+            $ins = $conDB->prepare("INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, ?)");
+            $ins->bind_param("siiis", $inv_no, $request_type_id, $approver_id, $level, $status);
             $ins->execute();
             $ins->close();
         }
-        // Set first approver to pending
-        if (count($approvers) > 0) {
-            $first_level = min(array_keys($approvers));
+        // Set first real approver (after employee) to pending
+        if ($first_real_approval_level !== null) {
             $upd = $conDB->prepare("UPDATE request_approvers SET status = 'pending' WHERE request_inv_no = ? AND request_type_id = ? AND approval_level = ?");
-            $upd->bind_param("sii", $inv_no, $request_type_id, $first_level);
+            $upd->bind_param("sii", $inv_no, $request_type_id, $first_real_approval_level);
             $upd->execute();
             $upd->close();
         }
@@ -2092,6 +2106,107 @@ function get_loan_approvers($emp_id) {
 }
 
 /**
+ * Build dynamic loan approval flow.
+ * Default order keys (edit $LOAN_APPROVAL_FLOW to change):
+ * 1. employee (submitter, stored as 'submitted')
+ * 2. direct_manager (supervisor_id from employees or dept manager fallback)
+ * 3. hr_payroll (admin_login.user_type = 'hr_payroll')
+ * 4. hr_manager (admin_login.user_type = 'hr_supervisor')
+ * 5. gm (admin_login.user_type = 'gm')
+ * 6. finance_manager (admin_login.user_type = 'finance')
+ * 7. finance_officer (admin_login.user_type = 'finance_officer')
+ * Extendable: pass a $flow array of step keys or modify $LOAN_APPROVAL_FLOW global.
+ * Returns array: [level => approver_emp_id]
+ */
+function get_dynamic_loan_approvers($conDB, $emp_id, $flow = null) {
+    // Editable global sequence
+    static $LOAN_APPROVAL_FLOW = [
+        'employee',
+        'direct_manager',
+        'hr_payroll',
+        'hr_manager',
+        'auditor',
+        'gm',
+        'finance_manager',
+        'finance_officer'
+    ];
+    if ($flow === null || !is_array($flow) || empty($flow)) {
+        $flow = $LOAN_APPROVAL_FLOW;
+    }
+
+    $resolved = [];
+    $added = [];
+    $level = 1;
+
+    // Pre-fetch employee data for manager lookup
+    $emp_stmt = $conDB->prepare("SELECT supervisor_id, dept FROM employees WHERE emp_id = ? LIMIT 1");
+    $emp_stmt->bind_param('s', $emp_id);
+    $emp_stmt->execute();
+    $emp_row = $emp_stmt->get_result()->fetch_assoc();
+    $emp_stmt->close();
+    $supervisor_id = $emp_row['supervisor_id'] ?? null;
+    $dept_id = $emp_row['dept'] ?? null;
+
+    foreach ($flow as $step) {
+        $approver_emp_id = null;
+        switch ($step) {
+            case 'employee':
+                $approver_emp_id = $emp_id; // submitter
+                break;
+            case 'direct_manager':
+                if (!empty($supervisor_id)) {
+                    $approver_emp_id = $supervisor_id;
+                } elseif (!empty($dept_id)) {
+                    $stmt = $conDB->prepare("SELECT emp_id FROM employees WHERE dept = ? AND emptype = 'Manager' AND status = 1 LIMIT 1");
+                    $stmt->bind_param('s', $dept_id);
+                    $stmt->execute();
+                    $mgr = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+                    if ($mgr) $approver_emp_id = $mgr['emp_id'];
+                }
+                break;
+            case 'hr_payroll':
+                $approver_emp_id = fetch_user_type_emp($conDB, 'hr_payroll');
+                break;
+            case 'hr_manager':
+                $approver_emp_id = fetch_user_type_emp($conDB, 'hr_supervisor');
+                break;
+            case 'audit':
+                $approver_emp_id = fetch_user_type_emp($conDB, 'auditor');
+                break;
+            case 'gm':
+                $approver_emp_id = fetch_user_type_emp($conDB, 'gm');
+                break;
+            case 'finance_manager':
+                $approver_emp_id = fetch_user_type_emp($conDB, 'finance');
+                break;
+            case 'finance_officer':
+                $approver_emp_id = fetch_user_type_emp($conDB, 'finance_officer');
+                break;
+            default:
+                // Unknown key: attempt generic lookup treating step as user_type
+                $approver_emp_id = fetch_user_type_emp($conDB, $step);
+        }
+        if ($approver_emp_id && !in_array($approver_emp_id, $added, true)) {
+            $resolved[$level] = (int)$approver_emp_id;
+            $added[] = (int)$approver_emp_id;
+            $level++;
+        }
+    }
+    return $resolved;
+}
+
+// Helper to resolve admin_login.user_type to employee id
+function fetch_user_type_emp($conDB, $user_type) {
+    $stmt = $conDB->prepare("SELECT emp_id FROM admin_login WHERE user_type = ? AND emp_id IS NOT NULL AND status = 1 LIMIT 1");
+    $stmt->bind_param('s', $user_type);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row['emp_id'] ?? null;
+}
+
+/**
  * Integrate approved loan into payroll system
  * Creates appropriate deduction entries based on loan type
  * 
@@ -2110,6 +2225,11 @@ function integrate_loan_to_payroll($loan_id, $conDB) {
         
         if (!$loan) {
             return ['success' => false, 'message' => 'Loan not found'];
+        }
+        
+        // Check deduction mode - only proceed with auto-deduction if mode is 'automatic'
+        if (isset($loan['deduction_mode']) && $loan['deduction_mode'] === 'manual') {
+            return ['success' => true, 'message' => 'Loan set to manual deduction mode - no auto payroll entries created'];
         }
         
         $emp_id = $loan['emp_id'];
@@ -2251,4 +2371,307 @@ function add_monthly_installment_deduction($conDB, $emp_id, $inv_no, $monthly_am
 if (isset($conDB)) {
     $conDB->close();
 }
+
+/**
+ * Update loan installments and monthly deduction
+ * Called from the Edit Installments Plan modal in view_employee.php
+ */
+function updateLoanInstallments() {
+    global $conDB;
+    
+    // Validate input
+    if (!isset($_POST['loan_id'], $_POST['installments'], $_POST['monthly_deduction'])) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Missing required parameters'
+        ]);
+        return;
+    }
+    
+    $loan_id = filter_var($_POST['loan_id'], FILTER_VALIDATE_INT);
+    $installments = filter_var($_POST['installments'], FILTER_VALIDATE_INT);
+    $monthly_deduction = filter_var($_POST['monthly_deduction'], FILTER_VALIDATE_FLOAT);
+    
+    // Validate loan_id
+    if ($loan_id === false || $loan_id <= 0) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Invalid loan ID'
+        ]);
+        return;
+    }
+    
+    // Validate installments: must be between 1 and 60
+    if ($installments === false || $installments < 1 || $installments > 60) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Installments must be between 1 and 60'
+        ]);
+        return;
+    }
+    
+    // Validate monthly_deduction
+    if ($monthly_deduction === false || $monthly_deduction < 0) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Invalid monthly deduction amount'
+        ]);
+        return;
+    }
+    
+    // Check if loan exists
+    $checkQuery = "SELECT id FROM emp_loan WHERE id = ?";
+    $checkStmt = $conDB->prepare($checkQuery);
+    
+    if (!$checkStmt) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Database error: ' . $conDB->error
+        ]);
+        return;
+    }
+    
+    $checkStmt->bind_param("i", $loan_id);
+    $checkStmt->execute();
+    $checkResult = $checkStmt->get_result();
+    
+    if ($checkResult->num_rows === 0) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Loan not found'
+        ]);
+        $checkStmt->close();
+        return;
+    }
+    
+    $checkStmt->close();
+    
+    // Update the loan record with new installments and monthly deduction
+    $updateQuery = "UPDATE emp_loan SET installments = ?, monthly_deduction = ? WHERE id = ?";
+    $updateStmt = $conDB->prepare($updateQuery);
+    
+    if (!$updateStmt) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Database error: ' . $conDB->error
+        ]);
+        return;
+    }
+    
+    $updateStmt->bind_param("idi", $installments, $monthly_deduction, $loan_id);
+    
+    if ($updateStmt->execute()) {
+        echo json_encode([
+            'status' => 200,
+            'message' => 'Installments plan updated successfully'
+        ]);
+    } else {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Failed to update installments: ' . $updateStmt->error
+        ]);
+    }
+    
+    $updateStmt->close();
+}
+
+/**
+ * Update loan deduction mode (automatic or manual)
+ * Called when user chooses how to handle payroll deductions
+ */
+function updateDeductionMode() {
+    global $conDB;
+    
+    if (!isset($_POST['loan_id'], $_POST['deduction_mode'])) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Missing required parameters'
+        ]);
+        return;
+    }
+    
+    $loan_id = filter_var($_POST['loan_id'], FILTER_VALIDATE_INT);
+    $deduction_mode = in_array($_POST['deduction_mode'], ['automatic', 'manual']) ? $_POST['deduction_mode'] : 'automatic';
+    
+    if ($loan_id === false || $loan_id <= 0) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Invalid loan ID'
+        ]);
+        return;
+    }
+    
+    // Check if loan exists
+    $checkQuery = "SELECT id, emp_id, status, inv_no FROM emp_loan WHERE id = ?";
+    $checkStmt = $conDB->prepare($checkQuery);
+    
+    if (!$checkStmt) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Database error: ' . $conDB->error
+        ]);
+        return;
+    }
+    
+    $checkStmt->bind_param("i", $loan_id);
+    $checkStmt->execute();
+    $checkResult = $checkStmt->get_result();
+    
+    if ($checkResult->num_rows === 0) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Loan not found'
+        ]);
+        $checkStmt->close();
+        return;
+    }
+    
+    $loan = $checkResult->fetch_assoc();
+    $checkStmt->close();
+    
+    $conDB->begin_transaction();
+    
+    try {
+        // Update deduction mode
+        $updateQuery = "UPDATE emp_loan SET deduction_mode = ? WHERE id = ?";
+        $updateStmt = $conDB->prepare($updateQuery);
+        
+        if (!$updateStmt) {
+            throw new Exception("Database error: " . $conDB->error);
+        }
+        
+        $updateStmt->bind_param("si", $deduction_mode, $loan_id);
+        
+        if (!$updateStmt->execute()) {
+            throw new Exception("Failed to update deduction mode: " . $updateStmt->error);
+        }
+        $updateStmt->close();
+        
+        // If switching to manual mode, delete existing payroll entries for this loan
+        if ($deduction_mode === 'manual') {
+            $pattern = "%{$loan['inv_no']}%";
+            $deleteQuery = "DELETE FROM payroll_deductions WHERE emp_id = ? AND deduction LIKE ?";
+            $deleteStmt = $conDB->prepare($deleteQuery);
+            
+            if (!$deleteStmt) {
+                throw new Exception("Failed to prepare delete query: " . $conDB->error);
+            }
+            
+            $deleteStmt->bind_param("ss", $loan['emp_id'], $pattern);
+            if (!$deleteStmt->execute()) {
+                throw new Exception("Failed to delete payroll entries: " . $deleteStmt->error);
+            }
+            $deleteStmt->close();
+        }
+        
+        $conDB->commit();
+        echo json_encode([
+            'status' => 200,
+            'message' => 'Deduction mode updated to ' . ucfirst($deduction_mode) . ($deduction_mode === 'manual' ? ' - existing payroll entries removed' : ''),
+            'deduction_mode' => $deduction_mode
+        ]);
+        
+    } catch (Exception $e) {
+        $conDB->rollback();
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Error: ' . $e->getMessage()
+        ]);
+    }
+}
+
+/**
+ * Purge and regenerate payroll deductions for a loan
+ * Called when loan is modified and payroll needs to be recalculated
+ */
+function purgeAndRegenerateLoanDeductions() {
+    global $conDB;
+    
+    if (!isset($_POST['loan_id'])) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Missing loan ID'
+        ]);
+        return;
+    }
+    
+    $loan_id = filter_var($_POST['loan_id'], FILTER_VALIDATE_INT);
+    
+    if ($loan_id === false || $loan_id <= 0) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Invalid loan ID'
+        ]);
+        return;
+    }
+    
+    // Get loan details
+    $loanQuery = "SELECT emp_id, inv_no, status, deduction_mode FROM emp_loan WHERE id = ?";
+    $loanStmt = $conDB->prepare($loanQuery);
+    
+    if (!$loanStmt) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Database error: ' . $conDB->error
+        ]);
+        return;
+    }
+    
+    $loanStmt->bind_param("i", $loan_id);
+    $loanStmt->execute();
+    $loan = $loanStmt->get_result()->fetch_assoc();
+    $loanStmt->close();
+    
+    if (!$loan) {
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Loan not found'
+        ]);
+        return;
+    }
+    
+    $conDB->begin_transaction();
+    
+    try {
+        // Only purge if mode is 'automatic' - manual deductions are user-managed
+        if ($loan['deduction_mode'] === 'automatic') {
+            // Find and delete all payroll deductions tied to this loan
+            $pattern = "%{$loan['inv_no']}%";
+            $deleteQuery = "DELETE FROM payroll_deductions WHERE emp_id = ? AND deduction LIKE ?";
+            $deleteStmt = $conDB->prepare($deleteQuery);
+            
+            if (!$deleteStmt) {
+                throw new Exception("Failed to prepare delete query: " . $conDB->error);
+            }
+            
+            $deleteStmt->bind_param("ss", $loan['emp_id'], $pattern);
+            if (!$deleteStmt->execute()) {
+                throw new Exception("Failed to delete deductions: " . $deleteStmt->error);
+            }
+            $deleteStmt->close();
+            
+            // Regenerate deductions by calling integrate_loan_to_payroll
+            if (function_exists('integrate_loan_to_payroll')) {
+                $result = integrate_loan_to_payroll($loan_id, $conDB);
+                if (!$result['success']) {
+                    throw new Exception($result['message']);
+                }
+            }
+        }
+        
+        $conDB->commit();
+        echo json_encode([
+            'status' => 200,
+            'message' => ($loan['deduction_mode'] === 'automatic' ? 'Deductions purged and regenerated' : 'Manual mode: deductions not auto-modified')
+        ]);
+        
+    } catch (Exception $e) {
+        $conDB->rollback();
+        echo json_encode([
+            'status' => 400,
+            'message' => 'Error: ' . $e->getMessage()
+        ]);
+    }
+}
+
 ?>

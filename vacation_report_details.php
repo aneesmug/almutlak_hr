@@ -271,7 +271,7 @@ if (mysqli_num_rows($query) == 1) {
 ?>
 
     <!doctype html>
-    <html lang="en">
+    <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
     <head>
         <meta charset="utf-8" />
@@ -287,6 +287,12 @@ if (mysqli_num_rows($query) == 1) {
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
+        <?php if ($is_rtl): ?>
+			<link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+		<?php endif; ?>
+		<script>
+			window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+		</script>
         <style>
             :root {
                 --primary-color: #4a90e2;
@@ -323,16 +329,27 @@ if (mysqli_num_rows($query) == 1) {
             .report-header .report-title { font-size: 1.1rem; font-weight: 600; margin: 0; }
             .report-header .report-subtitle { font-size: 0.8rem; color: var(--muted-color); margin: 0; }
             
+            /* RTL Overrides */
+            [dir="rtl"] .report-header { flex-direction: row-reverse; }
+            [dir="rtl"] .report-header .report-meta { text-align: left; }
+            
             .report-body { padding: 1.5rem; } /* Reduced padding */
             
             .employee-banner { display: flex; align-items: center; background-color: var(--background-light); padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid var(--border-color); }
             .employee-banner .avatar { width: 60px; height: 60px; border-radius: 50%; margin-right: 1rem; }
+            .employee-banner .info { flex: 1; }
             .employee-banner .info h4 { font-weight: 600; margin: 0 0 0.2rem 0; font-size: 1.1rem; }
             .employee-banner .info p { color: var(--muted-color); margin: 0; font-size: 0.85rem; }
+            
+            /* RTL Overrides */
+            [dir="rtl"] .employee-banner { flex-direction: row-reverse; }
+            [dir="rtl"] .employee-banner .avatar { margin-right: 0; margin-left: 1rem; order: 2; }
+            [dir="rtl"] .employee-banner .info { order: 1; text-align: right; }
 
             .report-section { margin-bottom: 1.5rem; } /* Reduced margin */
             .section-title { font-weight: 600; color: var(--primary-color); margin-bottom: 1rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
             .section-title i { margin-right: 0.5rem; }
+            [dir="rtl"] .section-title i { margin-right: 0; margin-left: 0.5rem; }
 
             .grid-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
             .detail-item .label { font-size: 0.8rem; color: var(--muted-color); margin-bottom: 0.1rem; }
@@ -347,6 +364,8 @@ if (mysqli_num_rows($query) == 1) {
             .payment-summary .total-payable .label { font-weight: 700; color: #155724; }
             .payment-summary .total-payable .value { font-size: 1.1rem; font-weight: 700; color: #155724; }
             
+            [dir="rtl"] .payment-summary li { flex-direction: row-reverse; }
+            
             .approval-timeline { position: relative; padding-left: 5px; }
             .timeline-item { position: relative; padding-bottom: 1rem; padding-left: 30px; min-height: 20px; }
             .timeline-item:last-child { padding-bottom: 0; }
@@ -359,7 +378,14 @@ if (mysqli_num_rows($query) == 1) {
             .timeline-item.future .icon, .timeline-item .icon { background-color: #ced4da; }
             .timeline-item .status { font-weight: 600; line-height: 20px; font-size: 0.9rem; }
             
+            [dir="rtl"] .approval-timeline { padding-left: 0; padding-right: 5px; }
+            [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 30px; }
+            [dir="rtl"] .timeline-item::before { left: auto; right: 0; }
+            [dir="rtl"] .timeline-item .icon { left: auto; right: -9px; }
+            
             .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
+            
+            [dir="rtl"] .notes-section { border-left: none; border-right: 4px solid var(--warning-color); }
             
             .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
             .signature-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; text-align: center; margin-top: 2.5rem; }
@@ -403,28 +429,28 @@ if (mysqli_num_rows($query) == 1) {
                                 <div class="logo-container"><img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo"></div>
                                 <div class="report-meta">
                                     <h2 class="report-title"><?= __('vacation_request_report') ?></h2>
-                                    <p class="report-subtitle"><?= __('request_id') ?>: #<?=htmlspecialchars($request['id']); ?></p>
+                                    <p class="report-subtitle"><?= __('request_id') ?>: #<?= display_or_na($request['id'] ?? null); ?></p>
                                 </div>
                             </div>
 
                             <div class="report-body">
                                 <div class="employee-banner">
-                                    <img src="<?=htmlspecialchars($request['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
+                                    <img src="<?= display_or_na($request['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
-                                        <h4><?=htmlspecialchars($request['employee_name']); ?></h4>
-                                        <p><?= __('employee_id') ?>: <?=htmlspecialchars($request['emp_id']); ?> | <?=htmlspecialchars($request['deptname']); ?><?= !empty($request['section_name']) ? ' / ' . htmlspecialchars($request['section_name']) : '' ?></p>
+                                        <h4><?= display_or_na($request['employee_name'] ?? null); ?></h4>
+                                        <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= display_or_na($request['deptname'] ?? null); ?><?= !empty($request['section_name']) ? ' / ' . display_or_na($request['section_name']) : '' ?></p>
                                     </div>
                                 </div>
 
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-calendar-alt"></i><?= __('vacation_details') ?></h5>
                                     <div class="grid-details">
-                                        <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?=htmlspecialchars($request['vac_type']); ?><?= !empty($request['fly_type']) ? ' | ' . htmlspecialchars($request['fly_type']) : '' ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?= display_or_na($request['vac_type'] ?? null); ?><?= !empty($request['fly_type']) ? ' | ' . display_or_na($request['fly_type']) : '' ?></small></span></div>
                                         <?php if ($request['vac_type'] !== 'Encashed'): ?>
-                                        <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['start_date']))); ?></small></span></div>
-                                        <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['return_date']))); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['start_date']) ? date('d M Y', strtotime($request['start_date'])) : null); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['return_date']) ? date('d M Y', strtotime($request['return_date'])) : null); ?></small></span></div>
                                         <?php endif; ?>
-                                        <div class="detail-item"><span class="label"><?= __('vacation_days') ?></span> <span class="value highlight"><small><?=htmlspecialchars($request['vacdays']); ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('vacation_days') ?></span> <span class="value highlight"><small><?= display_or_na($request['vacdays'] ?? null); ?> <?= __('days') ?></small></span></div>
                                         <?php 
                                         // Calculate flight days if both departure and arrival dates exist
                                         $flight_days = 0;
@@ -436,18 +462,18 @@ if (mysqli_num_rows($query) == 1) {
                                         }
                                         ?>
                                         <?php if (!empty($request['departure_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
-                                            <div class="detail-item"><span class="label"><?= __('departure_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['departure_date']))); ?></small></span></div>
+                                            <div class="detail-item"><span class="label"><?= __('departure_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['departure_date']) ? date('d M Y', strtotime($request['departure_date'])) : null); ?></small></span></div>
                                         <?php endif; ?>
                                         <?php if (!empty($request['arrival_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
-                                            <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y', strtotime($request['arrival_date']))); ?></small></span></div>
+                                            <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['arrival_date']) ? date('d M Y', strtotime($request['arrival_date'])) : null); ?></small></span></div>
                                         <?php endif; ?>
                                         <?php if ($flight_days > 0): ?>
-                                            <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?=htmlspecialchars($flight_days); ?> <?= __('days') ?></small></span></div>
+                                            <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?= display_or_na($flight_days); ?> <?= __('days') ?></small></span></div>
                                         <?php endif; ?>
-                                        <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?=parseName($request['replacement_person_name'] ?? 'N/A'); ?></small></span></div>
-                                        <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?=htmlspecialchars(date('d M Y, h:i A', strtotime($request['created_at']))); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?= parseName(($request['replacement_person_name'] ?? '') !== '' ? $request['replacement_person_name'] : __('not_available')); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?= display_or_na(!empty($request['created_at']) ? date('d M Y, h:i A', strtotime($request['created_at'])) : null); ?></small></span></div>
                                          <?php if (!empty($request['attachment_path'])): ?>
-                                            <div class="detail-item"><span class="label"><?= __('attachment') ?></span> <span class="value"><small><a href="<?=htmlspecialchars($request['attachment_path']); ?>" target="_blank"><?= __('view_document') ?></a></small></span></div>
+                                            <div class="detail-item"><span class="label"><?= __('attachment') ?></span> <span class="value"><small><a href="<?= display_or_na($request['attachment_path']); ?>" target="_blank"><?= __('view_document') ?></a></small></span></div>
                                         <?php endif; ?>
                                     </div>
                                 </div>
@@ -544,7 +570,8 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php endif; ?>
                                 
-                                <?php if ($is_local_annual): ?>
+                                <?php // Hide payroll info for employees
+                                    if ($is_local_annual && (empty($isEmployee) || $isEmployee === false)): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-briefcase"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
                                     <div class="alert alert-success mb-0">
@@ -652,7 +679,7 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php endif; ?>
                                 <div class="row">
-                                    <div class="col-md-7">
+                                    <div class="col-md-8">
                                         <div class="report-section">
                                             <h5 class="section-title"><i class="fa fa-tasks"></i><?= __('approval_status') ?></h5>
                                             <div class="approval-timeline">
@@ -731,7 +758,7 @@ if (mysqli_num_rows($query) == 1) {
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-5">
+                                    <div class="col-md-4">
                                         <?php if(!empty($request['remarks']) || !empty($request['note'])): ?>
                                         <div class="report-section">
                                              <h5 class="section-title"><i class="fa fa-comments"></i><?= __('remarks') ?></h5>

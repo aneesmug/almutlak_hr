@@ -99,6 +99,16 @@ $fname = $emprow['efullname'];
 $avatar = $emprow['eavatar'];
 $empid = $emprow['emp_id'];
 
+// --- 5. Log User Activity (First login only) ---
+if (!isset($_SESSION['activity_logged'])) {
+    require_once __DIR__ . '/user_activity_logger.php';
+    $activity_id = logUserActivity($conDB, $emprow['id'], $emprow['emp_id'], $username);
+    if ($activity_id) {
+        $_SESSION['activity_log_id'] = $activity_id;
+        $_SESSION['activity_logged'] = true;
+    }
+}
+
 $userwel = parseName($fname);
 $usracc = ucfirst($user_type);
 

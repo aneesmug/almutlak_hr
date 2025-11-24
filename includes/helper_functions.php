@@ -12,7 +12,7 @@ foreach ($mailerAutoloadPaths as $path) {
     if (file_exists($path)) {
         require_once $path;
         $phpmailerLoaded = true;
-        error_log("PHPMailer autoload successful from: " . $path);
+        //error_log("PHPMailer autoload successful from: " . $path);
         break;
     }
 }
@@ -3268,5 +3268,16 @@ if (!function_exists('get_live_vacation_balance')) {
             error_log("get_live_vacation_balance: Error calculating balance for emp_id=$emp_id - " . $e->getMessage());
             return null;
         }
+    }
+}
+
+
+// Helper: safely display values or show translated not_available
+if (!function_exists('display_or_na')) {
+    function display_or_na($val) {
+        if (is_null($val) || $val === '' || $val === false) {
+            return __('not_available');
+        }
+        return htmlspecialchars((string)$val);
     }
 }

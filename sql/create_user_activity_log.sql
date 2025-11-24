@@ -1,0 +1,37 @@
+-- User Activity Log Table
+-- Tracks user login activity, device information, location, and browser details
+
+CREATE TABLE IF NOT EXISTS `user_activity_log` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `user_id` INT(11) NOT NULL,
+  `emp_id` VARCHAR(50) DEFAULT NULL,
+  `username` VARCHAR(255) DEFAULT NULL,
+  `login_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `logout_time` DATETIME DEFAULT NULL,
+  `ip_address` VARCHAR(45) DEFAULT NULL,
+  `country` VARCHAR(100) DEFAULT NULL,
+  `country_code` VARCHAR(10) DEFAULT NULL,
+  `region` VARCHAR(100) DEFAULT NULL,
+  `city` VARCHAR(100) DEFAULT NULL,
+  `latitude` DECIMAL(10, 8) DEFAULT NULL,
+  `longitude` DECIMAL(11, 8) DEFAULT NULL,
+  `timezone` VARCHAR(50) DEFAULT NULL,
+  `isp` VARCHAR(255) DEFAULT NULL,
+  `browser` VARCHAR(100) DEFAULT NULL,
+  `browser_version` VARCHAR(50) DEFAULT NULL,
+  `os` VARCHAR(100) DEFAULT NULL,
+  `os_version` VARCHAR(50) DEFAULT NULL,
+  `device_type` VARCHAR(50) DEFAULT NULL COMMENT 'Desktop, Mobile, Tablet',
+  `screen_width` INT(11) DEFAULT NULL,
+  `screen_height` INT(11) DEFAULT NULL,
+  `user_agent` TEXT DEFAULT NULL,
+  `session_id` VARCHAR(255) DEFAULT NULL,
+  `status` ENUM('active', 'logged_out', 'timeout') DEFAULT 'active',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_emp_id` (`emp_id`),
+  KEY `idx_login_time` (`login_time`),
+  KEY `idx_ip_address` (`ip_address`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -293,10 +293,24 @@ function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
         return; // Skip if any loan deduction already exists
     }
     $payrollMonthEnd = date('Y-m-t', strtotime($monthYear . '-01'));
-    $stmtLoan = $pdo->prepare("SELECT id, total_payable, monthly_deduction FROM emp_loan WHERE emp_id = :emp_id AND status = 'approved' AND start_date <= :payroll_month_end LIMIT 1");
-    $stmtLoan->execute([':emp_id' => $empId, ':payroll_month_end' => $payrollMonthEnd]);
+    // Fetch latest approved automatic loan (even if start_date invalid) and decide effective start date in PHP.
+    $stmtLoan = $pdo->prepare("SELECT id, total_payable, monthly_deduction, deduction_mode, start_date, created_at FROM emp_loan WHERE emp_id = :emp_id AND status = 'approved' AND deduction_mode = 'automatic' ORDER BY id DESC LIMIT 1");
+    $stmtLoan->execute([':emp_id' => $empId]);
     $loan = $stmtLoan->fetch(PDO::FETCH_ASSOC);
     if ($loan) {
+        // Extra safety: skip if deduction_mode somehow not automatic
+        if (isset($loan['deduction_mode']) && $loan['deduction_mode'] !== 'automatic') {
+            return; // Manual mode: do not auto insert deduction
+        }
+        // Determine effective start date: prefer start_date, fallback to created_at
+        $rawStart = $loan['start_date'];
+        if (!$rawStart || $rawStart === '0000-00-00') {
+            $rawStart = substr($loan['created_at'],0,10); // fallback to created_at date
+        }
+        // If effective start date is after payroll month end, skip until that month
+        if (strtotime($rawStart) > strtotime($payrollMonthEnd)) {
+            return; // Not started yet in this payroll period
+        }
         $loanId = $loan['id'];
         $stmtPaid = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM emp_loan_payments WHERE loan_id = :loan_id");
         $stmtPaid->execute([':loan_id' => $loanId]);

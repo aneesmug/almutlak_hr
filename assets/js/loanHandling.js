@@ -128,6 +128,7 @@ $(document).on('click', '.applyLoan', async function(e) {
         },
         width: '95%',
         padding: '20px',
+        showLoaderOnConfirm: true,
         didOpen: () => {
             const confirmButton = Swal.getConfirmButton();
             const amountInput = $('#loan_amount');

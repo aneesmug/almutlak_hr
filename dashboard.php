@@ -44,9 +44,13 @@ while($rec = mysqli_fetch_assoc($sql_count_active)){$status_cont_active = $rec["
 $sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter`, `id` FROM `employees` WHERE `status`=0 ".$dept_filter);
 while($rec = mysqli_fetch_assoc($sql_count_ter)){$status_cont_ter = $rec["ter"];}
 
-// Count Employees on Vacation
-$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying`, `id` FROM `employees` WHERE `fly`=1 ".$dept_filter);
+// Count Employees on Departed Vacation (approved, latest vacation vac_type='Fly', employee fly=1)
+$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type='Fly' ".$dept_filter);
 while($rec = mysqli_fetch_assoc($sql_count_fly)){$status_cont_fly = $rec["flying"];}
+
+// Count Employees on Local Vacation (approved, latest vacation vac_type IN ('Local Vacation','Encashed'), employee fly=1)
+$sql_count_local_vac = mysqli_query($conDB, "SELECT COUNT(*) AS `local_vac` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type IN ('Local Vacation','Encashed') ".$dept_filter);
+while($rec = mysqli_fetch_assoc($sql_count_local_vac)){$status_cont_local_vac = $rec["local_vac"];}
 
 // Count Total Employees
 $sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) AS `tot`, `id` FROM `employees` WHERE 1=1 ".$dept_filter);
@@ -201,21 +205,28 @@ if(isset($_POST['submit'])){
                                     <p class="text-uppercase m-b-5 font-13 font-600"><?=__('total_on_job_employees') ?></p>
                                 </div>
                             </div>
-                            <div class="col-sm-4 col-xl-4" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&status=1&fly=1'" style="cursor: pointer;" <?php } ?> >
+							<div class="col-sm-3 col-xl-3" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&departed=1'" style="cursor: pointer;" <?php } ?> >
                                 <div class="card-box bg-warning widget-flat border-primary text-white">
-                                    <i class="fa fa-planet-moon"></i>
+                                    <i class="fa fa-plane-departure"></i>
                                     <h3 class="m-b-10"><?=$status_cont_fly ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('on_vacations_employees') ?></p>
+                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('departed_employees') ?></p>
                                 </div>
                             </div>
-                            <div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0'" style="cursor: pointer;">
+							<div class="col-sm-3 col-xl-3" <?php if(($status_cont_local_vac ?? 0) > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&local_vac=1'" style="cursor: pointer;" <?php } ?> >
+                                <div class="card-box bg-info widget-flat border-info text-white">
+                                    <i class="fa fa-umbrella-beach"></i>
+                                    <h3 class="m-b-10"><?=$status_cont_local_vac ?? 0 ?></h3>
+                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('local_vacation_employees') ?></p>
+                                </div>
+                            </div>
+                            <div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0'" style="cursor: pointer;">
                                 <div class="card-box bg-danger widget-flat border-danger text-white">
                                     <i class="fa fa-users-slash"></i>
                                     <h3 class="m-b-10"><?=$status_cont_ter ?></h3>
                                     <p class="text-uppercase m-b-5 font-13 font-600"><?=__('terminated_employees') ?></p>
                                 </div>
                             </div>
-							<div class="col-sm-4 col-xl-4" onclick="window.location.href='reg_employee.php'" style="cursor: pointer;">
+							<div class="col-sm-3 col-xl-3" onclick="window.location.href='reg_employee.php'" style="cursor: pointer;">
                                 <div class="card-box widget-flat border-success bg-success text-white">
                                     <i class="fa fa-users-viewfinder"></i>
                                     <h3 class="m-b-10"><?=$status_cont_tot ?></h3>

@@ -84,6 +84,7 @@ $addManualLoanLink = 'add_manual_loan.php';
 $employeeSalaryReportLink = 'employee_salary_report.php';
 $employeeEvaluationLink = 'employee_evaluation.php';
 $allEmployeeEvaluationsLink = 'all_employee_evaluations.php';
+$userActivityLink = 'user_activity.php';
 
 
 // =================================================================================
@@ -214,44 +215,37 @@ $show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see
 // DATA FETCHING FOR BADGES
 // =================================================================================
 
-// --- Fetch Loan Approval Counts ---
+// --- Fetch Loan Approval Counts (NEW SYSTEM) ---
 $loan_pending_count = 0;
-$loan_count_query = "";
-
-switch ($user_role) {
-    case 'DPT_Manager':
-        $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE l.status = 'dept_manager_pending' AND e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'";
-        break;
-    case 'HR_Manager':
-    case 'HR_Senior_BP':
-    case 'HR_Operations':
-    case 'HR_Supervisor':
-    case 'HR_Recruitment':
-    case 'HR_Payroll':
-        $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status = 'hr_manager_pending'";
-        break;
-    case 'Finance_Manager':
-    case 'Finance_Officer':
-    case 'Auditor':
-        $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status = 'finance_manager_pending'";
-        break;
-    case 'GM':
-        $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status = 'gm_pending'";
-        break;
-    case 'Finance_Assistant':
-        $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status = 'finance_assistant_pending'";
-        break;
-    case 'Administrator':
-        $loan_count_query = "SELECT COUNT(*) as count FROM emp_loan WHERE status NOT IN ('approved', 'paid', 'rejected')";
-        break;
+$loan_type_id = 0;
+$loan_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'loan_request' LIMIT 1");
+if ($row = mysqli_fetch_assoc($loan_type_query)) {
+    $loan_type_id = (int)$row['id'];
 }
-
-if (!empty($loan_count_query)) {
-    $result = mysqli_query($conDB, $loan_count_query);
-    if ($row = mysqli_fetch_assoc($result)) {
-        $loan_pending_count = $row['count'];
+if ($loan_type_id > 0) {
+    if ($user_role == 'Administrator') {
+        // Admin: count all distinct loan requests still pending anywhere
+        $loan_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                     FROM request_approvers ra
+                                     WHERE ra.status = 'pending' AND ra.request_type_id = $loan_type_id";
+        $res_loan_admin = mysqli_query($conDB, $loan_pending_query_admin);
+        if ($res_loan_admin && ($rla = mysqli_fetch_assoc($res_loan_admin))) {
+            $loan_pending_count = (int)$rla['count'];
+        }
+    } else {
+        // Regular user: count requests awaiting THIS user's approval
+        $loan_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                              FROM request_approvers ra
+                              WHERE ra.approver_id = " . (int)$empid . "
+                                AND ra.status = 'pending'
+                                AND ra.request_type_id = $loan_type_id";
+        $res_loan = mysqli_query($conDB, $loan_pending_query);
+        if ($res_loan && ($rl = mysqli_fetch_assoc($res_loan))) {
+            $loan_pending_count = (int)$rl['count'];
+        }
     }
 }
+// --- END NEW LOAN PENDING COUNT ---
 
 // --- Fetch Smart Request Counts (NEW GENERAL SYSTEM) ---
 $smart_request_count = 0;
@@ -459,13 +453,16 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php if ($is_admin): ?>
             <li><a href="<?= $carsLink ?>" class="<?= all_cars($current_page) ?>"><i class="fa fa-cars"></i><span><?=__('cars') ?></span></a></li>
             <li><a href="<?= $locationsLink ?>" class="<?= all_locations($current_page) ?>"><i class="fa fa-sitemap"></i><span><?=__('locations') ?></span></a></li>
-            <li>
-                <a href="javascript:void(0);"><i class="fa fa-gear-complex"></i><span><?=__('settings') ?></span><span class="float-right fa fa-arrow-right"></span></a>
-                <ul class="nav-second-level" aria-expanded="false">
-                    <li><a href="<?= $usersLink ?>"><i class="fa fa-users-gear"></i><span><?=__('users') ?></span></a></li>
-                    <li><a href="<?= $languageLink ?>"><i class="fa fa-language"></i><span><?=__('language') ?></span></a></li>
-                </ul>
-            </li>
+        <?php endif; ?>
+        <?php if ($is_system_admin): ?>
+        <li>
+            <a href="javascript:void(0);"><i class="fa fa-gear-complex"></i><span><?=__('settings') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+            <ul class="nav-second-level" aria-expanded="false">
+                <li><a href="<?= $usersLink ?>"><i class="fa fa-users-gear"></i><span><?=__('users') ?></span></a></li>
+                <li><a href="<?= $userActivityLink ?>"><i class="fa fa-history"></i><span><?=__('user_activity') ?></span></a></li>
+                <li><a href="<?= $languageLink ?>"><i class="fa fa-language"></i><span><?=__('language') ?></span></a></li>
+            </ul>
+        </li>
         <?php endif; ?>
     </ul>
 </div>

@@ -4,6 +4,12 @@ if(session_status() === PHP_SESSION_NONE)
 
 require_once __DIR__ . '/includes/db.php';
 
+// Log user logout activity
+if (isset($_SESSION['activity_log_id'])) {
+    require_once __DIR__ . '/includes/user_activity_logger.php';
+    logUserLogout($conDB, 'logged_out');
+}
+
 // Clear remember_me token from database if user is logged in
 if (isset($_SESSION['auth_user']) && isset($_SESSION['auth_user']['user_id'])) {
     $user_id = $_SESSION['auth_user']['user_id'];

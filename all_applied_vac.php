@@ -888,16 +888,14 @@ if ($can_see_all_depts) {
             if (isSimpleLeave) {
                 // SIMPLE LEAVE APPROVAL LOGIC
                 if (isLevel1) {
-                    // Level 1: Supervisor/Manager approving → select HR Senior BP
+                    // Level 1: Supervisor/Manager approving → HR Senior BP will be auto-selected by backend
                     chainHtml = `
                         <div class="swal-approval-chain text-left mt-3">
                             <hr>
-                            <label for="hr_bp_select" class="mt-2">${__('select_hr_senior_bp')} (Required)</label>
-                            <div class="swal-approval-chain-builder">
-                                <select id="hr_bp_select" class="form-control swal-select2-dynamic" style="width: 100%;">
-                                    <option value="">${__('loading_hr_staff')}</option>
-                                </select>
-                            </div>
+                            <p class="text-info">
+                                <i class="fa fa-info-circle"></i> 
+                                ${__('approval_chain_auto_built') || 'Approval will be automatically forwarded to HR Senior BP.'}
+                            </p>
                         </div>
                     `;
                 }
@@ -1058,36 +1056,7 @@ if ($can_see_all_depts) {
                     }
 
                     // --- SIMPLE LEAVE LOGIC ---
-                    if (isSimpleLeave && isLevel1) {
-                        // Level 1 approving simple leave: Load HR Senior BP
-                        initSelect2('#hr_bp_select', __('select_hr_senior_bp'));
-                        let $hrBPSelect = $('#hr_bp_select');
-                        
-                        $.ajax({
-                            url: './includes/ajaxFile/ajaxEmployee.php',
-                            dataType: 'JSON',
-                            type: 'POST',
-                            data: {
-                                ajaxType: "get_hr_senior_bp" // Get HR Senior BP users
-                            },
-                            success: function(res) {
-                                if (res.status == 200 && res.data.length > 0) {
-                                    let hrBPOptions = `<option value="">${__('select_hr_senior_bp')}</option>`;
-                                    for (let i in res.data) {
-                                        if (res.data[i].emp_id != <?=$empid?>) { 
-                                            hrBPOptions += `<option value="${res.data[i].emp_id}">${res.data[i].name} (${res.data[i].user_type})</option>`;
-                                        }
-                                    }
-                                    $hrBPSelect.html(hrBPOptions);
-                                } else {
-                                    $hrBPSelect.html(`<option value="">${__('no_hr_senior_bp_found')}</option>`);
-                                }
-                            },
-                            error: () => {
-                                $hrBPSelect.html(`<option value="">${__('error_loading_approvers')}</option>`);
-                            }
-                        });
-                    }
+                    // (HR Senior BP will be auto-selected by backend, no UI needed)
 
                     // --- HR TEAM CC LOADING (for HR Senior BP) ---
                     if (isHR_SeniorBP) {
@@ -1440,13 +1409,32 @@ if ($can_see_all_depts) {
 
                     // B) Get approver chain (based on leave type and role)
                     if (isSimpleLeave && isLevel1) {
-                        // Simple leave: Level 1 must select HR Senior BP
-                        let hrBPId = $(swalModal).find('#hr_bp_select').val();
-                        if (!hrBPId) {
-                            Swal.showValidationMessage(__('must_select_hr_senior_bp'));
-                            return false;
-                        }
-                        approver_chain.push(hrBPId);
+                        // Simple leave: Level 1 - HR Senior BP will be auto-selected by backend
+                        // Return a Promise to get HR Senior BP from backend
+                        return new Promise(function(resolve, reject){
+                            $.ajax({
+                                url: './includes/ajaxFile/ajaxEmployee.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: { 
+                                    ajaxType: 'get_hr_senior_bp'
+                                },
+                            }).done(function(res){
+                                if (!res || res.status !== 200 || !res.data || res.data.length === 0) {
+                                    Swal.showValidationMessage(__('no_hr_senior_bp_found') || 'No HR Senior BP found');
+                                    return reject('No HR Senior BP found');
+                                }
+                                // Automatically use the first HR Senior BP
+                                let hrBPId = res.data[0].emp_id;
+                                console.log('Simple leave - Auto-selected HR Senior BP:', hrBPId);
+                                resolve({
+                                    approver_chain: [hrBPId]
+                                });
+                            }).fail(function(){
+                                Swal.showValidationMessage(__('error_loading_hr_senior_bp') || 'Error loading HR Senior BP');
+                                reject('Error loading HR Senior BP');
+                            });
+                        });
                         
                     } else if (!isSimpleLeave && isLevel1) {
                         // Vacation (annual vacation) flow: After Manager, auto-route to HR Senior BP then asset teams

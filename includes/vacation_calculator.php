@@ -96,7 +96,7 @@ class VacationCalculator {
                 $contract_info['years']
             );
             error_log("calculateContractPeriod result: start=" . $period_dates['start']->format('Y-m-d') . " end=" . $period_dates['end']->format('Y-m-d'));
-            
+
             // Get the sum of all GM-approved vacation days within the current period.
             $used_days = $this->getUsedVacationDays(
                 $emp_id,
@@ -104,7 +104,7 @@ class VacationCalculator {
                 $period_dates['end']
             );
             error_log("getUsedVacationDays result: $used_days");
-            
+
             $carryover = $this->calculateCarryover(
                 $emp_id,
                 $emp_data['vac_period'],
@@ -113,7 +113,7 @@ class VacationCalculator {
                 $contract_info['years']
             );
             error_log("calculateCarryover result: $carryover");
-            
+
             // This is the baseline calculation using the 360-day logic
             $earned_days = $this->calculateEarnedDays(
                 $total_vac_days,
@@ -121,19 +121,14 @@ class VacationCalculator {
                 $period_dates['end']
             );
             error_log("calculateEarnedDays (360-day) result: $earned_days");
-            
+
             // Calculate final balance figures (baseline full-period method)
             $remaining_balance = $total_vac_days - $used_days;
             $available_balance = $earned_days + $carryover - $used_days;
 
-            // ---
-            // START of restored "Snapshot" logic (now using 360-day math)
-            // This logic attempts to find the *last* saved balance and add
-            // new accrual from a fixed anchor date (e.g., Nov 1st) to today.
-            // This will OVERWRITE the $available_balance if a snapshot is found.
-            // ---
+            // --- Snapshot logic using last_updated as anchor ---
             $snap = null;
-            $snap_q_latest = "SELECT available_balance, used_days, period_end, carryover_days, created_at
+            $snap_q_latest = "SELECT available_balance, used_days, period_end, carryover_days, last_updated, created_at
                                FROM emp_vacation_balance
                                WHERE emp_id = ?
                                ORDER BY id DESC
@@ -146,21 +141,23 @@ class VacationCalculator {
                 $stmtSnap->close();
             }
 
-            // Add fresh accrual from snapshot created_at to snapshot available_balance
+            // Add fresh accrual from snapshot last_updated to snapshot available_balance
             if ($snap && isset($snap['available_balance'])) {
                 $snapshot_available = (float)$snap['available_balance'];
-                
-                // Anchor to created_at (when snapshot was recorded/imported)
+                // Anchor to last_updated (when balance was last refreshed)
                 $anchor = null;
-                if (!empty($snap['created_at'])) {
+                if (!empty($snap['last_updated'])) {
+                    $anchor = new DateTime($snap['last_updated']);
+                    $anchor->setTime(0, 0, 0);
+                } elseif (!empty($snap['created_at'])) {
                     $anchor = new DateTime($snap['created_at']);
                     $anchor->setTime(0, 0, 0);
                 } else {
-                    // Fallback to Nov 1st if created_at is missing
+                    // Fallback to Nov 1st if both are missing
                     $anchor = new DateTime('2025-11-01');
                     $anchor->setTime(0, 0, 0);
                 }
-                
+
                 $today_live = new DateTime();
                 $today_live->setTime(0, 0, 0);
 
@@ -173,17 +170,17 @@ class VacationCalculator {
                 $cp = $this->parseContractPeriod($emp_data['vac_period']);
                 $yrs = $cp['years'];
                 $annual_rate = ($yrs == 2) ? ($total_vac_days / 2) : $total_vac_days;
-                
+
                 // ** MODIFIED to use 360-day rate **
                 $daily_rate_360 = $annual_rate / 360.0; 
 
                 $accrued_raw = $days_elapsed * $daily_rate_360;
                 $accrued_days = floor($accrued_raw * 100) / 100; // floor to 2 decimals
 
-                // Final: stored_available + fresh_accrual_from_created_at
+                // Final: stored_available + fresh_accrual_from last_updated
                 // This logic OVERWRITES the baseline calculation.
                 $available_balance = round($snapshot_available + $accrued_days, 2);
-                error_log("360-day created_at-accrual for emp $emp_id: opening_available={$snapshot_available}, anchor=" . $anchor->format('Y-m-d') . ", days_360={$days_elapsed}, daily_rate_360={$daily_rate_360}, accrued_floor={$accrued_days}, final={$available_balance}");
+                error_log("360-day last_updated-accrual for emp $emp_id: opening_available={$snapshot_available}, anchor=" . $anchor->format('Y-m-d') . ", days_360={$days_elapsed}, daily_rate_360={$daily_rate_360}, accrued_floor={$accrued_days}, final={$available_balance}");
             }
 
             error_log("Final calculations: remaining=$remaining_balance, available=$available_balance");

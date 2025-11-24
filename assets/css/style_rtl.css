@@ -818,3 +818,86 @@ input[type="file"]::file-selector-button:hover {
     /* If Font Awesome or similar, use the appropriate class/content code for a left arrow */
     /* Example for Font Awesome: content: "\f060"; */
 }
+
+/*
+=================================================================
+  RTL Modifications for Vacation Report Details
+=================================================================
+*/
+
+/**
+ * This section provides RTL overrides for the vacation_report_details.php page
+ * to ensure proper alignment and layout for Arabic language.
+ */
+
+/* --- Report Header --- */
+[dir="rtl"] .report-header {
+    flex-direction: row-reverse; /* Swap logo and meta positions */
+}
+
+[dir="rtl"] .report-header .report-meta {
+    text-align: left; /* Align text to left in RTL */
+}
+
+/* --- Employee Banner --- */
+[dir="rtl"] .employee-banner {
+    flex-direction: row-reverse; /* Avatar on right side */
+}
+
+[dir="rtl"] .employee-banner .avatar {
+    margin-right: 0;
+    margin-left: 1rem; /* Space on left side instead */
+}
+
+/* --- Section Titles --- */
+[dir="rtl"] .section-title i {
+    margin-right: 0;
+    margin-left: 0.5rem; /* Icon on right side of text */
+}
+
+/* --- Detail Items --- */
+[dir="rtl"] .detail-item {
+    text-align: right;
+}
+
+/* --- Payment Summary --- */
+[dir="rtl"] .payment-summary li {
+    flex-direction: row-reverse; /* Swap label and value positions */
+}
+
+/* --- Approval Timeline --- */
+[dir="rtl"] .approval-timeline {
+    padding-left: 0;
+    padding-right: 5px; /* Timeline on right side */
+}
+
+[dir="rtl"] .timeline-item {
+    padding-left: 0;
+    padding-right: 30px; /* Content on left of timeline */
+}
+
+[dir="rtl"] .timeline-item::before {
+    left: auto;
+    right: 0; /* Vertical line on right side */
+}
+
+[dir="rtl"] .timeline-item .icon {
+    left: auto;
+    right: -9px; /* Icon on right side */
+}
+
+/* --- Notes Section --- */
+[dir="rtl"] .notes-section {
+    border-left: none;
+    border-right: 4px solid var(--warning-color); /* Border on right side */
+}
+
+/* --- Print Button --- */
+[dir="rtl"] .text-right.no-print {
+    text-align: left !important; /* Button on left in RTL */
+}
+
+[dir="rtl"] .btn i.fa-print.mr-1 {
+    margin-right: 0 !important;
+    margin-left: 0.25rem !important; /* Icon spacing for RTL */
+}

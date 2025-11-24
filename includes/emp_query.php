@@ -78,6 +78,11 @@
 		`emp_eos`.`end_date`,
         (SELECT 1 FROM emp_loan WHERE emp_id = `employees`.`emp_id` AND loan_type = 'regular' AND status IN ('dept_manager_pending', 'hr_manager_pending', 'finance_manager_pending', 'gm_pending', 'finance_assistant_pending', 'approved') LIMIT 1) AS has_active_regular_loan,
         (SELECT 1 FROM emp_loan WHERE emp_id = `employees`.`emp_id` AND loan_type = 'emergency' AND status IN ('dept_manager_pending', 'hr_manager_pending', 'finance_manager_pending', 'gm_pending', 'finance_assistant_pending', 'approved') LIMIT 1) AS has_active_emergency_loan,
+		`vacation_balance`.`total_days`,
+		`vacation_balance`.`used_days`,
+		`vacation_balance`.`remaining_balance`,
+		`vacation_balance`.`available_balance`,
+		`vacation_balance`.`carryover_days`,
 		COALESCE(
 			(COALESCE(`vacation_balance`.`remaining_balance`, `contract_period`.`vac_period`) + COALESCE(`vacation_balance`.`carryover_days`, 0)), 
 			`contract_period`.`vac_period`
@@ -105,7 +110,7 @@
     LEFT JOIN (SELECT `id`, `emp_id`, `review`, `current_status` FROM `emp_vacation` WHERE `review`='A' ORDER BY `id` DESC LIMIT 1) AS `approved_vacations` ON `approved_vacations`.`emp_id` = `employees`.`emp_id`
     /* =================================== */
 
-	LEFT JOIN (SELECT * FROM `emp_vacation_balance`) AS `vacation_balance` ON `vacation_balance`.`emp_id` = `employees`.`emp_id` AND `vacation_balance`.`period_end` = (SELECT MAX(`period_end`) FROM `emp_vacation_balance` WHERE `emp_id` = `employees`.`emp_id`)
+	LEFT JOIN (SELECT `emp_id`, `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `period_start`, `period_end` FROM `emp_vacation_balance`) AS `vacation_balance` ON `vacation_balance`.`emp_id` = `employees`.`emp_id` AND `vacation_balance`.`period_end` = (SELECT MAX(`period_end`) FROM `emp_vacation_balance` WHERE `emp_id` = `employees`.`emp_id`)
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `docs_count` FROM `emp_docu` WHERE `status`='A' GROUP BY `emp_id`) AS `emp_documents` ON `emp_documents`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT * FROM `cars_drv` WHERE `status`=1 ORDER BY `id` DESC LIMIT 1) AS `cars_drv` ON `cars_drv`.`car_user` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `empnote` FROM `emp_notice` WHERE `is_deleted` = 0 GROUP BY `emp_id`) AS `noteemp_count` ON `noteemp_count`.`emp_id` = `employees`.`emp_id`

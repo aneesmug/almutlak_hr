@@ -14,6 +14,16 @@
         die("Employee data not found.");
     }
 
+    // Safe display helper: returns translated not_available when empty/null
+    if (!function_exists('display_or_na')) {
+        function display_or_na($val) {
+            if (is_null($val) || $val === '' || $val === false) {
+                return __('not_available');
+            }
+            return htmlspecialchars((string)$val);
+        }
+    }
+
     // Compute age in years from DOB for header and personal info
     $years = '';
     if (!empty($emprow['dob']) && $emprow['dob'] !== '0000-00-00') {
@@ -26,10 +36,23 @@
         }
     }
 
+    // Get available vacation balance directly from emp_vacation_balance table
+    // (Updated daily by cron job - no need for live calculation)
+    $displayBalance = 0;
+    $empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];    
+    if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
+        $balance_query = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' ORDER BY `last_updated` DESC LIMIT 1");
+        if ($balance_query && mysqli_num_rows($balance_query) > 0) {
+            $balance_row = mysqli_fetch_assoc($balance_query);
+            $displayBalance = (float)$balance_row['available_balance'];
+            mysqli_free_result($balance_query);
+        }
+    }
+
     // Build More Actions HTML for SweetAlert2
     $moreActionsHtml = '';
     if ($emprow['status'] == 1) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit\" id=\"startUpdateRequest\" data-avatar=\"" . htmlspecialchars($emprow['avatar']) . "\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-mobile=\"" . htmlspecialchars($emprow['mobile']) . "\" data-email=\"" . htmlspecialchars($emprow['email']) . "\" data-address=\"" . htmlspecialchars($emprow['address']) . "\" data-passport_number=\"" . htmlspecialchars($emprow['passport_number']) . "\" data-passport_exp=\"" . htmlspecialchars($emprow['passport_exp']) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-hourglass-end\"></i><span>" . __('excuse_leave') . "</span></a>";
         // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
@@ -811,8 +834,8 @@
                 <img src="<?= $emprow['avatar'] ?>" alt="<?= $emprow['name'] ?>" class="profile-avatar">
 
                 <div class="profile-header-info">
-                    <h1><?= htmlspecialchars($emprow['name']) ?></h1>
-                    <p><strong><?= __('employee_id') ?>:</strong> <?= htmlspecialchars($emprow['empid']) ?></p>
+                    <h1><?= display_or_na($emprow['name'] ?? null) ?></h1>
+                    <p><strong><?= __('employee_id') ?>:</strong> <?= display_or_na($emprow['empid'] ?? null) ?></p>
                     <p><strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></p>
                     <p><strong><?= __('actual_job_label') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["jobname_ar"] : $emprow["jobname"] ?></p>
                 </div>
@@ -823,7 +846,10 @@
                         <div class="stat-label"><?= __('age') ?></div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-number" id="liveVacationDays" data-empid="<?= htmlspecialchars($emprow['empid']) ?>"><?= htmlspecialchars($emprow['vacation_days']) ?></div>
+                        <div class="stat-number"><?= $displayBalance < 0 
+                            ? number_format($displayBalance, 2) 
+                            : ($displayBalance == floor($displayBalance) ? number_format($displayBalance, 0) : number_format($displayBalance, 2)) 
+                        ?></div>
                         <div class="stat-label"><?= __('vacation_days') ?></div>
                     </div>
                     <div class="stat-item">
@@ -875,7 +901,7 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('iqama_id_label') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['iqama']) ?> <i class="fa fa-copy copy-btn"></i></span>
+                        <span class="info-value"><?= display_or_na($emprow['iqama'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('iqama_id_expiry') ?></span>
@@ -903,7 +929,7 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('passport_no_label') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['passport_number']) ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['passport_number'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('passport_expiry') ?></span>
@@ -931,15 +957,15 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('email') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['email']) ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['email'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('mobile') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['mobile']) ?> <i class="fa fa-copy copy-btn"></i></span>
+                        <span class="info-value"><?= display_or_na($emprow['mobile'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('address') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['address'] ?? '') ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['address'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('country') ?></span>
@@ -947,11 +973,11 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('emergency_contact') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['emg_name'] ?? '') ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['emg_name'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('emergency_mobile_no_label') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['emg_mobile'] ?? '') ?> <i class="fa fa-copy copy-btn"></i></span>
+                        <span class="info-value"><?= display_or_na($emprow['emg_mobile'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                 </div>
 
@@ -966,7 +992,7 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('section_name_header') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['sectin_nme']) ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['sectin_nme'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('contract_period_label') ?></span>
@@ -1025,11 +1051,11 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('status') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['gosi']) ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['gosi'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('gosi_no') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['gosi_no']) ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['gosi_no'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('bank_name_label') ?></span>
@@ -1037,19 +1063,19 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('iban', 'IBAN') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['iban'] ?? '') ?> <i class="fa fa-copy copy-btn"></i></span>
+                        <span class="info-value"><?= display_or_na($emprow['iban'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('insurance_no', 'Insurance No.') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['insurance_no'] ?? '') ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['insurance_no'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('insurance_class', 'Insurance Class') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['insurance_class'] ?? '') ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['insurance_class'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('insurance_expiry', 'Insurance Expiry') ?></span>
-                        <span class="info-value"><?= !empty($emprow['insurance_exp']) ? htmlspecialchars($emprow['insurance_exp']) : 'N/A' ?></span>
+                        <span class="info-value"><?= display_or_na($emprow['insurance_exp'] ?? null) ?></span>
                     </div>
                 </div>
 
@@ -1176,31 +1202,6 @@
     <script>
         $(document).ready(function() {
             var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
-                // Fetch and render live vacation days balance in header
-                (function() {
-                    var $vacEl = $('#liveVacationDays');
-                    if ($vacEl.length === 0) return;
-                    var empId = $vacEl.data('empid');
-                    if (!empId) return;
-                    $vacEl.text('Loading…');
-                    $.ajax({
-                        url: 'includes/ajaxFile/ajaxVacation.php',
-                        type: 'POST',
-                        dataType: 'json',
-                        data: { ajaxType: 'getCurrentVacationBalance', empid: empId },
-                        success: function(resp){
-                            if (resp && resp.status === 200) {
-                                var bal = parseFloat(resp.balance);
-                                if (isNaN(bal)) { $vacEl.text('—'); return; }
-                                var display = (Math.floor(bal) === bal) ? bal.toFixed(0) : bal.toFixed(2);
-                                $vacEl.text(display);
-                            } else {
-                                $vacEl.text('—');
-                            }
-                        },
-                        error: function(){ $vacEl.text('—'); }
-                    });
-                })();
 
             $('#moreActionsBtn').on('click', function(e) {
                 e.preventDefault();

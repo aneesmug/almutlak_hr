@@ -5085,13 +5085,30 @@ function openVacationApplyModal(empid, deptId, country, currentBalance) {
                     if (res.status == 200) {
                         let options = '';
                         for (let i in res.data) {
-                            options += `<option value="${res.data[i].emp_id}">${res.data[i].name.split(' ')[0]+' '+res.data[i].name.split(' ')[1]}</option>`;
+                            const emp = res.data[i];
+                            // Defensive: ensure name has at least two parts
+                            const nameParts = emp.name ? emp.name.split(' ') : [];
+                            const displayName = nameParts.length >= 2 ? (nameParts[0] + ' ' + nameParts[1]) : emp.name;
+                            options += `<option value="${emp.emp_id}">${displayName}</option>`;
                         }
-                        $('#replacement_per').append(options);
+                        if (options.length === 0) {
+                            // No available replacement persons
+                            $('#replacement_per').append(`<option value="N/A" selected>No Replacement Available</option>`);
+                        } else {
+                            // Add all options plus a final NONE choice
+                            $('#replacement_per').append(options + `<option value="N/A">No Replacement Available</option>`);
+                        }
+                    } else {
+                        // Non-200 status, still provide a NONE fallback
+                        $('#replacement_per').append(`<option value="N/A" selected>No Replacement Available</option>`);
                     }
                 },
                 error: function(j, e) {
                     errorHandling(j, e);
+                    // On error also ensure user can proceed without replacement
+                    if (!$('#replacement_per option').length) {
+                        $('#replacement_per').append(`<option value="N/A" selected>No Replacement Available</option>`);
+                    }
                 },
             });
 

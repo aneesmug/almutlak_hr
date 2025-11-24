@@ -32,6 +32,27 @@ if (mysqli_num_rows($query) == 1) {
         $url_params['fly'] = $_GET['fly']; // Add to URL for pagination links
     }
 
+    // Add filter for 'local_vac' if requested (current local vacation employees)
+    if (isset($_GET['local_vac'])) {
+        $local_vac = strtolower(trim($_GET['local_vac']));
+        if ($local_vac === '1' || $local_vac === 'yes' || $local_vac === 'true') {
+            // Employees currently on approved encashed vacation (regardless of fly field)
+                $where_conditions[] = "`fly`='1'";
+                $where_conditions[] = "EXISTS (SELECT 1 FROM emp_vacation ev1 WHERE ev1.emp_id = employees.emp_id AND ev1.current_status='approved' AND ev1.vac_type IN ('Local Vacation','Encashed') AND ev1.id = (SELECT MAX(ev2.id) FROM emp_vacation ev2 WHERE ev2.emp_id = employees.emp_id AND ev2.current_status='approved'))";
+            $url_params['local_vac'] = '1';
+        }
+    }
+    
+        // Add filter for 'departed' (current fly vacation employees - latest approved vac_type='Fly')
+        if (isset($_GET['departed'])) {
+            $departed = strtolower(trim($_GET['departed']));
+            if ($departed === '1' || $departed === 'yes' || $departed === 'true') {
+                $where_conditions[] = "`fly`='1'";
+                $where_conditions[] = "EXISTS (SELECT 1 FROM emp_vacation ev1 WHERE ev1.emp_id = employees.emp_id AND ev1.current_status='approved' AND ev1.vac_type='Fly' AND ev1.id = (SELECT MAX(ev2.id) FROM emp_vacation ev2 WHERE ev2.emp_id = employees.emp_id AND ev2.current_status='approved'))";
+                $url_params['departed'] = '1';
+            }
+        }
+
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -189,13 +210,27 @@ if (mysqli_num_rows($query) == 1) {
 
                             ?>
                                 <div class="col-lg-3">
-                                    <div class="text-center card-box <?php if ($emp_status == "1" and $emp_status_fly == "0") {
-                                                                            echo "bg-light";
-                                                                        } elseif ($emp_status_fly == "1") {
-                                                                            echo "bg-warning";
-                                                                        } else {
-                                                                            echo "bg-danger";
-                                                                        } ?>">
+                                    <?php
+                                        // Determine current vacation type for this employee (approved, current)
+                                            $sql_vac_type = mysqli_query($conDB, "SELECT vac_type FROM `emp_vacation` WHERE `emp_id`='".$emp_id."' AND `current_status`='approved' ORDER BY id DESC LIMIT 1");
+                                        $current_vac_type = ($row_vac = mysqli_fetch_assoc($sql_vac_type)) ? $row_vac['fly_type'] : '';
+
+                                        // Card color priority: Fly > Encashed > Active > Terminated
+                                        if ($emp_status == "1" && $emp_status_fly == "1") {
+                                            if ($current_vac_type === 'Fly') {
+                                                $card_class = "bg-warning"; // departed / fly vacation
+                                            } elseif (in_array($current_vac_type, ['Local Vacation','Encashed'])) {
+                                                $card_class = "bg-info"; // local vacation
+                                            } else {
+                                                $card_class = "bg-light"; // fallback active
+                                            }
+                                        } elseif ($emp_status == "1") {
+                                            $card_class = "bg-light"; // active
+                                        } else {
+                                            $card_class = "bg-danger"; // terminated
+                                        }
+                                    ?>
+                                    <div class="text-center card-box <?= $card_class ?>">
 
                                         <div class="member-card pt-2 pb-2">
                                             <div class="thumb-lg member-thumb m-b-10 mx-auto">
@@ -207,7 +242,8 @@ if (mysqli_num_rows($query) == 1) {
                                             <div class="btn-group" role="group" aria-label="Edit Button">
                                                 <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="mdi mdi-account-search"></i> <?=__('view_details') ?></a>
                                             </div><br>
-                                            <span class="badge badge-dark badge-pill"><?=__('fly') ?>: <?= $cont_fly ?> | <?=__('encashed') ?>: <?= $cont_encashed ?></span>
+                                            <span class="badge badge-dark badge-pill"><?=__('fly') ?>: <?= $cont_fly ?> | <?=__('encashed') ?>: <?= $cont_encashed ?> | <?=__('vacation_type') ?>: <?= $current_vac_type ?: __('none') ?></span>
+                                                <span class="badge badge-dark badge-pill"><?=__('vacation_type') ?>: <?= $emp_status_fly == "1" ? ($current_vac_type ?: __('none')) : __('none') ?></span>
 
                                             <div class="mt-4">
                                                 <div class="row">

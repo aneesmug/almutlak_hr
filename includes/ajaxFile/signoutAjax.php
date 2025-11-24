@@ -7,6 +7,12 @@ if (session_status() == PHP_SESSION_NONE) {
 
 if (isset($_POST['action']) && $_POST['action'] == "signout") {
     
+    // Log user logout activity before destroying session
+    if (isset($_SESSION['activity_log_id'])) {
+        require_once __DIR__ . '/../user_activity_logger.php';
+        logUserLogout($conDB, 'logged_out');
+    }
+    
     // 1. Clear the "Remember Me" token from the database if the user is logged in
     if (isset($_SESSION['auth_user']['user_id'])) {
         $user_id = $_SESSION['auth_user']['user_id'];

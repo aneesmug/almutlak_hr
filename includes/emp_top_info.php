@@ -9,24 +9,36 @@
  * - Updated the "Goto Back" button's icon from `fa-angle-double-left` to `fa-angle-double-right` to correctly indicate direction in an RTL context.
  *
  **************************************************************************************************/
-
 $current_page_name = basename($_SERVER['PHP_SELF']);
-
-// --- 6. Forced Action Redirects for Employees ---
-if ($emprow['user_type'] !== 'employee') {
-	// -- QR Code Check --
-	$eid = $emprow['eid'];
-	$empid = $emprow['emp_id'];
-	$qr_file = "./assets/qrcodes/" . $eid . $empid . ".png";
-
-	if (!file_exists($qr_file) && $current_page_name !== 'qrconfig_employee.php') {
-		header("Location: qrconfig_employee.php?hashcode=" . urlencode($empid) . "&verification=" . urlencode($eid));
-		exit();
+if ($isEmployee !== true) {
+	// Ensure IDs available
+	$eid   = $emprow['eid'];
+	$empid = $emprow['empid'];
+	// QR Code filename pattern
+	$qr_dir  = './assets/qrcodes/';
+	$qr_file = $qr_dir . $eid . $empid . '.png';
+	if (!file_exists($qr_file)) {
+		// Attempt inline generation first (avoid unreliable redirect loops)
+		if (!is_dir($qr_dir)) {
+			@mkdir($qr_dir, 0775, true);
+		}
+		$qrlib_path = __DIR__ . '/qrcode/qrlib.php';
+		if (is_readable($qrlib_path)) {
+			require_once $qrlib_path;
+			$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+			$host   = $_SERVER['HTTP_HOST'] ?? 'hr.almutlaksystem.com';
+			$urlPath = $scheme . $host . '/emp_card/index.php?hashcode=' . urlencode($empid) . '&verification=' . urlencode($eid);
+			QRcode::png($urlPath, $qr_file, QR_ECLEVEL_L, 4, 1, false);
+		}
+		// Redirect to dedicated generator only if still missing
+		if (!file_exists($qr_file) && $current_page_name !== 'qrconfig_employee.php') {
+			header('Location: qrconfig_employee.php?hashcode=' . urlencode($empid) . '&verification=' . urlencode($eid));
+			exit();
+		}
 	}
-	// -- NEW: Salary Information Check --
-	// If basic salary is 0 and we are not on the salary page, redirect.
+	// Salary Information Check
 	if (($emprow['basic'] ?? 0) == 0 && $current_page_name !== 'add_emp_slry.php') {
-		header("Location: add_emp_slry.php?emp_id=" . urlencode($empid));
+		header('Location: add_emp_slry.php?emp_id=' . urlencode($empid));
 		exit();
 	}
 }
@@ -176,7 +188,7 @@ if ($emprow['user_type'] !== 'employee') {
 													</a>
 												<?php endif; ?>
 												<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" class="text-info dropdown-item applyLeaveRequest d-flex align-items-center">
-													<i class="fa fa-solid fa-house-person-leave mr-2"></i> <?= __('apply_leave') ?>
+													<i class="fa fa-solid fa-house-person-leave mr-2"></i> <?= __('excuse_leave') ?>
 												</a>
 											<?php endif; ?>
 

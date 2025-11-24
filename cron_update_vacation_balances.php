@@ -29,11 +29,21 @@ if (!is_dir($log_dir)) {
 }
 
 function log_message($message) {
-    global $log_file;
-    $timestamp = date('Y-m-d H:i:s');
-    $full_message = "[$timestamp] $message\n";
-    file_put_contents($log_file, $full_message, FILE_APPEND);
-    echo $full_message;
+        global $log_file;
+        $timestamp = date('Y-m-d H:i:s');
+        $full_message = "[$timestamp] $message\n";
+        // Ensure log directory exists
+        $log_dir = dirname($log_file);
+        if (!is_dir($log_dir)) {
+            mkdir($log_dir, 0755, true);
+        }
+        // Ensure log file exists (create if missing)
+        if (!file_exists($log_file)) {
+            touch($log_file);
+        }
+        file_put_contents($log_file, $full_message, FILE_APPEND);
+        echo "<br>";
+        echo $full_message;
 }
 
 log_message("========== CRON: Vacation Balance Update Started ==========");
@@ -75,6 +85,31 @@ try {
         $old_balance = (float)$row['old_balance'];
 
         try {
+            // Check last_updated for this record
+            $check_sql = "SELECT last_updated FROM emp_vacation_balance WHERE id = ? LIMIT 1";
+            $check_stmt = mysqli_prepare($conDB, $check_sql);
+            if (!$check_stmt) {
+                log_message("  [emp_id: $emp_id] ERROR: Prepare failed for last_updated check - " . mysqli_error($conDB));
+                $error_count++;
+                continue;
+            }
+            mysqli_stmt_bind_param($check_stmt, 'i', $balance_record_id);
+            if (!mysqli_stmt_execute($check_stmt)) {
+                log_message("  [emp_id: $emp_id] ERROR: Execute failed for last_updated check - " . mysqli_stmt_error($check_stmt));
+                mysqli_stmt_close($check_stmt);
+                $error_count++;
+                continue;
+            }
+            $result_last = mysqli_stmt_get_result($check_stmt);
+            $last_row = mysqli_fetch_assoc($result_last);
+            mysqli_stmt_close($check_stmt);
+
+            $last_updated = $last_row ? $last_row['last_updated'] : null;
+            $today_str = date('Y-m-d');
+            if ($last_updated && substr($last_updated, 0, 10) === $today_str) {
+                log_message("  [emp_id: $emp_id] SKIPPED: Already updated today ($last_updated)");
+                continue;
+            }
 
             // Calculate live balance for this employee using VacationCalculator
             $live_balance = get_live_vacation_balance($conDB, $emp_id);
@@ -88,9 +123,10 @@ try {
             $live_balance = (float)$live_balance;
             $balance_changed = (abs($old_balance - $live_balance) > 0.001);
 
-            // Update the record with new balance
+            // Update the record with new balance and track when it was last updated
             $update_sql = "UPDATE `emp_vacation_balance` 
-                          SET `available_balance` = ? 
+                          SET `available_balance` = ?, 
+                              `last_updated` = NOW() 
                           WHERE `id` = ?";
 
             $stmt = mysqli_prepare($conDB, $update_sql);
