@@ -57,7 +57,7 @@ function getActivityLog($conDB) {
                   LEFT JOIN `employees` e ON ual.emp_id = e.emp_id
                   WHERE 1=1";
     
-    // Search filter
+    // Global search filter
     $searchQuery = "";
     if (!empty($searchValue)) {
         $searchValue = mysqli_real_escape_string($conDB, $searchValue);
@@ -72,17 +72,47 @@ function getActivityLog($conDB) {
         )";
     }
     
+    // Column-specific search filters
+    $columnSearchQuery = "";
+    if (isset($_POST['columns']) && is_array($_POST['columns'])) {
+        foreach ($_POST['columns'] as $index => $column) {
+            if (!empty($column['search']['value'])) {
+                $colSearchValue = mysqli_real_escape_string($conDB, $column['search']['value']);
+                
+                switch ($index) {
+                    case 1: // Username/Employee name
+                        $columnSearchQuery .= " AND (ual.username LIKE '%{$colSearchValue}%' OR e.name LIKE '%{$colSearchValue}%')";
+                        break;
+                    case 6: // Location - search in the formatted location string
+                        // Since location is formatted as "City, Region, Country", we need to match any part
+                        $columnSearchQuery .= " AND CONCAT_WS(', ', 
+                            NULLIF(ual.city, ''), 
+                            NULLIF(ual.region, ''), 
+                            NULLIF(ual.country, '')
+                        ) LIKE '%{$colSearchValue}%'";
+                        break;
+                    case 7: // Device type
+                        $columnSearchQuery .= " AND ual.device_type LIKE '%{$colSearchValue}%'";
+                        break;
+                    case 11: // Status
+                        $columnSearchQuery .= " AND ual.status = '{$colSearchValue}'";
+                        break;
+                }
+            }
+        }
+    }
+    
     // Total records
     $totalQuery = "SELECT COUNT(*) as total " . $baseQuery;
     $totalResult = mysqli_query($conDB, $totalQuery);
     $totalRecords = mysqli_fetch_assoc($totalResult)['total'];
     
-    // Filtered records
-    $filteredQuery = "SELECT COUNT(*) as total " . $baseQuery . $searchQuery;
+    // Filtered records (apply both global and column searches)
+    $filteredQuery = "SELECT COUNT(*) as total " . $baseQuery . $searchQuery . $columnSearchQuery;
     $filteredResult = mysqli_query($conDB, $filteredQuery);
     $filteredRecords = mysqli_fetch_assoc($filteredResult)['total'];
     
-    // Get data
+    // Get data (apply both global and column searches)
     $dataQuery = "SELECT 
                     ual.id,
                     ual.username,
@@ -101,7 +131,7 @@ function getActivityLog($conDB) {
                     ual.screen_width,
                     ual.screen_height,
                     ual.status
-                  " . $baseQuery . $searchQuery . "
+                  " . $baseQuery . $searchQuery . $columnSearchQuery . "
                   ORDER BY {$orderColumn} {$orderDir}
                   LIMIT {$start}, {$length}";
     

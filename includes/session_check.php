@@ -43,6 +43,10 @@ if (!isset($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
 // --- 2. Session Timeout Handling ---
 $timeout_duration = 3600; // 60 minutes
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_duration) {
+    // Log timeout activity before destroying session
+    require_once __DIR__ . '/user_activity_logger.php';
+    logUserLogout($conDB, 'timeout');
+    
     // Check if remember_me cookie exists
     if (isset($_COOKIE['remember_me'])) {
         // User has remember_me enabled, redirect to index for auto-login instead of destroying session

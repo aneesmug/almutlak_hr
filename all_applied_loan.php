@@ -39,8 +39,8 @@ $all_statuses = [
 ];
 
 $search_term = $_GET['search'] ?? '';
-$limit_options = [8, 12, 16];
-$perpage = 8;
+$limit_options = [12, 16, 20];
+$perpage = 12;
 $items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $perpage;
 $show_all = isset($_GET['limit']) && $_GET['limit'] == 'all';
 if ($show_all) {
@@ -105,11 +105,15 @@ if ($current_filter === 'my_pending') {
     $where_clauses[] = "(l.status != 'approved' OR l.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY))";
 }
 
+// Exclude LEGACY records by default, but include them when searching by employee name
 if (!empty($search_term)) {
     $where_clauses[] = "(e.name LIKE ? OR l.emp_id LIKE ? OR l.inv_no LIKE ?)";
     $search_param = "%{$search_term}%";
     array_push($params, $search_param, $search_param, $search_param);
     $types .= "sss";
+} else {
+    // Hide LEGACY records when not searching
+    $where_clauses[] = "l.inv_no NOT LIKE 'LEGACY-%'";
 }
 
 // Enforce department scoping for non-privileged users
@@ -201,13 +205,21 @@ if ($total_items > 0) {
     $stmt->close();
 }
 
-// Unfiltered total respects department visibility
+// Unfiltered total respects department visibility and excludes LEGACY records when not searching
 if ($can_see_all_depts) {
-    $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_loan";
+    if (empty($search_term)) {
+        $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_loan WHERE inv_no NOT LIKE 'LEGACY-%'";
+    } else {
+        $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_loan";
+    }
     $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
     $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
 } else {
-    $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    if (empty($search_term)) {
+        $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?)) AND l.inv_no NOT LIKE 'LEGACY-%'";
+    } else {
+        $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    }
     if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
         $stmt_unf->bind_param('iii', $user_dept, $request_type_id, $empid);
         $stmt_unf->execute();
@@ -310,13 +322,14 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                         <div class="row">
                             <div class="col-xl-12">
                                 <div class="card-box">
+                                    <?php if($is_system_admin || $isHR_Payroll): ?>
                                     <div class="d-flex justify-content-between align-items-center m-b-30">
                                         <h4 class="header-title m-t-0 m-b-0"><?=__('loan_approval_center')?></h4>
-                                        <a href="add_manual_loan.php" class="btn btn-success waves-effect waves-light">
+                                        <a href="upload_loan_history.php" class="btn btn-success waves-effect waves-light">
                                             <i class="fa fa-plus"></i> <?=__('add_manual_loan_history')?>
                                         </a>
                                     </div>
-
+                                    <?php endif; ?>
                                     <div class="row filter-controls mx-auto mb-5">
                                         <div class="col-md-6 mb-3 mb-md-0">
                                             <div class="form-group">
@@ -351,7 +364,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                     <?php if (!empty($requests)): ?>
                                         <div class="row">
                                             <?php foreach ($requests as $loan): ?>
-                                                <div class="col-lg-4 col-md-6 mb-4">
+                                                <div class="col-lg-3 col-md-6 mb-3">
                                                     <div class="card request-card h-100">
                                                         <div class="card-header">
                                                             <?=($loan['employee_name']); ?>

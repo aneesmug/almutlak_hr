@@ -1948,6 +1948,63 @@ if (!function_exists('handle_approval_action')) {
                         }
                         // --- [END FIX] ---
 
+                        // --- [NEW] NOTIFY FINANCE MANAGER FOR SMART REQUESTS ---
+                        // Finance Manager should ALWAYS be notified when smart request reaches final approval
+                        // so they can assign a payer, regardless of whether they were in the approval chain
+                        if ($request_type === 'smart_request') {
+                            // Get Finance Manager (Department 2)
+                            $finance_manager_details = getDeptManager($conDB, 2);
+                            
+                            if ($finance_manager_details && !empty($finance_manager_details['email'])) {
+                                // Check if Finance Manager was already in the approval chain (to avoid duplicate notification)
+                                $fm_in_chain = false;
+                                $check_fm_sql = "SELECT COUNT(*) as cnt FROM `request_approvers` 
+                                                WHERE `request_inv_no` = ? 
+                                                AND `request_type_id` = ? 
+                                                AND `approver_id` = ?";
+                                $stmt_check_fm = mysqli_prepare($conDB, $check_fm_sql);
+                                if ($stmt_check_fm) {
+                                    mysqli_stmt_bind_param($stmt_check_fm, "sii", $inv_no_safe, $request_type_id, $finance_manager_details['emp_id']);
+                                    if (mysqli_stmt_execute($stmt_check_fm)) {
+                                        $res_fm = mysqli_stmt_get_result($stmt_check_fm);
+                                        if ($row_fm = mysqli_fetch_assoc($res_fm)) {
+                                            $fm_in_chain = ((int)$row_fm['cnt'] > 0);
+                                        }
+                                        if ($res_fm) mysqli_free_result($res_fm);
+                                    }
+                                    mysqli_stmt_close($stmt_check_fm);
+                                }
+                                
+                                // Only send notification if Finance Manager was NOT already notified as an approver
+                                if (!$fm_in_chain) {
+                                    $fm_notification_title = "Smart Request Requires Payer Assignment - $inv_no_safe";
+                                    $fm_notification_message = "Smart Request $inv_no_safe has been approved and requires you to assign a payer.";
+                                    $fm_notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
+                                    
+                                    // Send browser notification
+                                    create_browser_notification($conDB, $finance_manager_details['emp_id'], $fm_notification_title, $fm_notification_message, $fm_notification_url);
+                                    
+                                    // Send email notification
+                                    $fm_template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $finance_manager_details['name']);
+                                    if ($fm_template_data) {
+                                        // Customize message for Finance Manager
+                                        $fm_template_data['EMAIL_MESSAGE'] = "This request has been fully approved and requires you to assign a payer from your department.";
+                                        send_approval_email($conDB, $finance_manager_details['email'], $finance_manager_details['name'], $fm_notification_title, $request_type, $fm_template_data);
+                                        error_log("Finance Manager notified for payer assignment: {$finance_manager_details['email']} for request $inv_no_safe");
+                                    } else {
+                                        // Fallback email
+                                        $fm_email_body = "Dear " . htmlspecialchars($finance_manager_details['name']) . ",<br><br>Smart Request <b>$inv_no_safe</b> has been fully approved and requires you to assign a payer from your department.<br><br>Please review the request and assign a payer.";
+                                        send_approval_email($conDB, $finance_manager_details['email'], $finance_manager_details['name'], $fm_notification_title, $request_type, ['APPROVER_NAME' => $finance_manager_details['name'], 'REQUEST_ID' => $inv_no_safe, 'EMAIL_MESSAGE' => $fm_email_body]);
+                                    }
+                                } else {
+                                    error_log("Finance Manager was already in approval chain for $inv_no_safe - skipping duplicate notification");
+                                }
+                            } else {
+                                error_log("Could not find Finance Manager details to notify for payer assignment - request $inv_no_safe");
+                            }
+                        }
+                        // --- [END FINANCE MANAGER NOTIFICATION] ---
+
 
                         // --- Finance Manager Payer Assignment (if smart_request) ---
                         // [This logic is specific to smart_request, but safe to keep]

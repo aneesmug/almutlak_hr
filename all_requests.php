@@ -267,13 +267,19 @@ MODIFICATION SUMMARY (Previous Version):
                             searchable: false
                         },
                         {
-                            targets: 7, // Assuming Status is the 8th column (index 7)
+                            targets: 7, // Status column
                             render: function ( data, type, row, meta ) {
-                                // Add logic to show level if pending_approval
                                 let title = (data in statusObj) ? statusObj[data].title : data;
                                 let className = (data in statusObj) ? statusObj[data].class : 'badge-secondary';
-                                if (data === 'pending_approval' && row.current_approval_level) {
-                                    title += ' (' + __('level') + ' ' + row.current_approval_level + ')';
+                                if (data === 'pending_approval') {
+                                    // Differentiate current vs upcoming approvals for user
+                                    if (row.is_current_approver === 1) {
+                                        title = title + ' (' + __('level') + ' ' + row.current_approval_level + ')';
+                                    } else if (row.user_approval_level && row.user_approval_level > row.current_approval_level) {
+                                        // Upcoming approval for this user
+                                        title = title + ' (' + __('level') + ' ' + row.current_approval_level + ' → ' + row.user_approval_level + ' upcoming)';
+                                        className = 'badge-secondary'; // Dim color for upcoming
+                                    }
                                 }
                                 return `<span class="badge ${className}" text-capitalized>${title}</span>`;
                             }
@@ -303,9 +309,11 @@ MODIFICATION SUMMARY (Previous Version):
                     { data: 'department' },
                     { data: 'prep_by' },
                     { data: 'created_at' },
-                    { data: 'status' }, // Should map to 'current_status' in smartRequestAjaxTbl.php
+                    { data: 'status' },
                     { data: 'action' },
-                    { data: 'current_approval_level', visible: false, searchable: false } // Add level for rendering logic
+                    { data: 'current_approval_level', visible: false, searchable: false },
+                    { data: 'user_approval_level', visible: false, searchable: false },
+                    { data: 'is_current_approver', visible: false, searchable: false }
                 ],
                 language: {
                     search: `<span>${__('search')}:</span> _INPUT_`,

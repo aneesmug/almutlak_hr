@@ -33,6 +33,100 @@ if (isset($_POST['process_payment'])) {
             if($insert_payment){
                 // Add a status log
                 mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES ('$empid', '$inv_no_pay', '$userwel', 'paid', 'payment_processed.')");
+                
+                // Send email notification to request creator with payment proof
+                require_once __DIR__ . '/includes/helper_functions.php';
+                require_once __DIR__ . '/includes/vendor/autoload.php';
+                
+                // Get request details and creator info
+                $request_query = mysqli_query($conDB, "SELECT `emp_id`, `sub_title`, `prep_by` FROM `smart_request` WHERE `inv_no` = '" . escape_string($inv_no_pay) . "' LIMIT 1");
+                if ($request_query && mysqli_num_rows($request_query) > 0) {
+                    $request_data = mysqli_fetch_assoc($request_query);
+                    $creator_id = $request_data['emp_id'];
+                    $request_title = $request_data['sub_title'];
+                    
+                    // Get creator email
+                    $creator_details = getEmployeeDetails($conDB, $creator_id);
+                    if ($creator_details && !empty($creator_details['email'])) {
+                        try {
+                            $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+                            
+                            // SMTP settings
+                            $smtp_host = get_setting($conDB, 'smtp_host');
+                            $smtp_port = (int)get_setting($conDB, 'smtp_port');
+                            $smtp_user = get_setting($conDB, 'smtp_user');
+                            $smtp_pass = get_setting($conDB, 'smtp_pass');
+                            $smtp_from_email = get_setting($conDB, 'from_email');
+                            $smtp_from_name = get_setting($conDB, 'from_name', 'Al Mutlak HR System');
+                            $smtp_secure = get_setting($conDB, 'smtp_encryption');
+                            
+                            $mail->isSMTP();
+                            $mail->Host = $smtp_host;
+                            $mail->SMTPAuth = true;
+                            $mail->Username = $smtp_user;
+                            $mail->Password = $smtp_pass;
+                            
+                            switch (strtolower($smtp_secure)) {
+                                case 'tls':
+                                    $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                                    break;
+                                case 'ssl':
+                                    $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+                                    break;
+                                default:
+                                    $mail->SMTPSecure = false;
+                                    break;
+                            }
+                            
+                            $mail->Port = $smtp_port;
+                            $mail->CharSet = 'UTF-8';
+                            $mail->setFrom($smtp_from_email, $smtp_from_name);
+                            $mail->addAddress($creator_details['email'], $creator_details['name']);
+                            
+                            // Attach payment proof
+                            if (file_exists($target_file)) {
+                                $mail->addAttachment($target_file, $attachment_name);
+                            }
+                            
+                            $mail->isHTML(true);
+                            $mail->Subject = 'Payment Processed Successfully - ' . $inv_no_pay;
+                            
+                            // Prepare template data for payment notification
+                            $template_data = [
+                                'APPROVER_NAME' => $creator_details['name'],
+                                'REQUEST_ID' => $inv_no_pay,
+                                'REQUEST_TITLE' => $request_title,
+                                'SUBMITTED_BY' => $request_data['prep_by'],
+                                'DEPARTMENT' => '', // Not critical for payment notification
+                                'VIEW_REQUEST_URL' => get_base_url($conDB) . '/open_request.php?id=' . urlencode($inv_no_pay),
+                                'LOGO_URL' => get_base_url($conDB) . '/' . (get_setting($conDB, 'logo') ?? 'assets/images/logo.png'),
+                                'EMAIL_MESSAGE' => "Your smart request has been <strong style='color: #28a745;'>paid successfully</strong>. Please find the payment details below:<br><br>
+                                    <strong>Paid Amount:</strong> SAR " . number_format($paid_amount, 2) . "<br>
+                                    <strong>Paid By:</strong> " . htmlspecialchars($userwel) . "<br>
+                                    <strong>Payment Note:</strong> " . htmlspecialchars($payment_note) . "<br><br>
+                                    The payment proof is attached to this email for your records."
+                            ];
+                            
+                            // Use the smart request email template
+                            $email_html = load_email_template('smart_request', $template_data);
+                            
+                            if ($email_html !== false) {
+                                $mail->Body = $email_html;
+                            } else {
+                                // Fallback to plain text
+                                $mail->Body = "Dear " . htmlspecialchars($creator_details['name']) . ",\n\nYour smart request has been paid successfully.\n\nRequest ID: $inv_no_pay\nRequest Title: $request_title\nPaid Amount: SAR " . number_format($paid_amount, 2) . "\nPaid By: $userwel\nPayment Note: $payment_note\n\nThe payment proof is attached to this email.";
+                            }
+                            
+                            $mail->AltBody = "Payment Processed Successfully\n\nRequest ID: $inv_no_pay\nRequest Title: $request_title\nPaid Amount: SAR " . number_format($paid_amount, 2) . "\nPaid By: $userwel\nPayment Note: $payment_note\n\nThe payment proof is attached to this email.";
+                            
+                            $mail->send();
+                            error_log("Payment notification email sent to creator (emp_id: $creator_id) for request: $inv_no_pay");
+                        } catch (Exception $e) {
+                            error_log("Failed to send payment notification email for $inv_no_pay: " . $mail->ErrorInfo);
+                        }
+                    }
+                }
+                
                 $response = ['status' => 'success', 'message' => __('payment_processed_successfully')];
             } else {
                 // Optionally remove the uploaded file if DB insert fails
@@ -357,15 +451,38 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
     if (!empty($next_approver_email) || !empty($cc_hr_employees)) {
         $mail = new PHPMailer(true);
         try {
+            // Fetch SMTP settings (consistent with helper_functions.php)
+            $smtp_host = get_setting($conDB, 'smtp_host');
+            $smtp_port = (int)get_setting($conDB, 'smtp_port');
+            $smtp_user = get_setting($conDB, 'smtp_user');
+            $smtp_pass = get_setting($conDB, 'smtp_pass');
+            $smtp_from_email = get_setting($conDB, 'from_email');
+            $smtp_from_name = get_setting($conDB, 'from_name', 'Al Mutlak HR System');
+            $smtp_secure = get_setting($conDB, 'smtp_encryption');
+
+            // Server settings
             $mail->isSMTP();
-            $mail->Host = get_setting($conDB, 'smtp_host');
+            $mail->Host = $smtp_host;
             $mail->SMTPAuth = true;
-            $mail->Username = get_setting($conDB, 'smtp_user');
-            $mail->Password = get_setting($conDB, 'smtp_pass');
-            $mail->SMTPSecure = get_setting($conDB, 'smtp_secure');
-            $mail->Port = get_setting($conDB, 'smtp_port');
+            $mail->Username = $smtp_user;
+            $mail->Password = $smtp_pass;
+            
+            // Set encryption based on setting (consistent with helper_functions.php)
+            switch (strtolower($smtp_secure)) {
+                case 'tls':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    break;
+                case 'ssl':
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    break;
+                default:
+                    $mail->SMTPSecure = false;
+                    break;
+            }
+            
+            $mail->Port = $smtp_port;
             $mail->CharSet = 'UTF-8';
-            $mail->setFrom(get_setting($conDB, 'smtp_user'), get_setting($conDB, 'application_name'));
+            $mail->setFrom($smtp_from_email, $smtp_from_name);
 
             if (!empty($next_approver_email)) {
                 $mail->addAddress($next_approver_email, $next_approver_name);
@@ -399,47 +516,48 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
             }
 
             $mail->isHTML(true);
-            $mail->Subject = $_POST['email_subject'] ?? ('Smart Request Approved by HR - ' . ($userwelext ?? $userwel) . " - " . $invnoget);
-
-            $email_template_path = './includes/PHPMailerMaster/email_contant_body_redesigned.php';
-            if (file_exists($email_template_path)) {
-                 $bodycus = file_get_contents($email_template_path) ?: '';
-                 $bodycus = (string)$bodycus;
-                 $bodycus = preg_replace('/\\\\/', '', $bodycus);
-
-                 $userwel_str = $userwelext ?? $userwel ?? '';
-                 $sub_title_get_str = $sub_title_get ?? '';
-                 $invnoget_str = $invnoget ?? '';
-                 $dept_str = $usrdeptnme ?? $dep_nme_get ?? '';
-
-                 $bodycus = str_replace('$userwelext', $userwel_str, $bodycus);
-                 $bodycus = str_replace('$sub_title_get', $sub_title_get_str, $bodycus);
-                 $bodycus = str_replace('$invnoget', $invnoget_str, $bodycus);
-                 $bodycus = str_replace('$dept', $dept_str, $bodycus);
-
-                 if (isset($_POST['email_body_line'])) {
-                    $bodycus = str_replace('A new request is waiting for your approval.', $_POST['email_body_line'] ?? '', $bodycus);
-                 } else if (!empty($cc_hr_employees)) {
-                     $bodycus = str_replace('A new request is waiting for your approval.', 'This request has been approved by HR.', $bodycus);
-                 }
-                 $mail->Body = $bodycus;
+            
+            // Determine email subject based on context
+            $default_subject = "Smart Request Notification - " . ($invnoget ?? '');
+            if (isset($_POST['email_subject'])) {
+                $mail->Subject = $_POST['email_subject'];
+            } elseif (!empty($cc_hr_employees) && empty($next_approver_email)) {
+                $mail->Subject = "Smart Request Approved by HR - " . ($invnoget ?? '');
+            } elseif (!empty($next_approver_email)) {
+                $mail->Subject = "Smart Request Requires Your Approval - " . ($invnoget ?? '');
             } else {
-                // Fallback text email
-                $default_subject = "Smart Request Notification";
+                $mail->Subject = $default_subject;
+            }
+
+            // Prepare template data for the new email template
+            $template_data = [
+                'APPROVER_NAME' => $next_approver_name ?? 'Recipient',
+                'REQUEST_ID' => $invnoget ?? '',
+                'REQUEST_TITLE' => $sub_title_get ?? '',
+                'SUBMITTED_BY' => $userwelext ?? $userwel ?? '',
+                'DEPARTMENT' => $usrdeptnme ?? $dep_nme_get ?? '',
+                'VIEW_REQUEST_URL' => get_base_url($conDB) . '/open_request.php?id=' . urlencode($invnoget ?? ''),
+                'LOGO_URL' => get_base_url($conDB) . '/' . (get_setting($conDB, 'logo') ?? 'assets/images/logo.png')
+            ];
+
+            // Use the new HTML email template
+            require_once __DIR__ . '/includes/helper_functions.php';
+            $email_html = load_email_template('smart_request', $template_data);
+            
+            if ($email_html !== false) {
+                $mail->Body = $email_html;
+            } else {
+                // Fallback to plain text if template fails
                 $default_body_line = "A Smart Request requires attention.";
-                 if (isset($_POST['email_body_line'])) {
-                     $default_body_line = $_POST['email_body_line'] ?? '';
-                     $default_subject = $_POST['email_subject'] ?? $default_subject;
-                 } elseif (!empty($cc_hr_employees) && empty($next_approver_email)) {
-                     $default_body_line = "This request (" . ($invnoget ?? '') . ": " . ($sub_title_get ?? '') . ") has been approved by HR.";
-                     $default_subject = "Smart Request Approved by HR - " . ($invnoget ?? '');
-                 } elseif (!empty($next_approver_email)) {
-                     $default_body_line = "A new Smart Request (" . ($invnoget ?? '') . ": " . ($sub_title_get ?? '') . ") requires your approval.";
-                      $default_subject = "Smart Request for your Approval - " . ($invnoget ?? '');
-                 }
-                 $mail->Subject = $default_subject;
-                 $mail->Body = "Dear " . ($next_approver_name ?? 'Recipient') . ",\n\n" . $default_body_line . "\n\nPrepared by: " . ($userwelext ?? $userwel ?? '') . "\nDepartment: " . ($usrdeptnme ?? $dep_nme_get ?? '');
-                error_log("Email template not found: " . $email_template_path);
+                if (isset($_POST['email_body_line'])) {
+                    $default_body_line = $_POST['email_body_line'] ?? '';
+                } elseif (!empty($cc_hr_employees) && empty($next_approver_email)) {
+                    $default_body_line = "This request (" . ($invnoget ?? '') . ": " . ($sub_title_get ?? '') . ") has been approved by HR.";
+                } elseif (!empty($next_approver_email)) {
+                    $default_body_line = "A new Smart Request (" . ($invnoget ?? '') . ": " . ($sub_title_get ?? '') . ") requires your approval.";
+                }
+                $mail->Body = "Dear " . ($next_approver_name ?? 'Recipient') . ",\n\n" . $default_body_line . "\n\nRequest ID: " . ($invnoget ?? '') . "\nTitle: " . ($sub_title_get ?? '') . "\nPrepared by: " . ($userwelext ?? $userwel ?? '') . "\nDepartment: " . ($usrdeptnme ?? $dep_nme_get ?? '') . "\n\nView Request: " . get_base_url($conDB) . '/open_request.php?id=' . urlencode($invnoget ?? '');
+                error_log("Smart Request: Email template load failed, using plain text fallback");
             }
 
             if (!empty($mail->getToAddresses()) || !empty($mail->getCcAddresses())) {
@@ -458,54 +576,6 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
 
     // Redirect only if $msg is not set (meaning no errors occurred during POST handling)
     if (empty($msg)) {
-         // --- Check if Finance Manager was explicitly selected ---
-         $finance_manager_selected = false;
-         if (isset($_POST['approvers'])) {
-             foreach ($_POST['approvers'] as $approver_id) {
-                 // Fetch approver's department (assuming dept 2 is Finance)
-                 $app_query = mysqli_query($conDB, "SELECT dept FROM employees WHERE emp_id = " . (int)$approver_id);
-                 if ($app_query && $app_row = mysqli_fetch_assoc($app_query)) {
-                     if ($app_row['dept'] == 2) { // Assuming 2 is Finance Dept ID
-                         $finance_manager_selected = true;
-                         break;
-                     }
-                 }
-             }
-         }
-
-         // --- If Finance Manager was NOT selected, send email ---
-         if (!$finance_manager_selected && $current_status_get == 'draft' && isset($_POST['submit'])) { // Only on initial submission
-              require_once __DIR__ . '/includes/helper_functions.php'; // Ensure function is loaded
-             $finance_manager_details = getDeptManager($conDB, 2); // Get Finance Manager (Dept 2)
-             if ($finance_manager_details && !empty($finance_manager_details['email'])) {
-                 $mail_fm = new PHPMailer(true);
-                 try {
-                     // (Setup PHPMailer as above - Host, Auth, From etc.)
-                     $mail_fm->isSMTP();
-                     $mail_fm->Host = get_setting($conDB, 'smtp_host');
-                     $mail_fm->SMTPAuth = true;
-                     $mail_fm->Username = get_setting($conDB, 'smtp_user');
-                     $mail_fm->Password = get_setting($conDB, 'smtp_pass');
-                     $mail_fm->SMTPSecure = get_setting($conDB, 'smtp_secure');
-                     $mail_fm->Port = get_setting($conDB, 'smtp_port');
-                     $mail_fm->CharSet = 'UTF-8';
-                     $mail_fm->setFrom(get_setting($conDB, 'smtp_user'), get_setting($conDB, 'application_name'));
-                     $mail_fm->addAddress($finance_manager_details['email'], $finance_manager_details['name']);
-                     $mail_fm->isHTML(true);
-                     $mail_fm->Subject = 'Smart Request Requires Payer Assignment - ' . $inv_no_po;
-                     // Simple Body - You can use the template logic if preferred
-                     $mail_fm->Body = "Dear " . $finance_manager_details['name'] . ",<br><br>Smart Request <b>" . $inv_no_po . "</b> (" . ($sub_title_get ?? '') . ") has reached the approved stage and requires a payer to be assigned.<br><br>Please review the request.<br><br>Prepared by: " . ($prep_by_get ?? '') . "<br>Department: " . ($dep_nme_get ?? '');
-                     $mail_fm->send();
-                     error_log("Payer assignment notification sent to Finance Manager for InvNo: " . $inv_no_po);
-                 } catch (Exception $e) {
-                     error_log("Mailer Error (Finance Manager Payer Assignment) for InvNo: " . $inv_no_po . " - " . $mail_fm->ErrorInfo);
-                 }
-             } else {
-                 error_log("Could not find Finance Manager details to send payer assignment notification for InvNo: " . $inv_no_po);
-             }
-         }
-         // --- End Finance Manager Email Logic ---
-
          echo "<script>window.location.href = 'all_requests.php?action=success';</script>";
          exit;
     }
@@ -615,6 +685,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <!-- Sweet Alert -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>

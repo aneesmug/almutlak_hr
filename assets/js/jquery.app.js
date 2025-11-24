@@ -1633,7 +1633,7 @@ $(document).on('click', '.smt_attachment', function (e) {
                     '<input name="file" type="file" multiple />'+
                 '</div>'+
             '</form>',
-        icon: 'info',
+        // icon: 'info',
         showCancelButton: true,
         cancelButtonColor: '#d33',
         cancelButtonText: __('cancel'),

@@ -1,39 +1,5 @@
 <?php
-/****************************************************************
- * MODIFICATION SUMMARY:
- * 1. ENTIRELY REBUILT for Chain Approval System.
- * 2. REMOVED old status logic (hr_assistant_approved, it_pending, etc.).
- * 3. ADDED new filters: 'my_pending', 'approved', 'rejected', 'my_dept', 'all'.
- * 4. 'my_pending' is the new default for managers, querying `request_approvers`.
- * 5. SQL QUERY now joins `request_approvers` and `employees` (as `approver_emp`) to find the current pending approver.
- * 6. STATUS DISPLAY is now dynamic: "Pending with [Approver Name]", "Approved", or "Rejected".
- * 7. BUTTON VISIBILITY is simplified: Approve/Reject buttons only show if the request is pending with the logged-in user.
- * 8. JAVASCRIPT `approveRequest()` modal now has conditional logic:
- * - Simple Leave with Supervisor: Level 1 (Supervisor/Manager) → HR Senior BP
- * - Simple Leave without Supervisor: Level 1 (Dept Manager) → HR Senior BP
- * - Annual Vacation: Level 1 (Manager) → HR Assistant → Full Chain
- * 9. JAVASCRIPT `sendApproval()` now sends all conditional data (chain, payments) to `ajaxVacation.php`.
- * 10. APPLIED `parseName()` to all employee names.
- * 11. FIXED all bugs (numbering, file paths) and set modal width.
- * 12. [FIXED] Updated "Payments" button logic to be visible to HR Assistants ('assistant')
- * *after* a request is fully approved, matching the requested workflow.
- * 13. [FIXED] Corrected JS variable for HR Assistant role from 'HR_Assistant' to 'assistant'.
- * 14. [FIXED] Updated JS variable pass to use `$user_type` from session_check.php.
- * 15. [FIXED] Updated PHP "Payments" button logic to use `$isHR`, `$is_system_admin`, 
- * and `$isDeptHr` from session_check.php for correct role checking.
- * 16. [NEW] Payment button is now hidden if `ticket_pay` or `permit_fee` have been entered.
- * 17. [NEW] Added 30-day filter for approved records: By default, only shows approved 
- * records from the last 30 days. When searching by name/emp_id, shows ALL records 
- * for that employee regardless of date. This improves page performance and focuses 
- * on recent approvals.
- * 18. [NEW] SUPERVISOR-BASED APPROVAL: Updated to support supervisor assignments.
- * - Query now includes `supervisor_id` and supervisor details from employees table
- * - Approval modal differentiates between Simple Leave and Annual Vacation flows
- * - Simple Leave: Supervisor/Manager → HR Senior BP (2-level)
- * - Annual Vacation: Manager → HR Assistant → Custom Chain (multi-level)
- * - Added `get_hr_senior_bp` AJAX handler for loading HR Senior BP users
- * - Pass `hasSupervisor` and `isSimpleLeave` flags to JavaScript for dynamic logic
- ****************************************************************/
+
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 // $user_type, $empid, $user_dept, $is_system_admin, $isHR, $isDeptHr are available from session_check.php
@@ -159,16 +125,16 @@ elseif ($current_filter === 'all' && empty($search_term)) {
     $where_clauses[] = "(v.current_status != 'approved' OR v.created_at >= DATE_SUB(CURDATE(), INTERVAL 15 DAY))";
 }
 
-// Add search term if provided
+// Add search term if provided and exclude LEGACY records appropriately
 if (!empty($search_term)) {
     $where_clauses[] = "(e.name LIKE ? OR v.emp_id LIKE ? OR v.request_inv_no LIKE ?)";
     $search_param = "%{$search_term}%";
     array_push($params, $search_param, $search_param, $search_param);
     $types .= "sss";
+} else {
+    // Exclude legacy-imported requests only when not searching
+    $where_clauses[] = "v.request_inv_no NOT LIKE 'LEGACY-%'";
 }
-
-// Exclude legacy-imported requests by invoice id prefix
-$where_clauses[] = "v.request_inv_no NOT LIKE 'LEGACY-%'";
 
 // Enforce department scoping: Only HR and System Admin can see all departments.
 // Everyone else is restricted to their own department for history views.
@@ -284,14 +250,22 @@ if ($total_items > 0) {
     $stmt->close();
 }
 
-// Get the total unfiltered count (respect department visibility rules)
+// Get the total unfiltered count (respect department visibility rules and search context)
 if ($can_see_all_depts) {
-    $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_vacation WHERE request_inv_no NOT LIKE 'LEGACY-%'";
+    if (empty($search_term)) {
+        $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_vacation WHERE request_inv_no NOT LIKE 'LEGACY-%'";
+    } else {
+        $unfiltered_sql = "SELECT COUNT(id) as total FROM emp_vacation";
+    }
     $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
     $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
 } else {
-    // Respect the same scoping (dept OR in approval chain) and exclude LEGACY invoices
-    $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?)) AND v.request_inv_no NOT LIKE 'LEGACY-%'";
+    // Respect the same scoping (dept OR in approval chain) and exclude LEGACY invoices when not searching
+    if (empty($search_term)) {
+        $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?)) AND v.request_inv_no NOT LIKE 'LEGACY-%'";
+    } else {
+        $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    }
     if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
         $stmt_unf->bind_param('iii', $user_dept, $request_type_id, $empid);
         $stmt_unf->execute();
@@ -550,8 +524,13 @@ if ($can_see_all_depts) {
                                                                             $status_text = __('rejected');
                                                                             $status_icon = "<i class='fa fa-solid fa-times text-white'></i>";
                                                                             break;
+                                                                        case 'completed':
+                                                                            $badge_class = 'primary';
+                                                                            $status_text = __('completed');
+                                                                            $status_icon = "<i class='fa fa-solid fa-badge-check text-white'></i>";
+                                                                            break;
                                                                         default:
-                                                                            $status_text = htmlspecialchars($req['current_status']);
+                                                                            $status_text = __($req['current_status']);
                                                                             $status_icon = "";
                                                                             break;
                                                                     }

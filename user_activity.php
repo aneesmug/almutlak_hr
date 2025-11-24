@@ -244,10 +244,22 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
 
                                     <div class="d-flex justify-content-between align-items-center row pb-2 gap-3 gap-md-0">
-                                        <div class="col-md-3 user_filter mb-2"></div>
-                                        <div class="col-md-3 status_filter mb-2"></div>
-                                        <div class="col-md-3 device_filter mb-2"></div>
-                                        <div class="col-md-3 location_filter mb-2"></div>
+                                        <div class="col-md-3 mb-2">
+                                            <label class="font-weight-bold mb-1"><?= __('filter_by_user', 'Filter by User') ?>:</label>
+                                            <div class="user_filter"></div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label class="font-weight-bold mb-1"><?= __('filter_by_status', 'Filter by Status') ?>:</label>
+                                            <div class="status_filter"></div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label class="font-weight-bold mb-1"><?= __('filter_by_device', 'Filter by Device') ?>:</label>
+                                            <div class="device_filter"></div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label class="font-weight-bold mb-1"><?= __('filter_by_location', 'Filter by Location') ?>:</label>
+                                            <div class="location_filter"></div>
+                                        </div>
                                     </div>
 
                                     <div class="table-responsive">
@@ -376,6 +388,21 @@ if (mysqli_num_rows($query) == 1) {
                     buttons: buttonConfig,
                     order: [[0, "desc"]],
                     pageLength: 25,
+                    searchCols: [
+                        null, // ID
+                        null, // Username
+                        null, // Login time
+                        null, // Logout time
+                        null, // Duration
+                        null, // IP
+                        null, // Location
+                        null, // Device
+                        null, // Browser
+                        null, // OS
+                        null, // Screen
+                        null, // Status
+                        null  // Action
+                    ],
                     columnDefs: [
                         {
                             targets: 0,
@@ -411,50 +438,51 @@ if (mysqli_num_rows($query) == 1) {
                         }
                     ],
                     initComplete: function() {
+                        var api = this.api();
                         var selectOpt = `<select class="custom-select form-select input-sm"><option value=""> All </option></select>`;
                         
-                        // User filter
-                        this.api().columns(1).every(function() {
+                        // User filter (column 1)
+                        api.columns(1).every(function() {
                             var column = this;
                             var select = $(selectOpt).appendTo('.user_filter').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val ? '^' + val + '$' : '', true, false).draw();
+                                var val = $(this).val();
+                                column.search(val).draw();
                             });
                             column.data().unique().sort().each(function(d, j) {
                                 select.append(`<option value="${d}">${d}</option>`);
                             });
                         });
 
-                        // Status filter
-                        this.api().columns(11).every(function() {
+                        // Status filter (column 11)
+                        api.columns(11).every(function() {
                             var column = this;
                             var select = $(selectOpt).appendTo('.status_filter').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val ? '^' + val + '$' : '', true, false).draw();
+                                var val = $(this).val();
+                                column.search(val).draw();
                             });
                             column.data().unique().sort().each(function(d, j) {
-                                select.append(`<option value="${statusObj[d].title}">${statusObj[d].title}</option>`);
+                                select.append(`<option value="${d}">${statusObj[d].title}</option>`);
                             });
                         });
 
-                        // Device filter
-                        this.api().columns(7).every(function() {
+                        // Device filter (column 7)
+                        api.columns(7).every(function() {
                             var column = this;
                             var select = $(selectOpt).appendTo('.device_filter').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val ? '^' + val + '$' : '', true, false).draw();
+                                var val = $(this).val();
+                                column.search(val).draw();
                             });
                             column.data().unique().sort().each(function(d, j) {
                                 if (d) select.append(`<option value="${d}">${d}</option>`);
                             });
                         });
 
-                        // Location filter
-                        this.api().columns(6).every(function() {
+                        // Location filter (column 6)
+                        api.columns(6).every(function() {
                             var column = this;
                             var select = $(selectOpt).appendTo('.location_filter').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val, true, false).draw();
+                                var val = $(this).val();
+                                column.search(val).draw();
                             });
                             var seen = {};
                             column.data().unique().sort().each(function(d, j) {
