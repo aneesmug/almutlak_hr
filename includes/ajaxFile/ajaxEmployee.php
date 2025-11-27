@@ -994,8 +994,8 @@ elseif($ajaxType == 'unassign_asset') {
     $data = $_POST['image'];
     $id = $_POST['id'];
     $emp_id = $_POST['emp_id'];
-    $emptype = $_POST['emptype'];
-    $emp_name = str_replace(' ','',$_POST['emp_name']);
+    $emptype = isset($_POST['emptype']) ? $_POST['emptype'] : '';
+    $emp_name = isset($_POST['emp_name']) ? str_replace(' ', '', $_POST['emp_name']) : '';
     list($type, $data) = explode(';', $data);
     list(, $data) = explode(',', $data);
     $data = base64_decode($data);
@@ -1004,30 +1004,149 @@ elseif($ajaxType == 'unassign_asset') {
     $filepathup = "./assets/emp_pics/";
     $imagenameu = $emp_id."".$id."".$emp_name."".$imageName;
     if (empty($data) || (isset($data['error']) && $data['error'] == UPLOAD_ERR_NO_FILE)) {
-        echo "No Picture upload";
+        send_json_response("Error", "No Picture uploaded", "error");
     } else {
-        file_put_contents($filepath . $emp_id."".$id."".$emp_name."".$imageName , $data);
+        // Save the file
+        $file_saved = file_put_contents($filepath . $emp_id."".$id."".$emp_name."".$imageName , $data);
+        
+        if (!$file_saved) {
+            send_json_response("Error", "Failed to save image file", "error");
+            exit;
+        }
+        
+        // Update database based on emptype
         if ($emptype == 'employee') {
             try {
                 $stmt = $pdo->prepare("INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES (:emp_id, 'Profile Picture', :filepath)");
                 $stmt->execute([':emp_id' => $emp_id, ':filepath' => $filepathup . $imagenameu]);
+                send_json_response("Success!", "Image Uploaded Successfully.", "success");
             } catch(Exception $e) {
                 send_json_response("Database Error", "The catch block is working. The error was: " . $e->getMessage(), "error");
             }
         } else {
+            // Direct update to employees table
             try {
                 $stmt = $pdo->prepare("UPDATE `employees` SET `avatar` = :avatar WHERE `id` = :id AND `emp_id` = :emp_id");
                 $stmt->execute([':avatar' => $filepathup . $imagenameu, ':id' => $id, ':emp_id' => $emp_id]);
+                send_json_response("Success!", "Image Uploaded Successfully.", "success");
             } catch(Exception $e) {
                 send_json_response("Database Error", "The catch block is working. The error was: " . $e->getMessage(), "error");
             }
         }
-        if($stmt->rowCount() > 0){
-            send_json_response("Success!", "Image Uploaded Successfully.", "success");
-        } else {
-            send_json_response("Error!", "No changes made to profile picture", "error");
-        }
     }
+} elseif($ajaxType == 'update_salary') {
+        try {
+            $emp_id = $_POST['emp_id'];
+            $postedTotal = (float)$_POST['totalsal'];
+
+            // Define allowed salary components (whitelist)
+            $allowedFields = [
+                'basic', 'housing', 'transport', 'food', 'misc',
+                'cashier', 'fuel', 'tel', 'other', 'guard'
+            ];
+
+            // Check if employee already has a salary record in emp_salary
+            $checkExistingStmt = $pdo->prepare("SELECT id FROM emp_salary WHERE emp_id = :emp_id");
+            $checkExistingStmt->execute([':emp_id' => $emp_id]);
+            $existingSalaryRecord = $checkExistingStmt->fetch();
+
+            if ($existingSalaryRecord) {
+                send_json_response("Error", "This employee already has a salary record. Please update the existing record instead.", "error");
+                exit;
+            }
+
+            // Calculate sum of submitted components for verification
+            $componentsSum = 0;
+            foreach ($allowedFields as $field) {
+                $componentsSum += (float)($_POST[$field] ?? 0);
+            }
+
+            // Verify that the sum of the individual components matches the submitted total
+            if (abs($componentsSum - $postedTotal) > 0.01) {
+                send_json_response("Error", "Salary components do not add up to the total.", "error");
+                exit;
+            }
+
+            // Validate basic salary
+            if (empty($_POST['basic']) || (float)$_POST['basic'] <= 0) {
+                send_json_response("Error", "Basic salary is missing or invalid.", "error");
+                exit;
+            }
+
+            // Check if the total salary matches the master salary in the employees table
+            $stmt = $pdo->prepare("SELECT salary FROM employees WHERE emp_id = :emp_id");
+            $stmt->execute([':emp_id' => $emp_id]);
+            $masterSalary = $stmt->fetchColumn();
+
+            if ($masterSalary === false) {
+                send_json_response("Error", "Employee not found or master salary missing.", "error");
+                exit;
+            }
+
+            if (abs($masterSalary - $postedTotal) > 0.01) {
+                send_json_response("Error", "Master salary does not match the posted total salary.", "error");
+                exit;
+            }
+
+            // Process dynamic fields
+            $salaryData = [':emp_id' => $emp_id];
+            $columns = ['emp_id'];
+            $placeholders = [':emp_id'];
+            foreach ($allowedFields as $field) {
+                if (isset($_POST[$field])) {
+                    $value = (float)$_POST[$field];
+                    $salaryData[":$field"] = $value;
+                    $columns[] = $field;
+                    $placeholders[] = ":$field";
+                }
+            }
+
+            // Verify we have data to insert
+            if (count($columns) <= 1) {
+                send_json_response("Error", "No valid salary components provided.", "error");
+                exit;
+            }
+
+            // Begin transaction
+            $pdo->beginTransaction();
+
+            // 1. Check if record exists and update status to 0 if it does
+            $checkStmt = $pdo->prepare("SELECT id FROM emp_salary WHERE emp_id = :emp_id AND status = 1");
+            $checkStmt->execute([':emp_id' => $emp_id]);
+            $existingRecord = $checkStmt->fetch();
+
+            if ($existingRecord) {
+                $updateStmt = $pdo->prepare("UPDATE emp_salary SET status = 0 WHERE id = :id");
+                $updateStmt->execute([':id' => $existingRecord['id']]);
+            }
+
+            // 2. Insert new record with status = 1
+            $columns[] = 'status';
+            $placeholders[] = ':status';
+            $salaryData[':status'] = 1;
+
+            $sql = "INSERT INTO emp_salary (" . implode(', ', $columns) . ") 
+                    VALUES (" . implode(', ', $placeholders) . ")";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($salaryData);
+
+            // Commit transaction
+            $pdo->commit();
+
+            send_json_response("Success", "Salary updated successfully.", "success");
+
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            send_json_response("Error", "Database error: " . $e->getMessage(), "error");
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            send_json_response("Error", "General error: " . $e->getMessage(), "error");
+        }
+        exit;
 } elseif($ajaxType == 'add_social_links'){
     $emp_id_up = $_POST['emp_id'];
     $link_up = $_POST['link'];
@@ -1630,7 +1749,7 @@ elseif($ajaxType == 'unassign_asset') {
                 (float)($row['guard'] ?? 0);
             
             // Calculate daily rate: monthly_salary / 30 days (30/360 day-count convention)
-            // Then multiply by requested days
+            // Then multiply to calculate encashment amount
             $daily_rate = $total_monthly_salary / 30;
             $encash_amount = $daily_rate * $days;
             

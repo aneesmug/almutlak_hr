@@ -300,8 +300,8 @@ if ($can_see_all_depts) {
             .filter-controls { max-width: 800px; }
             .request-card { border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); transition: transform 0.3s ease, box-shadow 0.3s ease; }
             .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
-            .request-card .card-header { background-color: #fff; border-bottom: 1px solid #eef; font-weight: 600; font-size: 1.1em; }
-            .request-card .card-header span { font-size: 0.9em; color: #8a94a6; }
+            .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
+            .request-card .card-header .float-right { font-size: 0.85em; opacity: 0.9; }
             .request-card .card-body { padding: 1.5rem; }
             .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
             .detail-item i.fad { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }

@@ -40,7 +40,12 @@ if (!isset($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
     exit();
 }
 
-// --- 2. Session Timeout Handling ---
+// --- 2. Initialize Database Connection (needed for timeout logging) ---
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/init.php';
+include_once __DIR__ . '/helper_functions.php';
+
+// --- 3. Session Timeout Handling ---
 $timeout_duration = 3600; // 60 minutes
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_duration) {
     // Log timeout activity before destroying session
@@ -64,10 +69,7 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
 }
 $_SESSION['last_activity'] = time();
 
-// --- 3. Fetch Full User & Employee Record ---
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/init.php';
-include_once __DIR__ . '/helper_functions.php';
+// --- 4. Fetch Full User & Employee Record ---
 
 $user_id_for_query = $_SESSION['auth_user']['user_id'];
 

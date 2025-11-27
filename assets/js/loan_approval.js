@@ -157,9 +157,9 @@ function rejectLoanRequest(loanId, role) {
             }
         },
         preConfirm: (reason) => {
-            return sendLoanUpdate(loanId, role, 'reject_loan', { rejection_note: reason });
+            return sendLoanUpdate(loanId, role, 'reject_loan', { rejection_note: reason ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')});
         }
-    }).then((result) => {
+    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
         if (result.isConfirmed) {
             const response = result.value;
             Swal.fire({
@@ -224,7 +224,7 @@ function finalizeLoan(loanId) {
                 Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
             });
         }
-    }).then((result) => {
+    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
         if (result.isConfirmed) {
             const response = result.value; // AJAX response is in result.value
             Swal.fire({
@@ -402,7 +402,7 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                         Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
                     });
                 }
-            }).then((result) => {
+            ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
                 if (result.isConfirmed) {
                     const response = result.value;
                     Swal.fire({
@@ -421,7 +421,7 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
             throw new Error(response.message || __('failed_to_fetch_loan_details'));
         }
     } catch (error) {
-        Swal.fire({ icon: 'error', title: __('error_title'), text: error.message });
+        Swal.fire({ icon: 'error', title: __('error_title'), text: error.message ,allowOutsideClick:false});
     }
 }
 
@@ -553,7 +553,7 @@ async function modifyAndApproveLoanHRAssistant(loanId, currentAmount, currentIns
                         Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
                     });
                 }
-            }).then((result) => {
+            ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
                 if (result.isConfirmed) {
                     const response = result.value;
                     Swal.fire({
@@ -572,6 +572,6 @@ async function modifyAndApproveLoanHRAssistant(loanId, currentAmount, currentIns
             throw new Error(response.message || __('failed_to_fetch_loan_details'));
         }
     } catch (error) {
-        Swal.fire({ icon: 'error', title: __('error_title'), text: error.message });
+        Swal.fire({ icon: 'error', title: __('error_title'), text: error.message ,allowOutsideClick:false});
     }
 }

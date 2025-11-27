@@ -52,16 +52,17 @@
     // Build More Actions HTML for SweetAlert2
     $moreActionsHtml = '';
     if ($emprow['status'] == 1) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-hourglass-end\"></i><span>" . __('excuse_leave') . "</span></a>";
-        // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-hourglass-end\"></i><span>" . __('excuse_leave') . "</span></a>";
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
+        // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
     } else {
         $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
     }
     // Add HR and Sign Out button
     $moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a>";
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -620,40 +621,6 @@
             }
         }
 
-        /* Modal Window */
-        .more-actions-modal {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0.9);
-            background: var(--white);
-            border-radius: 16px;
-            box-shadow: var(--shadow-lg);
-            z-index: 1000;
-            min-width: 380px;
-            max-width: 95vw;
-            max-height: 80vh;
-            overflow-y: auto;
-            animation: slideUp 0.3s ease-out;
-        }
-
-        .more-actions-modal.active {
-            display: block;
-        }
-
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translate(-50%, -40%) scale(0.9);
-            }
-
-            to {
-                opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
-            }
-        }
-
         .modal-header {
             padding: 24px;
             border-bottom: 2px solid var(--light);
@@ -820,6 +787,794 @@
             color: #ff0000;
             background: #ffeeee;
         }
+
+        /* ===== MORE ACTIONS MODAL - PROFESSIONAL DESIGN ===== */
+        .more-actions-modal .swal2-popup {
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+        }
+
+        .more-actions-modal .swal2-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #2c3e50;
+            padding: 1.5rem;
+            margin: 0;
+            border-bottom: 3px solid #e9ecef;
+            background: linear-gradient(135deg, #f5f7fa 0%, #fff 100%);
+        }
+
+        .more-actions-modal .swal2-html-container {
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible;
+        }
+
+        /* Menu Items Container */
+        .more-actions-modal .menu-items-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            background: #fff;
+        }
+
+        .more-actions-modal .menu-item {
+            display: flex !important;
+            align-items: center;
+            gap: 14px;
+            padding: 16px 20px !important;
+            margin: 0 !important;
+            cursor: pointer !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            border-left: 4px solid transparent;
+            border-radius: 0;
+            font-weight: 500;
+            font-size: 15px;
+            user-select: none;
+            box-sizing: border-box;
+            background-color: #fff;
+            position: relative;
+        }
+
+        .more-actions-modal .menu-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, rgba(0,0,0,0.02) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .more-actions-modal .menu-item:hover {
+            background-color: #f8f9fa;
+            border-left-width: 4px;
+            transform: translateX(4px);
+        }
+
+        .more-actions-modal .menu-item:active {
+            background-color: #f0f2f5;
+        }
+
+        .more-actions-modal .menu-item i {
+            font-size: 18px;
+            width: 22px;
+            height: 22px;
+            text-align: center;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .more-actions-modal .menu-item span {
+            font-size: 15px;
+            white-space: nowrap;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Color Schemes - Professional */
+        .more-actions-modal .menu-item.text-primary {
+            color: var(--primary) !important;
+            border-left-color: transparent;
+        }
+
+        .more-actions-modal .menu-item.text-primary:hover {
+            background-color: rgba(91, 115, 232, 0.08);
+            border-left-color: var(--primary);
+        }
+
+        .more-actions-modal .menu-item.text-warning {
+            color: var(--warning) !important;
+        }
+
+        .more-actions-modal .menu-item.text-warning:hover {
+            background-color: rgba(241, 180, 76, 0.08);
+            border-left-color: var(--warning);
+        }
+
+        .more-actions-modal .menu-item.text-info {
+            color: var(--info) !important;
+        }
+
+        .more-actions-modal .menu-item.text-info:hover {
+            background-color: rgba(80, 165, 241, 0.08);
+            border-left-color: var(--info);
+        }
+
+        .more-actions-modal .menu-item.text-danger {
+            color: var(--danger) !important;
+        }
+
+        .more-actions-modal .menu-item.text-danger:hover {
+            background-color: rgba(244, 106, 106, 0.08);
+            border-left-color: var(--danger);
+        }
+        
+        .more-actions-modal .menu-item.text-success {
+            color: var(--success) !important;
+        }
+
+        .more-actions-modal .menu-item.text-success:hover {
+            background-color: rgba(40, 167, 69, 0.08);
+            border-left-color: var(--success);
+        }
+
+        .more-actions-modal .menu-item.text-dark {
+            color: var(--dark) !important;
+        }
+
+        .more-actions-modal .menu-item.text-dark:hover {
+            background-color: rgba(52, 58, 64, 0.08);
+            border-left-color: var(--dark);
+        }
+        
+        .more-actions-modal .menu-item.text-secondary {
+            color: var(--secondary) !important;
+        }
+
+        .more-actions-modal .menu-item.text-secondary:hover {
+            background-color: rgba(52, 58, 64, 0.08);
+            border-left-color: var(--secondary);
+        }
+
+        /* Close Button */
+        .more-actions-modal .swal2-close {
+            font-size: 2rem;
+            color: #74788d;
+            width: 40px;
+            height: 40px;
+        }
+
+        .more-actions-modal .swal2-close:hover {
+            color: #f46a6a;
+        }
+
+        /* ===== RESIGNATION WIZARD STYLES ===== */
+        .resignation-wizard {
+            z-index: 9999 !important;
+        }
+
+        .resignation-popup {
+            border-radius: 12px !important;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        .exit-interview-wizard {
+            z-index: 9999 !important;
+        }
+
+        .exit-interview-popup {
+            border-radius: 12px !important;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        .resignation-step1 {
+            text-align: left;
+        }
+
+        .resignation-step1 .form-group {
+            margin-bottom: 20px;
+        }
+
+        .resignation-step1 .form-label {
+            font-weight: 500;
+            color: #34495e;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .resignation-step1 .form-control {
+            padding: 12px;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .resignation-step1 .form-text {
+            margin-top: 5px;
+            color: #7f8c8d;
+        }
+
+        .exit-interview-step2 {
+            text-align: left;
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .exit-interview-step2 .form-group {
+            margin-bottom: 20px;
+        }
+
+        .exit-interview-step2 .form-label {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .exit-interview-step2 .form-control {
+            padding: 12px;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            font-size: 14px;
+            resize: vertical;
+        }
+
+        .exit-interview-step2 .form-control.is-invalid {
+            border-color: #dc3545;
+            background-color: #fff5f7;
+        }
+
+        .exit-interview-step2 .form-text {
+            display: block;
+            margin-top: 5px;
+            color: #7f8c8d;
+            font-size: 12px;
+        }
+
+        .question-number {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            margin-right: 8px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .alert-info {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            color: #1565c0;
+        }
+
+        .alert-warning {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            color: #856404;
+        }
+
+        /* SweetAlert2 Button Customization for Resignation */
+        .resignation-wizard .swal2-confirm,
+        .exit-interview-wizard .swal2-confirm {
+            background-color: #3498db !important;
+        }
+
+        .resignation-wizard .swal2-confirm:hover,
+        .exit-interview-wizard .swal2-confirm:hover {
+            background-color: #2980b9 !important;
+        }
+
+        .resignation-wizard .swal2-cancel,
+        .exit-interview-wizard .swal2-cancel {
+            background-color: #95a5a6 !important;
+        }
+
+        .resignation-wizard .swal2-cancel:hover,
+        .exit-interview-wizard .swal2-cancel:hover {
+            background-color: #7f8c8d !important;
+        }
+
+        /* ==========================================
+   Documents List View with Viewer
+   ========================================== */
+
+.documents-list-container {
+  max-height: 600px;
+  overflow-y: auto;
+  border: 1px solid #e3eaef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.doc-list-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  gap: 12px;
+}
+
+.doc-list-item:last-child {
+  border-bottom: none;
+}
+
+.doc-list-item:hover {
+  background: #f8f9fa;
+}
+
+.doc-list-item.active {
+  background: #e3f2fd;
+  border-left: 3px solid #3f51b5;
+}
+
+.doc-item-icon {
+  font-size: 28px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.doc-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #313a46;
+}
+
+.doc-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.doc-item-meta .badge-sm {
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.doc-item-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.doc-list-item:hover .doc-item-actions {
+  opacity: 1;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid #e3eaef;
+  background: #fff;
+  color: #74788d;
+  transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+  background: #f8f9fa;
+  color: #313a46;
+  border-color: #c8ccd4;
+}
+
+.btn-download-doc:hover {
+  background: #e8f5e9;
+  color: #51cf66;
+  border-color: #51cf66;
+}
+
+.btn-delete-item:hover {
+  background: #ffebee;
+  color: #f1556c;
+  border-color: #f1556c;
+}
+
+/* Document Viewer */
+.document-viewer-container {
+  border: 1px solid #e3eaef;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  height: 600px;
+}
+
+.viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e3eaef;
+  background: #f8f9fa;
+  border-radius: 8px 8px 0 0;
+}
+
+.viewer-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #313a46;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewer-title i {
+  color: #74788d;
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.viewer-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: #f0f2f5;
+}
+
+.viewer-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #98a6ad;
+}
+
+.viewer-body iframe,
+.viewer-body embed,
+.viewer-body img {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.viewer-body img {
+  object-fit: contain;
+  background: #fff;
+}
+
+/* Scrollbar Styling */
+.documents-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.documents-list-container::-webkit-scrollbar-track {
+  background: #f0f2f5;
+}
+
+.documents-list-container::-webkit-scrollbar-thumb {
+  background: #c8ccd4;
+  border-radius: 3px;
+}
+
+.documents-list-container::-webkit-scrollbar-thumb:hover {
+  background: #98a6ad;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .document-viewer-container {
+    height: 400px;
+    margin-top: 20px;
+  }
+  
+  .documents-list-container {
+    max-height: 300px;
+  }
+}
+
+/* Old Grid System - Deprecated */
+.documents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.document-card {
+  background: #fff;
+  border: 1px solid #e3eaef;
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.document-card:hover {
+  border-color: #3f51b5;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-4px);
+}
+
+.document-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.file-type-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  font-size: 24px;
+  color: #fff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.file-type-badge.badge-danger {
+  background: linear-gradient(135deg, #f1556c 0%, #ee3d54 100%);
+}
+
+.file-type-badge.badge-success {
+  background: linear-gradient(135deg, #51cf66 0%, #37b24d 100%);
+}
+
+.file-type-badge.badge-primary {
+  background: linear-gradient(135deg, #3f51b5 0%, #303f9f 100%);
+}
+
+.file-type-badge.badge-info {
+  background: linear-gradient(135deg, #00bcd4 0%, #00acc1 100%);
+}
+
+.file-type-badge.badge-warning {
+  background: linear-gradient(135deg, #ffc107 0%, #ffb300 100%);
+}
+
+.file-type-badge.badge-secondary {
+  background: linear-gradient(135deg, #98a6ad 0%, #7a8a97 100%);
+}
+
+.btn-delete-doc {
+  background: transparent;
+  border: none;
+  color: #98a6ad;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  opacity: 0.6;
+}
+
+.btn-delete-doc:hover {
+  background: rgba(241, 85, 108, 0.1);
+  color: #f1556c;
+  opacity: 1;
+}
+
+.document-preview {
+  margin-bottom: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f8f9fa;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.preview-image img:hover {
+  transform: scale(1.05);
+}
+
+.preview-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  color: #fff;
+  opacity: 0.8;
+  background-size: cover;
+  background-position: center;
+}
+
+.preview-icon.bg-danger {
+  background: linear-gradient(135deg, rgba(241, 85, 108, 0.2) 0%, rgba(238, 61, 84, 0.2) 100%);
+  color: #f1556c;
+}
+
+.preview-icon.bg-success {
+  background: linear-gradient(135deg, rgba(81, 207, 102, 0.2) 0%, rgba(55, 178, 77, 0.2) 100%);
+  color: #51cf66;
+}
+
+.preview-icon.bg-primary {
+  background: linear-gradient(135deg, rgba(63, 81, 181, 0.2) 0%, rgba(48, 63, 159, 0.2) 100%);
+  color: #3f51b5;
+}
+
+.preview-icon.bg-info {
+  background: linear-gradient(135deg, rgba(0, 188, 212, 0.2) 0%, rgba(0, 172, 193, 0.2) 100%);
+  color: #00bcd4;
+}
+
+.preview-icon.bg-warning {
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 179, 0, 0.2) 100%);
+  color: #ffc107;
+}
+
+.preview-icon.bg-secondary {
+  background: linear-gradient(135deg, rgba(152, 166, 173, 0.2) 0%, rgba(122, 138, 151, 0.2) 100%);
+  color: #98a6ad;
+}
+
+.document-info {
+  margin-bottom: 12px;
+}
+
+.document-type {
+  font-size: 14px;
+  font-weight: 600;
+  color: #313a46;
+  margin: 0 0 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.document-category {
+  font-size: 13px;
+  color: #7a8a97;
+  margin: 0 0 8px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.document-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #98a6ad;
+}
+
+.document-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.document-meta i {
+  font-size: 11px;
+}
+
+.document-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.document-actions .btn {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  border: none;
+  font-weight: 500;
+}
+
+.document-actions .btn-view {
+  background: #e3f2fd;
+  color: #3f51b5;
+}
+
+.document-actions .btn-view:hover {
+  background: #bbdefb;
+  color: #303f9f;
+}
+
+.document-actions .btn-download {
+  background: #e8f5e9;
+  color: #51cf66;
+}
+
+.document-actions .btn-download:hover {
+  background: #c8e6c9;
+  color: #37b24d;
+}
+
+/* Responsive Grid Adjustments */
+@media (max-width: 768px) {
+  .documents-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 576px) {
+  .documents-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .document-card {
+    padding: 12px;
+  }
+  
+  .document-actions {
+    flex-direction: column;
+  }
+}
     </style>
 
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
@@ -1141,6 +1896,123 @@
             </div>
         </div>
 
+        <!-- DOCUMENTS SECTION -->
+        <div>
+            <h3 class="section-title"><i class="mdi mdi-file-document-multiple"></i> <?= __('my_files') ?></h3>
+            <div class="card-box" style="background: var(--white); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-md);">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><i class="fa fa-file-upload"></i> <?= __('employee_documents') ?></h5>
+                    <span class="badge badge-primary badge-pill">
+                        <?php 
+                        $doc_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "'");
+                        $doc_result = mysqli_fetch_assoc($doc_query);
+                        echo $doc_result['total'] ?? 0;
+                        ?>
+                    </span>
+                </div>
+                
+                <?php
+                $queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' ORDER BY `id` DESC ");
+                $doc_count = mysqli_num_rows($queryempdocu);
+                
+                if ($doc_count > 0):
+                ?>
+                    <div class="row">
+                        <!-- Documents List Column -->
+                        <div class="col-md-5">
+                            <div class="documents-list-container">
+                                <?php
+                                mysqli_data_seek($queryempdocu, 0);
+                                while ($recempdoc = mysqli_fetch_assoc($queryempdocu)) {
+                                    $id_empdoc_get = $recempdoc["id"];
+                                    $docu_typ_get = $recempdoc["docu_typ"];
+                                    $attachment_get = $recempdoc["path"];
+                                    $docu_ext_get = strtolower($recempdoc["docu_ext"]);
+                                    $doc_date_reg_get = $recempdoc["created_at"];
+                                    $times_reg = strtotime("$doc_date_reg_get");
+                                    $doc_date_formatted = date('d M Y', $times_reg);
+                                    
+                                    // Determine file type and icon
+                                    $file_type_map = [
+                                        'pdf' => ['icon' => 'fa-file-pdf', 'color' => 'danger', 'label' => 'PDF'],
+                                        'xls' => ['icon' => 'fa-file-excel', 'color' => 'success', 'label' => 'Excel'],
+                                        'xlsx' => ['icon' => 'fa-file-excel', 'color' => 'success', 'label' => 'Excel'],
+                                        'doc' => ['icon' => 'fa-file-word', 'color' => 'primary', 'label' => 'Word'],
+                                        'docx' => ['icon' => 'fa-file-word', 'color' => 'primary', 'label' => 'Word'],
+                                        'jpg' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
+                                        'jpeg' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
+                                        'png' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
+                                        'gif' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
+                                        'zip' => ['icon' => 'fa-file-archive', 'color' => 'warning', 'label' => 'Archive'],
+                                        'rar' => ['icon' => 'fa-file-archive', 'color' => 'warning', 'label' => 'Archive'],
+                                        'txt' => ['icon' => 'fa-file-text', 'color' => 'secondary', 'label' => 'Text'],
+                                    ];
+                                    $file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
+                                ?>
+                                    <div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>" 
+                                        data-doc-path="./assets/emp_documents/<?= $attachment_get ?>" 
+                                        data-doc-ext="<?= $docu_ext_get ?>"
+                                        data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>">
+                                        <div class="doc-item-icon">
+                                            <i class="fa <?= $file_info['icon'] ?> text-<?= $file_info['color'] ?>"></i>
+                                        </div>
+                                        <div class="doc-item-info">
+                                            <h6 class="doc-item-name"><?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?></h6>
+                                            <small class="doc-item-meta">
+                                                <span class="badge badge-<?= $file_info['color'] ?> badge-sm"><?= strtoupper($docu_ext_get) ?></span>
+                                                <span class="text-muted ml-2"><i class="fa fa-calendar"></i> <?= $doc_date_formatted ?></span>
+                                            </small>
+                                        </div>
+                                        <div class="doc-item-actions">
+                                            <button class="btn btn-sm btn-icon btn-download-doc" title="<?= __('download') ?>" onclick="window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
+                                                <i class="fa fa-download"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-icon btn-delete-item deleteAjax" data-id='<?= $recempdoc['id'] ?>' data-tbl='emp_docu' data-file='1' data-column='path' title="<?= __('delete') ?>">
+                                                <i class="fa fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                        </div>
+                        
+                        <!-- Document Viewer Column -->
+                        <div class="col-md-7">
+                            <div class="document-viewer-container">
+                                <div class="viewer-header">
+                                    <h5 class="viewer-title"><i class="fa fa-file"></i> <span id="viewer-doc-name-profile"><?= __('select_document') ?></span></h5>
+                                    <div class="viewer-actions">
+                                        <button class="btn btn-sm btn-light" id="viewer-fullscreen-profile" title="<?= __('fullscreen') ?>">
+                                            <i class="fa fa-expand"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-light" id="viewer-download-profile" title="<?= __('download') ?>" style="display:none;">
+                                            <i class="fa fa-download"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="viewer-body" id="document-viewer-profile">
+                                    <div class="viewer-placeholder">
+                                        <i class="fa fa-file-text" style="font-size: 64px; color: #ddd;"></i>
+                                        <p class="text-muted mt-3"><?= __('select_document_to_view') ?></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <div class="alert alert-info" role="alert">
+                        <div class="d-flex align-items-center">
+                            <i class="fa fa-info-circle mr-3" style="font-size: 24px;"></i>
+                            <div>
+                                <h5 class="mb-1"><?= __('no_documents_found') ?></h5>
+                                <p class="mb-0"><?= __('no_documents_have_been_uploaded_yet') ?></p>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <!-- ACTION CARDS -->
         <div>
             <h3 class="section-title"><i class="fa fa-folder-open"></i> <?= __('employee_records') ?></h3>
@@ -1199,39 +2071,82 @@
     <!-- Main App JS -->
     <script src="assets/js/employee_profile.js"></script>
     <script src="assets/js/loanHandling.js"></script>
+    <script src="assets/js/resignationWizard.js"></script>
     <script>
         $(document).ready(function() {
+            
             var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
-
-            $('#moreActionsBtn').on('click', function(e) {
-                e.preventDefault();
+            $('#moreActionsBtn').click(function() {
                 Swal.fire({
                     title: '<?= __('more_actions') ?>',
-                    html: '<div class="swal-more-actions">' + moreActionsHtml + '</div>',
+                    html: '<div class="menu-items-container">' + moreActionsHtml + '</div>',
                     showConfirmButton: false,
-                    showCancelButton: true,
-                    cancelButtonText: '<?= __('close') ?>',
-                    cancelButtonColor: '#d33',
-                    width: 600,
-                    padding: '0 0 10px',
+                    showCloseButton: true,
                     customClass: {
-                        popup: 'more-actions-swal'
+                        container: 'more-actions-modal',
+                        popup: 'swal2-popup',
+                        closeButton: 'swal2-close'
                     },
-                    allowOutsideClick: false
-                });
-            });
+                    width: '450px',
+                    padding: '0',
+                    allowOutsideClick: false,
+                    didOpen: function() {
+                        // Get modal container and wrap it with jQuery
+                        var modalContainer = $(Swal.getHtmlContainer());
+                        
+                        // Edit Information
+                        modalContainer.find('#startUpdateRequest').on('click', function(e) {
+                            e.preventDefault();
+                            Swal.close();
+                            setTimeout(function() {
+                                $('#startUpdateRequest').trigger('click');
+                            }, 100);
+                        });
 
-            // Close SweetAlert when selecting an action (except for startUpdateRequest and signout)
-            $(document).on('click', '.swal-more-actions .menu-item', function() {
-                // Don't auto-close for startUpdateRequest, applyLeaveRequest, or signout (they handle their own logic)
-                if (
-                    $(this).attr('id') !== 'startUpdateRequest' && 
-                    !$(this).hasClass('applyLeaveRequest') && 
-                    !$(this).hasClass('applyLoan') && 
-                    !$(this).hasClass('signout') 
-                ) {
-                    Swal.close();
-                }
+                        // Apply Vacation
+                        modalContainer.find('.applyvacationAtter').on('click', function(e) {
+                            e.preventDefault();
+                            var empid = $(this).data('empid');
+                            Swal.close();
+                            setTimeout(function() {
+                                $('.applyvacationAtter[data-empid="' + empid + '"]').not('.swal2-html-container *').first().trigger('click');
+                            }, 100);
+                        });
+
+                        // Apply Leave Request
+                        modalContainer.find('.applyLeaveRequest').on('click', function(e) {
+                            e.preventDefault();
+                            var empid = $(this).data('empid');
+                            Swal.close();
+                            setTimeout(function() {
+                                $('.applyLeaveRequest[data-empid="' + empid + '"]').not('.swal2-html-container *').first().trigger('click');
+                            }, 100);
+                        });
+
+                        // Apply Resignation
+                        modalContainer.find('.applyResignation').on('click', function(e) {
+                            e.preventDefault();
+                            var emp_id = $(this).data('emp_id');
+                            var emp_name = $(this).data('emp_name');
+                            Swal.close();
+                            setTimeout(function() {
+                                openResignationWizard(emp_id, emp_name);
+                            }, 100);
+                        });
+
+                        // Logout/Signout
+                        modalContainer.find('.signout').on('click', function(e) {
+                            e.preventDefault();
+                            Swal.close();
+                            // setTimeout(function() {
+                            //     window.location.href = './includes/logout.php';
+                            // }, 100);
+                            setTimeout(function() {
+                                $('.signout').trigger('click');
+                            }, 100);
+                        });
+                    }
+                });
             });
 
             // Copy to clipboard functionality (robust + works on mobile)
@@ -1271,6 +2186,65 @@
                     fallbackCopy(text);
                 }
             });
+
+            // Document Viewer Functionality for Profile Page
+            var currentDocPath = '';
+            
+            $('.doc-list-item').on('click', function() {
+                // Remove active class from all items
+                $('.doc-list-item').removeClass('active');
+                // Add active class to clicked item
+                $(this).addClass('active');
+                
+                // Get document details
+                var docPath = $(this).data('doc-path');
+                var docExt = $(this).data('doc-ext');
+                var docName = $(this).data('doc-name');
+                
+                currentDocPath = docPath;
+                
+                // Update viewer title
+                $('#viewer-doc-name-profile').text(docName);
+                
+                // Show download button
+                $('#viewer-download-profile').show().off('click').on('click', function() {
+                    window.location.href = './downloadFile.php?file=' + docPath;
+                });
+                
+                // Load document based on type
+                var viewer = $('#document-viewer-profile');
+                
+                if (docExt === 'pdf') {
+                    viewer.html('<embed src="' + docPath + '" type="application/pdf" width="100%" height="100%">');
+                } else if (['jpg', 'jpeg', 'png', 'gif'].includes(docExt)) {
+                    viewer.html('<img src="' + docPath + '" alt="' + docName + '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">');
+                } else if (['doc', 'docx', 'xls', 'xlsx'].includes(docExt)) {
+                    viewer.html('<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(window.location.origin + '/' + docPath) + '" width="100%" height="100%" frameborder="0"></iframe>');
+                } else if (docExt === 'txt') {
+                    $.get(docPath, function(data) {
+                        viewer.html('<pre style="padding: 20px; white-space: pre-wrap; word-wrap: break-word;">' + $('<div>').text(data).html() + '</pre>');
+                    });
+                } else {
+                    viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3">Preview not available for this file type</p><a href="' + docPath + '" download class="btn btn-primary mt-3"><i class="fa fa-download"></i> Download File</a></div>');
+                }
+            });
+            
+            // Fullscreen toggle for profile viewer
+            $('#viewer-fullscreen-profile').on('click', function() {
+                var container = $('.document-viewer-container')[0];
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) {
+                    container.webkitRequestFullscreen();
+                } else if (container.msRequestFullscreen) {
+                    container.msRequestFullscreen();
+                }
+            });
+            
+            // Auto-select first document
+            if ($('.doc-list-item').length > 0) {
+                $('.doc-list-item').first().trigger('click');
+            }
         });
     </script>
 </body>

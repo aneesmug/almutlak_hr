@@ -2496,6 +2496,8 @@ elseif ($ajaxType == 'applyLeave') {
         $end_date = trim($_POST['end_date'] ?? '');
         $reason = trim($_POST['reason'] ?? '');
         $trip_destination = trim($_POST['trip_destination'] ?? '');
+        $accommodation_provided = trim($_POST['accommodation_provided'] ?? '');
+        $transportation_provided = trim($_POST['transportation_provided'] ?? '');
         
         // Validation
         if ($empid <= 0) {
@@ -2503,8 +2505,92 @@ elseif ($ajaxType == 'applyLeave') {
             exit;
         }
         
-        if (empty($leave_type)) {
-            send_json_response('Error', 'Leave type is required.', 'error', 400);
+        // Define valid leave types
+        $valid_leave_types = [
+            'Sick Leave',
+            'Exam Leave',
+            'Hajj Leave',
+            'Maternity Leave',
+            'Marriage Leave',
+            'Newborn Leave',
+            'Death Leave',
+            'Business Trip'
+        ];
+        
+        if (empty($leave_type) || !in_array($leave_type, $valid_leave_types)) {
+            send_json_response('Error', 'Invalid leave type selected.', 'error', 400);
+            exit;
+        }
+        
+        // Get employee details including gender
+        $sql_emp_check = "SELECT `emp_id`, `sex`, `dept`, `supervisor_id` FROM `employees` WHERE `emp_id` = ? LIMIT 1";
+        $stmt_emp_check = mysqli_prepare($conDB, $sql_emp_check);
+        if (!$stmt_emp_check) {
+            send_json_response('Error', 'Failed to fetch employee information.', 'error', 500);
+            exit;
+        }
+        mysqli_stmt_bind_param($stmt_emp_check, "i", $empid);
+        mysqli_stmt_execute($stmt_emp_check);
+        $result_emp_check = mysqli_stmt_get_result($stmt_emp_check);
+        $emp_info = mysqli_fetch_assoc($result_emp_check);
+        mysqli_free_result($result_emp_check);
+        mysqli_stmt_close($stmt_emp_check);
+        
+        if (!$emp_info) {
+            send_json_response('Error', 'Employee not found.', 'error', 400);
+            exit;
+        }
+        
+        $employee_gender = (int)($emp_info['sex'] ?? 0);
+        
+        // Validate gender-specific leave types
+        if ($leave_type === 'Maternity Leave' && $employee_gender !== 2) {
+            send_json_response('Error', 'Maternity Leave is only available for female employees.', 'error', 400);
+            exit;
+        }
+        
+        if ($leave_type === 'Newborn Leave' && $employee_gender !== 1) {
+            send_json_response('Error', 'Newborn Leave is only available for male employees.', 'error', 400);
+            exit;
+        }
+        
+        // Validate required fields - ALL fields are now required
+        if (empty($start_date)) {
+            send_json_response('Error', 'Start date is required.', 'error', 400);
+            exit;
+        }
+        
+        if (empty($end_date)) {
+            send_json_response('Error', 'End date is required.', 'error', 400);
+            exit;
+        }
+        
+        if (empty($reason)) {
+            send_json_response('Error', 'Reason/Notes is required for all leave types.', 'error', 400);
+            exit;
+        }
+        
+        // Validate Business Trip destination
+        if ($leave_type === 'Business Trip' && empty($trip_destination)) {
+            send_json_response('Error', 'Destination is required for Business Trip.', 'error', 400);
+            exit;
+        }
+        
+        // Validate Business Trip accommodation and transportation
+        if ($leave_type === 'Business Trip') {
+            if (empty($accommodation_provided) || !in_array($accommodation_provided, ['yes', 'no'])) {
+                send_json_response('Error', 'Accommodation provided status is required for Business Trip.', 'error', 400);
+                exit;
+            }
+            if (empty($transportation_provided) || !in_array($transportation_provided, ['yes', 'no'])) {
+                send_json_response('Error', 'Transportation provided status is required for Business Trip.', 'error', 400);
+                exit;
+            }
+        }
+        
+        // Validate attachment - REQUIRED for ALL leave types
+        if (!isset($_FILES['attachment']) || $_FILES['attachment']['error'] !== UPLOAD_ERR_OK) {
+            send_json_response('Error', 'Attachment is required for all leave types. Please upload a supporting document.', 'error', 400);
             exit;
         }
         
@@ -2528,8 +2614,6 @@ elseif ($ajaxType == 'applyLeave') {
                     $res_active = mysqli_stmt_get_result($stmt_active);
                     if ($res_active && mysqli_num_rows($res_active) > 0) {
                         $active_request = mysqli_fetch_assoc($res_active);
-                        
-                        
                         
                         if ($res_active) mysqli_free_result($res_active);
                         mysqli_stmt_close($stmt_active);
@@ -2630,28 +2714,9 @@ elseif ($ajaxType == 'applyLeave') {
             }
         }
         
-        // Get employee's department and supervisor
-        $sql_emp = "SELECT `dept`, `supervisor_id` FROM `employees` WHERE `emp_id` = ? LIMIT 1";
-        $stmt_emp = mysqli_prepare($conDB, $sql_emp);
-        if (!$stmt_emp) {
-            send_json_response('Error', 'Failed to fetch employee information.', 'error', 500);
-            exit;
-        }
-        
-        mysqli_stmt_bind_param($stmt_emp, "i", $empid);
-        mysqli_stmt_execute($stmt_emp);
-        $result_emp = mysqli_stmt_get_result($stmt_emp);
-        $emp_data = mysqli_fetch_assoc($result_emp);
-        mysqli_free_result($result_emp);
-        mysqli_stmt_close($stmt_emp);
-        
-        if (!$emp_data || empty($emp_data['dept'])) {
-            send_json_response('Error', 'Employee department not found.', 'error', 400);
-            exit;
-        }
-        
-        $emp_dept = $emp_data['dept'];
-        $supervisor_id = $emp_data['supervisor_id'] ?? null;
+        // Use employee data already fetched above
+        $emp_dept = $emp_info['dept'];
+        $supervisor_id = $emp_info['supervisor_id'] ?? null;
         
         // Get first approver: Direct Supervisor OR Department Manager
         $first_approver = null;
@@ -2755,14 +2820,18 @@ elseif ($ajaxType == 'applyLeave') {
         if (!empty($trip_destination)) {
             $remarks .= ' - Destination: ' . $trip_destination;
         }
+        if ($leave_type === 'Business Trip') {
+            $remarks .= ' - Accommodation: ' . ($accommodation_provided === 'yes' ? 'Yes' : 'No');
+            $remarks .= ' - Transportation: ' . ($transportation_provided === 'yes' ? 'Yes' : 'No');
+        }
         if (!empty($reason)) {
             $remarks .= ' - ' . $reason;
         }
         
         // Insert into emp_vacation table with pending approval status
         $sql = "INSERT INTO `emp_vacation` 
-                (`emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`) 
-                VALUES (?, ?, '', '', ?, ?, ?, ?, 'payroll', ?, ?, ?, 'pending_approval', 1)";
+                (`emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`, `accommodation_provided`, `transportation_provided`) 
+                VALUES (?, ?, '', '', ?, ?, ?, ?, 'payroll', ?, ?, ?, 'pending_approval', 1, ?, ?)";
         
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
@@ -2770,7 +2839,7 @@ elseif ($ajaxType == 'applyLeave') {
             exit;
         }
         
-        mysqli_stmt_bind_param($stmt, "isssisssi", 
+        mysqli_stmt_bind_param($stmt, "isssisssiss", 
             $empid, 
             $leave_type, 
             $start_date, 
@@ -2779,7 +2848,9 @@ elseif ($ajaxType == 'applyLeave') {
             $remarks, 
             $attachment_path,
             $request_inv_no,
-            $is_deductible
+            $is_deductible,
+            $accommodation_provided,
+            $transportation_provided
         );
         
         if (!mysqli_stmt_execute($stmt)) {

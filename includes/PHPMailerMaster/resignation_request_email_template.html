@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resignation Request - Action Required</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d0d0d;">
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #0d0d0d; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #1a1a1a; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);">
+                    <!-- Header with Logo -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); padding: 40px 30px; text-align: center;">
+                            <img src="{{LOGO_URL}}" alt="Company Logo" height="90" style="display: block; height: 90px; max-width: 130px; border: 0;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                Employee Resignation Request
+                            </h1>
+                            <p style="margin: 10px 0 0; color: #ffe6e6; font-size: 14px; opacity: 0.9;">
+                                Action Required - Immediate Attention Needed
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Greeting -->
+                    <tr>
+                        <td style="padding: 30px 30px 10px; border-bottom: 1px solid #2a2a2a;">
+                            <p style="margin: 0; color: #e0e0e0; font-size: 16px; line-height: 1.6;">
+                                Dear <strong style="color: #ffffff;">{{APPROVER_NAME}}</strong>,
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Main Message -->
+                    <tr>
+                        <td style="padding: 20px 30px; border-bottom: 1px solid #2a2a2a;">
+                            <p style="margin: 0; color: #c0c0c0; font-size: 14px; line-height: 1.8;">
+                                An employee has submitted a resignation request that requires your review and approval. Please find the details below:
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Employee Information Section -->
+                    <tr>
+                        <td style="padding: 25px 30px; background-color: #151515;">
+                            <h2 style="margin: 0 0 20px; color: #ffffff; font-size: 18px; font-weight: 600; border-bottom: 2px solid #dc3545; padding-bottom: 10px;">
+                                📋 Employee Information
+                            </h2>
+                            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #2a2a2a;">
+                                        <span style="color: #a0a0a0; font-size: 14px;">Employee ID:</span>
+                                        <span style="color: #ffffff; font-size: 14px; float: right; font-weight: 500;">{{EMP_ID}}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #2a2a2a;">
+                                        <span style="color: #a0a0a0; font-size: 14px;">Employee Name:</span>
+                                        <span style="color: #ffffff; font-size: 14px; float: right; font-weight: 500;">{{EMP_NAME}}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #2a2a2a;">
+                                        <span style="color: #a0a0a0; font-size: 14px;">Department:</span>
+                                        <span style="color: #ffffff; font-size: 14px; float: right;">{{DEPARTMENT}}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 0;">
+                                        <span style="color: #a0a0a0; font-size: 14px;">Designation:</span>
+                                        <span style="color: #ffffff; font-size: 14px; float: right;">{{DESIGNATION}}</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Resignation Details Section -->
+                    <tr>
+                        <td style="padding: 25px 30px; background-color: #1a1a1a;">
+                            <h2 style="margin: 0 0 20px; color: #ffffff; font-size: 18px; font-weight: 600; border-bottom: 2px solid #dc3545; padding-bottom: 10px;">
+                                📅 Resignation Details
+                            </h2>
+                            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #2a2a2a;">
+                                        <span style="color: #a0a0a0; font-size: 14px;">Resignation ID:</span>
+                                        <span style="color: #dc3545; font-size: 14px; float: right; font-weight: 600;">#{{RESIGNATION_ID}}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #2a2a2a;">
+                                        <span style="color: #a0a0a0; font-size: 14px;">Last Working Day:</span>
+                                        <span style="color: #ffc107; font-size: 14px; float: right; font-weight: 500;">{{LAST_WORKING_DAY}}</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 0;">
+                                        <span style="color: #a0a0a0; font-size: 14px;">Submission Date:</span>
+                                        <span style="color: #ffffff; font-size: 14px; float: right;">{{SUBMISSION_DATE}}</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Exit Interview Section -->
+                    <tr>
+                        <td style="padding: 25px 30px; background-color: #1a1a1a;">
+                            {{EXIT_INTERVIEW_SECTION}}
+                        </td>
+                    </tr>
+                    
+                    <!-- Action Button -->
+                    <tr>
+                        <td style="padding: 30px; text-align: center; background-color: #151515;">
+                            <p style="margin: 0 0 20px; color: #c0c0c0; font-size: 14px;">
+                                Please review this resignation request and take appropriate action.
+                            </p>
+                            <a href="{{REQUEST_URL}}" style="display: inline-block; padding: 14px 40px; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3); transition: transform 0.2s;">
+                                Review Resignation Request →
+                            </a>
+                        </td>
+                    </tr>
+                    
+                    <!-- Important Notice -->
+                    <tr>
+                        <td style="padding: 20px 30px; background-color: #2a1a1a; border-left: 4px solid #dc3545;">
+                            <p style="margin: 0; color: #ffcccc; font-size: 13px; line-height: 1.6;">
+                                <strong style="color: #dc3545;">⚠️ Important:</strong> This resignation requires immediate attention. Please review and provide your decision (approval/rejection) along with replacement requirements if applicable.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 30px; text-align: center; background-color: #0d0d0d; border-top: 1px solid #2a2a2a;">
+                            <p style="margin: 0 0 10px; color: #808080; font-size: 12px; line-height: 1.6;">
+                                This is an automated notification from Al-Mutlak HR System.<br>
+                                Please do not reply to this email.
+                            </p>
+                            <p style="margin: 0; color: #606060; font-size: 11px;">
+                                © 2025 Al-Mutlak. All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

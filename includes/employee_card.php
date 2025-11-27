@@ -25,7 +25,7 @@
         <div class="card-body text-center d-flex flex-column">
             <img src="<?= htmlspecialchars($emp_avatar) ?>" class="rounded-circle mx-auto mb-3 emp-avatar" alt="Profile Image">
 
-            <h5 class="mb-0 font-weight-bold"><?= parseName($name) ?></h5>
+            <h5 class="mb-0 font-weight-bold"><?= ($name) ?></h5>
             <p class="text-muted small"><?= (strtolower($emptype) == "manager") ? "<span class=\"badge badge-info\">".__(strtolower($emptype))."</span>" : __(strtolower($emptype)) ?></p>
             <?php if($emp_status == 1): ?>
                 <span class="badge badge-dark badge-pill mx-auto my-3"><?= __('fly') ?>: <?= $cont_fly ?> | <?= __('encashed') ?>: <?= $cont_encashed ?></span>

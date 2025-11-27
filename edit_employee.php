@@ -140,13 +140,10 @@ if (mysqli_num_rows($query) == 1) {
 		}
 
 		// EMPLOYEE MODIFICATION ACCESS CONTROL
-		// Only system admin, hr_operations, and hr_recruitment can modify employees
+		// Only system admin and HR department members can modify employees
 		$can_modify_employee = (
 			$is_system_admin || 
-			$user_type === 'hr_operations' ||
-			$user_type === 'hr_payroll' ||
-			$isHR_Assistant ||
-			$user_type === 'hr_recruitment'
+			$isDeptHr
 		);
 		
 		if (!$can_modify_employee) {

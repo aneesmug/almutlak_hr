@@ -14,6 +14,7 @@
  **************************************************************************************************/
 
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/helper_functions.php';
 
 header('Content-Type: application/json');
 
@@ -79,8 +80,8 @@ $data = array();
 while ($row = mysqli_fetch_assoc($empRecords)) {
     $data[] = array(
         "lang_key" => htmlspecialchars($row['lang_key']),
-        "en_translation" => htmlspecialchars($row['en_translation'] ?? ''), // Use null coalescing for safety
-        "ar_translation" => htmlspecialchars($row['ar_translation'] ?? ''), // Use null coalescing for safety
+        "en_translation" => split_words(htmlspecialchars($row['en_translation'] ?? ''),50,' '), // Use null coalescing for safety
+        "ar_translation" => split_words(htmlspecialchars($row['ar_translation'] ?? ''),50,' '), // Use null coalescing for safety
         "action" => "<div class='btn-group'>
                         <button class='btn btn-info btn-sm update-translation' data-key='".htmlspecialchars($row['lang_key'], ENT_QUOTES)."' data-en='".htmlspecialchars($row['en_translation'] ?? '', ENT_QUOTES)."' data-ar='".htmlspecialchars($row['ar_translation'] ?? '', ENT_QUOTES)."'><i class='fa fa-pencil'></i></button>
                         <button class='btn btn-danger btn-sm delete-translation' data-key='".htmlspecialchars($row['lang_key'], ENT_QUOTES)."'><i class='fa fa-trash'></i></button>
@@ -88,7 +89,7 @@ while ($row = mysqli_fetch_assoc($empRecords)) {
     );
 }
 
-## Response
+## Response 
 $response = array(
     "draw" => intval($draw),
     "iTotalRecords" => $totalRecords,

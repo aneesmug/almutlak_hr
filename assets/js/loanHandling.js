@@ -513,7 +513,7 @@ $(document).on('click', '.addManualPayment', async function(e) {
                             text: response.message,
                             icon: response.type,
                             allowOutsideClick: false
-                        }).then((result) => {
+                        ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
                             if (result.isConfirmed) {
                                 location.reload();
                             }
@@ -535,7 +535,7 @@ $(document).on('click', '.addManualPayment', async function(e) {
             icon: 'error',
             title: __('error_title'),
             text: error.message,
-        });
+            allowOutsideClick:false});
     }
 });
 
@@ -605,7 +605,8 @@ $(document).on('click', '.applyEmergencyLoan', function(e) {
                 todayHighlight: true,
                 autoclose: true,
                 startDate: new Date(),
-            });
+                cancelButtonColor:'#d33',
+                cancelButtonText:__('cancel')});
 
             const loanAmountInput = $('#loan_amount_emergency');
             const installmentsInput = $('#installments_emergency');
@@ -664,7 +665,7 @@ $(document).on('click', '.applyEmergencyLoan', function(e) {
                     text: response.message,
                     icon: response.type,
                     allowOutsideClick: false
-                }).then(function(isConfirm){
+                ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then(function(isConfirm){
                     if(isConfirm.value){
                         location.reload();
                     }

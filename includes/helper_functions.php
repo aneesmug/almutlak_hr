@@ -35,117 +35,130 @@ $formatter = new NumberFormatter('en_SA',  NumberFormatter::CURRENCY);
  * @param mixed $param The string or array to escape.
  * @return mixed The escaped string or array, or the original variable if not a string or array.
  */
-function escape_string($param)
-{
-    global $conDB; // Ensure connection is available
-    if (!$conDB) {
-        error_log("WARNING: escape_string called but \$conDB is not available. Using basic escaping (less secure).");
-        // Fallback basic escaping
-        if (is_array($param)) return array_map(__FUNCTION__, $param); // Use __FUNCTION__ for recursion
-        if (!empty($param) && is_string($param)) return str_replace(['\\', "\0", "\n", "\r", "'", '"', "\x1a"], ['\\\\', '\\0', '\\n', '\\r', "\\'", '\\"', '\\Z'], $param);
+if (!function_exists('escape_string')) {
+    function escape_string($param)
+    {
+        global $conDB; // Ensure connection is available
+        if (!$conDB) {
+            error_log("WARNING: escape_string called but \$conDB is not available. Using basic escaping (less secure).");
+            // Fallback basic escaping
+            if (is_array($param)) return array_map(__FUNCTION__, $param); // Use __FUNCTION__ for recursion
+            if (!empty($param) && is_string($param)) return str_replace(['\\', "\0", "\n", "\r", "'", '"', "\x1a"], ['\\\\', '\\0', '\\n', '\\r', "\\'", '\\"', '\\Z'], $param);
+            return $param;
+        }
+
+        if (is_array($param)) {
+            // Recursively apply escape_string to array elements
+            // Using array_map is generally preferred over __METHOD__ for non-class contexts
+            return array_map('escape_string', $param);
+        }
+
+        if (!empty($param) && is_string($param)) {
+            return mysqli_real_escape_string($conDB, $param);
+        }
         return $param;
     }
-
-    if (is_array($param)) {
-        // Recursively apply escape_string to array elements
-        // Using array_map is generally preferred over __METHOD__ for non-class contexts
-        return array_map('escape_string', $param);
-    }
-
-    if (!empty($param) && is_string($param)) {
-        return mysqli_real_escape_string($conDB, $param);
-    }
-    return $param;
 }
 
 
 // --- Time Ago Functions ---
-function timeAgo($time_ago)
-{
-    $time_ago = strtotime($time_ago);
-    if ($time_ago === false) return "Invalid date"; // Handle invalid date input
-    $cur_time   = time();
-    $time_elapsed   = $cur_time - $time_ago;
-    $seconds    = $time_elapsed;
-    $minutes    = round($time_elapsed / 60);
-    $hours      = round($time_elapsed / 3600);
-    $days       = round($time_elapsed / 86400);
-    $weeks      = round($time_elapsed / 604800);
-    $months     = round($time_elapsed / 2600640);
-    $years      = round($time_elapsed / 31207680);
-    // Seconds
-    if ($seconds <= 60) { return "just now"; }
-    //Minutes
-    else if ($minutes <= 60) { return ($minutes == 1) ? "one minute ago" : "$minutes minutes ago"; }
-    //Hours
-    else if ($hours <= 24) { return ($hours == 1) ? "an hour ago" : "$hours hrs ago"; }
-    //Days
-    else if ($days <= 7) { return ($days == 1) ? "yesterday" : "$days days ago"; }
-    //Weeks
-    else if ($weeks <= 4.3) { return ($weeks == 1) ? "a week ago" : "$weeks weeks ago"; }
-    //Months
-    else if ($months <= 12) { return ($months == 1) ? "a month ago" : "$months months ago"; }
-    //Years
-    else { return ($years == 1) ? "one year ago" : "$years years ago"; }
+if (!function_exists('timeAgo')) {
+    function timeAgo($time_ago)
+    {
+        $time_ago = strtotime($time_ago);
+        if ($time_ago === false) return "Invalid date"; // Handle invalid date input
+        $cur_time   = time();
+        $time_elapsed   = $cur_time - $time_ago;
+        $seconds    = $time_elapsed;
+        $minutes    = round($time_elapsed / 60);
+        $hours      = round($time_elapsed / 3600);
+        $days       = round($time_elapsed / 86400);
+        $weeks      = round($time_elapsed / 604800);
+        $months     = round($time_elapsed / 2600640);
+        $years      = round($time_elapsed / 31207680);
+        // Seconds
+        if ($seconds <= 60) { return "just now"; }
+        //Minutes
+        else if ($minutes <= 60) { return ($minutes == 1) ? "one minute ago" : "$minutes minutes ago"; }
+        //Hours
+        else if ($hours <= 24) { return ($hours == 1) ? "an hour ago" : "$hours hrs ago"; }
+        //Days
+        else if ($days <= 7) { return ($days == 1) ? "yesterday" : "$days days ago"; }
+        //Weeks
+        else if ($weeks <= 4.3) { return ($weeks == 1) ? "a week ago" : "$weeks weeks ago"; }
+        //Months
+        else if ($months <= 12) { return ($months == 1) ? "a month ago" : "$months months ago"; }
+        //Years
+        else { return ($years == 1) ? "one year ago" : "$years years ago"; }
+    }
 }
-function timeAgoAr($time_ago)
-{
-    $time_ago = strtotime($time_ago);
-     if ($time_ago === false) return "تاريخ غير صالح"; // Handle invalid date input
-    $cur_time   = time();
-    $time_elapsed   = $cur_time - $time_ago;
-    $seconds    = $time_elapsed;
-    $minutes    = round($time_elapsed / 60);
-    $hours      = round($time_elapsed / 3600);
-    $days       = round($time_elapsed / 86400);
-    $weeks      = round($time_elapsed / 604800);
-    $months     = round($time_elapsed / 2600640);
-    $years      = round($time_elapsed / 31207680);
-    // Seconds
-    if ($seconds <= 60) { return "الآن"; }
-    //Minutes
-    else if ($minutes <= 60) { return ($minutes == 1) ? "قبل دقيقة واحدة" : "$minutes دقائق مضت"; }
-    //Hours
-    else if ($hours <= 24) { return ($hours == 1) ? "قبل ساعة" : "$hours قبل ساعات"; }
-    //Days
-    else if ($days <= 7) { return ($days == 1) ? "أمس" : "$days قبل أيام"; }
-    //Weeks
-    else if ($weeks <= 4.3) { return ($weeks == 1) ? "قبل أسبوع" : "$weeks قبل أسابيع"; }
-    //Months
-    else if ($months <= 12) { return ($months == 1) ? "قبل شهر" : "$months قبل شهور"; }
-    //Years
-    else { return ($years == 1) ? "قبل عام" : "$years منذ سنوات"; }
+if (!function_exists('timeAgoAr')) {
+    function timeAgoAr($time_ago)
+    {
+        $time_ago = strtotime($time_ago);
+         if ($time_ago === false) return "تاريخ غير صالح"; // Handle invalid date input
+        $cur_time   = time();
+        $time_elapsed   = $cur_time - $time_ago;
+        $seconds    = $time_elapsed;
+        $minutes    = round($time_elapsed / 60);
+        $hours      = round($time_elapsed / 3600);
+        $days       = round($time_elapsed / 86400);
+        $weeks      = round($time_elapsed / 604800);
+        $months     = round($time_elapsed / 2600640);
+        $years      = round($time_elapsed / 31207680);
+        // Seconds
+        if ($seconds <= 60) { return "الآن"; }
+        //Minutes
+        else if ($minutes <= 60) { return ($minutes == 1) ? "قبل دقيقة واحدة" : "$minutes دقائق مضت"; }
+        //Hours
+        else if ($hours <= 24) { return ($hours == 1) ? "قبل ساعة" : "$hours قبل ساعات"; }
+        //Days
+        else if ($days <= 7) { return ($days == 1) ? "أمس" : "$days قبل أيام"; }
+        //Weeks
+        else if ($weeks <= 4.3) { return ($weeks == 1) ? "قبل أسبوع" : "$weeks قبل أسابيع"; }
+        //Months
+        else if ($months <= 12) { return ($months == 1) ? "قبل شهر" : "$months قبل شهور"; }
+        //Years
+        else { return ($years == 1) ? "قبل عام" : "$years منذ سنوات"; }
+    }
 }
 
 // --- String & Number Utilities ---
-function split_words($string, $nb_caracs, $separator)
-{
-    $string = strip_tags(html_entity_decode($string));
-    if (mb_strlen($string) <= $nb_caracs) { // Use mb_strlen for multi-byte strings
-        $final_string = $string;
-    } else {
-        $final_string = "";
-        $words = explode(" ", $string);
-        foreach ($words as $value) {
-            if (mb_strlen($final_string . " " . $value) < $nb_caracs) {
-                if (!empty($final_string)) $final_string .= " ";
-                $final_string .= $value;
-            } else {
-                break;
+// Expands a string to a specified number of characters without cutting words, appending a separator if truncated.
+// ex: split_words("This is a test string", 10, '...') => "This is..."
+if (!function_exists('split_words')) {
+    function split_words($string, $nb_caracs, $separator)
+    {
+        $string = strip_tags(html_entity_decode($string));
+        if (mb_strlen($string) <= $nb_caracs) { // Use mb_strlen for multi-byte strings
+            $final_string = $string;
+        } else {
+            $final_string = "";
+            $words = explode(" ", $string);
+            foreach ($words as $value) {
+                if (mb_strlen($final_string . " " . $value) < $nb_caracs) {
+                    if (!empty($final_string)) $final_string .= " ";
+                    $final_string .= $value;
+                } else {
+                    break;
+                }
             }
+            $final_string .= $separator;
         }
-        $final_string .= $separator;
+        return $final_string;
     }
-    return $final_string;
 }
 
-function number_pad($number, $n)
-{
-    return str_pad((int) $number, $n, "0", STR_PAD_LEFT);
+if (!function_exists('number_pad')) {
+    function number_pad($number, $n)
+    {
+        return str_pad((int) $number, $n, "0", STR_PAD_LEFT);
+    }
 }
 
 // --- Date & Time Utilities ---
-function dateDiffDays($startDate, $endDate)
+if (!function_exists('dateDiffDays')) {
+    function dateDiffDays($startDate, $endDate)
 {
     try {
         $date1 = new DateTime($startDate);
@@ -159,17 +172,21 @@ function dateDiffDays($startDate, $endDate)
         return "Error calculating difference";
     }
 }
+}
 
-function getTotalDays($years, $months, $days)
-{
-    // Simplified, assumes average month length which might not be accurate for precise calculations
-    // For exact day counts between dates, use dateDiffDays or DateTime::diff directly.
-    $result = ($years * 360) + ($months * 30) + $days;
-    return $result;
-};
+if (!function_exists('getTotalDays')) {
+    function getTotalDays($years, $months, $days)
+    {
+        // Simplified, assumes average month length which might not be accurate for precise calculations
+        // For exact day counts between dates, use dateDiffDays or DateTime::diff directly.
+        $result = ($years * 360) + ($months * 30) + $days;
+        return $result;
+    }
+}
 
 // --- Financial Calculations ---
-function endOfService($joinDate, $endDate, $salary)
+if (!function_exists('endOfService')) {
+    function endOfService($joinDate, $endDate, $salary)
 {
     try {
         $date1 = new DateTime($joinDate);
@@ -215,11 +232,13 @@ function endOfService($joinDate, $endDate, $salary)
 
     return round($result, 2); // Return final amount rounded
 }
+}
 
 // --- Debugging Utilities ---
-function debug($data, $die = true)
-{
-    echo '<pre style="background: #1e1e1e; color: #f0f0f0; padding: 10px; border-radius: 4px; text-align: left; font-family: monospace; font-size: 12px; z-index: 9999; position: relative;">';
+if (!function_exists('debug')) {
+    function debug($data, $die = true)
+    {
+        echo '<pre style="background: #1e1e1e; color: #f0f0f0; padding: 10px; border-radius: 4px; text-align: left; font-family: monospace; font-size: 12px; z-index: 9999; position: relative;">';
     echo "<strong>DEBUG OUTPUT:</strong>\n";
     if (is_bool($data) || is_null($data)) {
         var_dump($data); // Better for booleans & NULL
@@ -235,23 +254,28 @@ function debug($data, $die = true)
     echo '</pre>';
     if ($die) die(); // Optional: Stop execution
 }
-
-function dd($data) // Dump and Die
-{
-    debug($data, true);
 }
 
-function console_log($data)
-{
-    // Basic type handling for console output
-    $output = json_encode($data);
-    if ($output === false) {
-        // Handle json encoding failure (e.g., non-UTF8 data, recursion)
-        $output = "'PHP console_log: Error encoding data. Type: " . gettype($data) . "'";
+if (!function_exists('dd')) {
+    function dd($data) // Dump and Die
+    {
+        debug($data, true);
     }
-    echo '<script>';
-    echo 'console.log("PHP DEBUG:", ' . $output . ');';
-    echo '</script>';
+}
+
+if (!function_exists('console_log')) {
+    function console_log($data)
+    {
+        // Basic type handling for console output
+        $output = json_encode($data);
+        if ($output === false) {
+            // Handle json encoding failure (e.g., non-UTF8 data, recursion)
+            $output = "'PHP console_log: Error encoding data. Type: " . gettype($data) . "'";
+        }
+        echo '<script>';
+        echo 'console.log("PHP DEBUG:", ' . $output . ');';
+        echo '</script>';
+    }
 }
 
 // --- Navigation & Response Utilities ---
@@ -263,7 +287,8 @@ function console_log($data)
  * @param string $message Custom message to display during delay
  * @return void
  */
-function redirect($path = "", $delay = 0, $exit = true, $message = "")
+if (!function_exists('redirect')) {
+    function redirect($path = "", $delay = 0, $exit = true, $message = "")
 {
     // Prevent header modification errors if output already started
     if (headers_sent($file, $line)) {
@@ -323,10 +348,12 @@ function redirect($path = "", $delay = 0, $exit = true, $message = "")
 HTML;
 
     if ($exit) exit();
+    }
 }
 
 
-function salert($title, $message, $type = 'success', $redirectUrl = "", $btn = 'OK')
+if (!function_exists('salert')) {
+    function salert($title, $message, $type = 'success', $redirectUrl = "", $btn = 'OK')
 {
     // Sanitize output for security
     $title = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
@@ -372,42 +399,48 @@ function salert($title, $message, $type = 'success', $redirectUrl = "", $btn = '
     HTML;
     exit(); // Stop further script execution
 }
+}
 
 // --- Input Sanitization ---
-function sanitize_input($data)
-{
-    if (is_array($data)) {
-        return array_map('sanitize_input', $data);
+if (!function_exists('sanitize_input')) {
+    function sanitize_input($data)
+    {
+        if (is_array($data)) {
+            return array_map('sanitize_input', $data);
+        }
+        $data = trim($data);
+        $data = stripslashes($data); // Use with caution if magic quotes are off
+        $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+        return $data;
     }
-    $data = trim($data);
-    $data = stripslashes($data); // Use with caution if magic quotes are off
-    $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
-    return $data;
 }
 
 // --- JSON Response Helper ---
-function send_json_response($title, $message, $type, $http_status_code = 200)
-{
-    // Prevent potential errors if headers already sent
-    if (headers_sent($file, $line)) {
-        error_log("send_json_response cannot set headers - Output already started in $file on line $line");
-        // Still try to output JSON, but status code might be wrong
-        echo json_encode(['title' => $title, 'message' => $message, 'type' => $type]);
-    } else {
-        http_response_code($http_status_code);
-        header('Content-Type: application/json; charset=utf-8'); // Ensure charset
-        echo json_encode(['title' => $title, 'message' => $message, 'type' => $type]);
+if (!function_exists('send_json_response')) {
+    function send_json_response($title, $message, $type, $http_status_code = 200)
+    {
+        // Prevent potential errors if headers already sent
+        if (headers_sent($file, $line)) {
+            error_log("send_json_response cannot set headers - Output already started in $file on line $line");
+            // Still try to output JSON, but status code might be wrong
+            echo json_encode(['title' => $title, 'message' => $message, 'type' => $type]);
+        } else {
+            http_response_code($http_status_code);
+            header('Content-Type: application/json; charset=utf-8'); // Ensure charset
+            echo json_encode(['title' => $title, 'message' => $message, 'type' => $type]);
+        }
+        exit(); // Terminate script after sending JSON response
     }
-    exit(); // Terminate script after sending JSON response
 }
 
 // --- PDO Debug Helper ---
-function debugPDO($stmt, $params = [])
-{
-    // Ensure PDOStatement object is passed
-    if (!$stmt instanceof PDOStatement) {
-        return "Error: Invalid PDOStatement object provided.";
-    }
+if (!function_exists('debugPDO')) {
+    function debugPDO($stmt, $params = [])
+    {
+        // Ensure PDOStatement object is passed
+        if (!$stmt instanceof PDOStatement) {
+            return "Error: Invalid PDOStatement object provided.";
+        }
 
     $query = $stmt->queryString;
     $interpolatedQuery = $query;
@@ -440,22 +473,24 @@ function debugPDO($stmt, $params = [])
          . "<strong>Crude Interpolated Query (for display only):</strong>\n" . htmlspecialchars($interpolatedQuery) . "\n\n"
          . "<strong>PDO debugDumpParams():</strong>\n" . htmlspecialchars($debugInfo)
          . "</pre>";
+    }
 }
 
 // --- Name Parsing Utility ---
-function parseName($fullName, $format = 'FIRST_LAST')
-{
-    if (empty(trim($fullName))) return ''; // Handle empty input
+if (!function_exists('parseName')) {
+    function parseName($fullName, $format = 'FIRST_LAST')
+    {
+        if (empty(trim($fullName))) return ''; // Handle empty input
 
-    $parts = array_values(array_filter(explode(' ', trim($fullName))));
-    $count = count($parts);
+        $parts = array_values(array_filter(explode(' ', trim($fullName))));
+        $count = count($parts);
 
-    $firstName = $parts[0] ?? '';
-    $lastName = $count > 1 ? end($parts) : '';
-    $middleName = '';
-    if ($count > 2) {
-        $middleName = implode(' ', array_slice($parts, 1, -1));
-    }
+        $firstName = $parts[0] ?? '';
+        $lastName = $count > 1 ? end($parts) : '';
+        $middleName = '';
+        if ($count > 2) {
+            $middleName = implode(' ', array_slice($parts, 1, -1));
+        }
 
     // Determine components based on the available parts
     $components = [
@@ -477,14 +512,16 @@ function parseName($fullName, $format = 'FIRST_LAST')
         }
     }
 
-    // Avoid duplicate names if format requests overlapping parts (e.g., FIRST_SECOND_MIDDLE_LAST with 3 names)
-    return implode(' ', array_unique(array_filter($result)));
+        // Avoid duplicate names if format requests overlapping parts (e.g., FIRST_SECOND_MIDDLE_LAST with 3 names)
+        return implode(' ', array_unique(array_filter($result)));
+    }
 }
 
 // --- Search Highlighting ---
-function highlightKeywords($text, $search)
-{
-    if (empty(trim($search)) || empty($text)) return $text; // No search term or text
+if (!function_exists('highlightKeywords')) {
+    function highlightKeywords($text, $search)
+    {
+        if (empty(trim($search)) || empty($text)) return $text; // No search term or text
 
     // Escape special regex characters in search terms
     $wordsAry = preg_split('/\s+/', trim($search)); // Split by any whitespace
@@ -501,70 +538,75 @@ function highlightKeywords($text, $search)
         $text = preg_replace($pattern, $highlighted_text, $text);
     }
     return $text;
+    }
 }
 
 // --- Formatting Utilities ---
-function formatPeriod($periodString)
-{
-    // Example input: "1 year - 2023-10-29"
-    $parts = explode(' - ', $periodString, 2); // Limit split to 2 parts
-    if (count($parts) < 1) return $periodString; // Return original if format is unexpected
+if (!function_exists('formatPeriod')) {
+    function formatPeriod($periodString)
+    {
+        // Example input: "1 year - 2023-10-29"
+        $parts = explode(' - ', $periodString, 2); // Limit split to 2 parts
+        if (count($parts) < 1) return $periodString; // Return original if format is unexpected
 
-    $durationPart = $parts[0]; // "1 year"
-    $datePart = $parts[1] ?? ''; // "2023-10-29", might be empty
+        $durationPart = $parts[0]; // "1 year"
+        $datePart = $parts[1] ?? ''; // "2023-10-29", might be empty
 
-    // Split the duration part
-    $durationParts = explode(' ', $durationPart, 2);
-    $number = $durationParts[0] ?? '';
-    $unit = strtolower(trim($durationParts[1] ?? ''));
+        // Split the duration part
+        $durationParts = explode(' ', $durationPart, 2);
+        $number = $durationParts[0] ?? '';
+        $unit = strtolower(trim($durationParts[1] ?? ''));
 
-    // Translate the unit using the __() function (ensure it handles plurals or singular)
-    // Assume __() can handle 'year', 'month', 'day' etc.
-    $translatedUnit = __($unit); // Translate the unit
+        // Translate the unit using the __() function (ensure it handles plurals or singular)
+        // Assume __() can handle 'year', 'month', 'day' etc.
+        $translatedUnit = __($unit); // Translate the unit
 
-    // Reconstruct the string
-    $formattedString = $number . " " . $translatedUnit;
-    if (!empty($datePart)) {
-        $formattedString .= " - " . $datePart; // Add the date back if it exists
+        // Reconstruct the string
+        $formattedString = $number . " " . $translatedUnit;
+        if (!empty($datePart)) {
+            $formattedString .= " - " . $datePart; // Add the date back if it exists
+        }
+
+        return $formattedString;
     }
-
-    return $formattedString;
 }
 
 // --- Age Calculation ---
-function ageDOB($dob)
-{
-    try {
-        $birthDate = new DateTime($dob);
-        $today = new DateTime('today');
+if (!function_exists('ageDOB')) {
+    function ageDOB($dob)
+    {
+        try {
+            $birthDate = new DateTime($dob);
+            $today = new DateTime('today');
 
-        // Check if birth date is in the future
-        if ($birthDate > $today) {
-            return __('invalid_date_of_birth');
+            // Check if birth date is in the future
+            if ($birthDate > $today) {
+                return __('invalid_date_of_birth');
+            }
+
+            $age = $birthDate->diff($today);
+
+            // Format the output using translated terms
+            return sprintf(
+                "%s <b>%d</b> %s <b>%d</b> %s <b>%d</b>",
+                __('years'), $age->y,
+                __('months'), $age->m,
+                __('days'), $age->d
+            );
+        } catch (Exception $e) {
+            error_log("ageDOB Error: Invalid date format '$dob'. Error: " . $e->getMessage());
+            return __('invalid_date_format');
         }
-
-        $age = $birthDate->diff($today);
-
-        // Format the output using translated terms
-        return sprintf(
-            "%s <b>%d</b> %s <b>%d</b> %s <b>%d</b>",
-            __('years'), $age->y,
-            __('months'), $age->m,
-            __('days'), $age->d
-        );
-    } catch (Exception $e) {
-        error_log("ageDOB Error: Invalid date format '$dob'. Error: " . $e->getMessage());
-        return __('invalid_date_format');
     }
 }
-
 
 // --- Pagination ---
 /**
  * Generates a full set of pagination controls with detailed item counts.
  * [Existing Docblock]...
  */
-function generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $base_params = [], $unfiltered_total_items = null)
+if (!function_exists('generate_pagination_controls')) {
+    function generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $base_params = [], $unfiltered_total_items = null)
 {
     // Basic validation
     if (!is_numeric($current_page) || !is_numeric($total_pages) || !is_numeric($total_items) || !is_numeric($items_per_page) || !is_array($limit_options) || !is_bool($show_all)) {
@@ -687,6 +729,7 @@ function generate_pagination_controls($current_page, $total_pages, $total_items,
     $html .= '</div>'; // End d-flex
     $html .= '</div></div>'; // End row and outer div
     return $html;
+    }
 }
 
 
@@ -1130,7 +1173,8 @@ if (!function_exists('load_email_template')) {
             'smart_request' => 'smart_request_email_template.html',
             'vacation_request' => 'vacation_request_email_template.html',
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
-            'loan_request' => 'loan_request_email_template.html'
+            'loan_request' => 'loan_request_email_template.html',
+            'resignation_request' => 'resignation_request_email_template.html'
         ];
         
         $template_file = $template_map[$request_type] ?? 'smart_request_email_template.html';
@@ -1158,7 +1202,15 @@ if (!function_exists('load_email_template')) {
             'EMAIL_MESSAGE' => 'A new request requires your attention.',
             'REJECTION_BORDER' => 'border-bottom: 1px solid #404040;',
             'REJECTION_BORDER_INST' => '',
-            'REJECTION_INFO' => ''
+            'REJECTION_INFO' => '',
+            'EXIT_INTERVIEW_SECTION' => '',
+            'EMP_ID' => 'N/A',
+            'EMP_NAME' => 'N/A',
+            'DEPARTMENT' => 'N/A',
+            'DESIGNATION' => 'N/A',
+            'RESIGNATION_ID' => 'N/A',
+            'LAST_WORKING_DAY' => 'N/A',
+            'SUBMISSION_DATE' => 'N/A'
         ];
         
         $data = array_merge($defaults, $data);
@@ -1179,8 +1231,8 @@ if (!function_exists('load_email_template')) {
         
         // Replace template placeholders
         foreach ($data as $key => $value) {
-            // Skip already processed rejection info
-            if ($key === 'REJECTION_INFO' || $key === 'REJECTION_BORDER' || $key === 'REJECTION_BORDER_INST') {
+            // Skip already processed rejection info and HTML content
+            if ($key === 'REJECTION_INFO' || $key === 'REJECTION_BORDER' || $key === 'REJECTION_BORDER_INST' || $key === 'EXIT_INTERVIEW_SECTION') {
                 $html = str_replace('{{' . $key . '}}', $value, $html);
             } else {
                 $html = str_replace('{{' . $key . '}}', htmlspecialchars($value, ENT_QUOTES, 'UTF-8'), $html);
@@ -1335,6 +1387,44 @@ if (!function_exists('get_request_details_for_email')) {
             }
             error_log("get_request_details_for_email: Failed to fetch smart request details for $inv_no");
             return false;
+            
+        } elseif ($request_type === 'resignation_request') {
+            // Fetch resignation details
+            $sql = "SELECT r.*, e.emp_id, e.name as employee_name, e.iqama,
+                           d.dep_nme as department, j.job as designation
+                    FROM emp_resignations r
+                    LEFT JOIN employees e ON e.emp_id = r.emp_id
+                    LEFT JOIN department d ON d.id = e.dept
+                    LEFT JOIN ac_jobs j ON j.id = e.actual_job
+                    WHERE r.request_inv_no = ? 
+                    LIMIT 1";
+            
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        $template_data['EMP_ID'] = $row['emp_id'] ?? 'N/A';
+                        $template_data['EMP_NAME'] = $row['employee_name'] ?? 'N/A';
+                        $template_data['IQAMA'] = $row['iqama'] ?? 'N/A';
+                        $template_data['DEPARTMENT'] = $row['department'] ?? 'N/A';
+                        $template_data['DESIGNATION'] = $row['designation'] ?? 'N/A';
+                        $template_data['RESIGNATION_ID'] = $inv_no;
+                        $template_data['LAST_WORKING_DAY'] = isset($row['last_working_day']) ? date('d M Y', strtotime($row['last_working_day'])) : 'N/A';
+                        $template_data['SUBMISSION_DATE'] = isset($row['created_at']) ? date('d M Y H:i', strtotime($row['created_at'])) : 'N/A';
+                        $template_data['REQUEST_URL'] = $base_url . '/all_resignations.php';
+                        
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            error_log("get_request_details_for_email: Failed to fetch resignation details for $inv_no");
+            return false;
         }
         
         // Unknown request type
@@ -1344,6 +1434,101 @@ if (!function_exists('get_request_details_for_email')) {
 }
 
 
+
+/**
+ * =================================================================
+ * Fetches all exit interview questions and answers for a resignation
+ * @param mysqli $conDB Database connection
+ * @param int $resignation_id The resignation ID
+ * @return array Exit interview Q&A array or empty array if not found
+ */
+if (!function_exists('get_exit_interview_data')) {
+    function get_exit_interview_data($conDB, $resignation_id) {
+        $exit_interviews = [];
+        
+        if (!is_numeric($resignation_id) || $resignation_id <= 0) {
+            return $exit_interviews;
+        }
+        
+        $resignation_id_safe = (int)$resignation_id;
+        $sql = "SELECT * FROM `emp_exit_interviews` WHERE `resignation_id` = ? ORDER BY `id` ASC";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, 'i', $resignation_id_safe);
+            if (mysqli_stmt_execute($stmt)) {
+                $result = mysqli_stmt_get_result($stmt);
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $exit_interviews[] = $row;
+                }
+                mysqli_free_result($result);
+            }
+            mysqli_stmt_close($stmt);
+        }
+        
+        return $exit_interviews;
+    }
+}
+
+/**
+ * =================================================================
+ * Generates HTML for exit interview display in emails
+ * @param array $exit_interviews Array of exit interview records
+ * @return string HTML formatted exit interview Q&A display
+ */
+if (!function_exists('format_exit_interview_html')) {
+    function format_exit_interview_html($exit_interviews) {
+        if (empty($exit_interviews)) {
+            return '';
+        }
+        
+        $html = '<h2 style="margin: 0 0 20px; color: #ffffff; font-size: 18px; font-weight: 600; border-bottom: 2px solid #dc3545; padding-bottom: 10px;">
+                    📋 Exit Interview Responses
+                 </h2>';
+        
+        $html .= '<div style="background-color: #151515; padding: 15px; border-radius: 4px;">';
+        
+        // Define question labels
+        $questions = [
+            'What are the main reasons behind your decision to leave the company?',
+            'Did you feel supported and appreciated by management and colleagues?',
+            'Were you provided with sufficient tools and resources to perform your job effectively?',
+            'How would you evaluate your direct manager\'s leadership style?',
+            'Were the available growth and development opportunities suitable for you?',
+            'How do you evaluate the compensation and benefits you received?',
+            'What do you wish had been different during your time here?',
+            'Would you recommend the company as a workplace to others? Why or why not?',
+            'Is there anything else you would like to share before you leave?'
+        ];
+        
+        $answerKeys = ['q1_reasons', 'q2_support', 'q3_resources', 'q4_manager', 'q5_growth', 'q6_compensation', 'q7_different', 'q8_recommend', 'q9_additional'];
+        
+        foreach ($exit_interviews as $record) {
+            foreach ($answerKeys as $index => $key) {
+                if (!empty($record[$key])) {
+                    $question_num = $index + 1;
+                    $html .= '<div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #2a2a2a;">';
+                    
+                    // Question
+                    $html .= '<p style="margin: 0 0 8px; color: #ffc107; font-size: 14px; font-weight: 600;">
+                                Q' . $question_num . ': ' . htmlspecialchars($questions[$index], ENT_QUOTES, 'UTF-8') . '
+                              </p>';
+                    
+                    // Answer
+                    $html .= '<p style="margin: 0; color: #c0c0c0; font-size: 14px; line-height: 1.6; padding: 10px; background-color: #1a1a1a; border-left: 3px solid #28a745; border-radius: 3px;">
+                                ' . nl2br(htmlspecialchars($record[$key], ENT_QUOTES, 'UTF-8')) . '
+                              </p>';
+                    
+                    $html .= '</div>';
+                }
+            }
+        }
+        
+        $html .= '</div>';
+        
+        return $html;
+    }
+}
 
 /**
  * Handles an approver's action (approve/reject).

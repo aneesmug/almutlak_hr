@@ -124,6 +124,19 @@ try {
         // --- (NEW) LOAN DEDUCTION LOGIC ---
         addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
 
+        // Cleanup: ensure no loan deductions persist for loans set to manual mode for this employee/month
+        // This handles cases where mode was switched after scheduling or legacy rows exist
+        $stmtCleanup = $pdo->prepare("DELETE pd FROM payroll_deductions pd
+            WHERE pd.emp_id = :emp_id AND pd.month = :month_year AND (
+                EXISTS (
+                    SELECT 1 FROM emp_loan el
+                    WHERE el.emp_id = pd.emp_id
+                      AND el.deduction_mode = 'manual'
+                      AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
+                )
+            )");
+        $stmtCleanup->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+
 
         // --- GOSI Deduction Logic ---
         if ($employeeData['country'] === '191') {
@@ -184,10 +197,19 @@ try {
         }
         
         // --- Calculate total deductions ---
-        $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(note AS DECIMAL(10,2))), 0)
-            FROM payroll_deductions
-            WHERE emp_id = :emp_id AND month = :month_year AND status = 1
-        ");
+                // Exclude loan-linked deductions when the corresponding loan's deduction_mode is 'manual'.
+                // Assumes loan-linked payroll_deductions rows include the loan inv_no in the `deduction` text.
+                $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0)
+                        FROM payroll_deductions pd
+                        WHERE pd.emp_id = :emp_id
+                            AND pd.month = :month_year
+                            AND pd.status = 1
+                            AND NOT EXISTS (
+                                    SELECT 1 FROM emp_loan el
+                                    WHERE el.emp_id = pd.emp_id
+                                        AND el.deduction_mode = 'manual'
+                                        AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
+                            )");
         $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
         $totalDeductions = (float)$stmtDeductionsSum->fetchColumn();
         // Calculate net salary
@@ -286,6 +308,13 @@ function addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary) 
  * automated loan approval system that creates specific loan deductions.
  */
 function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
+    // If employee has any approved loans set to manual mode, do not auto-insert deductions
+    $payrollMonthEnd = date('Y-m-t', strtotime($monthYear . '-01'));
+    $stmtHasManual = $pdo->prepare("SELECT 1 FROM emp_loan WHERE emp_id = :emp_id AND status = 'approved' AND deduction_mode = 'manual' AND (start_date IS NULL OR start_date = '0000-00-00' OR start_date <= :month_end) LIMIT 1");
+    $stmtHasManual->execute([':emp_id' => $empId, ':month_end' => $payrollMonthEnd]);
+    if ($stmtHasManual->fetchColumn()) {
+        return; // Respect manual mode: no automatic loan deduction creation
+    }
     // Check if ANY loan-related deduction already exists for this month
     $stmtCheck = $pdo->prepare("SELECT id FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND (deduction = 'Loan Installment' OR deduction LIKE '%Loan%')");
     $stmtCheck->execute([':emp_id' => $empId, ':month_year' => $monthYear]);

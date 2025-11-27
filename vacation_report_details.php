@@ -30,7 +30,7 @@ if (mysqli_num_rows($query) == 1) {
         die("Invalid request parameters.");
     }
 
-    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note)
+    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note, accommodation_provided, transportation_provided)
     $sql = "SELECT 
                 v.*, 
                 v.fly_type as raw_fly_type,
@@ -42,6 +42,8 @@ if (mysqli_num_rows($query) == 1) {
                 v.deduction_hours,
                 v.deduction_days,
                 v.payroll_note,
+                v.accommodation_provided,
+                v.transportation_provided,
                 e.name as employee_name,
                 e.avatar,
                 e.joining_date,
@@ -471,6 +473,12 @@ if (mysqli_num_rows($query) == 1) {
                                             <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?= display_or_na($flight_days); ?> <?= __('days') ?></small></span></div>
                                         <?php endif; ?>
                                         <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?= parseName(($request['replacement_person_name'] ?? '') !== '' ? $request['replacement_person_name'] : __('not_available')); ?></small></span></div>
+                                        
+                                        <?php if ($request['vac_type'] === 'Business Trip'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('accommodation_provided') ?></span> <span class="value"><small><?= ucfirst($request['accommodation_provided'] ?? 'N/A'); ?></small></span></div>
+                                            <div class="detail-item"><span class="label"><?= __('transportation_provided') ?></span> <span class="value"><small><?= ucfirst($request['transportation_provided'] ?? 'N/A'); ?></small></span></div>
+                                        <?php endif; ?>
+                                        
                                         <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?= display_or_na(!empty($request['created_at']) ? date('d M Y, h:i A', strtotime($request['created_at'])) : null); ?></small></span></div>
                                          <?php if (!empty($request['attachment_path'])): ?>
                                             <div class="detail-item"><span class="label"><?= __('attachment') ?></span> <span class="value"><small><a href="<?= display_or_na($request['attachment_path']); ?>" target="_blank"><?= __('view_document') ?></a></small></span></div>

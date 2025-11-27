@@ -10,6 +10,111 @@
  *
  **************************************************************************************************/
 $current_page_name = basename($_SERVER['PHP_SELF']);
+
+// Calculate employee modification permission
+$can_modify_employee = (
+	$is_system_admin || 
+	$isDeptHr
+);
+
+// Get available vacation balance for modal actions
+$displayBalance = 0;
+$empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];
+if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
+	$balance_query = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' ORDER BY `last_updated` DESC LIMIT 1");
+	if ($balance_query && mysqli_num_rows($balance_query) > 0) {
+		$balance_row = mysqli_fetch_assoc($balance_query);
+		$displayBalance = (float)$balance_row['available_balance'];
+		mysqli_free_result($balance_query);
+	}
+}
+
+// Build More Actions menu HTML organized by categories
+$moreActionsHtml = '';
+if ($emprow['status'] == 1) {
+	// HR ACTIONS
+	$hr_actions = '';
+	
+	// Add Documents (HR only)
+	if ($isDeptHr || $isHR || $is_system_admin) {
+		$hr_actions .= "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
+	}
+	
+	// Apply Loan (HR/Admin only, if no active loan)
+	if (empty($emprow['has_active_regular_loan']) && ($is_system_admin || $isDeptHr || $isHR)) {
+		$hr_actions .= "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
+	}
+	
+	if ($hr_actions) {
+		$moreActionsHtml .= $hr_actions;
+	}
+	
+	// IT ACTIONS
+	if ($isItAssistant || $is_system_admin) {
+		$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"assignAsset('" . htmlspecialchars($emprow['empid']) . "')\" role=\"button\"><i class=\"fa fa-solid fa-project-diagram\"></i><span>" . __('assign_asset') . "</span></div>";
+	}
+	
+	// VACATION & LEAVE ACTIONS
+	if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) {
+		if ($emprow['emp_sup_type'] != "man_power") {
+			// Annual Vacation
+			if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) {
+				$moreActionsHtml .= "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
+			}
+			
+			// Excuse Leave
+			$moreActionsHtml .= "<div class=\"menu-item text-info applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
+			
+			// Vacation arrival/departure
+			if ($emprow["fly"] == 1) {
+				if ($isHR || $is_system_admin || $isDeptHr) {
+					$lastVac = lastVacIdGet($emprow['empid']);
+					$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"returnVacationRequest(" . htmlspecialchars($lastVac['vacid']) . ", '" . htmlspecialchars($lastVac['returndate']) . "')\" role=\"button\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('arrived') . "</span></div>";
+				}
+			} else {
+				if ($emprow['apd_status'] == 'approve' && $user_type != "dept_user") {
+					$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"window.location.href='add_vac_emp.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-plane-departure\"></i><span>" . __('add_vacation') . "</span></div>";
+				}
+			}
+		}
+	}
+	
+	// ADMIN ACTIONS
+	if ($is_system_admin || $isDeptHr || $isHR) {
+		// Create Login
+		if ($is_system_admin && empty($emprow['av_dept'])) {
+			$moreActionsHtml .= "<div class=\"menu-item text-dark createUserDeptAjax\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-shield\"></i><span>" . __('create_login') . "</span></div>";
+		}
+		
+		// Edit Employee (only system admin and dept hr)
+		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee && ($is_system_admin || $isDeptHr)) {
+			$moreActionsHtml .= "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
+		}
+		
+		// Add Note (only system admin and dept hr)
+		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee && ($is_system_admin || $isDeptHr)) {
+			$moreActionsHtml .= "<div class=\"menu-item text-info addnote\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-book-user\"></i><span>" . __('note') . "</span></div>";
+		}
+		
+		// Terminate (only on edit page)
+		if ($user_type != "dept_user" && $current_page_name == "edit_employee.php") {
+			$moreActionsHtml .= "<div class=\"menu-item text-danger\" data-toggle=\"modal\" data-target=\".terminat\" role=\"button\"><i class=\"fa fa-user-large-slash\"></i><span>" . __('terminat') . "</span></div>";
+		}
+		
+		// End of Service
+		if ($is_system_admin || $isDeptHr || $isHR) {
+			$moreActionsHtml .= "<div class=\"menu-item text-secondary\" onclick=\"window.open('emp_end_of_service.php?emp_id=" . htmlspecialchars($emprow['empid']) . "', '_blank')\" role=\"button\"><i class=\"fa fa-solid fa-user-slash\"></i><span>" . __('create_end_of_service') . "</span></div>";
+		}
+
+		// Apply Resignation
+		$moreActionsHtml .= "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
+
+	}
+} else {
+	$moreActionsHtml = '<div style="padding:24px; text-align:center; color: #6c757d;"><p>' . __('employee_is_inactive') . '</p></div>';
+}
+
+$current_page_name = basename($_SERVER['PHP_SELF']);
 if ($isEmployee !== true) {
 	// Ensure IDs available
 	$eid   = $emprow['eid'];
@@ -37,66 +142,62 @@ if ($isEmployee !== true) {
 		}
 	}
 	// Salary Information Check
-	if (($emprow['basic'] ?? 0) == 0 && $current_page_name !== 'add_emp_slry.php') {
-		header('Location: add_emp_slry.php?emp_id=' . urlencode($empid));
-		exit();
-	}
+	// if (($emprow['basic'] ?? 0) == 0 && $current_page_name !== 'add_emp_slry.php') {
+	// 	header('Location: add_emp_slry.php?emp_id=' . urlencode($empid));
+	// 	exit();
+	// }
 }
 
 ?>
 
 <div class="row">
 	<div class="col-xl-12">
-		<!-- meta -->
-		<div class="profile-user-box card-box <?= ($emprow["status"] == "1" && $emprow["fly"] == 0 ? "bg-dark" : ($emprow["fly"] == 1 ? "bg-warning" : "bg-danger")) ?>">
-			<div class="row">
-				<div class="col-sm-1">
-					<label class="empAvatarShow" for="img-crop" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-img="<?= $emprow['avatar'] ?>" data-name="<?= $emprow['name'] ?>" style="margin-bottom: 0 !important">
-						<div>
-							<img src="<?= $emprow['avatar'] ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="thumb-lg rounded-circle emp_avat_img">
-							<div class="empAvatar"><i class="fad fa-images-user duotone-danger"></i></div>
-						</div>
-					</label>
+		<!-- Profile Header Style Employee Card -->
+		<?php
+		// Determine status styling
+		$header_class = 'profile-header';
+		$status_label = __('active');
+		$status_icon = 'fa-check-circle';
+		
+		// Check vacation status first (has priority)
+		if ($emprow["fly"] == 1) {
+			$header_class .= ' vacation';
+			$status_label = __('on_vacation');
+			$status_icon = 'fa-plane-departure';
+		} elseif ($emprow["status"] == "0") {
+			$header_class .= ' inactive';
+			$status_label = __('inactive');
+			$status_icon = 'fa-times-circle';
+		}
+		?>
+		<div class="<?= $header_class ?>">
+			<div class="container-custom">
+				<!-- Avatar -->
+				<label class="empAvatarShow" for="img-crop" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-img="<?= $emprow['avatar'] ?>" data-name="<?= $emprow['name'] ?>" style="margin-bottom: 0; cursor: pointer;">
+					<img src="<?= $emprow['avatar'] ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
 					<input type="file" name="image" class="image" hidden id="img-crop" accept="image/*">
+				</label>
+
+				<!-- Employee Info -->
+				<div class="profile-header-info">
+					<h1><?= htmlspecialchars($emprow['name']) ?></h1>
+					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . $emprow["sectin_nme"]) ?></p>
+					<p><i class="fa fa-hashtag"></i> <?= __('employee_no') ?>: <?= htmlspecialchars($emprow['empid']) ?></p>
+					<p><i class="fa fa-passport"></i> <?= __('iqama_id_label') ?>: <?= htmlspecialchars($emprow['iqama']) ?></p>
+					<p><i class="fa fa-solid fa-phone-laptop"></i> <?= __('mobile') ?>: <?= htmlspecialchars($emprow['mobile']) ?></p>
 				</div>
 
-				<div class="col-sm-5">
-					<div class="media-body text-white">
-						<h4 class="mt-1 mb-1 font-18"><?= __('name') ?>: <span class="copyToClipboard"><?= htmlspecialchars($emprow['name']) ?></span> <i class="fa fa-clipboard"></i></h4>
-						<p class="text-light mb-0"><?= __('joining_date') ?>: <?= date('M d Y', strtotime(str_replace('/', '-', $emprow['joining_date']))) ?></p>
-						<p class="text-light mb-0"><?= __('mobile') ?>: <span class='copyToClipboard'><?= htmlspecialchars($emprow['mobile']) ?></span> <i class='fa fa-clipboard'></i></p>
-						<p class="text-light mb-0"><?= __('vacation_days') ?>: <?= htmlspecialchars($emprow['vacation_days']) ?></p>
-						<?php if ($emprow["status"] == 0) : ?>
-							<p class="text-light mb-0">
-								<?= __('terminated_reason') . ": " . ($is_rtl ?? false ? $emprow['leaving_reason_ar']:$emprow['leaving_reason']); ?>
-							</p>
-						<?php endif; ?>
+				<!-- Quick Stats -->
+				<div class="profile-quick-stats">
+					<div class="stat-item">
+						<div class="stat-number"><?= htmlspecialchars($emprow['vacation_days']) ?></div>
+						<div class="stat-label"><?= __('vacation_days') ?></div>
 					</div>
-				</div>
-
-				<div class="col-sm-2">
-					<div class="media-body text-white float-right">
-						<a href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank">
-							<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code">
-						</a>
-					</div>
-				</div>
-
-				<div class="col-sm-4">
-					<div class="text-left">
-						<p class="text-light mb-0">
-							<?= __('iqama_id') . ": <span class='copyToClipboard'>" . htmlspecialchars($emprow['iqama']) . "</span> <i class='fa fa-clipboard'></i>"; ?>
-						</p>
-						<p class="text-light mb-0"><?= __('employee_no') ?>: <span class='copyToClipboard'><?= htmlspecialchars($emprow['empid']) ?></span> <i class='fa fa-clipboard'></i></p>
-						<p class="text-light mb-0"><?= __('department') ?>: <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . $emprow["sectin_nme"]) ?></p>
-						<p class="text-light mb-0"><?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>
-						<p class="text-light mb-0"><?= __('balance_vacations') ?>:
+					<div class="stat-item">
+						<div class="stat-number">
 							<?php
-							// Get available balance directly from emp_vacation_balance table
-							// (Updated daily by cron job - no need for live calculation)
 							$displayBalance = 0;
 							$empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];
-							
 							if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
 								$balance_query = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' ORDER BY `last_updated` DESC LIMIT 1");
 								if ($balance_query && mysqli_num_rows($balance_query) > 0) {
@@ -105,164 +206,36 @@ if ($isEmployee !== true) {
 									mysqli_free_result($balance_query);
 								}
 							}
+							echo number_format($displayBalance, 2);
 							?>
-							<?= $displayBalance < 0 
-							    ? "<span class='badge badge-danger badge-pill'>" . number_format($displayBalance, 2) . __('days') . " </span>" 
-							    : number_format($displayBalance, 2) . " " . __('days'); 
-							?>
-						</p>
-						<?php if ($emprow["status"] == 0) : ?>
-							<p class="text-light mb-0">
-								<?=  __('terminated_date'). ": " . date('d M Y', strtotime($emprow["end_date"])); ?>
-							</p>
-						<?php endif; ?>
-					</div>
-
-					<?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
-						<div class="text-right">
-							<?php if ($emprow["status"] == 1) : ?>
-								<div class="btn-group" role="group" aria-label="Edit Button">
-									<button type="button" class="btn btn-sm btn-light dropdown-toggle waves-effect" data-toggle="dropdown" aria-expanded="false">
-										<?= __('more') ?> <i class="fa fa-chart-simple-horizontal font-18 vertical-middle"></i>
-									</button>
-									<div class="dropdown-menu">
-										<?php if($isDeptHr || $isHR || $is_system_admin): ?>
-										<a href="javascript:void(0);" class="text-primary dropdown-item addEmpDocuAtter d-flex align-items-center" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>">
-											<i class="fa fa-solid fa-upload mr-2"></i> <?= __('add_documents') ?>
-										</a>
-										<?php endif; ?>
-										<?php if($isItAssistant || $is_system_admin): ?>
-										<a href="javascript:void(0);" class="text-dark dropdown-item d-flex align-items-center" onclick="assignAsset('<?= $emprow['empid'] ?>')">
-											<i class="fa fa-solid fa-project-diagram mr-2"></i> <?= __('assign_asset') ?>
-										</a>
-										<?php endif; ?>
-										<?php  ?>
-										<?php if (empty($emprow['has_active_regular_loan']) && $is_system_admin || $isDeptHr || $isHR ) : ?>
-											<a href="javascript:void(0);" class="text-warning dropdown-item applyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
-												<i class="fa fa-money-bill-trend-up mr-2"></i> <?= __('apply_loan') ?>
-											</a>
-										<?php endif; /*?>
-										<?php if (empty($emprow['has_active_emergency_loan']) && $is_system_admin || $isDeptHr || $isHR) : ?>
-											<a href="javascript:void(0);" class="text-info dropdown-item applyEmergencyLoan d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
-												<i class="fa fa-money-bill-wheat mr-2"></i> <?= __('emergency_loan') ?>
-											</a>
-										<?php endif; ?>
-										<?php if ($is_system_admin && $emprow['c_email']) : ?>
-											<a class="text-info dropdown-item d-flex align-items-center" href="./qrsend.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>">
-												<i class="fa fa-solid fa-qrcode-read mr-2"></i> <?= __('send_qr') ?>
-											</a>
-										<?php endif; ?>
-										<?php */ ?>
-									<?php if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) : ?>
-
-										<?php if ($emprow['emp_sup_type'] != "man_power") : ?>
-											<?php if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) : ?>
-												<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" data-dept="<?= $emprow['dept'] ?>" data-country="<?= $emprow['country'] ?>" data-balance="<?= $displayBalance ?>" class="text-dark dropdown-item applyvacationAtter d-flex align-items-center">
-													<i class="fa fa-user-chart mr-2"></i> <?= __('apply_annual_vacation') ?>
-												</a>
-												<?php endif; ?>
-												<?php if ($emprow['apd_review'] == "A" && $emprow['apd_status'] == "apply") : ?>
-													<?php
-													$status_text = $all_statuses[$emprow['apd_status']] ?? 'Unknown';
-													$badge_class = 'secondary';
-													switch ($req['approval_status']) {
-														case 'apply':
-															$badge_class = 'info';
-															break;
-														case 'pending':
-															$badge_class = 'warning';
-															break;
-														case 'gm_approved':
-															$badge_class = 'success';
-															break;
-														case 'rejected':
-															$badge_class = 'danger';
-															break;
-														default:
-															$badge_class = 'primary';
-															break;
-													}
-													?>
-													<a class="text-warning dropdown-item d-flex align-items-center">
-														<i class="fa fa-user-check mr-2"></i> <?= htmlspecialchars($status_text) ?>
-													</a>
-												<?php endif; ?>
-												<a href="javascript:void(0);" data-empid="<?= $emprow['empid'] ?>" class="text-info dropdown-item applyLeaveRequest d-flex align-items-center">
-													<i class="fa fa-solid fa-house-person-leave mr-2"></i> <?= __('excuse_leave') ?>
-												</a>
-											<?php endif; ?>
-
-											<?php if ($is_system_admin && empty($emprow['av_dept'])) : ?>
-												<a href="javascript:void(0);" data-emp_id=<?= $emprow['empid'] ?> class="text-dark dropdown-item createUserDeptAjax d-flex align-items-center">
-													<i class="fa fa-user-shield mr-2"></i> <?= __('create_login') ?>
-												</a>
-											<?php endif; ?>
-
-											<?php if ($emprow["fly"] == 1) : ?>
-												<?php if ($isHR || $is_system_admin || $isDeptHr) : ?>
-													<a href="javascript:void(0);" class="text-dark dropdown-item d-flex align-items-center" onclick="returnVacationRequest(<?= lastVacIdGet($emprow['empid'])['vacid'] ?>, '<?= lastVacIdGet($emprow['empid'])['returndate'] ?>')">
-														<i class="fa fa-plane-arrival mr-2"></i> <?= __('arrived') ?>
-													</a>
-												<?php endif; ?>
-											<?php else : ?>
-												<?php if ($emprow['apd_status'] == 'approve' && $user_type != "dept_user") : ?>
-													<a href="add_vac_emp.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item d-flex align-items-center">
-														<i class="fa fa-plane-departure mr-2"></i> <?= __('add_vacation') ?>
-													</a>
-												<?php endif; ?>
-											<?php endif; ?>
-										<?php endif; ?>
-
-										<?php if ($is_system_admin || $isDeptHr || $isHR) : ?>
-										<?php if ($user_type != "dept_user" && $current_page_name == "edit_employee.php") : ?>
-											<a href="javascript:void(0);" class="text-danger dropdown-item d-flex align-items-center" data-toggle="modal" data-target=".terminat">
-												<i class="fa fa-user-large-slash mr-2"></i> <?= __('terminat') ?>
-											</a>
-										<?php endif; ?>
-
-										<?php 
-										// Only system_admin, hr_operations, hr_recruitment can edit employees
-										$can_modify_employee = (
-											$is_system_admin || 
-											$user_type === 'hr_operations' ||
-											$user_type === 'hr_payroll' ||
-											$isHR_Assistant ||
-											$user_type === 'hr_recruitment'
-										);
-										?>
-
-										<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) : ?>
-											<a href="edit_employee.php?emp_id=<?= $emprow['empid'] ?>" class="text-primary dropdown-item d-flex align-items-center">
-												<i class="fa fa-user-pen mr-2"></i> <?= __('edit') ?>
-											</a>
-										<?php endif; ?>
-
-										<?php if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) : ?>
-												<a href="javascript:void(0);" class="text-info dropdown-item addnote d-flex align-items-center" data-emp_id="<?= $emprow['empid'] ?>">
-													<i class="fa fa-book-user mr-2"></i> <?= __('note') ?>
-												</a>
-											<?php endif; ?>
-
-											<?php if ($isEmployee) : ?>
-												<a href="javascript:void(0);" class="text-primary dropdown-item d-flex align-items-center">
-													<i class="fa fa-user-pen mr-2"></i> <?= __('edit_information') ?>
-												</a>
-											<?php endif; ?>
-
-											<?php if ($is_system_admin || $isDeptHr || $isHR) : ?>
-												<a href="emp_end_of_service.php?emp_id=<?= $emprow['empid'] ?>" target="_blank" class="text-danger dropdown-item d-flex align-items-center">
-													<i class="fa fa-solid fa-user-slash mr-2"></i> <?= __('create_end_of_service') ?>
-												</a>
-											<?php endif; ?>
-
-										<?php endif; ?>
-									</div>
-								</div>
-							<?php endif; ?>
 						</div>
-
-					<?php endif; ?>
+						<div class="stat-label"><?= __('balance_vacations') ?></div>
+					</div>
+					<div class="stat-item">
+						<div class="stat-number"><?= date('Y', strtotime(str_replace('/', '-', $emprow['joining_date']))) ?></div>
+						<div class="stat-label"><?= __('joining_date') ?></div>
+					</div>
+					<div class="stat-item">
+						<div class="stat-number"><?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></div>
+						<div class="stat-label"><?= __('nationality') ?></div>
+					</div>
 				</div>
+
+				<!-- QR Code -->
+				<a href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank" title="<?= __('view_employee_card') ?>">
+					<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code" class="qr-code">
+				</a>
+
+				<!-- More Actions Button -->
+				<?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
+					<?php if ($emprow["status"] == 1) : ?>
+					<div class="more-actions-wrapper">
+						<button type="button" id="moreActionsBtn" class="more-actions-btn">
+							<i class="fa fa-bars"></i> <?= __('more') ?>
+						</button>
+					</div>
+					<?php endif; ?>
+				<?php endif; ?>
 			</div>
 		</div>
 
@@ -325,13 +298,13 @@ if ($isEmployee !== true) {
 								Add Portfolio Dedails <i class="mdi mdi mdi-account-card-details"></i>
 							</a>
 						<?php endif ?>
-						<?php if ($is_system_admin || $isHR || $isDeptHr): ?>
-							<?php if ($current_page_name <> "add_emp_slry.php"): ?>
-								<a href="add_emp_slry.php?emp_id=<?= $emprow['empid'] ?>" class="btn-sm btn btn-secondary waves-effect btn-rounded">
-									<?= __('update_salary') ?> <i class="mdi mdi-inbox-arrow-up"></i>
-								</a>
-							<?php endif ?>
+					<?php if ($is_system_admin || $isHR || $isDeptHr): ?>
+						<?php if ($current_page_name <> "add_emp_slry.php"): ?>
+							<a href="javascript:void(0);" class="btn-sm btn btn-secondary waves-effect btn-rounded updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>">
+								<?= __('update_salary') ?> <i class="mdi mdi-inbox-arrow-up"></i>
+							</a>
 						<?php endif ?>
+					<?php endif ?>
 					<?php else: ?>
 						<a href="./end_of_service_print.php?emp_id=<?= $emprow['empid']; ?>" target="_blank" class="btn-sm btn btn-danger waves-effect btn-rounded">
 							<?= __('print_end_of_service') ?> <i class="mdi mdi-printer"></i>
@@ -355,3 +328,33 @@ if ($isEmployee !== true) {
 	</div>
 <?php endif; ?>
 <!-- /*************************************************/ -->
+
+<!-- Force Salary Entry for Newly Registered Employees -->
+<?php
+$empid_check = $emprow['empid'] ?? $emprow['emp_id'];
+if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
+	// Check if employee has no salary record in emp_salary table
+	$checkSalaryStmt = $pdo->prepare("SELECT id FROM emp_salary WHERE emp_id = :emp_id LIMIT 1");
+	$checkSalaryStmt->execute([':emp_id' => $empid_check]);
+	$hasSalaryRecord = $checkSalaryStmt->fetch();
+	
+	// If no salary record exists, trigger the modal automatically
+	if (!$hasSalaryRecord):
+?>
+<script>
+	// Auto-trigger the update salary button click on page load for newly registered employees
+	window.addEventListener('load', function() {
+		setTimeout(function() {
+			var updateSalaryBtn = document.querySelector('.updateSalaryBtn');
+			if (updateSalaryBtn) {
+				// Set the auto_triggered flag
+				updateSalaryBtn.dataset.auto_triggered = 'true';
+				// Trigger click event for vanilla JavaScript
+				updateSalaryBtn.click();
+			}
+		}, 500);
+	});
+</script>
+<?php endif; 
+} ?>
+<!-- End Force Salary Entry -->

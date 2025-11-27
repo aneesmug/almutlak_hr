@@ -387,7 +387,7 @@ if (mysqli_num_rows($query) == 1) {
                     dom: 'Bfrtip',
                     buttons: buttonConfig,
                     order: [[0, "desc"]],
-                    pageLength: 25,
+                    pageLength: 10,
                     searchCols: [
                         null, // ID
                         null, // Username

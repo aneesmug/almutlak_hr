@@ -76,17 +76,21 @@ function __(key, defaultText = '') {
 
 // --- Main Script Logic (Your existing functions) ---
 $(document).ready(function() {
-    $('.addnote').on('click', function() {add_noties.call(this)});
+    // Use event delegation for dynamically created modal elements
+    $(document).on('click', '.addnote', function(e) {
+        e.preventDefault();
+        add_noties.call(this);
+    });
         // Get the current page's name from the data-page attribute
     const currentPage = $('body').data('page');
     // Check if we are on the 'edit-employee' page
     if (currentPage === 'edit-employee' || currentPage === 'new-employee' || currentPage === 'add_emp_slry' ) {
         initializeEditFormValidation();
-        console.log('load employees');
+        // console.log('load employees');
     }
     // Check if we are on the 'view-employee' page
     if (currentPage === 'view-employee') {
-        console.log("Running script for View Employee page.");
+        // console.log("Running script for View Employee page.");
         // All your view-employee specific code goes here
     }
 });
@@ -2570,7 +2574,7 @@ $(document).on('click', '.updateUserAjax', function (e) {
             // Toggle on change
             $('#user_type').on('change', function() {
                 toggleEmailField();
-            });
+                allowOutsideClick:false});
         },
         preConfirm: function() {
             var selectedType = $('#user_type').val();
@@ -2950,14 +2954,21 @@ $(document).on('click', '.empAvatarShow', function (e) {
     var emp_name    = $(this).data('emp_name');
     var img         = $(this).data('img');
     var emptype     = $(this).data('emptype');
+    var $uploadCrop;
+    
     Swal.fire({
         title: __('change_employee_image'),
         html: `
         <div class="row customSweetAlertMLR" >
+            <div class="col-md-12 text-center mb-3">
+                <input type="file" id="emp-img-crop-input" accept="image/*" style="display:none;" />
+            </div>
             <div class="col-md-6 text-center">
+                <p>${__('new_picture') || 'New Picture'}</p>
                 <div id="emp-img" style="width:350px"></div>
             </div>
             <div class="col-md-6" style="align-items: center; display: grid; justify-content: center;">
+                <p>${__('current_picture') || 'Current Picture'}</p>
                 <img src="${img}" style="width:200px;height:200px" />
             </div>
         </div>`,
@@ -2969,59 +2980,109 @@ $(document).on('click', '.empAvatarShow', function (e) {
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
         width: '40%',
-        willOpen: function(e) {
-            $('.image').trigger('click');
-            var reader,file;
+        didOpen: function() {
             $uploadCrop = $('#emp-img').croppie({
                 enableExif: true,
                 viewport: {
                     width: 300,
                     height: 300,
-                    type: 'circle', //type: 'circle',square
+                    type: 'circle',
                 },
                 boundary: {
                     width: 350,
                     height: 350,
                 }
             });
-            $('#img-crop').on('change', function () {
-                var reader = new FileReader();
-                reader.onload = function (e) {
-                    $uploadCrop.croppie('bind', {
-                        url: e.target.result
-                    }).then(function(){
-                        console.log('jQuery bind complete');
-                    }).catch(function(error){
-                        Swal.fire({
-                            title:__('file_error_title'),text:__('select_jpg_format_only'),icon:'error',allowOutsideClick:false
-                        })
-                    });
-                };
-                reader.readAsDataURL(this.files[0]);
+            
+            // Handle file input change
+            $('#emp-img-crop-input').on('change', function () {
+                if (this.files && this.files[0]) {
+                    var reader = new FileReader();
+                    reader.onload = function (e) {
+                        $uploadCrop.croppie('bind', {
+                            url: e.target.result
+                        }).then(function(){
+                            console.log('jQuery bind complete');
+                        }).catch(function(error){
+                            Swal.fire({
+                                title:__('file_error_title'),text:__('select_jpg_format_only'),icon:'error',allowOutsideClick:false
+                            })
+                        });
+                    };
+                    reader.readAsDataURL(this.files[0]);
+                }
             });
+            
+            // Auto-trigger file input after modal is fully rendered
+            setTimeout(function() {
+                $('#emp-img-crop-input')[0].click();
+            }, 100);
         },
         preConfirm: function() {
-            return new Promise(function(resolve) {
-                $uploadCrop.croppie('result', {
-                    type: 'canvas',
-                    format: 'jpeg'|'png'|'webp',
-                    size: 'viewport'
-                }).then(function (resp) {
-                    $.ajax({
-                        url: "./includes/ajaxFile/ajaxEmployee.php",
-                        type: "POST",
-                        dataType: "JSON",
-                        data: {"image": resp, "id": id, "emp_id": emp_id, "emp_name": emp_name, "emptype": emptype, ajaxType: 'avatar'},
-                        success: function (response) {
-                            Swal.fire({
-                                title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
-                            }).then(function(isConfirm){(isConfirm)?location.reload():""});
-                        }
-                    });
+            // Check if an image was loaded
+            if (!$uploadCrop || !$uploadCrop.croppie) {
+                Swal.showValidationMessage(__('please_select_image') || 'Please select an image first');
+                return false;
+            }
+            
+            return $uploadCrop.croppie('result', {
+                type: 'canvas',
+                format: 'png',
+                size: 'viewport'
+            }).then(function (resp) {
+                return $.ajax({
+                    url: "./includes/ajaxFile/ajaxEmployee.php",
+                    type: "POST",
+                    dataType: "JSON",
+                    data: {"image": resp, "id": id, "emp_id": emp_id, "emp_name": emp_name, "emptype": emptype, ajaxType: 'avatar'}
+                }).then(function(response) {
+                    if (response && response.type === 'success') {
+                        return response;
+                    } else {
+                        throw new Error(response.message || 'Upload failed');
+                    }
+                }).catch(function(error) {
+                    Swal.showValidationMessage(error.message || __("request_failed_try_again"));
+                    return false;
                 });
+            }).catch(function(error) {
+                Swal.showValidationMessage(__('error_processing_image') || 'Error processing image');
+                return false;
             });
         },
-    })
+    }).then(function(result) {
+        if (result.isConfirmed && result.value) {
+            Swal.fire({
+                title: result.value.title,
+                text: result.value.message,
+                icon: result.value.type,
+                allowOutsideClick: false
+            }).then(function() {
+                location.reload();
+            });
+        }
+    });
+});
+
+// Update Salary Button Click Handler
+$(document).on('click', '.updateSalaryBtn', function(e) {
+    e.preventDefault();
+    const empId = $(this).data('emp_id');
+    const isAutoTriggered = $(this).data('auto_triggered') || false;
+    const currentSalaryData = {
+        basic: $(this).data('basic') || 0,
+        housing: $(this).data('housing') || 0,
+        transport: $(this).data('transport') || 0,
+        food: $(this).data('food') || 0,
+        misc: $(this).data('misc') || 0,
+        cashier: $(this).data('cashier') || 0,
+        fuel: $(this).data('fuel') || 0,
+        tel: $(this).data('tel') || 0,
+        other: $(this).data('other') || 0,
+        guard: $(this).data('guard') || 0
+    };
+    
+    updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered);
 });
 
 $(document).on('click', '.addSocial', function (e) {
@@ -3433,7 +3494,7 @@ function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passp
                 return __('you_need_to_select_something_validation')
             }
         }
-    }).then((result) => {
+    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
         // If the user clicked "Next" and selected a field
         if (result.isConfirmed && result.value) {
             const field = result.value;
@@ -3488,6 +3549,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                                 <p>${__('current_picture')}</p>
                                 <img src="${empData.img}" class="img-fluid rounded-circle mb-3" style="width:150px;height:150px" />
                                 <p>${__('new_picture')}</p>
+                                <input type="file" id="img-crop-input" accept="image/*" style="display:none;" />
                                 <div id="emp-img-cropper" style="width:300px; height:300px; margin:auto;"></div>
                             </div>
                         </div>`,
@@ -3500,11 +3562,11 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                     allowOutsideClick: false,
                     width: '500px',
                     didOpen: () => {
-                        // This variable will hold the Croppie instance, as per your snippet.
-                        let $uploadCrop;
                         // Initialize Croppie on the correct element from the modal's HTML.
                         const el = document.getElementById('emp-img-cropper');
-                        $uploadCrop = $(el).croppie({
+                        const $uploadCrop = $(el);
+                        
+                        $uploadCrop.croppie({
                             enableExif: true,
                             viewport: {
                                 width: 300,
@@ -3516,25 +3578,43 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                                 height: 350,
                             }
                         });
+                        
+                        // Track if image was loaded
+                        let imageLoaded = false;
+                        
                         // Handle file selection
                         $('#img-crop-input').on('change', function () {
-                            var reader = new FileReader();
-                            reader.onload = function (e) {
-                                // Use the correct method to bind the image to the Croppie instance
-                                $uploadCrop.croppie('bind', { 
-                                    url: e.target.result 
-                                });
-                            };
-                            reader.readAsDataURL(this.files[0]);
+                            if (this.files && this.files[0]) {
+                                const reader = new FileReader();
+                                reader.onload = function (event) {
+                                    // Use the correct method to bind the image to the Croppie instance
+                                    $uploadCrop.croppie('bind', { 
+                                        url: event.target.result 
+                                    }).then(function() {
+                                        imageLoaded = true;
+                                    });
+                                };
+                                reader.readAsDataURL(this.files[0]);
+                            }
                         });
+                        
                         // Trigger the hidden file input
                         $('#img-crop-input').trigger('click');
-                        // Store instance for preConfirm
-                        Swal.getContainer().croppieInstance = $uploadCrop;
+                        
+                        // Store jQuery element and loaded status for preConfirm
+                        Swal.getContainer().croppieElement = $uploadCrop;
+                        Swal.getContainer().imageLoaded = () => imageLoaded;
                     },
                     preConfirm: () => {
-                        // CORRECTED: Call the 'result' method on the Croppie instance stored in the container
-                        return Swal.getContainer().croppieInstance.croppie('result', {
+                        // Check if image was loaded
+                        if (!Swal.getContainer().imageLoaded()) {
+                            Swal.showValidationMessage(__('please_select_image'));
+                            return false;
+                        }
+                        
+                        // Get the result from the Croppie instance
+                        const $croppie = Swal.getContainer().croppieElement;
+                        return $croppie.croppie('result', {
                             type: 'canvas',
                             size: 'viewport',
                             format: 'png'
@@ -3560,7 +3640,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             title: croppieResult.value.title,
                             text: croppieResult.value.message,
                             icon: croppieResult.value.type
-                        }).then(() => location.reload());
+                        ,allowOutsideClick:false}).then(() => location.reload());
                     }
                 });
 
@@ -3607,16 +3687,15 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             contentType: false,
                             dataType: 'json'
                         }).fail(function() {
-                            Swal.showValidationMessage(__("request_failed"));
-                        });
+                            Swal.showValidationMessage(__("request_failed"));});
                     }
-                }).then((finalResult) => {
+                ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((finalResult) => {
                     if (finalResult.isConfirmed) {
                         Swal.fire({
                             title: finalResult.value.title,
                             text: finalResult.value.message,
                             icon: finalResult.value.type
-                        });
+                        ,allowOutsideClick:false});
                     }
                 });
             }
@@ -3818,6 +3897,7 @@ function assignAsset(empId) {
                     `,
                     showCancelButton: true,
                     cancelButtonText: __('cancel'),
+                    cancelButtonColor: '#d33',
                     confirmButtonText: __('assign'),
                     showLoaderOnConfirm: true,
                     didOpen: () => {
@@ -3869,7 +3949,7 @@ function assignAsset(empId) {
                                     title: ajaxResponse.title,
                                     text: ajaxResponse.message,
                                     icon: ajaxResponse.type
-                                }).then(() => {
+                                ,allowOutsideClick:false}).then(() => {
                                     if(ajaxResponse.type === 'success') {
                                         location.reload();
                                     }
@@ -3930,7 +4010,7 @@ function registerAssetModal() {
             };
         },
         allowOutsideClick: false,
-    }).then((result) => {
+        }).then((result) => {
         if (result.isConfirmed) {
             $.ajax({
                 type: 'POST',
@@ -3942,7 +4022,7 @@ function registerAssetModal() {
                         title: ajaxResponse.title,
                         text: ajaxResponse.message,
                         icon: ajaxResponse.type
-                    }).then(() => {
+                    ,allowOutsideClick:false}).then(() => {
                         if(ajaxResponse.type === 'success') {
                             location.reload();
                         }
@@ -4019,7 +4099,7 @@ function unassignAsset(assetRecordId) {
             }
             return formData;
         }
-    }).then((result) => {
+    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
         if (result.isConfirmed) {
             $.ajax({
                 type: 'POST',
@@ -4030,7 +4110,7 @@ function unassignAsset(assetRecordId) {
                 processData: false, // Important for file uploads
                 success: function(ajaxResponse) {
                     Swal.fire({ title: ajaxResponse.title, text: ajaxResponse.message, icon: ajaxResponse.type })
-                    .then(() => { if(ajaxResponse.type === 'success') { location.reload(); } });
+                    .then(() => { if(ajaxResponse.type === 'success') { location.reload(); } allowOutsideClick:false});
                 },
                 error: function() { Swal.fire(__('error_title'), __('unexpected_error'), 'error'); }
             });
@@ -4454,37 +4534,23 @@ $(function(){
 
 /**
  * Toggles the visibility of form fields based on the selected leave type.
+ * ALL leave types now require: dates, reason/notes, and attachment
  */
 function toggleLeaveFields() {
     const selectedType = $('#leave_type_select').val();
     
-    // Hide all conditional sections first
-    $('#dateSection, #reasonSection, #attachmentSection, #tripSection').addClass('d-none');
-    $('#end_date').closest('.form-group').show(); // Show end date by default
-    calculateTotalDays(); // Recalculate days when type changes
+    // Hide all sections first
+    $('#dateSection, #reasonSection, #attachmentSection, #tripSection, #accommodationSection, #transportationSection').addClass('d-none');
+    calculateTotalDays();
 
     if (!selectedType) return;
 
-    // Show sections based on the selected type
-    switch (selectedType) {
-        case 'Sick Leave':
-            $('#dateSection, #reasonSection, #attachmentSection').removeClass('d-none');
-            break;
-        case 'Maternity Leave':
-            $('#dateSection, #attachmentSection').removeClass('d-none');
-            break;
-        case 'Business Trip':
-            $('#dateSection, #tripSection, #reasonSection').removeClass('d-none');
-            break;
-        /*case 'Compensatory Leave':
-            $('#dateSection, #reasonSection').removeClass('d-none');
-            $('#end_date').closest('.form-group').hide(); // Compensatory leave is usually for a single day
-            $('#end_date').val($('#start_date').val()); // Set end date same as start date
-            calculateTotalDays();
-            break;*/
-        default: // Casual Leave, Other Leave, Compassionate Leave
-            $('#dateSection, #reasonSection').removeClass('d-none');
-            break;
+    // ALL leave types show: dates, reason, and attachment
+    $('#dateSection, #reasonSection, #attachmentSection').removeClass('d-none');
+    
+    // Business Trip also needs destination, accommodation, and transportation
+    if (selectedType === 'Business Trip') {
+        $('#tripSection, #accommodationSection, #transportationSection').removeClass('d-none');
     }
 }
 
@@ -4515,11 +4581,29 @@ function calculateTotalDays() {
 $(document).on('click', '.applyLeaveRequest', function(e) {
     e.preventDefault();
     const empid = $(this).data('empid');
+    let employeeGender = null;
+
+    // First, fetch employee data to get gender
+    $.ajax({
+        url: './includes/ajaxFile/ajaxEmployee.php',
+        type: 'POST',
+        dataType: 'json',
+        async: false,
+        data: {
+            ajaxType: "emp_data",
+            empid: empid
+        },
+        success: function(res) {
+            if (res.status == 200 && res.data.length > 0) {
+                employeeGender = parseInt(res.data[0].sex) || null;
+            }
+        }
+    });
 
     Swal.fire({
         title: __('loading_employee_info'),
-        html: generateLeaveFormHTML(),
-        width: '50rem', // Adjusted for Bootstrap form layout
+        html: generateLeaveFormHTML(employeeGender),
+        width: '50rem',
         showCancelButton: true,
         confirmButtonText: __('submit_request'),
         confirmButtonColor: '#3085d6',
@@ -4597,51 +4681,66 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
             formData.append("ajaxType", "applyLeave");
             formData.append("empid", empid);
 
-            // --- UPDATED Validation Logic ---
+            // --- UPDATED Validation Logic - ALL fields required for ALL leave types ---
             const leaveType = formData.get('leave_type');
             if (!leaveType) {
                 Swal.showValidationMessage(__('select_leave_type_validation'));
                 return false;
             }
 
+            // Start date is REQUIRED for all leave types
             const startDate = formData.get('start_date');
-            if (!$('#dateSection').hasClass('d-none') && !startDate) {
+            if (!startDate) {
                 Swal.showValidationMessage(__('start_date_required'));
                 return false;
             }
             
+            // End date is REQUIRED for all leave types
             const endDate = formData.get('end_date');
-            if (!$('#dateSection').hasClass('d-none') && leaveType !== 'Compensatory Leave' && !endDate) {
-                    Swal.showValidationMessage(__('end_date_required'));
-                    return false;
+            if (!endDate) {
+                Swal.showValidationMessage(__('end_date_required'));
+                return false;
             }
 
+            // Validate date range
             if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
                 Swal.showValidationMessage(__('end_date_before_start_date_validation'));
                 return false;
             }
 
+            // Destination required for Business Trip
             const destination = formData.get('trip_destination');
             if (leaveType === 'Business Trip' && !destination.trim()) {
                 Swal.showValidationMessage(__('destination_required_validation'));
                 return false;
             }
 
+            // Accommodation provided required for Business Trip
+            const accommodationProvided = formData.get('accommodation_provided');
+            if (leaveType === 'Business Trip' && !accommodationProvided) {
+                Swal.showValidationMessage(__('accommodation_required_validation'));
+                return false;
+            }
+
+            // Transportation provided required for Business Trip
+            const transportationProvided = formData.get('transportation_provided');
+            if (leaveType === 'Business Trip' && !transportationProvided) {
+                Swal.showValidationMessage(__('transportation_required_validation'));
+                return false;
+            }
+
+            // Reason/Notes is REQUIRED for ALL leave types
             const reason = formData.get('reason');
-            const reasonRequiredTypes = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Business Trip', 'Compensatory Leave', 'Other Leave'];
-            if (reasonRequiredTypes.includes(leaveType) && !reason.trim()) {
+            if (!reason || !reason.trim()) {
                 Swal.showValidationMessage(__('reason_required_validation'));
                 return false;
             }
 
-            // Require attachment ONLY for Sick Leave and Maternity Leave
+            // Attachment is REQUIRED for ALL leave types
             const attachmentInput = document.getElementById('attachment');
-            const attachmentRequiredTypes = ['Sick Leave', 'Maternity Leave'];
-            if (attachmentRequiredTypes.includes(leaveType)) {
-                if (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0) {
-                    Swal.showValidationMessage(__('select_attachment_file_validation'));
-                    return false;
-                }
+            if (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0) {
+                Swal.showValidationMessage(__('select_attachment_file_validation'));
+                return false;
             }
 
 
@@ -4667,7 +4766,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                 title: result.value.title,
                 text: result.value.message,
                 icon: result.value.type,
-            }).then(() => {
+                allowOutsideClick:false}).then(() => {
                 if (result.value.type === 'success') {
                     location.reload();
                 }
@@ -4917,7 +5016,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
             data: { ajaxType: 'canApplyVacation', emp_id: empid },
         }).done(function(res) {
             if (!res || res.ok === false) {
-                Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' });
+                Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' ,allowOutsideClick:false});
                 return;
             }
             if (res.can_apply === false) {
@@ -4974,10 +5073,10 @@ $(document).on('click', '.applyvacationAtter', function (e) {
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
-            Swal.fire({ title: 'Error', text: msg, icon: 'error' });
+            Swal.fire({ title: 'Error', text: msg, icon: 'error' ,allowOutsideClick:false});
         });
     } catch(err) {
-        Swal.fire({ title: 'Error', text: 'Unexpected error. Please try again.', icon: 'error' });
+        Swal.fire({ title: 'Error', text: 'Unexpected error. Please try again.', icon: 'error' ,allowOutsideClick:false});
     }
 });
 
@@ -5395,7 +5494,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance) {
                             title: 'Error!',
                             text: errorMsg,
                             icon: 'error'
-                        });
+                        ,allowOutsideClick:false});
                         reject(errorMsg);
                     });
                 }).fail(function() {
@@ -5508,33 +5607,49 @@ function add_noties() {
 /*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/
 
 
-function generateLeaveFormHTML() {
-    const leaveTypes = [
-        'Sick Leave', /*'Casual Leave',*/ 'Maternity Leave', 
-        'Business Trip', 'Compensatory Leave', 'Other Leave'
+function generateLeaveFormHTML(employeeGender) {
+    // Define all leave types with gender requirements
+    // employeeGender: 1 = Male, 2 = Female
+    const allLeaveTypes = [
+        { value: 'Sick Leave', label: 'Sick Leave', gender: null },
+        { value: 'Exam Leave', label: 'Exam Leave', gender: null },
+        { value: 'Hajj Leave', label: 'Hajj Leave', gender: null },
+        { value: 'Maternity Leave', label: 'Maternity Leave', gender: 2 },
+        { value: 'Marriage Leave', label: 'Marriage Leave', gender: null },
+        { value: 'Newborn Leave', label: 'Newborn Leave', gender: 1 },
+        { value: 'Death Leave', label: 'Death Leave', gender: null },
+        { value: 'Business Trip', label: 'Business Trip', gender: null }
     ];
-    let leaveOptions = leaveTypes.map(type => `<option value="${type}">${type}</option>`).join('');
+
+    // Filter leave types based on employee gender
+    const leaveTypes = allLeaveTypes.filter(type => 
+        type.gender === null || type.gender === employeeGender
+    );
+    
+    let leaveOptions = leaveTypes.map(type => 
+        `<option value="${type.value}">${type.label}</option>`
+    ).join('');
 
     return `
         <form id="applyLeaveForm" class="text-left" enctype="multipart/form-data">
             <div class="form-group">
-                <label for="leave_type_select">${__('leave_type')}</label>
-                <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;">
+                <label for="leave_type_select">${__('leave_type')} <span class="text-danger">*</span></label>
+                <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;" required>
                     <option value="" selected disabled>${__('select_leave_type_placeholder')}</option>
                     ${leaveOptions}
                 </select>
             </div>
 
-            <!-- Dynamic sections that will be shown/hidden -->
+            <!-- Date Section - Always shown for all leave types -->
             <div id="dateSection" class="d-none">
                 <div class="form-row">
                     <div class="form-group col-md-4">
-                        <label for="start_date">${__('start_date')}</label>
-                        <input type="text" name="start_date" id="start_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly>
+                        <label for="start_date">${__('start_date')} <span class="text-danger">*</span></label>
+                        <input type="text" name="start_date" id="start_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="end_date">${__('end_date')}</label>
-                        <input type="text" name="end_date" id="end_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly>
+                        <label for="end_date">${__('end_date')} <span class="text-danger">*</span></label>
+                        <input type="text" name="end_date" id="end_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
                     <div class="form-group col-md-4">
                         <label for="total_days">${__('total_days')}</label>
@@ -5543,19 +5658,48 @@ function generateLeaveFormHTML() {
                 </div>
             </div>
 
+            <!-- Trip Destination - Only for Business Trip -->
             <div id="tripSection" class="form-group d-none">
-                <label for="trip_destination">${__('destination')}</label>
-                <input type="text" name="trip_destination" id="trip_destination" class="form-control" placeholder="${__('destination_placeholder')}">
-            </div>
-            
-            <div id="reasonSection" class="form-group d-none">
-                <label for="reason">${__('reason_notes')}</label>
-                <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}"></textarea>
+                <label for="trip_destination">${__('destination')} <span class="text-danger">*</span></label>
+                <input type="text" name="trip_destination" id="trip_destination" class="form-control" placeholder="${__('destination_placeholder')}" required>
             </div>
 
+            <!-- Accommodation Question - Only for Business Trip -->
+            <div id="accommodationSection" class="form-group d-none">
+                <label>${__('accommodation_provided')} <span class="text-danger">*</span></label>
+                <div class="custom-control custom-radio mb-2">
+                    <input type="radio" class="custom-control-input" id="accommodation_yes" name="accommodation_provided" value="yes" required>
+                    <label class="custom-control-label" for="accommodation_yes">${__('yes')}</label>
+                </div>
+                <div class="custom-control custom-radio">
+                    <input type="radio" class="custom-control-input" id="accommodation_no" name="accommodation_provided" value="no" required>
+                    <label class="custom-control-label" for="accommodation_no">${__('no')}</label>
+                </div>
+            </div>
+
+            <!-- Transportation Question - Only for Business Trip -->
+            <div id="transportationSection" class="form-group d-none">
+                <label>${__('transportation_provided')} <span class="text-danger">*</span></label>
+                <div class="custom-control custom-radio mb-2">
+                    <input type="radio" class="custom-control-input" id="transportation_yes" name="transportation_provided" value="yes" required>
+                    <label class="custom-control-label" for="transportation_yes">${__('yes')}</label>
+                </div>
+                <div class="custom-control custom-radio">
+                    <input type="radio" class="custom-control-input" id="transportation_no" name="transportation_provided" value="no" required>
+                    <label class="custom-control-label" for="transportation_no">${__('no')}</label>
+                </div>
+            </div>
+            
+            <!-- Reason/Notes - Required for ALL leave types -->
+            <div id="reasonSection" class="form-group d-none">
+                <label for="reason">${__('reason_notes')} <span class="text-danger">*</span></label>
+                <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}" required></textarea>
+            </div>
+
+            <!-- Attachment - Required for ALL leave types -->
             <div id="attachmentSection" class="form-group d-none">
-                <label for="attachment">${__('attach_document_required')}</label>
-                <input type="file" name="attachment" id="attachment" class="form-control-file">
+                <label for="attachment">${__('attach_document_required')} <span class="text-danger">*</span></label>
+                <input type="file" name="attachment" id="attachment" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png" required>
                 <small class="form-text text-muted">${__('attachment_example')}</small>
             </div>
         </form>
@@ -7165,13 +7309,13 @@ function add_note_HTML(){
                     settings.forEach(setting => {
                         const element = document.getElementById(`swal-${setting.setting_name}`);
                         if (element) newSettings[setting.setting_name] = element.value;
-                    });
+                    ,allowOutsideClick:false,cancelButtonColor:'#d33',cancelButtonText:__('cancel')});
 
                     return fetch('/includes/settings_handler.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: new URLSearchParams({ action: 'update_settings', settings: JSON.stringify(newSettings) })
-                    }).then(response => {
+                    ,allowOutsideClick:false,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then(response => {
                         if (!response.ok) throw new Error(response.statusText);
                         return response.json();
                     }).catch(error => Swal.showValidationMessage(`Request failed: ${error}`));
@@ -7479,7 +7623,7 @@ function calculate_overtime(){
         jQuery('.final-result').css('display','block');
     } else {
         jQuery('.final-result').css('display','none');
-        Swal.fire({title: __('oops'), text: __('enter_valid_value_alert'), icon: 'warning'});
+        Swal.fire({title: __('oops'), text: __('enter_valid_value_alert'), icon: 'warning',allowOutsideClick:false});
     }
 }
 
@@ -8349,6 +8493,187 @@ function dateofbirth(selector){
         $.App = new App, $.App.Constructor = App
 
 }(window.jQuery);
+
+// ========================================
+// SALARY UPDATE FUNCTION
+// ========================================
+function updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered = false) {
+    Swal.fire({
+        title: __('update_employee_salary') || 'Update Employee Salary',
+        html: `
+            <div class="row" style="text-align: left;">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-basic">${__('basic') || 'Basic'} <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" id="swal-basic" class="form-control salary-input" value="${currentSalaryData.basic || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-housing">${__('housing') || 'Housing'}</label>
+                        <input type="number" step="0.01" id="swal-housing" class="form-control salary-input" value="${currentSalaryData.housing || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-transport">${__('transport') || 'Transport'}</label>
+                        <input type="number" step="0.01" id="swal-transport" class="form-control salary-input" value="${currentSalaryData.transport || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-food">${__('food') || 'Food'}</label>
+                        <input type="number" step="0.01" id="swal-food" class="form-control salary-input" value="${currentSalaryData.food || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-misc">${__('misc') || 'Misc'}</label>
+                        <input type="number" step="0.01" id="swal-misc" class="form-control salary-input" value="${currentSalaryData.misc || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-cashier">${__('cashier') || 'Cashier'}</label>
+                        <input type="number" step="0.01" id="swal-cashier" class="form-control salary-input" value="${currentSalaryData.cashier || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-fuel">${__('fuel') || 'Fuel'}</label>
+                        <input type="number" step="0.01" id="swal-fuel" class="form-control salary-input" value="${currentSalaryData.fuel || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-tel">${__('tel') || 'Tel'}</label>
+                        <input type="number" step="0.01" id="swal-tel" class="form-control salary-input" value="${currentSalaryData.tel || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-other">${__('others') || 'Others'}</label>
+                        <input type="number" step="0.01" id="swal-other" class="form-control salary-input" value="${currentSalaryData.other || 0}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="swal-guard">${__('guard') || 'Guard'}</label>
+                        <input type="number" step="0.01" id="swal-guard" class="form-control salary-input" value="${currentSalaryData.guard || 0}">
+                    </div>
+                </div>
+                <div class="col-md-12">
+                    <div class="form-group">
+                        <label for="swal-total" class="font-weight-bold">${__('total_salary') || 'Total Salary'}</label>
+                        <input type="text" id="swal-total" class="form-control font-weight-bold" readonly style="background-color: #e9ecef; font-size: 18px;">
+                    </div>
+                </div>
+            </div>
+        `,
+        width: '700px',
+        showCancelButton: !isAutoTriggered,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: __('yes_update') || 'Yes, Update',
+        cancelButtonText: __('cancel') || 'Cancel',
+        allowOutsideClick: false,
+        allowEscapeKey: !isAutoTriggered,
+        didOpen: function() {
+            // Calculate total function
+            function calculateTotal() {
+                const total = 
+                    (parseFloat($('#swal-basic').val()) || 0) +
+                    (parseFloat($('#swal-housing').val()) || 0) +
+                    (parseFloat($('#swal-transport').val()) || 0) +
+                    (parseFloat($('#swal-food').val()) || 0) +
+                    (parseFloat($('#swal-misc').val()) || 0) +
+                    (parseFloat($('#swal-cashier').val()) || 0) +
+                    (parseFloat($('#swal-fuel').val()) || 0) +
+                    (parseFloat($('#swal-tel').val()) || 0) +
+                    (parseFloat($('#swal-other').val()) || 0) +
+                    (parseFloat($('#swal-guard').val()) || 0);
+                $('#swal-total').val(total.toFixed(2));
+            }
+            
+            // Initial calculation
+            calculateTotal();
+            
+            // Auto-update on input change
+            $('.salary-input').on('input change', calculateTotal);
+            
+            // Handle Enter key to move to next field
+            $('.salary-input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    const inputs = $('.salary-input');
+                    const index = inputs.index(this);
+                    if (index < inputs.length - 1) {
+                        inputs.eq(index + 1).focus().select();
+                    } else {
+                        // Last field - trigger confirm
+                        Swal.clickConfirm();
+                    }
+                }
+            });
+            
+            // Focus first input
+            $('#swal-basic').focus().select();
+        },
+        preConfirm: function() {
+            const salaryData = {
+                basic: parseFloat($('#swal-basic').val()) || 0,
+                housing: parseFloat($('#swal-housing').val()) || 0,
+                transport: parseFloat($('#swal-transport').val()) || 0,
+                food: parseFloat($('#swal-food').val()) || 0,
+                misc: parseFloat($('#swal-misc').val()) || 0,
+                cashier: parseFloat($('#swal-cashier').val()) || 0,
+                fuel: parseFloat($('#swal-fuel').val()) || 0,
+                tel: parseFloat($('#swal-tel').val()) || 0,
+                other: parseFloat($('#swal-other').val()) || 0,
+                guard: parseFloat($('#swal-guard').val()) || 0,
+                totalsal: parseFloat($('#swal-total').val()) || 0,
+                emp_id: empId,
+                submit: 1
+            };
+            
+            // Validate basic salary
+            if (salaryData.basic <= 0) {
+                Swal.showValidationMessage(__('basic_salary_required') || 'Basic salary is required');
+                return false;
+            }
+            
+            return $.ajax({
+                url: "./includes/ajaxFile/ajaxEmployee.php",
+                type: "POST",
+                dataType: "JSON",
+                data: {
+                    ...salaryData,
+                    ajaxType: 'update_salary'
+                }
+            }).then(function(response) {
+                if (response && response.type === 'success') {
+                    return response;
+                } else {
+                    throw new Error(response.message || 'Update failed');
+                }
+            }).catch(function(error) {
+                Swal.showValidationMessage(error.message || __("request_failed_try_again"));
+                return false;
+            });
+        }
+    }).then(function(result) {
+        if (result.isConfirmed && result.value) {
+            Swal.fire({
+                title: result.value.title,
+                text: result.value.message,
+                icon: result.value.type,
+                allowOutsideClick: false
+            }).then(function() {
+                location.reload();
+            });
+        }
+    });
+}
 
 //initializing main application module
 (function ($) {

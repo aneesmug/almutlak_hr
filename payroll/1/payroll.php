@@ -39,11 +39,27 @@ function generatePayroll($emp_id, $month_year, $conDB) {
     $benefits_data = $benefits_result->fetch_assoc();
     $total_benefits = $benefits_data['total'] ?? 0;
     
-    // Calculate deductions, excluding approved leave days (e.g., sick leave)
-    $total_deductions = 0;
-    // Get all deduction records for this employee/month
-    $deductions_stmt = $conDB->prepare("SELECT * FROM payroll_deductions WHERE emp_id = ? AND month = ? AND status = 1");
-    $deductions_stmt->bind_param("ss", $emp_id, $month_year);
+        // Calculate deductions, excluding approved leave days (e.g., sick leave)
+        // Also exclude auto-generated loan deductions when the loan's deduction_mode is set to 'manual'
+        $total_deductions = 0;
+        // Get deduction records for this employee/month, excluding loan-linked rows in manual mode
+        // Assumes loan-linked rows contain the loan inv_no inside the `deduction` text/description field
+        $deductions_sql = "
+                SELECT pd.*
+                FROM payroll_deductions pd
+                WHERE pd.emp_id = ?
+                    AND pd.month = ?
+                    AND pd.status = 1
+                    AND NOT EXISTS (
+                            SELECT 1
+                            FROM emp_loan el
+                            WHERE el.emp_id = pd.emp_id
+                                AND el.deduction_mode = 'manual'
+                                AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
+                    )
+        ";
+        $deductions_stmt = $conDB->prepare($deductions_sql);
+        $deductions_stmt->bind_param("ss", $emp_id, $month_year);
     $deductions_stmt->execute();
     $deductions_result = $deductions_stmt->get_result();
     while ($ded_row = $deductions_result->fetch_assoc()) {

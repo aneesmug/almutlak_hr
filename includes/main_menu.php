@@ -60,6 +60,7 @@ $yearlyEOSLink = 'employee_audit_gen.php';
 $payrollLink = 'generate_payroll.php';
 $appliedVacationsLink = 'all_applied_vac.php';
 $appliedLoanLink = 'all_applied_loan.php';
+$allResignationsLink = 'all_resignations.php';
 $carsLink = 'all_cars.php';
 $locationsLink = 'all_locations.php';
 $machinesLink = 'all_machines.php';
@@ -102,6 +103,7 @@ $page_roles = [
     'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
+    'all_resignations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll', 'DPT_Manager', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'add_manual_loan.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_cars.php' => ['Administrator', 'GR_Officer'],
     'all_locations.php' => ['Administrator', 'GR_Officer'],
@@ -170,6 +172,13 @@ $can_see_loan_approvals_page = [
     'HR_Manager', 'Finance_Manager','IT_Team_Manager'
 ];
 
+$can_see_resignations_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll',
+    'DPT_Manager', 'IT_Team_Manager',
+    'HR_Team', 'HR_Team_Manager',
+    'HR_Manager'
+];
+
 $can_see_content_approvals_page = [
     'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
     'HR_Team', 'HR_Team_Manager',
@@ -208,6 +217,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
 
 $show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_loan_approvals_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_content_approvals_page));
 
 
@@ -310,6 +320,38 @@ if ($vacation_type_id > 0) {
     }
 }
 // --- END NEW VACATION PENDING COUNT ---
+
+// --- Fetch Resignation Pending Approval Count (NEW) ---
+$resignation_pending_count = 0;
+$resignation_type_id = 0;
+$res_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'resignation_request' LIMIT 1");
+if ($row = mysqli_fetch_assoc($res_type_query)) {
+    $resignation_type_id = (int)$row['id'];
+}
+if ($resignation_type_id > 0) {
+    if ($user_role == 'Administrator') {
+        // Admin: count all distinct resignation requests still pending anywhere
+        $resignation_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                            FROM request_approvers ra
+                                            WHERE ra.status = 'awaiting' AND ra.request_type_id = $resignation_type_id";
+        $res_resig_admin = mysqli_query($conDB, $resignation_pending_query_admin);
+        if ($res_resig_admin && ($rra = mysqli_fetch_assoc($res_resig_admin))) {
+            $resignation_pending_count = (int)$rra['count'];
+        }
+    } else {
+        // Regular user: count requests awaiting THIS user's approval
+        $resignation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                      FROM request_approvers ra
+                                      WHERE ra.approver_id = " . (int)$empid . "
+                                        AND ra.status = 'awaiting'
+                                        AND ra.request_type_id = $resignation_type_id";
+        $res_resig = mysqli_query($conDB, $resignation_pending_query);
+        if ($res_resig && ($rr = mysqli_fetch_assoc($res_resig))) {
+            $resignation_pending_count = (int)$rr['count'];
+        }
+    }
+}
+// --- END NEW RESIGNATION PENDING COUNT ---
 
 
 // Initialize counts to 0
@@ -431,6 +473,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)): ?>
                     <li><a href="<?= $appliedLoanLink ?>"><i class="fa fa-money-bill-trend-up"></i><span><?=__('loans') ?></span><?= ($loan_pending_count > 0) ? "<span class='badgez badge-danger'>$loan_pending_count</span>" : "" ?></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_resignations_page) || in_array($user_type, $can_see_resignations_page)): ?>
+                    <li><a href="<?= $allResignationsLink ?>"><i class="fa fa-user-times"></i><span><?=__('resignations') ?></span><?= ($resignation_pending_count > 0) ? "<span class='badgez badge-danger'>$resignation_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                  <?php if (in_array($user_role, $can_see_content_approvals_page) || in_array($user_type, $can_see_content_approvals_page)): ?>
                     <li><a href="<?= $tempContractsLink ?>"><i class="fa fa-arrows-spin"></i><span><?=__('content_updates') ?> <?= ($status_cont_contaprl > 0) ? "<span class='badgez badge-danger'>$status_cont_contaprl</span>" : "" ?></span></a></li>

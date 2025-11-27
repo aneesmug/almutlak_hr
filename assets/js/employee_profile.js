@@ -69,7 +69,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
             data: { ajaxType: 'canApplyVacation', emp_id: empid },
         }).done(function(res) {
             if (!res || res.ok === false) {
-                Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' });
+                Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' ,allowOutsideClick:false});
                 return;
             }
             if (res.can_apply === false) {
@@ -126,10 +126,10 @@ $(document).on('click', '.applyvacationAtter', function (e) {
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
-            Swal.fire({ title: 'Error', text: msg, icon: 'error' });
+            Swal.fire({ title: 'Error', text: msg, icon: 'error' ,allowOutsideClick:false});
         });
     } catch(err) {
-        Swal.fire({ title: 'Error', text: 'Unexpected error. Please try again.', icon: 'error' });
+        Swal.fire({ title: 'Error', text: 'Unexpected error. Please try again.', icon: 'error' ,allowOutsideClick:false});
     }
 });
 
@@ -540,7 +540,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance) {
                             title: 'Error!',
                             text: errorMsg,
                             icon: 'error'
-                        });
+                        ,allowOutsideClick:false});
                         reject(errorMsg);
                     });
                 }).fail(function() {
@@ -558,14 +558,33 @@ function openVacationApplyModal(empid, deptId, country, currentBalance) {
 }
 
 
+// Main click event handler for the "Apply for Leave" button
 $(document).on('click', '.applyLeaveRequest', function(e) {
     e.preventDefault();
     const empid = $(this).data('empid');
+    let employeeGender = null;
+
+    // First, fetch employee data to get gender
+    $.ajax({
+        url: './includes/ajaxFile/ajaxEmployee.php',
+        type: 'POST',
+        dataType: 'json',
+        async: false,
+        data: {
+            ajaxType: "emp_data",
+            empid: empid
+        },
+        success: function(res) {
+            if (res.status == 200 && res.data.length > 0) {
+                employeeGender = parseInt(res.data[0].sex) || null;
+            }
+        }
+    });
 
     Swal.fire({
         title: __('loading_employee_info'),
-        html: generateLeaveFormHTML(),
-        // width: '50rem', // Adjusted for Bootstrap form layout
+        html: generateLeaveFormHTML(employeeGender),
+        width: '50rem',
         showCancelButton: true,
         confirmButtonText: __('submit_request'),
         confirmButtonColor: '#3085d6',
@@ -590,7 +609,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                     if (res.status == 200 && res.data.length > 0) {
                         const employeeName = res.data[0].name;
                         // Update the modal title with the employee's name
-                        $('.swal2-title').html(`${__('excuse_leave_for')} <br><span style="color:#3085d6;">${employeeName}</span>`);
+                        $('.swal2-title').html(`${__('leave_application_for')} <br><span style="color:#3085d6;">${employeeName}</span>`);
                         Swal.hideLoading();
                     } else {
                         // Handle case where employee is not found
@@ -643,51 +662,66 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
             formData.append("ajaxType", "applyLeave");
             formData.append("empid", empid);
 
-            // --- UPDATED Validation Logic ---
+            // --- UPDATED Validation Logic - ALL fields required for ALL leave types ---
             const leaveType = formData.get('leave_type');
             if (!leaveType) {
                 Swal.showValidationMessage(__('select_leave_type_validation'));
                 return false;
             }
 
+            // Start date is REQUIRED for all leave types
             const startDate = formData.get('start_date');
-            if (!$('#dateSection').hasClass('d-none') && !startDate) {
+            if (!startDate) {
                 Swal.showValidationMessage(__('start_date_required'));
                 return false;
             }
             
+            // End date is REQUIRED for all leave types
             const endDate = formData.get('end_date');
-            if (!$('#dateSection').hasClass('d-none') && leaveType !== 'Compensatory Leave' && !endDate) {
-                    Swal.showValidationMessage(__('end_date_required'));
-                    return false;
+            if (!endDate) {
+                Swal.showValidationMessage(__('end_date_required'));
+                return false;
             }
 
+            // Validate date range
             if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
                 Swal.showValidationMessage(__('end_date_before_start_date_validation'));
                 return false;
             }
 
+            // Destination required for Business Trip
             const destination = formData.get('trip_destination');
             if (leaveType === 'Business Trip' && !destination.trim()) {
                 Swal.showValidationMessage(__('destination_required_validation'));
                 return false;
             }
 
+            // Accommodation provided required for Business Trip
+            const accommodationProvided = formData.get('accommodation_provided');
+            if (leaveType === 'Business Trip' && !accommodationProvided) {
+                Swal.showValidationMessage(__('accommodation_required_validation'));
+                return false;
+            }
+
+            // Transportation provided required for Business Trip
+            const transportationProvided = formData.get('transportation_provided');
+            if (leaveType === 'Business Trip' && !transportationProvided) {
+                Swal.showValidationMessage(__('transportation_required_validation'));
+                return false;
+            }
+
+            // Reason/Notes is REQUIRED for ALL leave types
             const reason = formData.get('reason');
-            const reasonRequiredTypes = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Business Trip', 'Compensatory Leave', 'Other Leave'];
-            if (reasonRequiredTypes.includes(leaveType) && !reason.trim()) {
+            if (!reason || !reason.trim()) {
                 Swal.showValidationMessage(__('reason_required_validation'));
                 return false;
             }
 
-            // Require attachment ONLY for Sick Leave and Maternity Leave
+            // Attachment is REQUIRED for ALL leave types
             const attachmentInput = document.getElementById('attachment');
-            const attachmentRequiredTypes = ['Sick Leave', 'Maternity Leave'];
-            if (attachmentRequiredTypes.includes(leaveType)) {
-                if (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0) {
-                    Swal.showValidationMessage(__('select_attachment_file_validation'));
-                    return false;
-                }
+            if (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0) {
+                Swal.showValidationMessage(__('select_attachment_file_validation'));
+                return false;
             }
 
 
@@ -713,7 +747,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                 title: result.value.title,
                 text: result.value.message,
                 icon: result.value.type,
-            }).then(() => {
+                allowOutsideClick:false}).then(() => {
                 if (result.value.type === 'success') {
                     location.reload();
                 }
@@ -764,7 +798,7 @@ function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passp
                 return __('you_need_to_select_something_validation')
             }
         }
-    }).then((result) => {
+    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
         // If the user clicked "Next" and selected a field
         if (result.isConfirmed && result.value) {
             const field = result.value;
@@ -891,7 +925,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             title: croppieResult.value.title,
                             text: croppieResult.value.message,
                             icon: croppieResult.value.type
-                        }).then(() => location.reload());
+                        ,allowOutsideClick:false}).then(() => location.reload());
                     }
                 });
 
@@ -941,13 +975,14 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             Swal.showValidationMessage(__("request_failed"));
                         });
                     }
-                }).then((finalResult) => {
+                    ,cancelButtonColor:'#d33',
+                    cancelButtonText:__('cancel')}).then((finalResult) => {
                     if (finalResult.isConfirmed) {
                         Swal.fire({
                             title: finalResult.value.title,
                             text: finalResult.value.message,
                             icon: finalResult.value.type
-                        });
+                        ,allowOutsideClick:false});
                     }
                 });
             }
@@ -1145,33 +1180,49 @@ function vacationApply_HTML(country) {
     return strView;
 }
 
-function generateLeaveFormHTML() {
-    const leaveTypes = [
-        'Sick Leave', /*'Casual Leave',*/ 'Maternity Leave', 
-        'Business Trip', 'Compensatory Leave', 'Other Leave'
+function generateLeaveFormHTML(employeeGender) {
+    // Define all leave types with gender requirements
+    // employeeGender: 1 = Male, 2 = Female
+    const allLeaveTypes = [
+        { value: 'Sick Leave', label: 'Sick Leave', gender: null },
+        { value: 'Exam Leave', label: 'Exam Leave', gender: null },
+        { value: 'Hajj Leave', label: 'Hajj Leave', gender: null },
+        { value: 'Maternity Leave', label: 'Maternity Leave', gender: 2 },
+        { value: 'Marriage Leave', label: 'Marriage Leave', gender: null },
+        { value: 'Newborn Leave', label: 'Newborn Leave', gender: 1 },
+        { value: 'Death Leave', label: 'Death Leave', gender: null },
+        { value: 'Business Trip', label: 'Business Trip', gender: null }
     ];
-    let leaveOptions = leaveTypes.map(type => `<option value="${type}">${type}</option>`).join('');
+
+    // Filter leave types based on employee gender
+    const leaveTypes = allLeaveTypes.filter(type => 
+        type.gender === null || type.gender === employeeGender
+    );
+    
+    let leaveOptions = leaveTypes.map(type => 
+        `<option value="${type.value}">${type.label}</option>`
+    ).join('');
 
     return `
         <form id="applyLeaveForm" class="text-left" enctype="multipart/form-data">
             <div class="form-group">
-                <label for="leave_type_select">${__('leave_type')}</label>
-                <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;">
+                <label for="leave_type_select">${__('leave_type')} <span class="text-danger">*</span></label>
+                <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;" required>
                     <option value="" selected disabled>${__('select_leave_type_placeholder')}</option>
                     ${leaveOptions}
                 </select>
             </div>
 
-            <!-- Dynamic sections that will be shown/hidden -->
+            <!-- Date Section - Always shown for all leave types -->
             <div id="dateSection" class="d-none">
                 <div class="form-row">
                     <div class="form-group col-md-4">
-                        <label for="start_date">${__('start_date')}</label>
-                        <input type="text" name="start_date" id="start_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly>
+                        <label for="start_date">${__('start_date')} <span class="text-danger">*</span></label>
+                        <input type="text" name="start_date" id="start_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="end_date">${__('end_date')}</label>
-                        <input type="text" name="end_date" id="end_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly>
+                        <label for="end_date">${__('end_date')} <span class="text-danger">*</span></label>
+                        <input type="text" name="end_date" id="end_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
                     <div class="form-group col-md-4">
                         <label for="total_days">${__('total_days')}</label>
@@ -1180,19 +1231,48 @@ function generateLeaveFormHTML() {
                 </div>
             </div>
 
+            <!-- Trip Destination - Only for Business Trip -->
             <div id="tripSection" class="form-group d-none">
-                <label for="trip_destination">${__('destination')}</label>
-                <input type="text" name="trip_destination" id="trip_destination" class="form-control" placeholder="${__('destination_placeholder')}">
-            </div>
-            
-            <div id="reasonSection" class="form-group d-none">
-                <label for="reason">${__('reason_notes')}</label>
-                <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}"></textarea>
+                <label for="trip_destination">${__('destination')} <span class="text-danger">*</span></label>
+                <input type="text" name="trip_destination" id="trip_destination" class="form-control" placeholder="${__('destination_placeholder')}" required>
             </div>
 
+            <!-- Accommodation Question - Only for Business Trip -->
+            <div id="accommodationSection" class="form-group d-none">
+                <label>${__('accommodation_provided')} <span class="text-danger">*</span></label>
+                <div class="custom-control custom-radio mb-2">
+                    <input type="radio" class="custom-control-input" id="accommodation_yes" name="accommodation_provided" value="yes" required>
+                    <label class="custom-control-label" for="accommodation_yes">${__('yes')}</label>
+                </div>
+                <div class="custom-control custom-radio">
+                    <input type="radio" class="custom-control-input" id="accommodation_no" name="accommodation_provided" value="no" required>
+                    <label class="custom-control-label" for="accommodation_no">${__('no')}</label>
+                </div>
+            </div>
+
+            <!-- Transportation Question - Only for Business Trip -->
+            <div id="transportationSection" class="form-group d-none">
+                <label>${__('transportation_provided')} <span class="text-danger">*</span></label>
+                <div class="custom-control custom-radio mb-2">
+                    <input type="radio" class="custom-control-input" id="transportation_yes" name="transportation_provided" value="yes" required>
+                    <label class="custom-control-label" for="transportation_yes">${__('yes')}</label>
+                </div>
+                <div class="custom-control custom-radio">
+                    <input type="radio" class="custom-control-input" id="transportation_no" name="transportation_provided" value="no" required>
+                    <label class="custom-control-label" for="transportation_no">${__('no')}</label>
+                </div>
+            </div>
+            
+            <!-- Reason/Notes - Required for ALL leave types -->
+            <div id="reasonSection" class="form-group d-none">
+                <label for="reason">${__('reason_notes')} <span class="text-danger">*</span></label>
+                <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}" required></textarea>
+            </div>
+
+            <!-- Attachment - Required for ALL leave types -->
             <div id="attachmentSection" class="form-group d-none">
-                <label for="attachment">${__('attach_document_required')}</label>
-                <input type="file" name="attachment" id="attachment" class="form-control-file">
+                <label for="attachment">${__('attach_document_required')} <span class="text-danger">*</span></label>
+                <input type="file" name="attachment" id="attachment" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png" required>
                 <small class="form-text text-muted">${__('attachment_example')}</small>
             </div>
         </form>
@@ -1204,36 +1284,25 @@ function generateLeaveFormHTML() {
 /**
  * Toggles the visibility of form fields based on the selected leave type.
  */
+/**
+ * Toggles the visibility of form fields based on the selected leave type.
+ * ALL leave types now require: dates, reason/notes, and attachment
+ */
 function toggleLeaveFields() {
     const selectedType = $('#leave_type_select').val();
     
-    // Hide all conditional sections first
-    $('#dateSection, #reasonSection, #attachmentSection, #tripSection').addClass('d-none');
-    $('#end_date').closest('.form-group').show(); // Show end date by default
-    calculateTotalDays(); // Recalculate days when type changes
+    // Hide all sections first
+    $('#dateSection, #reasonSection, #attachmentSection, #tripSection, #accommodationSection, #transportationSection').addClass('d-none');
+    calculateTotalDays();
 
     if (!selectedType) return;
 
-    // Show sections based on the selected type
-    switch (selectedType) {
-        case 'Sick Leave':
-            $('#dateSection, #reasonSection, #attachmentSection').removeClass('d-none');
-            break;
-        case 'Maternity Leave':
-            $('#dateSection, #attachmentSection').removeClass('d-none');
-            break;
-        case 'Business Trip':
-            $('#dateSection, #tripSection, #reasonSection').removeClass('d-none');
-            break;
-        /*case 'Compensatory Leave':
-            $('#dateSection, #reasonSection').removeClass('d-none');
-            $('#end_date').closest('.form-group').hide(); // Compensatory leave is usually for a single day
-            $('#end_date').val($('#start_date').val()); // Set end date same as start date
-            calculateTotalDays();
-            break;*/
-        default: // Casual Leave, Other Leave, Compassionate Leave
-            $('#dateSection, #reasonSection').removeClass('d-none');
-            break;
+    // ALL leave types show: dates, reason, and attachment
+    $('#dateSection, #reasonSection, #attachmentSection').removeClass('d-none');
+    
+    // Business Trip also needs destination, accommodation, and transportation
+    if (selectedType === 'Business Trip') {
+        $('#tripSection, #accommodationSection, #transportationSection').removeClass('d-none');
     }
 }
 

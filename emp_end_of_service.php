@@ -243,7 +243,7 @@
     
     $contractType = $_POST['contract_type'] ?? '1';
     $selectedReasonCode = $_POST['eos_reason'] ?? '';
-    $endDateStr = $_POST['end_date'] ?? ''; 
+    $endDateStr = $_GET['end_date'] ?? $_POST['end_date'] ?? ''; 
     $allReasons = [];
     $errors = [];
     $general_error_message = '';
@@ -577,11 +577,11 @@
                                                                 <?php if (!empty($errors['eos_reason'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['eos_reason']); ?></small></div><?php endif; ?>
                                                             </div>
                                                             <div class="form-group col-lg-6">
-                                                                <label for="joining_date"><?=__('Joining Date');?>:</label>
+                                                                <label for="joining_date"><?=__('joining_date_label');?>:</label>
                                                                 <input type="text" name="joining_date" class="form-control" id="joining_date" value="<?=htmlspecialchars($emprow['joining_date']);?>" readonly>
                                                             </div>
                                                             <div class="form-group col-lg-6">
-                                                                <label for="end_date"><?=__('End of Service Date');?>:<span class="text-danger">*</span></label>
+                                                                <label for="end_date"><?=__('last_working_day');?>:<span class="text-danger">*</span></label>
                                                                 <input type="text" name="end_date" class="form-control datepicker" id="end_date" value="<?=htmlspecialchars($endDateStr); ?>" required autocomplete="off">
                                                                 <?php if (!empty($errors['end_date'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['end_date']); ?></small></div><?php endif; ?>
                                                             </div>

@@ -70,6 +70,18 @@
     $notes_query = mysqli_query($conDB, "SELECT n.* FROM `emp_notice` n WHERE n.emp_id = '{$emprow['empid']}' AND n.is_deleted = 0 ORDER BY n.id DESC");
     $employee_notes = mysqli_fetch_all($notes_query, MYSQLI_ASSOC);
 
+    // Query for Supervisor Info
+    $supervisor_query = mysqli_query($conDB, "SELECT `emp_id`, `name`, `actual_job` FROM `employees` WHERE `emp_id` = '{$emprow['supervisor_id']}' LIMIT 1");
+    $supervisor_info = mysqli_fetch_assoc($supervisor_query);
+    
+    // Query for End of Service Info
+    $eos_query = mysqli_query($conDB, "SELECT * FROM `emp_eos` WHERE `emp_id` = '{$emprow['empid']}' LIMIT 1");
+    $end_of_service = mysqli_fetch_assoc($eos_query);
+
+    // Query for Vacation Balance
+    $balance_query = mysqli_query($conDB, "SELECT * FROM `emp_vacation_balance` WHERE `emp_id` = '{$emprow['empid']}' ORDER BY `last_updated` DESC LIMIT 1");
+    $vacation_balance = mysqli_fetch_assoc($balance_query);
+
 	} else {
 		//when the id not equals id show database
 		header("Location: ./reg_employee.php");
@@ -98,46 +110,197 @@
         <script src="assets/js/modernizr.min.js"></script>
 		<style>
             body {
-                font-size: 16px;
+                font-size: 12px;
+                background-color: white;
+                padding: 0;
+                margin: 0;
+            }
+            .wrapper, .content-page, .content, .container-fluid {
+                background-color: white !important;
+                padding: 1rem !important;
             }
             .table-sm td, .table-sm th {
-                padding: .5rem;
+                padding: .35rem;
+                font-size: 10px;
             }
             h4 {
                 font-size: 1.25rem;
+                font-weight: 600;
+                color: #333;
             }
             h5 {
                 font-size: 1.1rem;
+                font-weight: 500;
+                color: #555;
             }
-             .card-box {
+            .card-box {
                 page-break-inside: avoid;
+                margin-bottom: 1rem;
+                border: none;
             }
+            .employee-header {
+                text-align: center;
+                margin-bottom: 1.5rem;
+                padding-bottom: 1rem;
+                border-bottom: 2px solid #333;
+            }
+            .employee-header img {
+                width: 100px;
+                height: 100px;
+                border-radius: 50%;
+                margin-bottom: 0.5rem;
+                border: 2px solid #333;
+            }
+            .employee-header h2 {
+                margin: 0.5rem 0;
+                font-size: 1.5rem;
+                font-weight: 700;
+            }
+            h4.section-title {
+                font-size: 1.1rem;
+                font-weight: 700;
+                color: #000;
+                margin-top: 1.5rem;
+                margin-bottom: 0.5rem;
+                border-bottom: 1px solid #333;
+                padding-bottom: 0.3rem;
+            }
+            /* Layout helpers */
+            .section { page-break-inside: avoid; }
+            .two-col { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
+            .two-col > [class*="col-"] { width: 100%; padding-left: 0; padding-right: 0; }
+            @page { size: A4; margin: 12mm; }
+            /* Enhanced Table Styling */
+            .table {
+                margin-bottom: 1rem;
+                border-collapse: collapse;
+                border: 1px solid #999;
+                width: 100%;
+            }
+            .table thead th {
+                background-color: #333 !important;
+                color: #fff !important;
+                font-weight: 600;
+                border: 1px solid #999;
+                padding: 0.35rem 0.25rem !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .table td, .table th { border: 1px solid #999; }
+            .table-bordered td {
+                border-color: #dee2e6;
+            }
+            .badge {
+                font-weight: 600;
+                padding: 0.4rem 0.8rem;
+            }
+            /* Status Badges */
+            .badge-success { background-color: #27ae60 !important; }
+            .badge-danger { background-color: #e74c3c !important; }
+            .badge-warning { background-color: #f7b731 !important; color: #333 !important; }
+            .badge-info { background-color: #17a2b8 !important; }
+            .badge-primary { background-color: #007bff !important; }
+            
             @media print {
+                @page { size: A4 portrait; margin: 12mm; }
+                html, body { height: auto; }
                 body {
-                    font-size: 12px;
+                    font-size: 11px;
+                    background-color: white !important;
+                    margin: 0 !important;
                 }
-                .content-page, .content {
+                .content-page {
                     padding: 0 !important;
                     margin: 0 !important;
                 }
+                .content {
+                    padding: 0 !important;
+                    margin: 0 !important;
+                }
+                .container-fluid {
+                    padding: 0 !important;
+                    margin: 0 !important;
+                }
+                .row {
+                    margin: 0 !important;
+                }
+                .col-md-12 {
+                    padding: 0 !important;
+                }
+                .left.side-menu, .topbar, .navbar-custom, .page-title-box, .footer, .no-print { display: none !important; }
                 .card-box {
                     box-shadow: none !important;
-                    border: 1px solid #dee2e6 !important;
+                    border: 1px solid #ccc !important;
+                    page-break-inside: avoid;
+                    margin-bottom: 0.75rem !important;
                 }
                 .table {
-                    margin-bottom: 0.5rem;
+                    margin-bottom: 0.5rem !important;
+                    font-size: 10px;
+                    border-collapse: collapse !important;
+                    border: 1px solid #999 !important;
+                    width: 100% !important;
                 }
-                .thead-dark th {
-                    background-color: #343a40 !important;
+                .table thead th {
+                    background-color: #333 !important;
                     color: #fff !important;
                     -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                    padding: 0.35rem 0.25rem !important;
+                    border: 1px solid #999 !important;
                 }
-                .badge{
-                    border: 1px solid #000;
+                .table td, .table th {
+                    padding: 0.25rem !important;
+                    border: 1px solid #999 !important;
                 }
+                .badge {
+                    border: 1px solid #000 !important;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                    padding: 0.25rem 0.5rem !important;
+                }
+                .badge-success { background-color: #27ae60 !important; color: white !important; }
+                .badge-danger { background-color: #e74c3c !important; color: white !important; }
+                .badge-warning { background-color: #f7b731 !important; }
+                .badge-info { background-color: #17a2b8 !important; color: white !important; }
+                .badge-primary { background-color: #007bff !important; color: white !important; }
                 .no-print {
-                    display: none;
+                    display: none !important;
                 }
+                .profile-section {
+                    background-color: #f0f0f0 !important;
+                    color: #000 !important;
+                    border: 1px solid #999 !important;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .stat-box {
+                    background-color: #f9f9f9 !important;
+                    color: #000 !important;
+                    border: 1px solid #999 !important;
+                    page-break-inside: avoid;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .stat-box h3 {
+                    color: #000 !important;
+                }
+                .header-title {
+                    color: #000 !important;
+                    border-bottom: 2px solid #333 !important;
+                }
+                img {
+                    max-width: 100%;
+                    height: auto;
+                }
+                .img-thumbnail {
+                    border: 1px solid #999 !important;
+                }
+                .two-col { display: grid !important; grid-template-columns: 1fr 1fr !important; column-gap: 12px !important; }
+                .two-col > [class*="col-"] { float: none !important; width: auto !important; padding-left: 0 !important; padding-right: 0 !important; }
+                h4.section-title { break-after: avoid; }
+                .table { page-break-inside: auto; }
+                tr, td, th { page-break-inside: avoid; }
             }
         </style>
 		<?php if ($is_rtl): ?>
@@ -151,7 +314,7 @@
         <div id="wrapper">
 
             <!-- ========== Left Sidebar Start ========== -->
-            <div class="left side-menu no-print" style="display:none;">
+            <div class="left side-menu" style="display:none;">
 
                 <div class="slimscroll-menu" id="remove-scroll">
 
@@ -187,53 +350,49 @@
 
                         <div class="row">
                             <div class="col-md-12">
-                                <div class="card-box" id="nodeToRenderAsPDF">
-                                    <div class="clearfix mb-3">
-                                        <div class="float-left">
-                                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="120">
-                                        </div>
-										<div class="float-right items-right text-right justify-content-center align-items-center">
-                                            <h3 class="m-0"><?=__('personal_employment_details_header')?></h3>
-                                            <p><?=__('date_label')?>: <?= date('d M, Y') ?></p>
-											<p><strong><?=__('status_label')?>:</strong> <span class="badge badge-<?=($emprow['status'] == 1)?'success':'danger';?>"><?=($emprow['status'] == 1)?__('active_status'):__('terminated_status');?></span></p>
-                                        </div>
-                                    </div>
-                                    <hr/>
-                                    <!-- Profile Header -->
-                                    <div class="card-box bg-light">
-                                        <div class="row">
-                                            <div class="col-md-3 text-center">
-                                                <img src="<?=$emprow['avatar'] ?>" class="img-thumbnail rounded-circle" alt="employee-image" style="width:150px; height:150px;">
-                                                <h4 class="mt-2 mb-0"><?=$emprow['name']?></h4>
-                                                <p class="text-muted"><?=($is_rtl ?? false ? $emprow['jobname_ar']:$emprow['jobname'])?> - <?=($is_rtl ?? false ? $emprow['deptnme_ar']:$emprow['deptnme'])?></p>
+                                <!-- Employee Header -->
+                                <div class="employee-header">
+                                    <img src="<?=$emprow['avatar'] ?>" alt="employee-image">
+                                    <h2><?=$emprow['name']?></h2>
+                                </div>
+
+                                <!-- Personal & Employment Details -->
+                                <h4 class="section-title"><?=__('personal_employment_details_header')?></h4>
+                                    <div class="row two-col">
+                                            <div class="col-md-6">
+                                                <h5><?=__('personal_information_header')?></h5>
+                                                <table class="table table-sm">
+                                                    <tbody>
+                                                        <tr><th style="width:150px;"><?=__('employee_id_label')?>:</th><td><strong>#<?=$emprow['empid']; ?></strong></td></tr>
+                                                        <tr><th><?=__('iqama_id_label')?>:</th><td><?=$emprow['iqama']; ?></td></tr>
+                                                        <tr><th><?=__('iqama_exp_label')?>:</th><td><?=$emprow['iqama_exp']; ?></td></tr>
+                                                        <tr><th><?=__('passport_label')?>:</th><td><?=$emprow['passport_number']; ?></td></tr>
+                                                        <tr><th><?=__('passport_exp_label')?>:</th><td><?php if (!empty($emprow['passport_exp'])) echo $emprow['passport_exp']; else echo 'N/A'; ?></td></tr>
+                                                        <tr><th><?=__('dob_label')?>:</th><td><?=$emprow['dob']; ?> (<?=$years?> <?=__('years_text')?>)</td></tr>
+                                                        <tr><th><?=__('nationality_label')?>:</th><td><?=($is_rtl ?? false ? $emprow['country_name_ar']:$emprow['country_name']); ?></td></tr>
+                                                    </tbody>
+                                                </table>
                                             </div>
-                                            <div class="col-md-9">
-                                                <div class="row">
-                                                    <div class="col-md-6">
-                                                        <h5><?=__('personal_information_header')?></h5>
-                                                        <p><strong><?=__('employee_id_label')?>:</strong> <?=$emprow['empid']; ?></p>
-                                                        <p><strong><?=__('iqama_id_label')?>:</strong> <?=$emprow['iqama']; ?> (<?=__('expires_label')?>: <?=$emprow['iqama_exp']; ?>)</p>
-                                                        <p><strong><?=__('passport_label')?>:</strong> <?=$emprow['passport_number']; ?> (<?=__('expires_label')?>: <?php if (!empty($emprow['passport_exp'])) echo $emprow['passport_exp']; ?>)</p>
-                                                        <p><strong><?=__('dob_label')?>:</strong> <?=$emprow['dob']; ?> (<?=$years?>)</p>
-                                                        <p><strong><?=__('nationality_label')?>:</strong> <?=($is_rtl ?? false ? $emprow['country_name_ar']:$emprow['country_name']); ?></p>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <h5><?=__('employment_information_header')?></h5>
-                                                        <p><strong><?=__('department_label')?>:</strong> <?=$emprow['deptnme']; ?> (<?=$emprow['sectin_nme']; ?>)</p>
-                                                        <p><strong><?=__('date_hired_label')?>:</strong> <?=$emprow['joining_date']; ?></p>
-                                                        <p><strong><?=__('working_period')?>:</strong> <?=ageDOB($emprow['joining_date']) ?></p>
-                                                        <p><strong><?=__('contract_period_label')?>:</strong> <?=formatPeriod($emprow["period"])?></p>
-                                                        <p><strong><?=__('contact_label')?>:</strong> <?=$emprow['mobile']; ?> | <?=$emprow['c_email']; ?></p>
-                                                    </div>
-                                                </div>
+                                            <div class="col-md-6">
+                                                <h5><?=__('employment_information_header')?></h5>
+                                                <table class="table table-sm">
+                                                    <tbody>
+                                                        <tr><th style="width:150px;"><?=__('department_label')?>:</th><td><?=$emprow['deptnme']; ?></td></tr>
+                                                        <tr><th><?=__('section_label')?>:</th><td><?=$emprow['sectin_nme']; ?></td></tr>
+                                                        <tr><th><?=__('job_position_label')?>:</th><td><?=($is_rtl ?? false ? $emprow['jobname_ar']:$emprow['jobname']); ?></td></tr>
+                                                        <tr><th><?=__('date_hired_label')?>:</th><td><?=$emprow['joining_date']; ?></td></tr>
+                                                        <tr><th><?=__('working_period')?>:</th><td><?=ageDOB($emprow['joining_date']) ?></td></tr>
+                                                        <tr><th><?=__('contract_period_label')?>:</th><td><?=formatPeriod($emprow["period"])?></td></tr>
+                                                        <tr><th><?=__('contact_label')?>:</th><td><?=$emprow['mobile']; ?></td></tr>
+                                                        <tr><th><?=__('email_label')?>:</th><td><?=$emprow['c_email']; ?></td></tr>
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         </div>
-                                    </div>
 
                                     <!-- Financial Details -->
-                                    <div class="card-box mt-3">
-                                        <h4 class="header-title mt-0 mb-3 text-center"><?=__('financial_details_header')?></h4>
-                                        <div class="row">
+                                    <h4 class="section-title"><?=__('financial_details_header')?></h4>
+                                        <div class="row two-col">
                                             <div class="col-md-6">
                                                 <h5><?=__('salary_breakdown_header')?></h5>
                                                 <table class="table table-sm">
@@ -265,13 +424,11 @@
                                                 </table>
                                             </div>
                                         </div>
-                                    </div>
 
                                     <!-- Assets -->
                                     <?php if ($car_info || !empty($assigned_assets)): ?>
-                                    <div class="card-box mt-3">
-                                        <h4 class="header-title mt-0 mb-3 text-center"><?=__('assigned_assets_header')?></h4>
-                                        <div class="row">
+                                    <h4 class="section-title"><?=__('assigned_assets_header')?></h4>
+                                        <div class="row two-col">
                                             <?php if ($car_info): ?>
                                             <div class="col-md-6">
                                                 <h5><?=__('assigned_car_header')?></h5>
@@ -299,13 +456,11 @@
                                             </div>
                                             <?php endif; ?>
                                         </div>
-                                    </div>
                                     <?php endif; ?>
 
                                     <!-- Loan History -->
                                     <?php if (!empty($loan_history)): ?>
-                                    <div class="card-box mt-3">
-                                        <h4 class="header-title mt-0 mb-3 text-center"><?=__('loan_history_header')?></h4>
+                                    <h4 class="section-title"><?=__('loan_history_header')?></h4>
                                         <table class="table table-sm table-bordered">
                                             <thead class="thead-light">
                                                 <tr><th><?=__('amount_header')?></th><th><?=__('deduction_header')?></th><th><?=__('balance_header')?></th><th><?=__('start_header')?></th><th><?=__('end_header')?></th><th><?=__('type_header')?></th><th><?=__('status_header')?></th></tr>
@@ -332,13 +487,11 @@
                                                 <?php endforeach; ?>
                                             </tbody>
                                         </table>
-                                    </div>
                                     <?php endif; ?>
 
                                     <!-- Vacation History -->
                                     <?php if (!empty($vacation_history)): ?>
-                                    <div class="card-box mt-3">
-                                        <h4 class="header-title mt-0 mb-3"><?=__('vacation_history_header')?></h4>
+                                    <h4 class="section-title"><?=__('vacation_history_header')?></h4>
                                         <table class="table table-sm table-bordered">
                                             <thead class="thead-light">
                                                 <tr><th><?=__('type_header')?></th><th><?=__('start_date_header')?></th><th><?=__('return_date_header')?></th><th><?=__('days_header')?></th><th><?=__('permit_no_header')?></th><th><?=__('status_header')?></th><th><?=__('arrived_header')?></th></tr>
@@ -357,13 +510,36 @@
                                                 <?php endforeach; ?>
                                             </tbody>
                                         </table>
-                                    </div>
                                     <?php endif; ?>
                                     
+                                    <!-- End of Service Info -->
+                                    <?php if ($end_of_service): ?>
+                                    <h4 class="section-title text-danger"><?=__('end_of_service_header')?></h4>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <table class="table table-sm">
+                                                    <tbody>
+                                                        <tr><th style="width:150px;"><?=__('resignation_date_label')?>:</th><td><?= date('d M Y', strtotime($end_of_service['resignation_date'])); ?></td></tr>
+                                                        <tr><th><?=__('last_working_day_label')?>:</th><td><?= date('d M Y', strtotime($end_of_service['last_working_day'])); ?></td></tr>
+                                                        <tr><th><?=__('reason_label')?>:</th><td><?= htmlspecialchars($end_of_service['reason'] ?? 'N/A'); ?></td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <table class="table table-sm">
+                                                    <tbody>
+                                                        <tr><th style="width:150px;"><?=__('eos_amount_label')?>:</th><td><?= number_format($end_of_service['eos_amount'] ?? 0, 2); ?> <?=__('sar_currency')?></td></tr>
+                                                        <tr><th><?=__('final_settlement_label')?>:</th><td><?= number_format($end_of_service['final_settlement'] ?? 0, 2); ?> <?=__('sar_currency')?></td></tr>
+                                                        <tr><th><?=__('status_label')?>:</th><td><span class="badge badge-<?= ($end_of_service['status'] == 'settled' ? 'success' : 'warning') ?>"><?= __($end_of_service['status'] ?? 'pending'); ?></span></td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+
                                     <!-- Notes -->
                                      <?php if (!empty($employee_notes)): ?>
-                                    <div class="card-box mt-3">
-                                        <h4 class="header-title mt-0 mb-3"><?=__('notes_notices_header')?></h4>
+                                    <h4 class="section-title"><?=__('notes_notices_header')?></h4>
                                         <table class="table table-sm table-bordered">
                                             <thead class="thead-light">
                                                 <tr>
@@ -380,38 +556,8 @@
                                                 <?php endforeach; ?>
                                             </tbody>
                                         </table>
-                                    </div>
                                     <?php endif; ?>
 
-                                    <!-- Documents -->
-                                    <?php if (!empty($employee_documents)): ?>
-                                    <div class="card-box mt-3">
-                                        <h4 class="header-title mt-0 mb-3"><?=__('employee_documents_header')?></h4>
-                                        <div class="row">
-                                            <?php foreach ($employee_documents as $doc):
-                                                $fileIcon = ($doc["docu_ext"] == "pdf" ? "pdf" : ($doc["docu_ext"] == "xls" ? "excel" : ($doc["docu_ext"] == "tif" ? "tif" : "")));
-                                            ?>
-                                            <div class="col-lg-3 col-xl-2">
-                                                <div class="file-man-box text-center">
-                                                    <div class="file-img-box">
-                                                        <?php if ($doc["docu_ext"] == "pdf" or $doc["docu_ext"] == "xls" or $doc["docu_ext"] == "tif"): ?>
-                                                            <img src="assets/images/file_icons/<?= $fileIcon ?>.svg" alt="icon" style="width: 64px; height: 64px;">
-                                                        <?php else: ?>
-                                                            <img src="./assets/emp_documents/<?= $doc['path'] ?>" alt="document" class="img-thumbnail" style="max-height: 80px;">
-                                                        <?php endif ?>
-                                                    </div>
-                                                    <div class="file-man-title">
-                                                        <h6 class="mb-0 text-overflow" style="font-size:10px"><?= $doc['docu_typ'] ?></h6>
-                                                        <p class="mb-0"><small><?= date('d-M-y', strtotime($doc['created_at'])) ?></small></p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    </div>
-                                    <?php endif; ?>
-
-                                </div>
                             </div>
                         </div>
                         <!-- end row -->
