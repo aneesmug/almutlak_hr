@@ -1282,18 +1282,7 @@ elseif($ajaxType == 'unassign_asset') {
         }
         // Begin transaction for multiple database operations
         $pdo->beginTransaction();
-        if ($emptype == 'employee') {
-            // Insert into employee_temp_contants
-            $stmt1 = $pdo->prepare("INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES (:emp_id, 'Employee Documents', :filepath)");
-            $stmt1->execute([':emp_id' => $emp_id_up, ':filepath' => $filepathup . $filename_po ]);
-            // Insert into emp_docu with status 'I'
-            $stmt2 = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`, `status`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid, 'I')");
-            $stmt2->execute([':emp_id' => $emp_id_up, ':docu_typ' => $docu_typ_up,':filename' => $filename_po,':ext' => $file_ext,':pgid' => $id]);
-        } else {
-            // Insert into emp_docu without status
-            $stmt = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid)");
-            $stmt->execute([':emp_id' => $emp_id_up,':docu_typ' => $docu_typ_up,':filename' => $filename_po,':ext' => $file_ext,':pgid' => $id]);
-        }
+        
         // Commit transaction if all queries succeeded
         $pdo->commit();
         send_json_response("Added!", "Record has been added successfully.", "success");
@@ -1499,55 +1488,93 @@ elseif($ajaxType == 'unassign_asset') {
     $notes = isset($_POST['notes']) ? trim($_POST['notes']) : '';
     // --- If the request is APPROVED ---
     if ($approvalAction == 'approve') {
-        try {
-            // 1. Fetch the request details from the temp table
-            $stmt = $pdo->prepare("SELECT type, new_value, path FROM employee_temp_contants WHERE id = ? AND emp_id = ?");
-            $stmt->execute([$requestId, $empId]);
-            $request = $stmt->fetch();
+    try {
+        // 1. Fetch the request details from the temp table
+        $stmt = $pdo->prepare("SELECT type, new_value, path FROM employee_temp_contants WHERE id = ? AND emp_id = ?");
+        $stmt->execute([$requestId, $empId]);
+        $request = $stmt->fetch();
 
-            if (!$request) {
-                echo json_encode(['type' => 'error', 'title' => 'Not Found', 'message' => 'The original request could not be found.']);
-                exit;
-            }
-            // 2. Determine which column to update in the main 'employees' table
-            // This section is now updated to match your 'employees' table schema.emp_temp_contant
-            $updateField = '';
-            switch ($request['type']) {
-                case 'Mobile':          $updateField = 'mobile'; break;
-                case 'Email':           $updateField = 'email'; break;
-                case 'Passport No':     $updateField = 'passport_number'; break;
-                case 'Passport Exp':    $updateField = 'passport_exp'; break;
-                case 'Address':         $updateField = 'address'; break;
-                case 'Profile Picture': $updateField = 'avatar'; break;
-                // NOTE: 'Employee Documents' case was removed as there is no matching column in your 'employees' table.
-                // If you have a column for general document paths, add a case for it here.
-            }
-            // Use the path for file-based updates, otherwise use new_value
-            $updateValue = ($request['path']) ? $request['path'] : $request['new_value'];
-            // 3. Update the main employees table if a valid field was found
-            if (!empty($updateField)) {
-                // IMPORTANT: The query now uses `emp_id` as the WHERE clause key.
-                $updateStmt = $pdo->prepare("UPDATE `employees` SET {$updateField} = ? WHERE emp_id = ?");
-                $updateStmt->execute([$updateValue, $empId]);
-            }
-            // 4. Update the status of the temp request to 'Approved'
-            $finalStmt = $pdo->prepare("UPDATE employee_temp_contants SET status = 'Approved', notes = ? WHERE id = ?");
-            $finalStmt->execute([$notes, $requestId]);
-            echo json_encode(['type' => 'success', 'title' => 'Approved!', 'message' => 'Employee information has been successfully updated.']);
-        } catch (PDOException $e) {
-            // In a real app, log the error
-            // For debugging, you can output the error message:
-            // echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => $e->getMessage()]);
-            echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => 'An error occurred while updating the data.']);
+        if (!$request) {
+            echo json_encode(['type' => 'error', 'title' => 'Not Found', 'message' => 'The original request could not be found.']);
+            exit;
         }
+        $updateField = '';
+        switch ($request['type']) {
+            case 'Mobile':          $updateField = 'mobile'; break;
+            case 'Email':           $updateField = 'email'; break;
+            case 'Passport No':     $updateField = 'passport_number'; break;
+            case 'Passport Exp':    $updateField = 'passport_exp'; break;
+            case 'Address':         $updateField = 'address'; break;
+            case 'Profile Picture': $updateField = 'avatar'; break;
+            // case 'Upload Documents': $updateField = 'upload_documents'; break;
+        }
+        $updateValue = ($request['path']) ? $request['path'] : $request['new_value'];
+        // 3. Update the main employees table if a valid field was found
+        if (!empty($updateField)) {
+            $updateStmt = $pdo->prepare("UPDATE `employees` SET {$updateField} = ? WHERE emp_id = ?");
+            $updateStmt->execute([$updateValue, $empId]);
+        }
+        // 4. If Employee Documents or Upload Documents, approve the document in emp_docu
+        if ($request['type'] === 'Employee Documents' || $request['type'] === 'Upload Documents') {
+            $docStmt = $pdo->prepare("UPDATE emp_docu SET status = 'A' WHERE emp_id = ? AND pgid = ?");
+            $docStmt->execute([$empId, $requestId]);
+            $rowsUpdated = $docStmt->rowCount();
+            
+            // Log for debugging
+            error_log("Document Approval: emp_id={$empId}, pgid={$requestId}, rows_updated={$rowsUpdated}");
+            
+            if ($rowsUpdated === 0) {
+                error_log("WARNING: No emp_docu records found with emp_id={$empId} AND pgid={$requestId}");
+            }
+        }
+        // 5. Update the status of the temp request to 'Approved'
+        $finalStmt = $pdo->prepare("UPDATE employee_temp_contants SET status = 'Approved', notes = ? WHERE id = ?");
+        $finalStmt->execute([$notes, $requestId]);
+        echo json_encode(['type' => 'success', 'title' => 'Approved!', 'message' => 'Employee information has been successfully updated.']);
+    } catch (PDOException $e) {
+        echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => 'An error occurred while updating the data.']);
+    }
     // --- If the request is REJECTED ---
     } elseif ($approvalAction == 'not_approve') {
         try {
-            // Just update the status to 'Rejected' and add the reason
+            // 1. Fetch the request details to get the file path
+            $stmt = $pdo->prepare("SELECT type, path FROM employee_temp_contants WHERE id = ? AND emp_id = ?");
+            $stmt->execute([$requestId, $empId]);
+            $request = $stmt->fetch();
+            
+            if ($request && !empty($request['path'])) {
+                // 2. If it's a document upload or profile picture, delete the physical file
+                if (in_array($request['type'], ['Employee Documents', 'Upload Documents', 'Profile Picture'])) {
+                    // Normalize path to use forward slashes and construct absolute path correctly
+                    $relativePath = str_replace('\\', '/', $request['path']);
+                    $filePath = realpath(__DIR__ . '/../../' . $relativePath);
+                    
+                    // Verify file exists and delete it
+                    if ($filePath && file_exists($filePath)) {
+                        if (unlink($filePath)) {
+                            error_log("Rejected file deleted successfully: {$filePath}");
+                        } else {
+                            error_log("Failed to delete file: {$filePath}");
+                        }
+                    } else {
+                        error_log("File not found for deletion: " . __DIR__ . '/../../' . $relativePath);
+                    }
+                }
+                
+                // 3. If it's a document upload, also delete from emp_docu table
+                if ($request['type'] === 'Employee Documents' || $request['type'] === 'Upload Documents') {
+                    $deleteDocStmt = $pdo->prepare("DELETE FROM emp_docu WHERE emp_id = ? AND pgid = ? AND status = 'I'");
+                    $deleteDocStmt->execute([$empId, $requestId]);
+                    error_log("Rejected document removed from emp_docu: emp_id={$empId}, pgid={$requestId}");
+                }
+            }
+            
+            // 4. Update the status to 'Rejected' and add the reason
             $finalStmt = $pdo->prepare("UPDATE employee_temp_contants SET status = 'Rejected', notes = ? WHERE id = ?");
             $finalStmt->execute([$notes, $requestId]);
-            echo json_encode(['type' => 'success', 'title' => 'Rejected', 'message' => 'The update request has been rejected.']);
+            echo json_encode(['type' => 'success', 'title' => 'Rejected', 'message' => 'The update request has been rejected and the file has been deleted.']);
         } catch (PDOException $e) {
+            error_log("Rejection error: " . $e->getMessage());
             echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => 'An error occurred while updating the request status.']);
         }
     } else {
@@ -1775,6 +1802,150 @@ elseif($ajaxType == 'unassign_asset') {
         ]);
     }
     exit;
+}
+// ============================================================================
+// GET DOCUMENT TYPES FROM DATABASE
+// ============================================================================
+elseif($ajaxType == 'get_document_types') {
+    try {
+        $stmt = $pdo->prepare("SELECT `id`, `duc_type` FROM `docu_type` ORDER BY `duc_type` ASC");
+        $stmt->execute();
+        $documentTypes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'status' => 200,
+            'data' => $documentTypes,
+            'message' => 'Document types loaded successfully.'
+        ]);
+    } catch (PDOException $e) {
+        echo json_encode([
+            'status' => 500,
+            'data' => [],
+            'message' => 'Error loading document types: ' . $e->getMessage()
+        ]);
+    }
+    exit;
+}
+// ============================================================================
+// UPLOAD EMPLOYEE DOCUMENT
+// ============================================================================
+elseif($ajaxType == 'upload_employee_document') {
+    try {
+        // Accept both legacy and new field names
+        $emp_id_up   = isset($_POST['emp_id']) ? (int)$_POST['emp_id'] : 0;
+        $docu_typ_up = $_POST['docu_typ'] ?? $_POST['document_type'] ?? null; // can be name or id
+        // Follow user_type=employee logic (fallback to old 'emptype')
+        $requestType = strtolower((string)($_POST['user_type'] ?? $_POST['emptype'] ?? ''));
+        $isEmployee  = ($requestType === 'employee');
+        // Use posted id as pgid (do not auto-link to temp id); default to 0 to satisfy NOT NULL
+        $pgid        = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+
+        // Resolve uploaded file from either 'file' or 'document_file'
+        $file = $_FILES['file'] ?? ($_FILES['document_file'] ?? null);
+
+        // Basic validation
+        if ($emp_id_up <= 0) {
+            send_json_response("Error", "Invalid employee ID.", "error");
+            exit;
+        }
+        if (empty($docu_typ_up)) {
+            send_json_response("Error", "Document type is required.", "error");
+            exit;
+        }
+        if (!$file || !isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
+            send_json_response("Error", "No file uploaded or upload error.", "error");
+            exit;
+        }
+
+        // Validate file size (max 5MB)
+        $maxFileSize = 5 * 1024 * 1024;
+        if (($file['size'] ?? 0) > $maxFileSize) {
+            send_json_response("Error", "File size exceeds 5MB limit.", "error");
+            exit;
+        }
+
+        // Validate file extension
+        $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png'];
+        if (!in_array($file_ext, $allowed_extensions)) {
+            send_json_response("Error", 'Invalid file type. Allowed: ' . implode(', ', $allowed_extensions), "error");
+            exit;
+        }
+
+        // Ensure upload directory exists
+        $uploadDir = __DIR__ . '/../../assets/emp_documents/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        // Sanitize part of filename from document type
+        $doc_segment = preg_replace('/[^A-Za-z0-9]+/', '_', strtoupper((string)$docu_typ_up));
+        $filename_po = 'EMP' . $emp_id_up . '_' . $doc_segment . '_' . time() . '_' . mt_rand(1000,9999) . '.' . $file_ext;
+        $uploadFilePath = $uploadDir . $filename_po;
+        $publicFilePath = 'assets/emp_documents/' . $filename_po; // for DB storage
+        $filepathup = 'assets/emp_documents/';
+
+        // Move uploaded file
+        if (!move_uploaded_file($file['tmp_name'], $uploadFilePath)) {
+            send_json_response("Error", "Failed to save uploaded file.", "error");
+            exit;
+        }
+
+        // Begin transaction for DB operations
+        $pdo->beginTransaction();
+
+        // If uploaded by employee (self-service), follow the exact method you provided
+        if ($isEmployee) {
+            // Insert into employee_temp_contants (store public path like existing code)
+            $stmt1 = $pdo->prepare("INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES (:emp_id, 'Upload Documents', :filepath)");
+            $stmt1->execute([':emp_id' => $emp_id_up, ':filepath' => $filepathup . $filename_po]);
+            
+            // Get the temp request ID that was just created
+            $tempRequestId = (int)$pdo->lastInsertId();
+            
+            // Log for debugging
+            error_log("Document Upload: emp_id={$emp_id_up}, tempRequestId={$tempRequestId}, filename={$filename_po}");
+
+            // Insert into emp_docu with status = 'I' and link to temp request via pgid
+            $stmt2 = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`, `status`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid, 'I')");
+            $stmt2->execute([
+                ':emp_id'   => $emp_id_up,
+                ':docu_typ' => $docu_typ_up,
+                ':filename' => $filename_po,
+                ':ext'      => $file_ext,
+                ':pgid'     => $tempRequestId // Link to temp request for approval
+            ]);
+            
+            // Log the inserted emp_docu record
+            error_log("emp_docu inserted with pgid={$tempRequestId}, status=I");
+        } else {
+            // Direct admin upload -> insert without status (let DB default apply) and use posted pgid (or 0)
+            $stmt = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid)");
+            $stmt->execute([
+                ':emp_id'   => $emp_id_up,
+                ':docu_typ' => $docu_typ_up,
+                ':filename' => $filename_po,
+                ':ext'      => $file_ext,
+                ':pgid'     => $pgid // will be 0 if not provided
+            ]);
+        }
+
+        $pdo->commit();
+        send_json_response("Success", "Document uploaded successfully.", "success");
+    } catch (PDOException $e) {
+        if (isset($pdo) && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        if (isset($uploadFilePath) && file_exists($uploadFilePath)) {
+            unlink($uploadFilePath);
+        }
+        send_json_response("Database Error", "Failed to save record: " . $e->getMessage(), "error");
+    } catch (Exception $e) {
+        if (isset($uploadFilePath) && file_exists($uploadFilePath)) {
+            unlink($uploadFilePath);
+        }
+        send_json_response("Error", $e->getMessage(), "error");
+    }
 }
 
 ?>

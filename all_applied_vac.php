@@ -404,6 +404,9 @@ if ($can_see_all_depts) {
                 background: white;
             }
             /* --- END NEW STYLES --- */
+            .detail-item{
+                flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
+            }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />

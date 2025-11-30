@@ -195,6 +195,7 @@ if (mysqli_num_rows($query) == 1) {
                                 $emp_status_fly = $rec["fly"];
                                 $emptype = $rec["emptype"];
                                 $sex_get = $rec["sex"];
+                                
 
                                 $sql_count = mysqli_query($conDB, "SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='" . $emp_id . "' ");
                                 $status_cont = mysqli_fetch_array($sql_count)[0];
@@ -208,75 +209,18 @@ if (mysqli_num_rows($query) == 1) {
                                 $checkGander = ($sex_get == 'male') ? './assets/emp_pics/defult.png' : './assets/emp_pics/defultFemale.jpg';
                                 $emp_avatar = (file_exists("./assets/emp_pics/" . explode("/", $emp_avatar)[3])) ? $emp_avatar : $checkGander;
 
+                                // Determine card status class
+                                $status_class = '';
+                                if ($emp_status == 1 && $emp_status_fly == 0) {
+                                    $status_class = 'status-active';
+                                } elseif ($emp_status_fly == 1) {
+                                    $status_class = 'status-fly';
+                                } else {
+                                    $status_class = 'status-inactive';
+                                }
+
                             ?>
-                                <div class="col-lg-3">
-                                    <?php
-                                        // Determine current vacation type for this employee (approved, current)
-                                            $sql_vac_type = mysqli_query($conDB, "SELECT vac_type FROM `emp_vacation` WHERE `emp_id`='".$emp_id."' AND `current_status`='approved' ORDER BY id DESC LIMIT 1");
-                                        $current_vac_type = ($row_vac = mysqli_fetch_assoc($sql_vac_type)) ? $row_vac['fly_type'] : '';
-
-                                        // Card color priority: Fly > Encashed > Active > Terminated
-                                        if ($emp_status == "1" && $emp_status_fly == "1") {
-                                            if ($current_vac_type === 'Fly') {
-                                                $card_class = "bg-warning"; // departed / fly vacation
-                                            } elseif (in_array($current_vac_type, ['Local Vacation','Encashed'])) {
-                                                $card_class = "bg-info"; // local vacation
-                                            } else {
-                                                $card_class = "bg-light"; // fallback active
-                                            }
-                                        } elseif ($emp_status == "1") {
-                                            $card_class = "bg-light"; // active
-                                        } else {
-                                            $card_class = "bg-danger"; // terminated
-                                        }
-                                    ?>
-                                    <div class="text-center card-box <?= $card_class ?>">
-
-                                        <div class="member-card pt-2 pb-2">
-                                            <div class="thumb-lg member-thumb m-b-10 mx-auto">
-                                                <img src="<?= $emp_avatar ?>" class="emp_avat_img empfil" alt="profile-image">
-                                            </div>
-                                            <div class=""><br>
-                                                <h4 class="m-b-5"><?=parseName($name, 'FIRST_LAST')?></h4>
-                                            </div>
-                                            <div class="btn-group" role="group" aria-label="Edit Button">
-                                                <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm"><i class="mdi mdi-account-search"></i> <?=__('view_details') ?></a>
-                                            </div><br>
-                                            <span class="badge badge-dark badge-pill"><?=__('fly') ?>: <?= $cont_fly ?> | <?=__('encashed') ?>: <?= $cont_encashed ?> | <?=__('vacation_type') ?>: <?= $current_vac_type ?: __('none') ?></span>
-                                                <span class="badge badge-dark badge-pill"><?=__('vacation_type') ?>: <?= $emp_status_fly == "1" ? ($current_vac_type ?: __('none')) : __('none') ?></span>
-
-                                            <div class="mt-4">
-                                                <div class="row">
-                                                    <div class="col-4 text-left">
-                                                        <div class="mt-3">
-                                                            <h4 class="m-b-5"><?= $emp_id ?></h4>
-                                                            <p class="mb-0"><?=__('employee_id') ?></p>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="col-4">
-                                                        <div class="mt-3">
-                                                            <?php if ($emptype == "Manager") { ?>
-                                                                <button type="button" class="btn btn-custom btn-rounded waves-light waves-effect"><i class="fa fa-user-circle-o"></i> <?= __(strtolower($emptype)) ?></button>
-                                                                <!--									<p class="mb-0 text-muted">Vac. No.</p>-->
-                                                            <?php } ?>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="col-4 text-right">
-                                                        <div class="mt-3">
-                                                            <h5 class="m-b-5"><span class='copyToClipboard'><?= $iqama ?></span></h5>
-                                                            <p class="mb-0"><?=__('iqama_id') ?></p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                        </div>
-
-                                    </div>
-
-                                </div> <!-- end col -->
+                                <?php include("./includes/employee_card.php"); ?>
                             <?php } ?>
                         </div>
 

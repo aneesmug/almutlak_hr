@@ -4654,7 +4654,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                 format: "yyyy-mm-dd",
                 todayHighlight: true,
                 autoclose: true,
-                startDate: '-5d'
+                startDate: '-10d'
             }).on('changeDate', function(e) {
                 $('#end_date').datepicker('setStartDate', e.date);
                 if ($('#leave_type_select').val() === 'Compensatory Leave') {
@@ -8022,6 +8022,8 @@ function initializeEditFormValidation() {
 
     // restrictToNumbers(document.getElementById('basic'), {allowDecimal: true });
     restrictToNumbers(document.getElementById('basic'));
+    
+    // restrictToNumbers(document.getElementsByClassName('basic'));
 }
 
 // function initializeDataTables() {
@@ -8505,61 +8507,61 @@ function updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered = false)
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-basic">${__('basic') || 'Basic'} <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" id="swal-basic" class="form-control salary-input" value="${currentSalaryData.basic || 0}">
+                        <input type="text" id="swal-basic" class="form-control salary-input numeric-only" value="${currentSalaryData.basic || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-housing">${__('housing') || 'Housing'}</label>
-                        <input type="number" step="0.01" id="swal-housing" class="form-control salary-input" value="${currentSalaryData.housing || 0}">
+                        <input type="text" id="swal-housing" class="form-control salary-input numeric-only" value="${currentSalaryData.housing || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-transport">${__('transport') || 'Transport'}</label>
-                        <input type="number" step="0.01" id="swal-transport" class="form-control salary-input" value="${currentSalaryData.transport || 0}">
+                        <input type="text" id="swal-transport" class="form-control salary-input numeric-only" value="${currentSalaryData.transport || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-food">${__('food') || 'Food'}</label>
-                        <input type="number" step="0.01" id="swal-food" class="form-control salary-input" value="${currentSalaryData.food || 0}">
+                        <input type="text" id="swal-food" class="form-control salary-input numeric-only" value="${currentSalaryData.food || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-misc">${__('misc') || 'Misc'}</label>
-                        <input type="number" step="0.01" id="swal-misc" class="form-control salary-input" value="${currentSalaryData.misc || 0}">
+                        <input type="text" id="swal-misc" class="form-control salary-input numeric-only" value="${currentSalaryData.misc || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-cashier">${__('cashier') || 'Cashier'}</label>
-                        <input type="number" step="0.01" id="swal-cashier" class="form-control salary-input" value="${currentSalaryData.cashier || 0}">
+                        <input type="text" id="swal-cashier" class="form-control salary-input numeric-only" value="${currentSalaryData.cashier || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-fuel">${__('fuel') || 'Fuel'}</label>
-                        <input type="number" step="0.01" id="swal-fuel" class="form-control salary-input" value="${currentSalaryData.fuel || 0}">
+                        <input type="text" id="swal-fuel" class="form-control salary-input numeric-only" value="${currentSalaryData.fuel || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-tel">${__('tel') || 'Tel'}</label>
-                        <input type="number" step="0.01" id="swal-tel" class="form-control salary-input" value="${currentSalaryData.tel || 0}">
+                        <input type="text" id="swal-tel" class="form-control salary-input numeric-only" value="${currentSalaryData.tel || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-other">${__('others') || 'Others'}</label>
-                        <input type="number" step="0.01" id="swal-other" class="form-control salary-input" value="${currentSalaryData.other || 0}">
+                        <input type="text" id="swal-other" class="form-control salary-input numeric-only" value="${currentSalaryData.other || 0}">
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group">
                         <label for="swal-guard">${__('guard') || 'Guard'}</label>
-                        <input type="number" step="0.01" id="swal-guard" class="form-control salary-input" value="${currentSalaryData.guard || 0}">
+                        <input type="text" id="swal-guard" class="form-control salary-input numeric-only" value="${currentSalaryData.guard || 0}">
                     </div>
                 </div>
                 <div class="col-md-12">
@@ -8597,6 +8599,8 @@ function updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered = false)
             
             // Initial calculation
             calculateTotal();
+            // Restrict salary inputs to numeric only
+            setupInputValidations();
             
             // Auto-update on input change
             $('.salary-input').on('input change', calculateTotal);

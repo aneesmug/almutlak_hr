@@ -119,8 +119,9 @@ $page_roles = [
     'log_activity.php' => ['Administrator'],
     'manual_vacation.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'import_iqama_exp.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager', 'IT_Team_Manager'],
     'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -206,6 +207,10 @@ $can_see_employee_evaluation_page = [
 
 $can_see_all_evaluations_report = [
     'Administrator', 'GM', 'HR_Senior_BP', 'HR_Supervisor', 'HR_Recruitment', 'HR_Manager'
+];
+
+$can_see_reports_page = [
+    'Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'
 ];
 
 $is_admin = $is_system_admin; 
@@ -428,7 +433,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $payrollLink ?>"><i class="fa fa-money-bill-transfer"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
-                
+                <?php /* ?>
                 <li>
                     <a href="javascript:void(0);"><i class="fa fa-users-gear"></i><span><?=__("history") ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-second-level" aria-expanded="false">
@@ -440,7 +445,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                         <?php endif; ?>
                     </ul>
                 </li>
-
+                <?php */ ?>
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
                 <?php endif; ?>
@@ -495,9 +500,13 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php endif; ?>
 
         <!-- Admin Section -->
-        <?php if ($is_admin): ?>
+        <?php if ($is_admin || $is_system_admin): ?>
             <li><a href="<?= $carsLink ?>" class="<?= all_cars($current_page) ?>"><i class="fa fa-cars"></i><span><?=__('cars') ?></span></a></li>
             <li><a href="<?= $locationsLink ?>" class="<?= all_locations($current_page) ?>"><i class="fa fa-sitemap"></i><span><?=__('locations') ?></span></a></li>
+        <?php endif; ?>
+        <!-- Reports -->
+        <?php if (in_array($user_role, $can_see_reports_page) || in_array($user_type, $can_see_reports_page)): ?>
+            <li><a href="reports.php"><i class="fa fa-file-chart-line"></i> <span> <?=__('reports') ?> </span></a></li>
         <?php endif; ?>
         <?php if ($is_system_admin): ?>
         <li>

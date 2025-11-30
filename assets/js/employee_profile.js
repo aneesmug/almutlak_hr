@@ -635,7 +635,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                 format: "yyyy-mm-dd",
                 todayHighlight: true,
                 autoclose: true,
-                startDate: '-5d'
+                startDate: '-10d'
             }).on('changeDate', function(e) {
                 $('#end_date').datepicker('setStartDate', e.date);
                 if ($('#leave_type_select').val() === 'Compensatory Leave') {
@@ -774,31 +774,102 @@ $(document).on('click', '#startUpdateRequest', function() {
 function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passport_number, passport_exp) {
     // --- First Modal: Ask WHAT to update ---
     Swal.fire({
-        title: __('what_to_update_title'),
-        input: 'select',
-        inputOptions: {
-            'Mobile': __('mobile'),
-            'Email': __('email'),
-            'Address': __('address'),
-            'Passport No': __('passport_number'),
-            'Passport Exp': __('passport_expiry_date'),
-            'Profile Picture': __('profile_picture')
-        },
+        title: '<i class="fa fa-edit"></i> ' + __('what_to_update_title'),
+        html: `
+            <style>
+                .update-request-form {
+                    padding: 20px 10px;
+                    text-align: left;
+                }
+                .update-form-group {
+                    margin-bottom: 20px;
+                }
+                .update-label {
+                    display: block;
+                    font-weight: 600;
+                    color: #2c3e50;
+                    margin-bottom: 8px;
+                    font-size: 14px;
+                }
+                .update-select {
+                    width: 100%;
+                    padding: 12px 15px;
+                    border: 2px solid #e0e6ed;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                    background: #f8f9fa;
+                    cursor: pointer;
+                }
+                .update-select:focus {
+                    border-color: #4e73df;
+                    background: #fff;
+                    outline: none;
+                    box-shadow: 0 0 0 3px rgba(78, 115, 223, 0.1);
+                }
+                .update-select option {
+                    padding: 10px;
+                }
+                .update-help-text {
+                    display: flex;
+                    align-items: center;
+                    margin-top: 10px;
+                    padding: 10px 12px;
+                    background: #e8f4f8;
+                    border-left: 4px solid #3498db;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    color: #2980b9;
+                }
+                .update-help-text i {
+                    margin-right: 8px;
+                    font-size: 14px;
+                }
+            </style>
+            <form class="update-request-form">
+                <div class="update-form-group">
+                    <label class="update-label">
+                        <i class="fa fa-list-ul"></i> ${__('select_field_to_update')}<span class="text-danger"> *</span>
+                    </label>
+                    <select class="update-select" id="field_select" name="field_select" required>
+                        <option value="">${__('select_an_item_placeholder')}</option>
+                        <option value="Mobile">${__('mobile')}</option>
+                        <option value="Email">${__('email')}</option>
+                        <option value="Address">${__('address')}</option>
+                        <option value="Passport No">${__('passport_number')}</option>
+                        <option value="Passport Exp">${__('passport_expiry_date')}</option>
+                        <option value="Profile Picture">${__('profile_picture')}</option>
+                        <option value="Upload Documents">${__('upload_documents')}</option>
+                    </select>
+                    <div class="update-help-text">
+                        <i class="fa fa-info-circle"></i>
+                        <span>${__('select_what_you_want_to_update') || 'Select the field you want to update'}</span>
+                    </div>
+                </div>
+            </form>
+        `,
+        width: '550px',
         allowOutsideClick: false,
-        inputPlaceholder: __('select_an_item_placeholder'),
         showCancelButton: true,
-        confirmButtonText: __('next'),
+        confirmButtonText: '<i class="fa fa-arrow-right"></i> ' + __('next'),
+        cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
         customClass: {
             confirmButton: 'btn btn-primary waves-effect waves-light',
-            cancelButton: 'btn btn-secondary waves-effect waves-light ml-2'
+            cancelButton: 'btn btn-secondary waves-effect waves-light ml-2',
+            popup: 'update-modal-popup'
         },
+        allowOutsideClick: false,
         buttonsStyling: false,
         inputValidator: (value) => {
-            if (!value) {
+            const selectedField = document.getElementById('field_select').value;
+            if (!selectedField) {
                 return __('you_need_to_select_something_validation')
             }
+        },
+        preConfirm: () => {
+            return document.getElementById('field_select').value;
         }
-    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+    }).then((result) => {
         // If the user clicked "Next" and selected a field
         if (result.isConfirmed && result.value) {
             const field = result.value;
@@ -925,7 +996,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             title: croppieResult.value.title,
                             text: croppieResult.value.message,
                             icon: croppieResult.value.type
-                        ,allowOutsideClick:false}).then(() => location.reload());
+                        }).then(() => location.reload());
                     }
                 });
 
@@ -975,17 +1046,247 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             Swal.showValidationMessage(__("request_failed"));
                         });
                     }
-                    ,cancelButtonColor:'#d33',
-                    cancelButtonText:__('cancel')}).then((finalResult) => {
+                }).then((finalResult) => {
                     if (finalResult.isConfirmed) {
                         Swal.fire({
                             title: finalResult.value.title,
                             text: finalResult.value.message,
                             icon: finalResult.value.type
-                        ,allowOutsideClick:false});
+                        });
                     }
                 });
             }
+            if (field === 'Upload Documents') {
+                // Fetch document types from database
+                $.ajax({
+                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    type: 'POST',
+                    dataType: 'JSON',
+                    data: { ajaxType: 'get_document_types' },
+                    success: function(response) {
+                        if (response.status == 200 && response.data.length > 0) {
+                            let docTypeOptions = '<option value="">' + __('select_document_type') + '</option>';
+                            response.data.forEach(function(doc) {
+                                docTypeOptions += '<option value="' + doc.duc_type + '">' + doc.duc_type + '</option>';
+                            });
+                            
+                            Swal.fire({
+                                title: '<i class="fa fa-upload"></i> ' + __('upload_documents'),
+                                html: `
+                                    <style>
+                                        .upload-document-form {
+                                            padding: 20px 10px;
+                                            text-align: left;
+                                        }
+                                        .upload-form-group {
+                                            margin-bottom: 25px;
+                                        }
+                                        .upload-label {
+                                            display: block;
+                                            font-weight: 600;
+                                            color: #2c3e50;
+                                            margin-bottom: 8px;
+                                            font-size: 14px;
+                                        }
+                                        .upload-select, .upload-file-input {
+                                            width: 100%;
+                                            padding: 12px 15px;
+                                            border: 2px solid #e0e6ed;
+                                            border-radius: 8px;
+                                            font-size: 14px;
+                                            transition: all 0.3s ease;
+                                            background: #f8f9fa;
+                                        }
+                                        .upload-select:focus, .upload-file-input:focus {
+                                            border-color: #4e73df;
+                                            background: #fff;
+                                            outline: none;
+                                            box-shadow: 0 0 0 3px rgba(78, 115, 223, 0.1);
+                                        }
+                                        .upload-file-wrapper {
+                                            position: relative;
+                                            overflow: hidden;
+                                            display: inline-block;
+                                            width: 100%;
+                                        }
+                                        .upload-file-input {
+                                            cursor: pointer;
+                                        }
+                                        .upload-file-input::-webkit-file-upload-button {
+                                            padding: 8px 16px;
+                                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                            color: white;
+                                            border: none;
+                                            border-radius: 6px;
+                                            cursor: pointer;
+                                            font-weight: 600;
+                                            margin-right: 10px;
+                                            transition: all 0.3s ease;
+                                        }
+                                        .upload-file-input::-webkit-file-upload-button:hover {
+                                            transform: translateY(-2px);
+                                            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+                                        }
+                                        .upload-help-text {
+                                            display: flex;
+                                            align-items: center;
+                                            margin-top: 8px;
+                                            padding: 10px 12px;
+                                            background: #e8f4f8;
+                                            border-left: 4px solid #3498db;
+                                            border-radius: 4px;
+                                            font-size: 12px;
+                                            color: #2980b9;
+                                        }
+                                        .upload-help-text i {
+                                            margin-right: 8px;
+                                            font-size: 14px;
+                                        }
+                                        .file-type-badges {
+                                            display: flex;
+                                            gap: 6px;
+                                            margin-top: 10px;
+                                            flex-wrap: wrap;
+                                        }
+                                        .file-badge {
+                                            padding: 4px 10px;
+                                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                            color: white;
+                                            border-radius: 12px;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            letter-spacing: 0.5px;
+                                        }
+                                    </style>
+                                    <form id="uploadDocumentForm" enctype="multipart/form-data" class="upload-document-form">
+                                        <div class="upload-form-group">
+                                            <label class="upload-label">
+                                                <i class="fa fa-file-alt"></i> ${__('document_type')}<span class="text-danger"> *</span>
+                                            </label>
+                                            <select class="upload-select" id="document_type_select" name="document_type" required>
+                                                ${docTypeOptions}
+                                            </select>
+                                        </div>
+                                        <div class="upload-form-group">
+                                            <label class="upload-label">
+                                                <i class="fa fa-paperclip"></i> ${__('select_file')}<span class="text-danger"> *</span>
+                                            </label>
+                                            <div class="upload-file-wrapper">
+                                                <input type="file" class="upload-file-input" id="document_file_input" name="document_file" accept=".pdf,.jpg,.jpeg,.png" required>
+                                            </div>
+                                            <div class="upload-help-text">
+                                                <i class="fa fa-info-circle"></i>
+                                                <span>${__('allowed_formats')}: <strong>PDF, JPG, JPEG, PNG</strong> (Max 5MB)</span>
+                                            </div>
+                                            <div class="file-type-badges">
+                                                <span class="file-badge">📄 PDF</span>
+                                                <span class="file-badge">🖼️ JPG</span>
+                                                <span class="file-badge">🖼️ JPEG</span>
+                                                <span class="file-badge">🖼️ PNG</span>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="emp_id" value="${empid}">
+                                        <input type="hidden" name="emptype" value="employee">
+                                        <input type="hidden" name="type" value="Upload Documents">
+                                    </form>
+                                `,
+                                width: '550px',
+                                confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit_request'),
+                                cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
+                                customClass: {
+                                    confirmButton: 'btn btn-success waves-effect waves-light',
+                                    cancelButton: 'btn btn-danger waves-effect waves-light ml-2',
+                                    popup: 'upload-modal-popup'
+                                },
+                                buttonsStyling: false,
+                                showCancelButton: true,
+                                focusConfirm: false,
+                                showLoaderOnConfirm: true,
+                                allowOutsideClick: () => !Swal.isLoading(),
+                                preConfirm: () => {
+                                    const docType = document.getElementById('document_type_select').value;
+                                    const fileInput = document.getElementById('document_file_input');
+                                    
+                                    if (!docType) {
+                                        Swal.showValidationMessage(__('select_document_type_validation') || 'Please select a document type');
+                                        return false;
+                                    }
+                                    
+                                    if (!fileInput.files || fileInput.files.length === 0) {
+                                        Swal.showValidationMessage(__('select_file_validation') || 'Please select a file to upload');
+                                        return false;
+                                    }
+                                    
+                                    const file = fileInput.files[0];
+                                    
+                                    // Validate file type
+                                    const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+                                    const fileExtension = file.name.split('.').pop().toLowerCase();
+                                    if (!allowedExtensions.includes(fileExtension)) {
+                                        Swal.showValidationMessage(__('invalid_file_type') || 'Only PDF, JPG, JPEG, and PNG files are allowed');
+                                        return false;
+                                    }
+                                    
+                                    const maxSize = 5 * 1024 * 1024; // 5MB
+                                    if (file.size > maxSize) {
+                                        Swal.showValidationMessage(__('file_too_large_5') || 'File size should not exceed 5MB');
+                                        return false;
+                                    }
+                                    
+                                    const form = document.getElementById('uploadDocumentForm');
+                                    const formData = new FormData(form);
+                                    formData.append('ajaxType', 'upload_employee_document');
+                                    // Ensure emptype is present in FormData for PHP
+                                    if (!formData.has('emptype')) {
+                                        formData.append('emptype', 'employee');
+                                    }
+                                    
+                                    return $.ajax({
+                                        url: './includes/ajaxFile/ajaxEmployee.php',
+                                        type: 'POST',
+                                        data: formData,
+                                        processData: false,
+                                        contentType: false,
+                                        dataType: 'json'
+                                    }).fail(function() {
+                                        Swal.showValidationMessage(__("request_failed"));
+                                    });
+                                }
+                                ,cancelButtonColor:'#d33',
+                                cancelButtonText:__('cancel')
+                            }).then((finalResult) => {
+                                if (finalResult.isConfirmed) {
+                                    Swal.fire({
+                                        title: finalResult.value.title,
+                                        text: finalResult.value.message,
+                                        icon: finalResult.value.type
+                                    ,allowOutsideClick:false}).then(() => {
+                                        if (finalResult.value.type === 'success') {
+                                            location.reload();
+                                        }
+                                    });
+                                }
+                            });
+                        } else {
+                            Swal.fire({
+                                title: __('error'),
+                                text: __('no_document_types_available'),
+                                icon: 'error',
+                                allowOutsideClick: false
+                            });
+                        }
+                    },
+                    error: function() {
+                        Swal.fire({
+                            title: __('error'),
+                            text: __('failed_to_load_document_types'),
+                            icon: 'error',
+                            allowOutsideClick: false
+                        });
+                    }
+                });
+            }
+        
 }
 
 

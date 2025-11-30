@@ -250,11 +250,295 @@ if (mysqli_num_rows($query) == 1) {
 				transition: all 0.2s ease-in-out;
 				border-radius: 10px !important;
 			}
-
 			.card-box.social:hover {
 				box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 				transform: scale(1.005);
 				cursor: pointer;
+			}
+			/* More Actions Modal - Professional Tab Design */
+			.more-actions-modal .swal2-popup {
+				border-radius: 10px;
+				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+				overflow: hidden;
+			}
+
+			.more-actions-modal .swal2-title {
+				font-size: 1.8rem;
+				font-weight: 700;
+				color: #2c3e50;
+				padding: 1.5rem;
+				margin: 0;
+				border-bottom: 3px solid #e9ecef;
+				background: linear-gradient(135deg, #f5f7fa 0%, #fff 100%);
+			}
+
+			.more-actions-modal .swal2-html-container {
+				margin: 0 !important;
+				padding: 0 !important;
+				overflow: visible;
+			}
+
+			/* Menu Items Container */
+			.more-actions-modal .menu-items-container {
+				display: flex;
+				flex-direction: column;
+				gap: 0;
+				margin: 0;
+				padding: 0;
+				width: 100%;
+				background: #fff;
+			}
+
+			.more-actions-modal .menu-item {
+				display: flex !important;
+				align-items: center;
+				gap: 14px;
+				padding: 16px 20px !important;
+				margin: 0 !important;
+				cursor: pointer !important;
+				transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+				border: none;
+				border-left: 4px solid transparent;
+				border-radius: 0;
+				font-weight: 500;
+				font-size: 15px;
+				user-select: none;
+				box-sizing: border-box;
+				background-color: #fff;
+				position: relative;
+			}
+
+			.more-actions-modal .menu-item::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background: linear-gradient(90deg, rgba(0, 0, 0, 0.02) 0%, transparent 50%);
+				opacity: 0;
+				transition: opacity 0.3s ease;
+				pointer-events: none;
+			}
+
+			.more-actions-modal .menu-item:hover {
+				background-color: #f8f9fa;
+				border-left-width: 4px;
+				transform: translateX(4px);
+			}
+
+			.more-actions-modal .menu-item:active {
+				background-color: #f0f2f5;
+			}
+
+			.more-actions-modal .menu-item i {
+				font-size: 18px;
+				width: 22px;
+				height: 22px;
+				text-align: center;
+				flex-shrink: 0;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+
+			.more-actions-modal .menu-item span {
+				font-size: 15px;
+				white-space: nowrap;
+				flex: 1;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			/* Color Schemes - Professional */
+			.more-actions-modal .menu-item.text-primary {
+				color: var(--primary) !important;
+				border-left-color: transparent;
+			}
+
+			.more-actions-modal .menu-item.text-primary:hover {
+				background-color: rgba(91, 115, 232, 0.08);
+				border-left-color: var(--primary);
+			}
+
+			.more-actions-modal .menu-item.text-warning {
+				color: var(--warning) !important;
+			}
+
+			.more-actions-modal .menu-item.text-warning:hover {
+				background-color: rgba(241, 180, 76, 0.08);
+				border-left-color: var(--warning);
+			}
+
+			.more-actions-modal .menu-item.text-info {
+				color: var(--info) !important;
+			}
+
+			.more-actions-modal .menu-item.text-info:hover {
+				background-color: rgba(80, 165, 241, 0.08);
+				border-left-color: var(--info);
+			}
+
+			.more-actions-modal .menu-item.text-danger {
+				color: var(--danger) !important;
+			}
+
+			.more-actions-modal .menu-item.text-danger:hover {
+				background-color: rgba(244, 106, 106, 0.08);
+				border-left-color: var(--danger);
+			}
+
+			.more-actions-modal .menu-item.text-secondary {
+				color: var(--secondary) !important;
+			}
+
+			.more-actions-modal .menu-item.text-secondary:hover {
+				background-color: rgba(108, 117, 125, 0.08);
+				border-left-color: var(--secondary);
+			}
+
+			.more-actions-modal .menu-item.text-dark {
+				color: var(--dark) !important;
+			}
+
+			.more-actions-modal .menu-item.text-dark:hover {
+				background-color: rgba(52, 58, 64, 0.08);
+				border-left-color: var(--dark);
+			}
+
+			/* Close Button */
+			.more-actions-modal .swal2-close {
+				font-size: 2rem;
+				color: #74788d;
+				width: 40px;
+				height: 40px;
+			}
+
+			.more-actions-modal .swal2-close:hover {
+				color: #f46a6a;
+			}
+
+			/* Resignation Wizard CSS */
+			.resignation-wizard .resignation-popup {
+				border-radius: 10px;
+				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+			}
+
+			.resignation-wizard .swal2-title {
+				font-size: 1.6rem;
+				font-weight: 700;
+				color: #2c3e50;
+				padding: 1.5rem;
+			}
+
+			.resignation-step1 .form-control {
+				border: 1px solid #bdc3c7;
+				transition: all 0.3s ease;
+			}
+
+			.resignation-step1 .form-control:focus {
+				border-color: #e74c3c;
+				box-shadow: 0 0 0 0.2rem rgba(231, 76, 60, 0.25);
+			}
+
+			.resignation-step1 .form-label {
+				font-weight: 600;
+				color: #2c3e50;
+				margin-bottom: 8px;
+			}
+
+			.resignation-step1 .alert {
+				margin-top: 20px;
+				border-radius: 5px;
+			}
+
+			/* Exit Interview Wizard CSS */
+			.exit-interview-wizard .exit-interview-popup {
+				border-radius: 10px;
+				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+			}
+
+			.exit-interview-step2 {
+				scrollbar-width: thin;
+				scrollbar-color: #bdc3c7 #ecf0f1;
+			}
+
+			.exit-interview-step2::-webkit-scrollbar {
+				width: 6px;
+			}
+
+			.exit-interview-step2::-webkit-scrollbar-track {
+				background: #ecf0f1;
+			}
+
+			.exit-interview-step2::-webkit-scrollbar-thumb {
+				background: #bdc3c7;
+				border-radius: 3px;
+			}
+
+			.exit-interview-step2 .form-group {
+				margin-bottom: 20px;
+			}
+
+			.exit-interview-step2 .form-label {
+				font-weight: 600;
+				color: #2c3e50;
+				display: flex;
+				align-items: center;
+				margin-bottom: 10px;
+			}
+
+			.exit-interview-step2 .form-label span {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+				color: white;
+				width: 28px;
+				height: 28px;
+				border-radius: 50%;
+				margin-right: 8px;
+				font-size: 12px;
+				font-weight: bold;
+				flex-shrink: 0;
+			}
+
+			.exit-interview-step2 .form-control {
+				border: 1px solid #bdc3c7;
+				border-radius: 5px;
+				padding: 12px;
+				font-size: 14px;
+				transition: all 0.3s ease;
+				resize: vertical;
+			}
+
+			.exit-interview-step2 .form-control:focus {
+				border-color: #e74c3c;
+				box-shadow: 0 0 0 0.2rem rgba(231, 76, 60, 0.25);
+			}
+
+			.exit-interview-step2 .form-control.is-invalid {
+				border-color: #e74c3c;
+				background-color: #fff5f5;
+			}
+
+			.exit-interview-step2 .form-text {
+				color: #7f8c8d;
+				font-size: 12px;
+			}
+
+			.exit-interview-step2 .alert {
+				margin-top: 20px;
+				padding: 15px;
+				border-radius: 5px;
+				border-left: 4px solid #f39c12;
+			}
+
+			/* Wizard step styling */
+			.swal2-actions button {
+				border-radius: 5px;
+				font-weight: 600;
+				padding: 10px 30px;
 			}
 		</style>
 		<?php if ($is_rtl): ?>
@@ -653,25 +937,25 @@ if (mysqli_num_rows($query) == 1) {
 												<div class="card-header bg-primary text-white font-weight-bold"><?= __('vacation_balance_summary') ?></div>
 												<div class="card-body">
 													<?php if ($vac_total > 0 || $vac_used > 0 || $vac_available > 0): ?>
-													<div class="row text-center">
-														<div class="col-md-4">
-															<h6 class="text-muted text-uppercase"><?= __('total_vacation_days') ?></h6>
-															<h4><?= number_format($vac_total, 1) ?></h4>
+														<div class="row text-center">
+															<div class="col-md-4">
+																<h6 class="text-muted text-uppercase"><?= __('total_vacation_days') ?></h6>
+																<h4><?= number_format($vac_total, 1) ?></h4>
+															</div>
+															<div class="col-md-4">
+																<h6 class="text-muted text-uppercase"><?= __('used_days') ?></h6>
+																<h4 class="text-warning"><?= number_format($vac_used, 1) ?></h4>
+															</div>
+															<div class="col-md-4">
+																<h6 class="text-muted text-uppercase"><?= __('available_balance') ?></h6>
+																<h4 class="text-success font-weight-bold"><?= number_format($vac_available, 2) ?></h4>
+															</div>
 														</div>
-														<div class="col-md-4">
-															<h6 class="text-muted text-uppercase"><?= __('used_days') ?></h6>
-															<h4 class="text-warning"><?= number_format($vac_used, 1) ?></h4>
-														</div>
-														<div class="col-md-4">
-															<h6 class="text-muted text-uppercase"><?= __('available_balance') ?></h6>
-															<h4 class="text-success font-weight-bold"><?= number_format($vac_available, 2) ?></h4>
-														</div>
-													</div>
 													<?php else: ?>
-													<div class="alert alert-info mb-0" role="alert">
-														<i class="mdi mdi-information-outline mr-2"></i>
-														<?= __('no_vacation_balance_record_found') ?>
-													</div>
+														<div class="alert alert-info mb-0" role="alert">
+															<i class="mdi mdi-information-outline mr-2"></i>
+															<?= __('no_vacation_balance_record_found') ?>
+														</div>
 													<?php endif; ?>
 												</div>
 											</div>
@@ -1114,16 +1398,16 @@ if (mysqli_num_rows($query) == 1) {
 													<h4 class="header-title m-t-0"><i class="mdi mdi-file-document-multiple"></i> <?= __('my_files') ?></h4>
 													<span class="badge badge-primary badge-pill"><?php echo mysqli_num_rows(mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "'")); ?></span>
 												</div>
-												
+
 												<?php
 												$queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' ORDER BY `id` DESC ");
 												$doc_count = mysqli_num_rows($queryempdocu);
-												
+
 												if ($doc_count > 0):
 												?>
 													<div class="row">
 														<!-- Documents List Column -->
-														<div class="col-md-5">
+														<div class="col-12">
 															<div class="documents-list-container">
 																<?php
 																mysqli_data_seek($queryempdocu, 0);
@@ -1135,7 +1419,7 @@ if (mysqli_num_rows($query) == 1) {
 																	$doc_date_reg_get = $recempdoc["created_at"];
 																	$times_reg = strtotime("$doc_date_reg_get");
 																	$doc_date_formatted = date('d M Y', $times_reg);
-																	
+
 																	// Determine file type and icon
 																	$file_type_map = [
 																		'pdf' => ['icon' => 'fa-file-pdf', 'color' => 'danger', 'label' => 'PDF'],
@@ -1153,8 +1437,8 @@ if (mysqli_num_rows($query) == 1) {
 																	];
 																	$file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
 																?>
-																	<div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>" 
-																		data-doc-path="./assets/emp_documents/<?= $attachment_get ?>" 
+																	<div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>"
+																		data-doc-path="./assets/emp_documents/<?= $attachment_get ?>"
 																		data-doc-ext="<?= $docu_ext_get ?>"
 																		data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>">
 																		<div class="doc-item-icon">
@@ -1179,10 +1463,10 @@ if (mysqli_num_rows($query) == 1) {
 																<?php } ?>
 															</div>
 														</div>
-														
+
 														<!-- Document Viewer Column -->
 														<div class="col-md-7">
-															<div class="document-viewer-container">
+															<div class="document-viewer-container" style="display:none;">
 																<div class="viewer-header">
 																	<h5 class="viewer-title"><i class="fa fa-file"></i> <span id="viewer-doc-name"><?= __('select_document') ?></span></h5>
 																	<div class="viewer-actions">
@@ -1191,6 +1475,9 @@ if (mysqli_num_rows($query) == 1) {
 																		</button>
 																		<button class="btn btn-sm btn-light" id="viewer-download" title="<?= __('download') ?>" style="display:none;">
 																			<i class="fa fa-download"></i>
+																		</button>
+																		<button class="btn btn-sm btn-light" id="viewer-clear" title="<?= __('close') ?>">
+																			<i class="fa fa-times"></i>
 																		</button>
 																	</div>
 																</div>
@@ -1216,7 +1503,6 @@ if (mysqli_num_rows($query) == 1) {
 												<?php endif; ?>
 											</div>
 										</div>
-
 										<div class="tab-pane" id="noties">
 											<div class="card-box">
 												<h4 class="header-title m-b-30"><?= __('all_notes') ?></h4>
@@ -1500,293 +1786,78 @@ if (mysqli_num_rows($query) == 1) {
 		<script src="assets/js/loanHandling.js"></script>
 		<script src="assets/js/resignationWizard.js"></script>
 
-		<style>
-			/* More Actions Modal - Professional Tab Design */
-			.more-actions-modal .swal2-popup {
-				border-radius: 10px;
-				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-				overflow: hidden;
-			}
+		<script type="text/javascript">
+			$(function() {
+				var currentDocPath = '';
 
-			.more-actions-modal .swal2-title {
-				font-size: 1.8rem;
-				font-weight: 700;
-				color: #2c3e50;
-				padding: 1.5rem;
-				margin: 0;
-				border-bottom: 3px solid #e9ecef;
-				background: linear-gradient(135deg, #f5f7fa 0%, #fff 100%);
-			}
+				// Delegated click for dynamic items
+				$(document).on('click', '.doc-list-item', function() {
+					$('.doc-list-item').removeClass('active');
+					$(this).addClass('active');
 
-			.more-actions-modal .swal2-html-container {
-				margin: 0 !important;
-				padding: 0 !important;
-				overflow: visible;
-			}
+					var docPath = $(this).data('doc-path');
+					var docExt = $(this).data('doc-ext');
+					var docName = $(this).data('doc-name');
+					currentDocPath = docPath;
 
-			/* Menu Items Container */
-			.more-actions-modal .menu-items-container {
-				display: flex;
-				flex-direction: column;
-				gap: 0;
-				margin: 0;
-				padding: 0;
-				width: 100%;
-				background: #fff;
-			}
+					// Show viewer
+					$('.document-viewer-container').show();
 
-			.more-actions-modal .menu-item {
-				display: flex !important;
-				align-items: center;
-				gap: 14px;
-				padding: 16px 20px !important;
-				margin: 0 !important;
-				cursor: pointer !important;
-				transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-				border: none;
-				border-left: 4px solid transparent;
-				border-radius: 0;
-				font-weight: 500;
-				font-size: 15px;
-				user-select: none;
-				box-sizing: border-box;
-				background-color: #fff;
-				position: relative;
-			}
+					// Adjust columns: list -> col-md-5, viewer -> col-md-7
+					var $listCol = $('.documents-list-container').closest('.col-12, .col-md-5');
+					$listCol.removeClass('col-12').addClass('col-md-5');
+					var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
+					$viewerCol.removeClass('col-12').addClass('col-md-7');
 
-			.more-actions-modal .menu-item::before {
-				content: '';
-				position: absolute;
-				top: 0;
-				left: 0;
-				right: 0;
-				bottom: 0;
-				background: linear-gradient(90deg, rgba(0,0,0,0.02) 0%, transparent 50%);
-				opacity: 0;
-				transition: opacity 0.3s ease;
-				pointer-events: none;
-			}
+					// Update title and download
+					$('#viewer-doc-name').text(docName);
+					$('#viewer-download').show().off('click').on('click', function() {
+						window.location.href = './downloadFile.php?file=' + docPath;
+					});
 
-			.more-actions-modal .menu-item:hover {
-				background-color: #f8f9fa;
-				border-left-width: 4px;
-				transform: translateX(4px);
-			}
+					var viewer = $('#document-viewer');
+					if (docExt === 'pdf') {
+						viewer.html('<embed src="' + docPath + '" type="application/pdf" width="100%" height="100%">');
+					} else if (['jpg', 'jpeg', 'png', 'gif'].includes(docExt)) {
+						viewer.html('<img src="' + docPath + '" alt="' + docName + '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">');
+					} else if (['doc', 'docx', 'xls', 'xlsx'].includes(docExt)) {
+						viewer.html('<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(window.location.origin + '/' + docPath) + '" width="100%" height="100%" frameborder="0"></iframe>');
+					} else if (docExt === 'txt') {
+						$.get(docPath, function(data) {
+							viewer.html('<pre style="padding: 20px; white-space: pre-wrap; word-wrap: break-word;">' + $('<div>').text(data).html() + '</pre>');
+						});
+					} else {
+						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3">Preview not available for this file type</p><a href="' + docPath + '" download class="btn btn-primary mt-3"><i class="fa fa-download"></i> Download File</a></div>');
+					}
+				});
 
-			.more-actions-modal .menu-item:active {
-				background-color: #f0f2f5;
-			}
+				// Fullscreen toggle
+				$('#viewer-fullscreen').on('click', function() {
+					var container = $('.document-viewer-container')[0];
+					if (container.requestFullscreen) container.requestFullscreen();
+					else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+					else if (container.msRequestFullscreen) container.msRequestFullscreen();
+				});
 
-			.more-actions-modal .menu-item i {
-				font-size: 18px;
-				width: 22px;
-				height: 22px;
-				text-align: center;
-				flex-shrink: 0;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-			}
-
-			.more-actions-modal .menu-item span {
-				font-size: 15px;
-				white-space: nowrap;
-				flex: 1;
-				overflow: hidden;
-				text-overflow: ellipsis;
-			}
-
-			/* Color Schemes - Professional */
-			.more-actions-modal .menu-item.text-primary {
-				color: var(--primary) !important;
-				border-left-color: transparent;
-			}
-
-			.more-actions-modal .menu-item.text-primary:hover {
-				background-color: rgba(91, 115, 232, 0.08);
-				border-left-color: var(--primary);
-			}
-
-			.more-actions-modal .menu-item.text-warning {
-				color: var(--warning) !important;
-			}
-
-			.more-actions-modal .menu-item.text-warning:hover {
-				background-color: rgba(241, 180, 76, 0.08);
-				border-left-color: var(--warning);
-			}
-
-			.more-actions-modal .menu-item.text-info {
-				color: var(--info) !important;
-			}
-
-			.more-actions-modal .menu-item.text-info:hover {
-				background-color: rgba(80, 165, 241, 0.08);
-				border-left-color: var(--info);
-			}
-
-			.more-actions-modal .menu-item.text-danger {
-				color: var(--danger) !important;
-			}
-
-			.more-actions-modal .menu-item.text-danger:hover {
-				background-color: rgba(244, 106, 106, 0.08);
-				border-left-color: var(--danger);
-			}
-
-			.more-actions-modal .menu-item.text-secondary {
-				color: var(--secondary) !important;
-			}
-
-			.more-actions-modal .menu-item.text-secondary:hover {
-				background-color: rgba(108, 117, 125, 0.08);
-				border-left-color: var(--secondary);
-			}
-			
-			.more-actions-modal .menu-item.text-dark {
-				color: var(--dark) !important;
-			}
-
-			.more-actions-modal .menu-item.text-dark:hover {
-				background-color: rgba(52, 58, 64, 0.08);
-				border-left-color: var(--dark);
-			}
-
-			/* Close Button */
-			.more-actions-modal .swal2-close {
-				font-size: 2rem;
-				color: #74788d;
-				width: 40px;
-				height: 40px;
-			}
-
-			.more-actions-modal .swal2-close:hover {
-				color: #f46a6a;
-			}
-
-			/* Resignation Wizard CSS */
-			.resignation-wizard .resignation-popup {
-				border-radius: 10px;
-				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-			}
-
-			.resignation-wizard .swal2-title {
-				font-size: 1.6rem;
-				font-weight: 700;
-				color: #2c3e50;
-				padding: 1.5rem;
-			}
-
-			.resignation-step1 .form-control {
-				border: 1px solid #bdc3c7;
-				transition: all 0.3s ease;
-			}
-
-			.resignation-step1 .form-control:focus {
-				border-color: #e74c3c;
-				box-shadow: 0 0 0 0.2rem rgba(231, 76, 60, 0.25);
-			}
-
-			.resignation-step1 .form-label {
-				font-weight: 600;
-				color: #2c3e50;
-				margin-bottom: 8px;
-			}
-
-			.resignation-step1 .alert {
-				margin-top: 20px;
-				border-radius: 5px;
-			}
-
-			/* Exit Interview Wizard CSS */
-			.exit-interview-wizard .exit-interview-popup {
-				border-radius: 10px;
-				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-			}
-
-			.exit-interview-step2 {
-				scrollbar-width: thin;
-				scrollbar-color: #bdc3c7 #ecf0f1;
-			}
-
-			.exit-interview-step2::-webkit-scrollbar {
-				width: 6px;
-			}
-
-			.exit-interview-step2::-webkit-scrollbar-track {
-				background: #ecf0f1;
-			}
-
-			.exit-interview-step2::-webkit-scrollbar-thumb {
-				background: #bdc3c7;
-				border-radius: 3px;
-			}
-
-			.exit-interview-step2 .form-group {
-				margin-bottom: 20px;
-			}
-
-			.exit-interview-step2 .form-label {
-				font-weight: 600;
-				color: #2c3e50;
-				display: flex;
-				align-items: center;
-				margin-bottom: 10px;
-			}
-
-			.exit-interview-step2 .form-label span {
-				display: inline-flex;
-				align-items: center;
-				justify-content: center;
-				background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-				color: white;
-				width: 28px;
-				height: 28px;
-				border-radius: 50%;
-				margin-right: 8px;
-				font-size: 12px;
-				font-weight: bold;
-				flex-shrink: 0;
-			}
-
-			.exit-interview-step2 .form-control {
-				border: 1px solid #bdc3c7;
-				border-radius: 5px;
-				padding: 12px;
-				font-size: 14px;
-				transition: all 0.3s ease;
-				resize: vertical;
-			}
-
-			.exit-interview-step2 .form-control:focus {
-				border-color: #e74c3c;
-				box-shadow: 0 0 0 0.2rem rgba(231, 76, 60, 0.25);
-			}
-
-			.exit-interview-step2 .form-control.is-invalid {
-				border-color: #e74c3c;
-				background-color: #fff5f5;
-			}
-
-			.exit-interview-step2 .form-text {
-				color: #7f8c8d;
-				font-size: 12px;
-			}
-
-			.exit-interview-step2 .alert {
-				margin-top: 20px;
-				padding: 15px;
-				border-radius: 5px;
-				border-left: 4px solid #f39c12;
-			}
-
-			/* Wizard step styling */
-			.swal2-actions button {
-				border-radius: 5px;
-				font-weight: 600;
-				padding: 10px 30px;
-			}
-		</style>
+				// Clear selection and hide viewer
+				$('#viewer-clear').on('click', function() {
+					$('.doc-list-item').removeClass('active');
+					$('#viewer-download').hide();
+					$('#viewer-doc-name').text('<?= __('select_document') ?>');
+					$('#document-viewer').html(`
+						<div class="viewer-placeholder">
+							<i class="fa fa-file-text" style="font-size: 64px; color: #ddd;"></i>
+							<p class="text-muted mt-3"><?= __('select_document_to_view') ?></p>
+						</div>
+					`);
+					$('.document-viewer-container').hide();
+					var $listCol = $('.documents-list-container').closest('.col-md-5, .col-12');
+					$listCol.removeClass('col-md-5').addClass('col-12');
+					var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
+					$viewerCol.removeClass('col-md-7').addClass('col-12');
+				});
+			});
+		</script>
 
 		<script type="text/javascript">
 			$(document).ready(function() {
@@ -1809,7 +1880,7 @@ if (mysqli_num_rows($query) == 1) {
 						didOpen: function() {
 							// Get modal container and wrap it with jQuery
 							var modalContainer = $(Swal.getHtmlContainer());
-							
+
 							// Add Documents
 							modalContainer.find('.addEmpDocuAtter').on('click', function(e) {
 								e.preventDefault();
@@ -2432,28 +2503,28 @@ if (mysqli_num_rows($query) == 1) {
 		<script>
 			$(document).ready(function() {
 				let currentDocPath = '';
-				
+
 				// Handle document item click
 				$('.doc-list-item').on('click', function() {
 					$('.doc-list-item').removeClass('active');
 					$(this).addClass('active');
-					
+
 					const docPath = $(this).data('doc-path');
 					const docExt = $(this).data('doc-ext');
 					const docName = $(this).data('doc-name');
-					
+
 					currentDocPath = docPath;
-					
+
 					$('#viewer-doc-name').text(docName);
 					$('#viewer-download').attr('onclick', "window.location.href='./downloadFile.php?file=" + docPath + "'").show();
-					
+
 					loadDocument(docPath, docExt);
 				});
-				
+
 				// Load document into viewer
 				function loadDocument(path, ext) {
 					const viewer = $('#document-viewer');
-					
+
 					if (ext === 'pdf') {
 						viewer.html('<embed src="' + path + '" type="application/pdf" />');
 					} else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
@@ -2468,12 +2539,12 @@ if (mysqli_num_rows($query) == 1) {
 						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3">Preview not available for this file type</p><button class="btn btn-primary mt-2" onclick="window.location.href=\'./downloadFile.php?file=' + path + '\'"><i class="fa fa-download"></i> Download File</button></div>');
 					}
 				}
-				
+
 				// Fullscreen toggle
 				$('#viewer-fullscreen').on('click', function() {
 					const container = $('.document-viewer-container')[0];
 					const icon = $(this).find('i');
-					
+
 					if (!document.fullscreenElement) {
 						container.requestFullscreen().then(() => {
 							icon.removeClass('fa-expand').addClass('fa-compress');
@@ -2484,7 +2555,7 @@ if (mysqli_num_rows($query) == 1) {
 						});
 					}
 				});
-				
+
 				// Exit fullscreen handler
 				document.addEventListener('fullscreenchange', function() {
 					const icon = $('#viewer-fullscreen i');
@@ -2492,11 +2563,8 @@ if (mysqli_num_rows($query) == 1) {
 						icon.removeClass('fa-compress').addClass('fa-expand');
 					}
 				});
-				
-				// Auto-select first document if available
-				if ($('.doc-list-item').length > 0) {
-					$('.doc-list-item').first().trigger('click');
-				}
+
+				// Do not auto-select any document; show viewer only after click
 			});
 		</script>
 
@@ -2845,8 +2913,7 @@ if (mysqli_num_rows($query) == 1) {
 					icon: 'question',
 					title: '<?= __('confirm_mode_change') ?>',
 					html: deductionMode === 'automatic' ?
-						'<?= __('switch_to_automatic_msg') ?>' :
-						'<?= __('switch_to_manual_msg') ?>',
+						'<?= __('switch_to_automatic_msg') ?>' : '<?= __('switch_to_manual_msg') ?>',
 					showCancelButton: true,
 					confirmButtonText: '<?= __('confirm') ?>',
 					cancelButtonText: '<?= __('cancel') ?>'

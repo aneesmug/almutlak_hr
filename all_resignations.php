@@ -289,6 +289,9 @@ if ($can_see_all_depts) {
             .custom-radio .custom-control-label i { margin-right: 5px; }
             .resignation-approval-wizard .form-control:focus { border-color: #007bff; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); }
             .resignation-approval-wizard .datepicker { cursor: pointer; }
+            .detail-item{
+                flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
+            }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />

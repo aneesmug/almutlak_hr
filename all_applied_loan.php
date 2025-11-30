@@ -294,6 +294,9 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
             .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; }
             .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
 			.btn-block + .btn-block{ margin-top: 0rem !important; }
+            .detail-item{
+                flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
+            }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />

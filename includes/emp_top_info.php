@@ -182,13 +182,17 @@ if ($isEmployee !== true) {
 				<div class="profile-header-info">
 					<h1><?= htmlspecialchars($emprow['name']) ?></h1>
 					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . $emprow["sectin_nme"]) ?></p>
-					<p><i class="fa fa-hashtag"></i> <?= __('employee_no') ?>: <?= htmlspecialchars($emprow['empid']) ?></p>
 					<p><i class="fa fa-passport"></i> <?= __('iqama_id_label') ?>: <?= htmlspecialchars($emprow['iqama']) ?></p>
-					<p><i class="fa fa-solid fa-phone-laptop"></i> <?= __('mobile') ?>: <?= htmlspecialchars($emprow['mobile']) ?></p>
+					<p><i class="fa fa-phone-laptop"></i> <?= __('mobile') ?>: <?= htmlspecialchars($emprow['mobile']) ?></p>
+					<p><i class="fa fa-globe-asia"></i> <?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>
 				</div>
 
 				<!-- Quick Stats -->
 				<div class="profile-quick-stats">
+					<div class="stat-item">
+						<div class="stat-number"><i class="fa fa-hashtag"></i> <?= htmlspecialchars($emprow['empid']) ?></div>
+						<div class="stat-label"><?= __('employee_no') ?></div>
+					</div>
 					<div class="stat-item">
 						<div class="stat-number"><?= htmlspecialchars($emprow['vacation_days']) ?></div>
 						<div class="stat-label"><?= __('vacation_days') ?></div>
@@ -215,27 +219,23 @@ if ($isEmployee !== true) {
 						<div class="stat-number"><?= date('Y', strtotime(str_replace('/', '-', $emprow['joining_date']))) ?></div>
 						<div class="stat-label"><?= __('joining_date') ?></div>
 					</div>
-					<div class="stat-item">
-						<div class="stat-number"><?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></div>
-						<div class="stat-label"><?= __('nationality') ?></div>
-					</div>
 				</div>
 
-				<!-- QR Code -->
-				<a href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank" title="<?= __('view_employee_card') ?>">
-					<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code" class="qr-code">
-				</a>
-
-				<!-- More Actions Button -->
-				<?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
-					<?php if ($emprow["status"] == 1) : ?>
-					<div class="more-actions-wrapper">
-						<button type="button" id="moreActionsBtn" class="more-actions-btn">
-							<i class="fa fa-bars"></i> <?= __('more') ?>
-						</button>
-					</div>
+				<!-- QR Code + Actions stacked vertically -->
+				<div class="qr-actions-block" style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+					<a href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank" title="<?= __('view_employee_card') ?>" style="display:inline-block;">
+						<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code" class="qr-code">
+					</a>
+					<?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
+						<?php if ($emprow["status"] == 1) : ?>
+						<div class="more-actions-wrapper" style="text-align:center;">
+							<button type="button" id="moreActionsBtn" class="more-actions-btn">
+								<i class="fa fa-bars"></i> <?= __('more') ?>
+							</button>
+						</div>
+						<?php endif; ?>
 					<?php endif; ?>
-				<?php endif; ?>
+				</div>
 			</div>
 		</div>
 
@@ -270,7 +270,7 @@ if ($isEmployee !== true) {
 
 		<div class="row">
 			<div class="col-sm-6">
-				<button action="action" onclick="window.history.go(-1); return false;" type="button" class="btn-sm btn btn-danger waves-effect float-left btn-rounded"><?= __('goto_back') ?> <i class="fa fa-angle-double-right "></i></button>
+				<button action="action" onclick="window.history.go(-1); return false;" type="button" class="btn-sm btn btn-danger waves-effect float-left btn-rounded"><i class="fa fa-angle-double-left "></i> <?= __('goto_back') ?></button>
 			</div>
 			<div class="col-sm-6">
 				<div class="btn-group float-right" role="group" aria-label="Edit Button">
@@ -288,7 +288,7 @@ if ($isEmployee !== true) {
 								}
 							}
 						} ?>
-						<?php if ($emprow['empsocialcount'] < 9 || $is_system_admin): ?>
+						<?php /* if ($emprow['empsocialcount'] < 9 || $is_system_admin): ?>
 							<a href="javascript:void(0);" class="btn-sm btn btn-info waves-effect btn-rounded addSocial" data-emp_id="<?= $emprow['empid'] ?>">
 								Add Social Media <i class="mdi mdi-link-variant"></i>
 							</a>
@@ -297,7 +297,7 @@ if ($isEmployee !== true) {
 							<a href="javascript:void(0);" class="btn-sm btn btn-dark waves-effect btn-rounded addPortfolio" data-emp_id="<?= $emprow['empid'] ?>">
 								Add Portfolio Dedails <i class="mdi mdi mdi-account-card-details"></i>
 							</a>
-						<?php endif ?>
+						<?php endif */ ?>
 					<?php if ($is_system_admin || $isHR || $isDeptHr): ?>
 						<?php if ($current_page_name <> "add_emp_slry.php"): ?>
 							<a href="javascript:void(0);" class="btn-sm btn btn-secondary waves-effect btn-rounded updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>">

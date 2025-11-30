@@ -1110,13 +1110,13 @@
 }
 
 .doc-list-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
   border-bottom: 1px solid #f0f2f5;
   cursor: pointer;
   transition: all 0.2s ease;
-  gap: 12px;
+    gap: 8px;
 }
 
 .doc-list-item:last-child {
@@ -1133,13 +1133,13 @@
 }
 
 .doc-item-icon {
-  font-size: 28px;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+    font-size: 20px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .doc-item-info {
@@ -1148,20 +1148,20 @@
 }
 
 .doc-item-name {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #313a46;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #313a46;
 }
 
 .doc-item-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
 }
 
 .doc-item-meta .badge-sm {
@@ -1575,13 +1575,39 @@
     flex-direction: column;
   }
 }
-    </style>
+/* ==========================================
+RTL Support
+========================================== */
+    .rtl {
+        direction: rtl;
+        text-align: right;
+    }
+/* Flip common spacing utilities used here */
+    .rtl .ml-2 { margin-left: 0 !important; margin-right: .5rem !important; }
+    .rtl .mr-3 { margin-right: 0 !important; margin-left: 1rem !important; }
+    .rtl .viewer-actions { flex-direction: row-reverse; }
+    .rtl .doc-list-item { flex-direction: row-reverse; }
+    /* Ensure icon renders at right side with proper spacing in RTL */
+    .rtl .doc-item-icon { order: 3; margin-left: 0; margin-right: 8px; }
+    .rtl .doc-item-actions { order: 1; }
+    .rtl .doc-item-info { order: 2; text-align: right; }
+    .rtl .doc-item-info { text-align: right; }
+    .rtl .documents-list-container { text-align: right; }
+    .rtl .viewer-title { flex-direction: row-reverse; }
+    .rtl .document-meta { justify-content: flex-end; }
+    .rtl .action-cards-grid { direction: rtl; }
+    .rtl .info-row { justify-content: space-between; }
+    .rtl .info-label { margin-left: 0; margin-right: 8px; }
+    .rtl .profile-header-info p { text-align: right; }
+    .rtl .menu-items-container { direction: rtl; }
+    .rtl .swal2-close { left: 12px; right: auto; }
+</style>
 
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 
 </head>
 
-<body>
+<body dir="<?= ($is_rtl ?? false) ? 'rtl' : 'ltr' ?>" class="<?= ($is_rtl ?? false) ? 'rtl' : '' ?>">
     <div class="profile-container">
         <!-- HEADER SECTION -->
         <div class="profile-header<?= ((int)($emprow['status'] ?? 1) === 0 ? ' inactive' : '') ?>">
@@ -1912,14 +1938,14 @@
                 </div>
                 
                 <?php
-                $queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' ORDER BY `id` DESC ");
+                $queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status`='A' ORDER BY `id` DESC ");
                 $doc_count = mysqli_num_rows($queryempdocu);
                 
                 if ($doc_count > 0):
                 ?>
                     <div class="row">
                         <!-- Documents List Column -->
-                        <div class="col-md-5">
+                        <div class="col-12">
                             <div class="documents-list-container">
                                 <?php
                                 mysqli_data_seek($queryempdocu, 0);
@@ -1935,17 +1961,10 @@
                                     // Determine file type and icon
                                     $file_type_map = [
                                         'pdf' => ['icon' => 'fa-file-pdf', 'color' => 'danger', 'label' => 'PDF'],
-                                        'xls' => ['icon' => 'fa-file-excel', 'color' => 'success', 'label' => 'Excel'],
-                                        'xlsx' => ['icon' => 'fa-file-excel', 'color' => 'success', 'label' => 'Excel'],
-                                        'doc' => ['icon' => 'fa-file-word', 'color' => 'primary', 'label' => 'Word'],
-                                        'docx' => ['icon' => 'fa-file-word', 'color' => 'primary', 'label' => 'Word'],
                                         'jpg' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
                                         'jpeg' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
                                         'png' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
                                         'gif' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
-                                        'zip' => ['icon' => 'fa-file-archive', 'color' => 'warning', 'label' => 'Archive'],
-                                        'rar' => ['icon' => 'fa-file-archive', 'color' => 'warning', 'label' => 'Archive'],
-                                        'txt' => ['icon' => 'fa-file-text', 'color' => 'secondary', 'label' => 'Text'],
                                     ];
                                     $file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
                                 ?>
@@ -1967,9 +1986,6 @@
                                             <button class="btn btn-sm btn-icon btn-download-doc" title="<?= __('download') ?>" onclick="window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
                                                 <i class="fa fa-download"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-icon btn-delete-item deleteAjax" data-id='<?= $recempdoc['id'] ?>' data-tbl='emp_docu' data-file='1' data-column='path' title="<?= __('delete') ?>">
-                                                <i class="fa fa-trash"></i>
-                                            </button>
                                         </div>
                                     </div>
                                 <?php } ?>
@@ -1978,7 +1994,7 @@
                         
                         <!-- Document Viewer Column -->
                         <div class="col-md-7">
-                            <div class="document-viewer-container">
+                            <div class="document-viewer-container" style="display:none;">
                                 <div class="viewer-header">
                                     <h5 class="viewer-title"><i class="fa fa-file"></i> <span id="viewer-doc-name-profile"><?= __('select_document') ?></span></h5>
                                     <div class="viewer-actions">
@@ -1987,6 +2003,9 @@
                                         </button>
                                         <button class="btn btn-sm btn-light" id="viewer-download-profile" title="<?= __('download') ?>" style="display:none;">
                                             <i class="fa fa-download"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-light" id="viewer-clear-profile" title="<?= __('close') ?>">
+                                            <i class="fa fa-times"></i>
                                         </button>
                                     </div>
                                 </div>
@@ -2189,8 +2208,9 @@
 
             // Document Viewer Functionality for Profile Page
             var currentDocPath = '';
-            
-            $('.doc-list-item').on('click', function() {
+
+            // Use delegated event so dynamically added items work too
+            $(document).on('click', '.doc-list-item', function() {
                 // Remove active class from all items
                 $('.doc-list-item').removeClass('active');
                 // Add active class to clicked item
@@ -2202,6 +2222,15 @@
                 var docName = $(this).data('doc-name');
                 
                 currentDocPath = docPath;
+                
+                // Show viewer container now that a file is selected
+                $('.document-viewer-container').show();
+
+                // Adjust columns: list -> col-md-5, viewer -> col-md-7
+                var $listCol = $('.documents-list-container').closest('.col-12, .col-md-5');
+                $listCol.removeClass('col-12').addClass('col-md-5');
+                var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
+                $viewerCol.removeClass('col-12').addClass('col-md-7');
                 
                 // Update viewer title
                 $('#viewer-doc-name-profile').text(docName);
@@ -2240,11 +2269,33 @@
                     container.msRequestFullscreen();
                 }
             });
+
+            // Clear selection and hide viewer
+            $('#viewer-clear-profile').on('click', function() {
+                // Remove active state and hide download button
+                $('.doc-list-item').removeClass('active');
+                $('#viewer-download-profile').hide();
+
+                // Reset title and body to placeholder
+                $('#viewer-doc-name-profile').text('<?= __('select_document') ?>');
+                $('#document-viewer-profile').html(`
+                    <div class="viewer-placeholder">
+                        <i class="fa fa-file-text" style="font-size: 64px; color: #ddd;"></i>
+                        <p class="text-muted mt-3"><?= __('select_document_to_view') ?></p>
+                    </div>
+                `);
+
+                // Hide the entire viewer container
+                $('.document-viewer-container').hide();
+
+                // Reset columns: list back to full width
+                var $listCol = $('.documents-list-container').closest('.col-md-5, .col-12');
+                $listCol.removeClass('col-md-5').addClass('col-12');
+                var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
+                $viewerCol.removeClass('col-md-7').addClass('col-12');
+            });
             
-            // Auto-select first document
-            if ($('.doc-list-item').length > 0) {
-                $('.doc-list-item').first().trigger('click');
-            }
+            // Do not auto-load any document; wait for user selection
         });
     </script>
 </body>
