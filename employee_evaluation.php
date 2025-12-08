@@ -123,9 +123,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
                 punctuality, achieving_time, job_knowledge, problem_solving,
                 feedback_receptiveness, self_development, work_under_pressure,
                 communication_teamwork, creativity_response, initiative_cooperation,
-                observation, total_score
+                observation, total_score, manager_acknowledgment_status
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
         ");
         
@@ -147,7 +147,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
             $creativity_response,
             $initiative_cooperation,
             $observation,
-            $total_score
+            $total_score,
+            'pending'  // Set initial status to pending - evaluation won't appear in reports until acknowledged/objected
         ]);
         
         $pdo->commit();
@@ -332,14 +333,14 @@ try {
                                         
                                         <!-- Department and Employee Selection -->
                                         <div class="row mb-4">
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <div class="form-group">
                                                     <label for="dept_name">Department <span class="text-danger">*</span></label>
                                                     <input type="text" class="form-control" id="dept_name" value="<?php echo htmlspecialchars($dept_name); ?>" readonly>
                                                 </div>
                                             </div>
                                             
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <div class="form-group">
                                                     <label for="employee_emp_id">Select Employee <span class="text-danger">*</span></label>
                                                     <select class="form-control select2" id="employee_emp_id" name="employee_emp_id" required>
@@ -355,21 +356,20 @@ try {
                                                 </div>
                                             </div>
                                             
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <div class="form-group">
                                                     <label for="employee_name">Employee Name</label>
                                                     <input type="text" class="form-control" id="employee_name" readonly>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <div class="row mb-4">
-                                            <div class="col-md-4">
+                                            <div class="col-md-3">
                                                 <div class="form-group">
                                                     <label for="employee_position">Current Position</label>
                                                     <input type="text" class="form-control" id="employee_position" readonly>
                                                 </div>
                                             </div>
+
                                         </div>
 
                                         <hr>

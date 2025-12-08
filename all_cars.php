@@ -126,9 +126,9 @@ if (mysqli_num_rows($query) == 1) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php
-                                            $sql_emp_vac = "
-SELECT `cars`.*, `car_maker`.`maker` AS `maker_name`, `car_maker`.`logo_pos`, `car_model`.`model`, `car_model`.`id` AS `mdid`, `car_maker`.`id` AS `mkid`
+<?php
+$sql_emp_vac = "SELECT 
+`cars`.*, `car_maker`.`maker` AS `maker_name`, `car_maker`.`logo_pos`, `car_model`.`model`, `car_model`.`id` AS `mdid`, `car_maker`.`id` AS `mkid`
 FROM `cars`
 LEFT JOIN `car_maker` ON `car_maker`.`id` = `cars`.`maker_name`
 LEFT JOIN `car_model` ON `car_model`.`id` = `cars`.`model` 
@@ -147,12 +147,6 @@ WHERE `cars`.`status` = '1';
                                                 $status = $rec["status"];
                                                 $mdid = $rec["mdid"];
                                                 $mkid = $rec["mkid"];
-
-                                                //	$times_reg = strtotime("$date_emp");
-                                                //	$datevac = date('d, M Y', $times_reg);
-
-                                                $timestamp_reg = strtotime("$datereg");
-                                                $date_reg = date('d, M Y', $timestamp_reg);
 
                                             ?>
                                                 <tr <?= ($status != "1") ? "class='table-danger'" : false; ?>>

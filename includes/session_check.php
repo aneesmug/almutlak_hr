@@ -147,6 +147,7 @@ $isHR_Recruitment = ($user_type === 'hr_recruitment');
 $isHR_Payroll = ($user_type === 'hr_payroll');
 $isHR_Assistant = ($user_type === 'assistant' && $user_dept == 5); // HR Department Assistant
 
+
 // Combined HR roles (any HR position or HR department)
 $isHR = ($user_type === 'hr' || $isHR_Senior_BP || $isHR_Operations || $isHR_Supervisor || $isHR_Recruitment || $isHR_Payroll || $isHR_Assistant || $user_dept == 5);
 $isDeptHr = ($user_dept == 5); // Anyone in HR Department
@@ -168,6 +169,7 @@ $isGR_Officer = ($user_type === 'gr_officer');
 $isAssistant = ($user_type === 'assistant'); // Generic assistant role
 $isItTeam = ($user_dept == 6); // Anyone in IT Department
 $isItAssistant = ($user_type === 'assistant' && $user_dept == 6); // IT Department Assistant
+$isAdministration = ($user_dept === 1); // Anyone in Administration Department
 
 // General Role Types
 $isEmployee = ($user_type === 'employee');
@@ -221,64 +223,46 @@ function update_employee_fly_status_on_session($conDB) {
     try {
         $today = date('Y-m-d');
         
-                // STEP 1: Set fly=1 for employees with approved vacation that has STARTED today
-                // (Only for regular vacation VAC-*, not leave requests LV-*)
-                // Note: Annual Fly vacations may have is_deductible = 0 but employee is away → still set fly=1
-        $sql_set_fly = "
-            UPDATE employees e
-            INNER JOIN emp_vacation v ON v.emp_id = e.emp_id
-            SET e.fly = 1
-                        WHERE (e.fly = 0 OR e.fly = '0' OR LOWER(e.fly) = 'no' OR e.fly IS NULL)
-                            AND v.current_status = 'approved'
-              AND v.start_date <= ?
-              AND v.return_date >= ?
-              AND v.request_inv_no LIKE 'VAC-%'
-                            AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
+        // STEP 1: Set fly=1 for employees with approved or complete vacation that has STARTED today
+        // (Only for regular vacation VAC-*, not leave requests LV-*)
+        // Find all employees who have approved/complete vacation within the date range
+        $sql_find_employees = "
+            SELECT DISTINCT v.emp_id
+            FROM emp_vacation v
+            WHERE (v.current_status = 'approved' OR v.current_status = 'completed')
+                AND v.start_date <= ?
+                AND v.return_date >= ?
+                AND v.request_inv_no LIKE 'VAC-%'
+                AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
         ";
         
-        $stmt_set = mysqli_prepare($conDB, $sql_set_fly);
-        if ($stmt_set) {
-            mysqli_stmt_bind_param($stmt_set, 'ss', $today, $today);
-            if (mysqli_stmt_execute($stmt_set)) {
-                $affected = mysqli_stmt_affected_rows($stmt_set);
-                if ($affected > 0) {
-                    error_log("update_employee_fly_status: Set fly=1 for $affected employee(s) whose vacation started.");
+        $stmt_find = mysqli_prepare($conDB, $sql_find_employees);
+        if ($stmt_find) {
+            mysqli_stmt_bind_param($stmt_find, 'ss', $today, $today);
+            if (mysqli_stmt_execute($stmt_find)) {
+                $result = mysqli_stmt_get_result($stmt_find);
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $emp_id = $row['emp_id'];
+                    
+                    // Update this employee's fly status to 1
+                    $sql_update = "UPDATE employees SET fly = 1 WHERE emp_id = ? AND (fly = 0 OR fly = '0' OR LOWER(fly) = 'no' OR fly IS NULL)";
+                    $stmt_update = mysqli_prepare($conDB, $sql_update);
+                    if ($stmt_update) {
+                        mysqli_stmt_bind_param($stmt_update, 's', $emp_id);
+                        mysqli_stmt_execute($stmt_update);
+                        mysqli_stmt_close($stmt_update);
+                    }
                 }
+                if ($result) mysqli_free_result($result);
             }
-            mysqli_stmt_close($stmt_set);
+            mysqli_stmt_close($stmt_find);
         }
         
-        // STEP 2: Reset fly=0 for employees whose approved vacation/leave has ENDED
-                $sql_reset_fly = "
-            UPDATE employees e
-            SET e.fly = 0
-                        WHERE (e.fly = 1 OR e.fly = '1' OR LOWER(e.fly) = 'yes')
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM emp_vacation v
-                  WHERE v.emp_id = e.emp_id
-                    AND v.current_status = 'approved'
-                    AND v.start_date <= ?
-                    AND v.return_date >= ?
-                    AND v.request_inv_no LIKE 'VAC-%'
-                                        AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
-              )
-        ";
-        
-        $stmt_reset = mysqli_prepare($conDB, $sql_reset_fly);
-        if ($stmt_reset) {
-            mysqli_stmt_bind_param($stmt_reset, 'ss', $today, $today);
-            if (mysqli_stmt_execute($stmt_reset)) {
-                $affected = mysqli_stmt_affected_rows($stmt_reset);
-                if ($affected > 0) {
-                    error_log("update_employee_fly_status: Reset fly=0 for $affected employee(s) whose vacation ended.");
-                }
-            }
-            mysqli_stmt_close($stmt_reset);
-        }
+        // STEP 2: DISABLED - fly=0 should only be reset via returnVacationRequest() function in emp_top_info.php
+        // This ensures proper workflow control and prevents automatic resets
         
     } catch (Exception $e) {
         // Silently fail to avoid breaking page loads
-        error_log("update_employee_fly_status: Exception - " . $e->getMessage());
+        // error_log("update_employee_fly_status: Exception - " . $e->getMessage());
     }
 }

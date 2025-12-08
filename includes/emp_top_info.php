@@ -58,12 +58,12 @@ if ($emprow['status'] == 1) {
 	if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) {
 		if ($emprow['emp_sup_type'] != "man_power") {
 			// Annual Vacation
-			if ($emprow['apd_status'] != 'approve' && $emprow["fly"] == 0) {
+			if ($emprow['apd_status'] != 'approve' /*&& $emprow["fly"] == 0*/ ) {
 				$moreActionsHtml .= "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
 			}
 			
 			// Excuse Leave
-			$moreActionsHtml .= "<div class=\"menu-item text-info applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
+			$moreActionsHtml .= "<div class=\"menu-item text-success applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
 			
 			// Vacation arrival/departure
 			if ($emprow["fly"] == 1) {
@@ -180,8 +180,8 @@ if ($isEmployee !== true) {
 
 				<!-- Employee Info -->
 				<div class="profile-header-info">
-					<h1><?= htmlspecialchars($emprow['name']) ?></h1>
-					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . $emprow["sectin_nme"]) ?></p>
+					<h1><?= translate_name($emprow['name'], $current_lang ?? 'en') ?></h1>
+					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . translate_name($emprow["sectin_nme"], $current_lang ?? 'en')) ?></p>
 					<p><i class="fa fa-passport"></i> <?= __('iqama_id_label') ?>: <?= htmlspecialchars($emprow['iqama']) ?></p>
 					<p><i class="fa fa-phone-laptop"></i> <?= __('mobile') ?>: <?= htmlspecialchars($emprow['mobile']) ?></p>
 					<p><i class="fa fa-globe-asia"></i> <?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>
@@ -190,7 +190,7 @@ if ($isEmployee !== true) {
 				<!-- Quick Stats -->
 				<div class="profile-quick-stats">
 					<div class="stat-item">
-						<div class="stat-number"><i class="fa fa-hashtag"></i> <?= htmlspecialchars($emprow['empid']) ?></div>
+						<div class="stat-number"><?= htmlspecialchars($emprow['empid']) ?></div>
 						<div class="stat-label"><?= __('employee_no') ?></div>
 					</div>
 					<div class="stat-item">

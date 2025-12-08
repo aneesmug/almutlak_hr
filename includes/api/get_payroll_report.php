@@ -51,7 +51,9 @@ try {
                 e.iqama,
                 e.name AS employee_name,
                 e.iban,
+                e.dept,
                 d.dep_nme AS department_name,
+                c.comp_name,
                 bl.bank_name_s,
                 s.sponsor,
                 gp.month_year,
@@ -73,10 +75,11 @@ try {
             FROM payrolls gp
             JOIN employees e ON gp.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN companies c ON e.comp_no = c.comp_id
             LEFT JOIN bank_list bl ON bl.bnk_id = e.bank_name
             LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
             WHERE gp.month_year = :month_year_param" . $dept_filter . "
-            ORDER BY d.dep_nme ASC, e.name ASC";
+            ORDER BY c.comp_name ASC, d.dep_nme ASC, e.name ASC";
 
     $stmt = $pdo->prepare($sql);
     foreach ($params as $key => $value) {
@@ -118,10 +121,10 @@ try {
     echo json_encode(['status' => 'success', 'report' => $reportData]);
 
 } catch (PDOException $e) {
-    error_log('Error fetching payroll report: ' . $e->getMessage());
+    // error_log('Error fetching payroll report: ' . $e->getMessage());
     echo json_encode(['status' => 'error', 'message' => 'Database error: Could not retrieve payroll report data.']);
 } catch (Exception $e) {
-    error_log('General error in get_payroll_report.php: ' . $e->getMessage());
+    // error_log('General error in get_payroll_report.php: ' . $e->getMessage());
     echo json_encode(['status' => 'error', 'message' => 'An unexpected server error occurred.']);
 }
 ?>

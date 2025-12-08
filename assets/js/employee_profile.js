@@ -1,3 +1,6 @@
+
+$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js"));
+
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
     if (typeof window.lang === 'undefined' || window.lang === null) {
@@ -61,12 +64,13 @@ $(document).on('click', '.applyvacationAtter', function (e) {
     var currentBalance = $(this).data('balance') || 0;
 
     // Quick pre-check: block opening the modal if there's already a pending request
+    // Note: We'll allow emergency vacation even with pending requests
     try {
         $.ajax({
             url: './includes/ajaxFile/ajaxVacation.php',
             type: 'POST',
             dataType: 'json',
-            data: { ajaxType: 'canApplyVacation', emp_id: empid },
+            data: { ajaxType: 'canApplyVacation', emp_id: empid, is_emergency: 0 },
         }).done(function(res) {
             if (!res || res.ok === false) {
                 Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' ,allowOutsideClick:false});
@@ -111,18 +115,34 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                 }
 
                 const textMsg = res.message || lines.join('\n');
-                if (chainHtml) {
-                    // Use HTML to render the chain nicely
-                    const htmlTop = esc(textMsg).replace(/\n/g, '<br/>');
-                    Swal.fire({ title: __('cannot_apply_now') || 'Cannot Apply', html: `${htmlTop}${chainHtml}`, icon: 'info', allowOutsideClick: false });
-                } else {
-                    Swal.fire({ title: __('cannot_apply_now') || 'Cannot Apply', text: textMsg, icon: 'info', allowOutsideClick: false });
-                }
+                
+                // Add option to apply for emergency vacation with different dates
+                const htmlTop = esc(textMsg).replace(/\n/g, '<br/>');
+                const fullHtml = chainHtml 
+                    ? `${htmlTop}${chainHtml}<hr/><p style="margin-top:15px;"><strong>${__('note') || 'Note'}:</strong> ${__('you_can_apply_for_emergency_vacation_with_different_dates') || 'You can apply for emergency vacation with different dates.'}</p>`
+                    : `${htmlTop}<br/><br/><strong>${__('note') || 'Note'}:</strong> ${__('you_can_apply_for_emergency_vacation_with_different_dates') || 'You can apply for emergency vacation with different dates.'}`;
+                
+                Swal.fire({ 
+                    title: __('cannot_apply_now') || 'Cannot Apply', 
+                    html: fullHtml, 
+                    icon: 'info', 
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: __('apply_emergency_vacation') || 'Apply Emergency Vacation',
+                    cancelButtonText: __('cancel') || 'Cancel',
+                    confirmButtonColor: '#d33',
+                    cancelButtonColor: '#6c757d'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Open the modal for emergency vacation
+                        openVacationApplyModal(empid, deptId, country, currentBalance, true);
+                    }
+                });
                 return;
             }
 
             // Proceed to open the modal as usual
-            openVacationApplyModal(empid, deptId, country, currentBalance);
+            openVacationApplyModal(empid, deptId, country, currentBalance, false);
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
@@ -134,11 +154,12 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 });
 
 // Extracted function to open the Apply Vacation modal after eligibility check
-function openVacationApplyModal(empid, deptId, country, currentBalance) {
+function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency) {
     currentBalance = currentBalance || 0;
+    forceEmergency = forceEmergency || false;
 
     Swal.fire({
-        title: '<i class="fa fa-umbrella-beach"></i> ' + __('apply_vacation_info_title'),
+        title: '<i class="fa fa-umbrella-beach"></i> ' + (forceEmergency ? __('apply_emergency_vacation') : __('apply_vacation_info_title')),
         html: vacationApply_HTML(country),
         showCancelButton: true,
         confirmButtonColor: '#4e73df',
@@ -157,6 +178,19 @@ function openVacationApplyModal(empid, deptId, country, currentBalance) {
         padding: '20px',
         willOpen: () => {
             const swalModal = Swal.getHtmlContainer();
+            
+            // If forceEmergency is true, pre-select Fly and Emergency vacation
+            if (forceEmergency) {
+                setTimeout(() => {
+                    // Select "Fly" vacation type
+                    $('#inlineRadio1').prop('checked', true).trigger('change');
+                    
+                    // Show flyTypeSection and select "emergency"
+                    setTimeout(() => {
+                        $('#vac_type2').prop('checked', true).trigger('change');
+                    }, 100);
+                }, 100);
+            }
 
             // Original date pickers
             $('#start_date').datepicker({
@@ -654,7 +688,90 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
             });
 
             // Add event listener for the Select2 dropdown
-            $('#leave_type_select').on('change', toggleLeaveFields);
+            $('#leave_type_select').on('change', function() {
+                toggleLeaveFields();
+                
+                // Initialize Dropzone after attachment section becomes visible
+                setTimeout(function() {
+                    if (!$('#attachmentSection').hasClass('d-none') && $('#leaveDropzone').length > 0 && !window.leaveDropzoneInstance) {
+                        initializeLeaveDropzone();
+                    }
+                }, 200);
+            });
+
+            // Function to initialize Dropzone
+            function initializeLeaveDropzone() {
+                // Double-check element exists
+                const dropzoneElement = document.getElementById('leaveDropzone');
+                if (!dropzoneElement) {
+                    console.error('Dropzone element #leaveDropzone not found in DOM');
+                    return;
+                }
+
+                // Check if already initialized
+                if (window.leaveDropzoneInstance) {
+                    console.log('Dropzone already initialized');
+                    return;
+                }
+
+                try {
+                    Dropzone.autoDiscover = false;
+                    const leaveDropzone = new Dropzone(dropzoneElement, {
+                        url: '#', // Dummy URL since we'll handle submission via AJAX
+                        autoProcessQueue: false,
+                        uploadMultiple: true,
+                        parallelUploads: 10,
+                        maxFiles: 10,
+                        maxFilesize: 5, // MB
+                        acceptedFiles: '.pdf,.jpg,.jpeg,.png',
+                        addRemoveLinks: true,
+                        dictDefaultMessage: __('drag_drop_files') || 'Drag & Drop files here or click to browse',
+                        dictRemoveFile: __('remove_file') || 'Remove',
+                        dictMaxFilesExceeded: __('maximum_10_files_allowed') || 'Maximum 10 files allowed',
+                        dictFileTooBig: __('file_too_large_dropzone') || 'File is too large ({{filesize}}MB). Max: {{maxFilesize}}MB',
+                        dictInvalidFileType: __('invalid_file_type') || 'Invalid file type. Only PDF, JPG, PNG allowed',
+                        init: function() {
+                            this.on('addedfile', function(file) {
+                                console.log('File added:', file.name);
+                            });
+                            this.on('removedfile', function(file) {
+                                console.log('File removed:', file.name);
+                            });
+                            this.on('maxfilesexceeded', function(file) {
+                                this.removeFile(file);
+                                Swal.showValidationMessage(__('maximum_10_files_allowed') || 'Maximum 10 files allowed');
+                                // Clear validation message after 3 seconds
+                                setTimeout(() => {
+                                    const validationMsg = document.querySelector('.swal2-validation-message');
+                                    if (validationMsg) {
+                                        validationMsg.style.display = 'none';
+                                    }
+                                }, 3000);
+                            });
+                            this.on('error', function(file, errorMessage) {
+                                console.log('Error:', errorMessage);
+                                this.removeFile(file);
+                                if (typeof errorMessage === 'string') {
+                                    Swal.showValidationMessage(errorMessage);
+                                    // Clear validation message after 3 seconds
+                                    setTimeout(() => {
+                                        const validationMsg = document.querySelector('.swal2-validation-message');
+                                        if (validationMsg) {
+                                            validationMsg.style.display = 'none';
+                                        }
+                                    }, 3000);
+                                }
+                            });
+                        }
+                    });
+
+                    // Store dropzone instance for later access
+                    window.leaveDropzoneInstance = leaveDropzone;
+                    console.log('Dropzone initialized successfully');
+                } catch (error) {
+                    console.error('Error initializing Dropzone:', error);
+                }
+            }
         },
         preConfirm: () => {
             const form = document.getElementById('applyLeaveForm');
@@ -717,12 +834,22 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                 return false;
             }
 
-            // Attachment is REQUIRED for ALL leave types
-            const attachmentInput = document.getElementById('attachment');
-            if (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0) {
-                Swal.showValidationMessage(__('select_attachment_file_validation'));
+            // Validate Dropzone attachments
+            const dropzone = window.leaveDropzoneInstance;
+            if (!dropzone || dropzone.files.length === 0) {
+                Swal.showValidationMessage(__('at_least_one_file_required') || 'At least one file is required');
                 return false;
             }
+
+            if (dropzone.files.length > 10) {
+                Swal.showValidationMessage(__('max_10_files_allowed') || 'Maximum 10 files allowed');
+                return false;
+            }
+
+            // Add Dropzone files to FormData
+            dropzone.files.forEach((file, index) => {
+                formData.append('attachments[]', file);
+            });
 
 
             // --- AJAX Submission ---
@@ -1485,14 +1612,14 @@ function generateLeaveFormHTML(employeeGender) {
     // Define all leave types with gender requirements
     // employeeGender: 1 = Male, 2 = Female
     const allLeaveTypes = [
-        { value: 'Sick Leave', label: 'Sick Leave', gender: null },
-        { value: 'Exam Leave', label: 'Exam Leave', gender: null },
-        { value: 'Hajj Leave', label: 'Hajj Leave', gender: null },
-        { value: 'Maternity Leave', label: 'Maternity Leave', gender: 2 },
-        { value: 'Marriage Leave', label: 'Marriage Leave', gender: null },
-        { value: 'Newborn Leave', label: 'Newborn Leave', gender: 1 },
-        { value: 'Death Leave', label: 'Death Leave', gender: null },
-        { value: 'Business Trip', label: 'Business Trip', gender: null }
+        { value: 'Sick Leave', label: __('sick_leave'), gender: null },
+        { value: 'Exam Leave', label: __('exam_leave'), gender: null },
+        { value: 'Hajj Leave', label: __('hajj_leave'), gender: null },
+        { value: 'Maternity Leave', label: __('maternity_leave'), gender: 2 },
+        { value: 'Marriage Leave', label: __('marriage_leave'), gender: null },
+        { value: 'Newborn Leave', label: __('newborn_leave'), gender: 1 },
+        { value: 'Death Leave', label: __('death_leave'), gender: null },
+        { value: 'Business Trip', label: __('business_trip'), gender: null }
     ];
 
     // Filter leave types based on employee gender
@@ -1541,26 +1668,30 @@ function generateLeaveFormHTML(employeeGender) {
             <!-- Accommodation Question - Only for Business Trip -->
             <div id="accommodationSection" class="form-group d-none">
                 <label>${__('accommodation_provided')} <span class="text-danger">*</span></label>
-                <div class="custom-control custom-radio mb-2">
-                    <input type="radio" class="custom-control-input" id="accommodation_yes" name="accommodation_provided" value="yes" required>
-                    <label class="custom-control-label" for="accommodation_yes">${__('yes')}</label>
-                </div>
-                <div class="custom-control custom-radio">
-                    <input type="radio" class="custom-control-input" id="accommodation_no" name="accommodation_provided" value="no" required>
-                    <label class="custom-control-label" for="accommodation_no">${__('no')}</label>
+                <div class="d-flex" style="gap: 20px;">
+                    <div class="custom-control custom-radio">
+                        <input type="radio" class="custom-control-input" id="accommodation_yes" name="accommodation_provided" value="yes" required>
+                        <label class="custom-control-label" for="accommodation_yes">${__('yes')}</label>
+                    </div>
+                    <div class="custom-control custom-radio">
+                        <input type="radio" class="custom-control-input" id="accommodation_no" name="accommodation_provided" value="no" required>
+                        <label class="custom-control-label" for="accommodation_no">${__('no')}</label>
+                    </div>
                 </div>
             </div>
 
             <!-- Transportation Question - Only for Business Trip -->
             <div id="transportationSection" class="form-group d-none">
                 <label>${__('transportation_provided')} <span class="text-danger">*</span></label>
-                <div class="custom-control custom-radio mb-2">
-                    <input type="radio" class="custom-control-input" id="transportation_yes" name="transportation_provided" value="yes" required>
-                    <label class="custom-control-label" for="transportation_yes">${__('yes')}</label>
-                </div>
-                <div class="custom-control custom-radio">
-                    <input type="radio" class="custom-control-input" id="transportation_no" name="transportation_provided" value="no" required>
-                    <label class="custom-control-label" for="transportation_no">${__('no')}</label>
+                <div class="d-flex" style="gap: 20px;">
+                    <div class="custom-control custom-radio">
+                        <input type="radio" class="custom-control-input" id="transportation_yes" name="transportation_provided" value="yes" required>
+                        <label class="custom-control-label" for="transportation_yes">${__('yes')}</label>
+                    </div>
+                    <div class="custom-control custom-radio">
+                        <input type="radio" class="custom-control-input" id="transportation_no" name="transportation_provided" value="no" required>
+                        <label class="custom-control-label" for="transportation_no">${__('no')}</label>
+                    </div>
                 </div>
             </div>
             
@@ -1573,8 +1704,50 @@ function generateLeaveFormHTML(employeeGender) {
             <!-- Attachment - Required for ALL leave types -->
             <div id="attachmentSection" class="form-group d-none">
                 <label for="attachment">${__('attach_document_required')} <span class="text-danger">*</span></label>
-                <input type="file" name="attachment" id="attachment" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png" required>
-                <small class="form-text text-muted">${__('attachment_example')}</small>
+                <div id="leaveDropzone" class="dropzone" style="border: 2px dashed #4e73df; border-radius: 8px; padding: 20px; min-height: 150px; background: #f8f9fc; cursor: pointer; transition: all 0.3s ease;">
+                    <div class="dz-message" style="margin: 20px 0; text-align: center;">
+                        <i class="fa fa-cloud-upload-alt" style="font-size: 48px; color: #4e73df; margin-bottom: 15px; display: block;"></i>
+                        <h4 style="margin: 15px 0 10px 0; color: #495057; font-weight: 600;">${__('drag_drop_files') || 'Drag & Drop files here'}</h4>
+                        <p style="color: #6c757d; margin: 10px 0; font-size: 14px;">${__('or_click_to_browse') || 'or click to browse'}</p>
+                        <small style="color: #858796; display: block; margin-top: 10px; font-size: 12px;">
+                            <i class="fa fa-info-circle"></i> ${__('attachment_dropzone_help') || '1-10 files • Max 5MB each • PDF, JPG, PNG'}
+                        </small>
+                    </div>
+                </div>
+                <small class="form-text text-muted mt-2" style="display: block; margin-top: 8px;">
+                    <i class="fa fa-info-circle"></i> ${__('attachment_multiple_help') || 'You can upload 1-10 files. Each file must be less than 5MB. Accepted formats: PDF, JPG, PNG'}
+                </small>
+                <style>
+                    #leaveDropzone:hover {
+                        border-color: #2e59d9;
+                        background: #eef2ff;
+                    }
+                    #leaveDropzone .dz-preview {
+                        margin: 10px;
+                    }
+                    #leaveDropzone .dz-preview .dz-image {
+                        border-radius: 8px;
+                    }
+                    #leaveDropzone .dz-preview .dz-details {
+                        background: #fff;
+                        padding: 8px;
+                        border-radius: 4px;
+                    }
+                    #leaveDropzone .dz-preview .dz-remove {
+                        color: #e74a3b;
+                        font-size: 12px;
+                        text-decoration: none;
+                        cursor: pointer;
+                    }
+                    #leaveDropzone .dz-preview .dz-remove:hover {
+                        color: #c9302c;
+                        text-decoration: underline;
+                    }
+                    #leaveDropzone.dz-drag-hover {
+                        border-color: #2e59d9;
+                        background: #e3f2fd;
+                    }
+                </style>
             </div>
         </form>
     `;

@@ -125,7 +125,7 @@ if (mysqli_num_rows($query) == 1) {
                     <div class="container-fluid">
                         <div class="row">
                             <div class="col-12">
-                                <?= $msg ?>
+                                <?//= $msg ?>
                                 <div class="card-box table-responsive">
                                     <h4 class="m-t-0 header-title">All Registerd Users</h4>
 

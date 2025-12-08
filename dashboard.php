@@ -27,7 +27,8 @@ $can_see_all_employees = (
     $user_type == 'administrator' ||
     $user_dept == 5 || // HR Department
     $isHR || 
-    $isDeptHr
+    $isDeptHr ||
+	$user_dept == 1 // Administration Department
 );
 
 // Build department filter for queries
@@ -59,6 +60,16 @@ while($rec = mysqli_fetch_assoc($sql_count_tot)){$status_cont_tot = $rec["tot"];
 // Count Man Power Employees
 $sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr`, `id` FROM `employees` WHERE `emp_sup_type`='man_power' AND `status`=1 ".$dept_filter);
 while($rec = mysqli_fetch_assoc($sql_count_man_power)){$status_cont_man_power = $rec["manpwr"];}
+
+// Percentages for dashboard progress bars
+$totalEmployees = max(1, (int)($status_cont_tot ?? 0));
+$pct_active      = round((($status_cont_active ?? 0) / $totalEmployees) * 100, 1);
+$pct_man_power   = round((($status_cont_man_power ?? 0) / $totalEmployees) * 100, 1);
+$pct_on_job      = round(((($status_cont_man_power ?? 0) + ($status_cont_active ?? 0)) / $totalEmployees) * 100, 1);
+$pct_fly         = round((($status_cont_fly ?? 0) / $totalEmployees) * 100, 1);
+$pct_local_vac   = round((($status_cont_local_vac ?? 0) / $totalEmployees) * 100, 1);
+$pct_terminated  = round((($status_cont_ter ?? 0) / $totalEmployees) * 100, 1);
+$pct_total       = 100.0;
 
 if(isset($_POST['submit'])){
 	if($_POST['iqama_exp']){
@@ -114,6 +125,168 @@ if(isset($_POST['submit'])){
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
 
         <script src="assets/js/modernizr.min.js"></script>
+
+		<style>
+			/* Modern Stats Card Design - Matching dashbydepart.php */
+			.stats-card {
+				border-radius: 16px;
+				box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+				padding: 32px 24px 24px 24px;
+				margin-bottom: 28px;
+				transition: box-shadow 0.2s, transform 0.2s;
+				border: none;
+				position: relative;
+				min-height: 180px;
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				background: var(--card-gradient, linear-gradient(90deg,#2196f3 0%,#21cbf3 100%));
+				color: #fff;
+				overflow: hidden;
+			}
+			/* Gradient backgrounds for each color */
+			.stats-card[data-color="primary"] {
+				--card-gradient: linear-gradient(90deg,#556ee6 0%,#50a5f1 100%);
+			}
+			.stats-card[data-color="success"] {
+				--card-gradient: linear-gradient(90deg,#34c38f 0%,#43e97b 100%);
+			}
+			.stats-card[data-color="info"] {
+				--card-gradient: linear-gradient(90deg,#50a5f1 0%,#2196f3 100%);
+			}
+			.stats-card[data-color="danger"] {
+				--card-gradient: linear-gradient(90deg,#f46a6a 0%,#ff6a88 100%);
+			}
+			.stats-card[data-color="warning"] {
+				--card-gradient: linear-gradient(90deg,#f1b44c 0%,#ffde7d 100%);
+			}
+			.stats-card[data-color="secondary"] {
+				--card-gradient: linear-gradient(90deg,#6c757d 0%,#343a40 100%);
+			}
+			.stats-card[data-color="dark"] {
+				--card-gradient: linear-gradient(90deg,#343a40 0%,#232526 100%);
+			}
+			/* Dashboard-specific colors */
+			.stats-card[data-color="custom"] {
+				--card-gradient: linear-gradient(90deg,#0097a7 0%,#26c6da 100%);
+			}
+			.stats-card[data-color="purple"] {
+				--card-gradient: linear-gradient(90deg,#6f42c1 0%,#8e6be8 100%);
+			}
+			.stats-card:hover {
+				box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+				transform: translateY(-4px) scale(1.02);
+			}
+			.stats-card-icon {
+				background: rgba(255,255,255,0.18);
+				border-radius: 50%;
+				width: 72px;
+				height: 72px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 40px;
+				margin-right: 28px;
+				box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+				position: relative;
+				transition: transform 0.2s;
+				flex-direction: column;
+			}
+			.stats-card-count-circle {
+				background: #fff;
+				color: #2196f3;
+				border-radius: 50%;
+				width: 38px;
+				height: 38px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 20px;
+				font-weight: 700;
+				margin-bottom: 6px;
+				box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+			}
+			.stats-card-icon i {
+				font-size: 28px;
+				color: #2196f3;
+			}
+			.stats-card-icon[data-color="primary"] i { color: #556ee6; }
+			.stats-card-icon[data-color="success"] i { color: #34c38f; }
+			.stats-card-icon[data-color="info"] i { color: #50a5f1; }
+			.stats-card-icon[data-color="danger"] i { color: #f46a6a; }
+			.stats-card-icon[data-color="warning"] i { color: #f1b44c; }
+			.stats-card-icon[data-color="secondary"] i { color: #6c757d; }
+			.stats-card-icon[data-color="dark"] i { color: #343a40; }
+			.stats-card-icon[data-color="custom"] i { color: #0097a7; }
+			.stats-card-icon[data-color="purple"] i { color: #6f42c1; }
+			.stats-card-icon:hover {
+				transform: scale(1.10) rotate(-6deg);
+			}
+			.stats-card-icon .stats-card-tooltip {
+				display: none;
+				position: absolute;
+				top: -32px;
+				left: 50%;
+				transform: translateX(-50%);
+				background: #222;
+				color: #fff;
+				padding: 4px 10px;
+				border-radius: 6px;
+				font-size: 12px;
+				white-space: nowrap;
+				z-index: 10;
+			}
+			.stats-card-icon:hover .stats-card-tooltip {
+				display: block;
+			}
+			.stats-card-content {
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				align-items: flex-start;
+				position: relative;
+			}
+			.stats-card-label {
+				font-size: 18px;
+				font-weight: 700;
+				color: #fff;
+				margin-bottom: 12px;
+				letter-spacing: 0.5px;
+			}
+			.stats-card-footer {
+				display: flex;
+				align-items: center;
+				gap: 18px;
+			}
+			.stats-card-percentage {
+				font-size: 15px;
+				font-weight: 600;
+				display: flex;
+				align-items: center;
+			}
+			.stats-card-percentage.positive {
+				color: #34c38f;
+			}
+			.stats-card-percentage.negative {
+				color: #f46a6a;
+			}
+			.stats-card-percentage i {
+				font-size: 18px;
+				margin-right: 4px;
+			}
+			@media (max-width: 767px) {
+				.stats-card {
+					flex-direction: column;
+					align-items: flex-start;
+					padding: 16px 8px;
+					min-height: 160px;
+				}
+				.stats-card-icon {
+					margin-bottom: 10px;
+					margin-right: 0;
+				}
+			}
+		</style>
 
 		<?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -183,57 +356,183 @@ if(isset($_POST['submit'])){
 								header("refresh:3 ; ./dashboard.php");
 							}
 						?>
-                        <div class="row text-center">
-                            <div class="col-sm-4 col-xl-4" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">
-                                <div class="card-box widget-flat border-custom bg-custom text-white">
-                                    <i class="fa fa-house-chimney-user"></i>
-                                    <h3 class="m-b-10"><?=$status_cont_active ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('almutlak_employees') ?></p>
-                                </div>
-                            </div>
+						<div class="row text-center">
+							<div class="col-sm-4 col-xl-4" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">
+							<div class="stats-card" data-color="custom">
+								<div class="stats-card-icon" data-color="custom">
+									<div class="stats-card-count-circle"><?=$status_cont_active ?></div>
+									<span class="stats-card-tooltip">Active Employees</span>
+									<i class="fa fa-house-chimney-user"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('almutlak_employees') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div style="height:12px;border-radius:8px;width:<?=$pct_active ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_active ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
 							<div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee.php?page=1&status=1&fly=no&emp_sup_type=man_power'" style="cursor: pointer;">
-                                <div class="card-box widget-flat border-purple bg-purple text-white">
-                                    <i class="fa fa-users-rays"></i>
-                                    <h3 class="m-b-10"><?php if($status_cont_man_power > 0){ echo $status_cont_man_power;}else{echo "0";} ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('man_power_employees') ?></p>
-                                </div>
-                            </div>
-                            <div class="col-sm-4 col-xl-4" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;" <?php } ?> >
-                                <div class="card-box bg-primary widget-flat border-primary text-white">
-                                    <i class="fa fa-plane-departure"></i>
-                                    <h3 class="m-b-10"><?=$status_cont_man_power + $status_cont_active ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('total_on_job_employees') ?></p>
-                                </div>
-                            </div>
+							<div class="stats-card" data-color="purple">
+								<div class="stats-card-icon" data-color="purple">
+									<div class="stats-card-count-circle"><?php if($status_cont_man_power > 0){ echo $status_cont_man_power;}else{echo "0";} ?></div>
+									<span class="stats-card-tooltip">Man Power</span>
+									<i class="fa fa-users-rays"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('man_power_employees') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div style="height:12px;border-radius:8px;width:<?=$pct_man_power ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_man_power ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
+							<div class="col-sm-4 col-xl-4" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;" <?php } ?> >
+							<div class="stats-card" data-color="primary">
+								<div class="stats-card-icon" data-color="primary">
+									<div class="stats-card-count-circle"><?=$status_cont_man_power + $status_cont_active ?></div>
+									<span class="stats-card-tooltip">Total On Job</span>
+									<i class="fa fa-plane-departure"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('total_on_job_employees') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div style="height:12px;border-radius:8px;width:<?=$pct_on_job ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_on_job ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
 							<div class="col-sm-3 col-xl-3" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&departed=1'" style="cursor: pointer;" <?php } ?> >
-                                <div class="card-box bg-warning widget-flat border-primary text-white">
-                                    <i class="fa fa-plane-departure"></i>
-                                    <h3 class="m-b-10"><?=$status_cont_fly ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('departed_employees') ?></p>
-                                </div>
-                            </div>
+							<div class="stats-card" data-color="warning">
+								<div class="stats-card-icon" data-color="warning">
+									<div class="stats-card-count-circle"><?=$status_cont_fly ?></div>
+									<span class="stats-card-tooltip">Departed Employees</span>
+									<i class="fa fa-plane-departure"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('departed_employees') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div style="height:12px;border-radius:8px;width:<?=$pct_fly ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_fly ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
 							<div class="col-sm-3 col-xl-3" <?php if(($status_cont_local_vac ?? 0) > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&local_vac=1'" style="cursor: pointer;" <?php } ?> >
-                                <div class="card-box bg-info widget-flat border-info text-white">
-                                    <i class="fa fa-umbrella-beach"></i>
-                                    <h3 class="m-b-10"><?=$status_cont_local_vac ?? 0 ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('local_vacation_employees') ?></p>
-                                </div>
-                            </div>
-                            <div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0'" style="cursor: pointer;">
-                                <div class="card-box bg-danger widget-flat border-danger text-white">
-                                    <i class="fa fa-users-slash"></i>
-                                    <h3 class="m-b-10"><?=$status_cont_ter ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('terminated_employees') ?></p>
-                                </div>
-                            </div>
+							<div class="stats-card" data-color="info">
+								<div class="stats-card-icon" data-color="info">
+									<div class="stats-card-count-circle"><?=$status_cont_local_vac ?? 0 ?></div>
+									<span class="stats-card-tooltip">Local Vacation</span>
+									<i class="fa fa-umbrella-beach"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('local_vacation_employees') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div style="height:12px;border-radius:8px;width:<?=$pct_local_vac ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_local_vac ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
+							<div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0'" style="cursor: pointer;">
+							<div class="stats-card" data-color="danger">
+								<div class="stats-card-icon" data-color="danger">
+									<div class="stats-card-count-circle"><?=$status_cont_ter ?></div>
+									<span class="stats-card-tooltip">Terminated Employees</span>
+									<i class="fa fa-users-slash"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('terminated_employees') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div style="height:12px;border-radius:8px;width:<?=$pct_terminated ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_terminated ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
 							<div class="col-sm-3 col-xl-3" onclick="window.location.href='reg_employee.php'" style="cursor: pointer;">
-                                <div class="card-box widget-flat border-success bg-success text-white">
-                                    <i class="fa fa-users-viewfinder"></i>
-                                    <h3 class="m-b-10"><?=$status_cont_tot ?></h3>
-                                    <p class="text-uppercase m-b-5 font-13 font-600"><?=__('total_employees') ?></p>
-                                </div>
-                            </div>
-                        </div>                        
+							<div class="stats-card" data-color="success">
+								<div class="stats-card-icon" data-color="success">
+									<div class="stats-card-count-circle"><?=$status_cont_tot ?></div>
+									<span class="stats-card-tooltip">Total Employees</span>
+									<i class="fa fa-users-viewfinder"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('total_employees') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div style="height:12px;border-radius:8px;width:<?=$pct_total ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_total ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
+						</div>                        
                         </div>
                         <?php /* if($user_type == $access1 OR $user_type == $access2){ ?>
                         <div class="card-box">
@@ -320,7 +619,7 @@ if(isset($_POST['submit'])){
 									
 								<tr class="<?=$color; ?>">
 									<td><?=$row['emp_id']; ?></td>
-									<td><?=$row['name']; ?></td>
+									<td><?=translate_name($row['name'], $current_lang ?? 'en'); ?></td>
 									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
 									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
 									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>
@@ -390,7 +689,7 @@ if(isset($_POST['submit'])){
 									?>
 								<tr>
 									<td><?=$row['emp_id']; ?></td>
-									<td><?=$row['name']; ?></td>
+									<td><?=translate_name($row['name'], $current_lang ?? 'en'); ?></td>
 									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
 									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
 									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>

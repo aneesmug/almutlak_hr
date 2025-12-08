@@ -60,19 +60,19 @@ if($ajaxType == 'emp_search') {
             } else {
                 echo json_encode([
                     'status' => 404,
-                    'message' => 'No supervisor assigned to this employee.'
+                    'message' => __('no_supervisor_assigned_to_this_employee')
                 ]);
             }
         } else {
             echo json_encode([
                 'status' => 404,
-                'message' => 'Employee not found.'
+                'message' => __('employee_not_found')
             ]);
         }
     } else {
         echo json_encode([
             'status' => 400,
-            'message' => 'Invalid employee ID.'
+            'message' => __('invalid_employee_id')
         ]);
     }
 } elseif($ajaxType == 'emp_department') {
@@ -117,7 +117,7 @@ elseif($ajaxType == 'get_assigned_assets') {
             ORDER BY ea.assigned_date DESC";
     $stmt = mysqli_prepare($conDB, $sql);
     if (!$stmt) {
-        echo json_encode(['status' => 500, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        echo json_encode(['status' => 500, 'message' => __('database_error') . ': ' . mysqli_error($conDB)]);
         exit;
     }
     mysqli_stmt_bind_param($stmt, "s", $emp_id);
@@ -146,7 +146,7 @@ elseif($ajaxType == 'get_potential_approvers') {
         $data = [
             'data'      => [],
             'status'    => 404,
-            'message'   => 'No potential approvers found.'
+            'message'   => __('no_potential_approvers_found')
         ];
     }
     echo json_encode($data);
@@ -156,7 +156,7 @@ elseif($ajaxType == 'get_potential_approvers') {
 // =================================================================
 elseif($ajaxType == 'get_department_approvers') {
     if (empty($_POST['dept_id'])) {
-        send_json_response("Error", "Department ID is required.", "error");
+        send_json_response(__('error'), __('department_id_is_required'), "error");
         exit;
     }
     $dept_id = (int)$_POST['dept_id'];
@@ -171,7 +171,7 @@ elseif($ajaxType == 'get_department_approvers') {
         $data = [
             'data'      => [],
             'status'    => 404,
-            'message'   => 'No potential approvers found for this department.'
+            'message'   => __('no_potential_approvers_found_for_this_department')
         ];
     }
     echo json_encode($data);
@@ -250,7 +250,7 @@ elseif($ajaxType == 'get_employee_salary') {
     $emp_id = mysqli_real_escape_string($conDB, $_POST['emp_id'] ?? '');
     
     if (empty($emp_id)) {
-        echo json_encode(['status' => 400, 'message' => 'Employee ID is required']);
+        echo json_encode(['status' => 400, 'message' => __('employee_id_is_required')]);
         exit;
     }
     
@@ -258,14 +258,14 @@ elseif($ajaxType == 'get_employee_salary') {
     $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='{$emp_id}' AND `status` = 1 ORDER BY `id` DESC LIMIT 1");
     
     if (!$get_salary_data) {
-        echo json_encode(['status' => 500, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        echo json_encode(['status' => 500, 'message' => __('database_error') . ': ' . mysqli_error($conDB)]);
         exit;
     }
     
     $salaryrow = mysqli_fetch_assoc($get_salary_data);
     
     if (!$salaryrow) {
-        echo json_encode(['status' => 404, 'message' => 'No active salary record found for this employee']);
+        echo json_encode(['status' => 404, 'message' => __('no_active_salary_record_found_for_this_employee')]);
         exit;
     }
     
@@ -316,7 +316,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         // Check if exclude_level1 is set and true (handles both boolean and string)
         $exclude_level1 = (isset($_POST['exclude_level1']) && ($_POST['exclude_level1'] === true || $_POST['exclude_level1'] === 'true' || $_POST['exclude_level1'] === 1 || $_POST['exclude_level1'] === '1'));
         
-        error_log("get_asset_clearance_chain: vacation_id=$vacation_id, exclude_level1=" . ($exclude_level1 ? 'true' : 'false'));
+        
         
         if (empty($vacation_id)) {
             throw new Exception("Vacation ID is required");
@@ -329,19 +329,19 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         $stmt_vac = mysqli_prepare($conDB, $sql_vac);
         
         if (!$stmt_vac) {
-            throw new Exception("Database error: " . mysqli_error($conDB));
+            throw new Exception(__('database_error') . ": " . mysqli_error($conDB));
         }
         
         mysqli_stmt_bind_param($stmt_vac, "i", $vacation_id);
         if (!mysqli_stmt_execute($stmt_vac)) {
             mysqli_stmt_close($stmt_vac);
-            throw new Exception("Failed to fetch vacation details");
+            throw new Exception(__('failed_to_fetch_vacation_details'));
         }
         
         $result_vac = mysqli_stmt_get_result($stmt_vac);
         if (!$result_vac || mysqli_num_rows($result_vac) == 0) {
             mysqli_stmt_close($stmt_vac);
-            throw new Exception("Vacation request not found");
+            throw new Exception(__('vacation_request_not_found'));
         }
         
         $vac_data = mysqli_fetch_assoc($result_vac);
@@ -364,7 +364,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         $sql_emp = "SELECT supervisor_id, dept FROM employees WHERE emp_id = ? LIMIT 1";
         $stmt_emp = mysqli_prepare($conDB, $sql_emp);
         if (!$stmt_emp) {
-            throw new Exception("Database error");
+            throw new Exception(__('database_error'));
         }
         
         mysqli_stmt_bind_param($stmt_emp, "i", $emp_id);
@@ -373,7 +373,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         
         if (!$res_emp || mysqli_num_rows($res_emp) == 0) {
             mysqli_stmt_close($stmt_emp);
-            throw new Exception("Employee not found");
+            throw new Exception(__('employee_not_found'));
         }
         
         $emp_row = mysqli_fetch_assoc($res_emp);
@@ -395,7 +395,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                     $chain_details[] = [
                         'emp_id' => $row_sup['emp_id'],
                         'name' => $row_sup['name'],
-                        'label' => 'Direct Supervisor',
+                        'label' => __('direct_supervisor'),
                         'level' => 1
                     ];
                 }
@@ -409,7 +409,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                 $chain_details[] = [
                     'emp_id' => $dept_mgr['emp_id'],
                     'name' => $dept_mgr['name'],
-                    'label' => 'Department Manager',
+                    'label' => __('department_manager'),
                     'level' => 1
                 ];
             }
@@ -428,7 +428,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                 $chain_details[] = [
                     'emp_id' => $row_hr_bp['emp_id'],
                     'name' => $row_hr_bp['name'],
-                    'label' => 'HR Senior BP',
+                    'label' => __('hr_senior_bp'),
                     'level' => count($chain)
                 ];
             }
@@ -471,9 +471,9 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
             if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
                 // Department name normalization mapping to actual dep_nme values in DB
                 $deptLookup = [
-                    'IT' => 'Information Technology',
-                    'Administration' => 'Administration',
-                    'Transportation' => 'Transportation'
+                    'IT' => __('information_technology'),
+                    'Administration' => __('administration'),
+                    'Transportation' => __('transportation')    
                 ];
                 if ($needs_it) {
                     $it_dept_id = get_department_id_by_name($conDB, $deptLookup['IT']);
@@ -484,7 +484,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                             $chain_details[] = [
                                 'emp_id' => $it_mgr['emp_id'],
                                 'name' => $it_mgr['name'],
-                                'label' => 'IT Team (Asset Clearance)',
+                                'label' => __('it_team_asset_clearance'),
                                 'level' => count($chain)
                             ];
                         }
@@ -500,7 +500,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                             $chain_details[] = [
                                 'emp_id' => $admin_mgr['emp_id'],
                                 'name' => $admin_mgr['name'],
-                                'label' => 'Administration Team (Asset Clearance)',
+                                'label' => __('administration_team_asset_clearance'),
                                 'level' => count($chain)
                             ];
                         }
@@ -516,7 +516,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                             $chain_details[] = [
                                 'emp_id' => $transport_mgr['emp_id'],
                                 'name' => $transport_mgr['name'],
-                                'label' => 'Transportation Team (Asset Clearance)',
+                                'label' => __('transportation_team_asset_clearance'),
                                 'level' => count($chain)
                             ];
                         }
@@ -539,7 +539,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                     $chain_details[] = [
                         'emp_id' => $row_hr_payroll['emp_id'],
                         'name' => $row_hr_payroll['name'],
-                        'label' => 'HR Payroll',
+                        'label' => __('hr_payroll'),
                         'level' => count($chain)
                     ];
                 }
@@ -568,7 +568,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         if ($is_fly_vacation) {
             $sql_gr_officer = "SELECT e.emp_id, e.name FROM employees e 
                                JOIN admin_login al ON e.emp_id = al.emp_id 
-                               WHERE al.user_type = 'gr_officer' AND e.status = 1 
+                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
                                ORDER BY e.emp_id ASC LIMIT 1";
             $res_gr_officer = mysqli_query($conDB, $sql_gr_officer);
             if ($res_gr_officer && ($row_gr_officer = mysqli_fetch_assoc($res_gr_officer))) {
@@ -577,7 +577,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
                     $chain_details[] = [
                         'emp_id' => $row_gr_officer['emp_id'],
                         'name' => $row_gr_officer['name'],
-                        'label' => 'GR Officer (Final - Ticket & Exit Fee)',
+                        'label' => __('hr_payroll_final_ticket_exit_fee'),
                         'level' => count($chain),
                         'is_final' => true
                     ];
@@ -587,10 +587,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         }
         
         // Log the chain BEFORE exclusion
-        error_log("get_asset_clearance_chain: Chain BEFORE exclude_level1: " . json_encode([
-            'chain' => $chain,
-            'chain_details' => array_map(function($d) { return $d['emp_id'] . ':' . $d['label']; }, $chain_details)
-        ]));
+        
         
         // If exclude_level1 is true, remove the first approver from the chain
         // This is used when Level 1 approver is approving and needs to pass the rest of the chain
@@ -604,15 +601,10 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
             }
             unset($detail);
             
-            // Log for debugging
-            error_log("get_asset_clearance_chain: Chain AFTER excluding Level 1: " . json_encode([
-                'chain' => $chain,
-                'chain_details' => array_map(function($d) { return $d['emp_id'] . ':' . $d['label']; }, $chain_details)
-            ]));
+            // Levels renumbered after exclusion
         }
         
-        // Log the final chain being returned
-        error_log("get_asset_clearance_chain: FINAL chain for vacation_id $vacation_id: " . count($chain) . " approvers: " . json_encode($chain));
+        
         
         // Return the chain
         echo json_encode([
@@ -620,7 +612,7 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
             'chain' => $chain,
             'chain_details' => $chain_details,
             'total_levels' => count($chain),
-            'flow_type' => $is_fly_vacation ? 'with_gr_officer' : 'standard'
+            'flow_type' => $is_fly_vacation ? 'with_hr_payroll' : 'standard'
         ]);
         exit;
         
@@ -649,7 +641,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
         $remarks = strtolower($_POST['remarks'] ?? '');
 
         if ($emp_id <= 0) {
-            send_json_response('Error', 'Invalid employee ID.', 'error', 400);
+            send_json_response(__('error'), __('invalid_employee_id'), 'error', 400);
             exit;
         }
 
@@ -667,7 +659,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
         mysqli_stmt_close($stmt_emp);
 
         if (!$emp_data) {
-            send_json_response('Error', 'Employee not found.', 'error', 404);
+            send_json_response(__('error'), __('employee_not_found'), 'error', 404);
             exit;
         }
 
@@ -691,7 +683,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
                 $chain_details[] = [
                     'emp_id' => $supervisor_data['emp_id'],
                     'name' => $supervisor_data['name'],
-                    'label' => 'Direct Supervisor',
+                    'label' => __('direct_supervisor'),
                     'level' => 1
                 ];
 
@@ -711,7 +703,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
                         $chain_details[] = [
                             'emp_id' => $manager_data['emp_id'],
                             'name' => $manager_data['name'],
-                            'label' => 'Supervisor\'s Manager',
+                            'label' => __('supervisors_manager'),
                             'level' => 2
                         ];
                     }
@@ -726,7 +718,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
                     $chain_details[] = [
                         'emp_id' => $dept_mgr['emp_id'],
                         'name' => $dept_mgr['name'],
-                        'label' => 'Department Manager',
+                        'label' => __('department_manager'),
                         'level' => 1
                     ];
                 }
@@ -787,9 +779,9 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
             if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
                 // Department name normalization mapping to actual dep_nme values in DB
                 $deptLookup = [
-                    'IT' => 'Information Technology',
-                    'Administration' => 'Administration',
-                    'Transportation' => 'Transportation'
+                    'IT' => __('information_technology'),
+                    'Administration' => __('administration'),
+                    'Transportation' => __('transportation')
                 ];
                 if ($needs_it) {
                     $it_dept_id = get_department_id_by_name($conDB, $deptLookup['IT']);
@@ -816,7 +808,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
                             $chain_details[] = [
                                 'emp_id' => $admin_mgr['emp_id'],
                                 'name' => $admin_mgr['name'],
-                                'label' => 'Administration Team (Asset Clearance)',
+                                'label' => __('administration_team_asset_clearance'),
                                 'level' => count($chain)
                             ];
                         }
@@ -832,7 +824,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
                             $chain_details[] = [
                                 'emp_id' => $transport_mgr['emp_id'],
                                 'name' => $transport_mgr['name'],
-                                'label' => 'Transportation Team (Asset Clearance)',
+                                'label' => __('transportation_team_asset_clearance'),
                                 'level' => count($chain)
                             ];
                         }
@@ -854,7 +846,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
                     $chain_details[] = [
                         'emp_id' => $row_hr_payroll['emp_id'],
                         'name' => $row_hr_payroll['name'],
-                        'label' => 'HR Payroll',
+                        'label' => __('hr_payroll'),
                         'level' => count($chain)
                     ];
                 }
@@ -868,7 +860,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
         if ($is_fly_vacation) {
             $sql_gr_officer = "SELECT e.emp_id, e.name FROM employees e 
                                JOIN admin_login al ON e.emp_id = al.emp_id 
-                               WHERE al.user_type = 'gr_officer' AND e.status = 1 
+                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
                                ORDER BY e.emp_id ASC LIMIT 1";
             $res_gr_officer = mysqli_query($conDB, $sql_gr_officer);
             if ($res_gr_officer && ($row_gr_officer = mysqli_fetch_assoc($res_gr_officer))) {
@@ -877,7 +869,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
                     $chain_details[] = [
                         'emp_id' => $row_gr_officer['emp_id'],
                         'name' => $row_gr_officer['name'],
-                        'label' => 'GR Officer (Final - Ticket & Exit Fee)',
+                        'label' => __('hr_payroll_final_ticket_exit_fee'),
                         'level' => count($chain),
                         'is_final' => true
                     ];
@@ -892,7 +884,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
             'chain' => $chain,
             'chain_details' => $chain_details,
             'total_levels' => count($chain),
-            'flow_type' => $is_fly_vacation ? 'with_gr_officer' : 'standard'
+            'flow_type' => $is_fly_vacation ? 'with_hr_payroll' : 'standard'
         ]);
         exit;
 
@@ -905,7 +897,7 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
 elseif($ajaxType == 'unassign_asset') {
     try {
         if (empty($_POST['asset_record_id']) || empty($_POST['return_date']) || empty($_POST['return_status'])) {
-            throw new Exception('Required fields are missing.');
+            throw new Exception(__('required_fields_are_missing'));
         }
 
         $attachment_path = null;
@@ -921,7 +913,7 @@ elseif($ajaxType == 'unassign_asset') {
             if (move_uploaded_file($_FILES['return_attachment']['tmp_name'], $targetPath)) {
                 $attachment_path = $targetPath;
             } else {
-                throw new Exception('Server could not save the uploaded file.');
+                throw new Exception(__('server_could_not_save_the_uploaded_file'));
             }
         }
 
@@ -941,9 +933,9 @@ elseif($ajaxType == 'unassign_asset') {
         ]);
 
         if($stmt->rowCount() > 0){
-            send_json_response("Returned!", "Asset has been marked as returned.", "success");
+            send_json_response(__("returned"), __("asset_has_been_marked_as_returned"), "success");
         } else {
-            throw new Exception('Could not update the asset record. It may have already been returned.');
+            throw new Exception(__('could_not_update_asset_record'));
         }
 
     } catch (Exception $e) {
@@ -964,7 +956,7 @@ elseif($ajaxType == 'unassign_asset') {
 } elseif($ajaxType == 'assign_asset') {
     try {
         if (empty($_POST['emp_id']) || empty($_POST['asset_id']) || empty($_POST['assigned_date'])) {
-            throw new Exception('Required fields are missing.');
+            throw new Exception(__('required_fields_are_missing'));
         }
 
         $stmt = $pdo->prepare(
@@ -981,9 +973,9 @@ elseif($ajaxType == 'unassign_asset') {
         ]);
 
         if($stmt->rowCount() > 0){
-            send_json_response("Assigned!", "Asset has been assigned successfully.", "success");
+            send_json_response(__("assigned"), __("asset_has_been_assigned_successfully"), "success");
         } else {
-            throw new Exception('Failed to insert the asset record.');
+            throw new Exception(__('failed_to_insert_the_asset_record'));
         }
 
     } catch (Exception $e) {
@@ -1004,13 +996,13 @@ elseif($ajaxType == 'unassign_asset') {
     $filepathup = "./assets/emp_pics/";
     $imagenameu = $emp_id."".$id."".$emp_name."".$imageName;
     if (empty($data) || (isset($data['error']) && $data['error'] == UPLOAD_ERR_NO_FILE)) {
-        send_json_response("Error", "No Picture uploaded", "error");
+        send_json_response(__("error"), __("no_picture_uploaded"), "error");
     } else {
         // Save the file
         $file_saved = file_put_contents($filepath . $emp_id."".$id."".$emp_name."".$imageName , $data);
         
         if (!$file_saved) {
-            send_json_response("Error", "Failed to save image file", "error");
+            send_json_response(__("error"), __("failed_to_save_image_file"), "error");
             exit;
         }
         
@@ -1019,18 +1011,18 @@ elseif($ajaxType == 'unassign_asset') {
             try {
                 $stmt = $pdo->prepare("INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES (:emp_id, 'Profile Picture', :filepath)");
                 $stmt->execute([':emp_id' => $emp_id, ':filepath' => $filepathup . $imagenameu]);
-                send_json_response("Success!", "Image Uploaded Successfully.", "success");
+                send_json_response(__("success"), __("image_uploaded_successfully"), "success");
             } catch(Exception $e) {
-                send_json_response("Database Error", "The catch block is working. The error was: " . $e->getMessage(), "error");
+                send_json_response(__("database_error"), __("the_catch_block_is_working_the_error_was") . ": " . $e->getMessage(), "error");
             }
         } else {
             // Direct update to employees table
             try {
                 $stmt = $pdo->prepare("UPDATE `employees` SET `avatar` = :avatar WHERE `id` = :id AND `emp_id` = :emp_id");
                 $stmt->execute([':avatar' => $filepathup . $imagenameu, ':id' => $id, ':emp_id' => $emp_id]);
-                send_json_response("Success!", "Image Uploaded Successfully.", "success");
+                send_json_response(__("success"), __("image_uploaded_successfully"), "success");
             } catch(Exception $e) {
-                send_json_response("Database Error", "The catch block is working. The error was: " . $e->getMessage(), "error");
+                send_json_response(__("database_error"), __("the_catch_block_is_working_the_error_was") . ": " . $e->getMessage(), "error");
             }
         }
     }
@@ -1051,7 +1043,7 @@ elseif($ajaxType == 'unassign_asset') {
             $existingSalaryRecord = $checkExistingStmt->fetch();
 
             if ($existingSalaryRecord) {
-                send_json_response("Error", "This employee already has a salary record. Please update the existing record instead.", "error");
+                send_json_response(__("error"), __("this_employee_already_has_a_salary_record_please_update_the_existing_record_instead"), "error");
                 exit;
             }
 
@@ -1063,13 +1055,13 @@ elseif($ajaxType == 'unassign_asset') {
 
             // Verify that the sum of the individual components matches the submitted total
             if (abs($componentsSum - $postedTotal) > 0.01) {
-                send_json_response("Error", "Salary components do not add up to the total.", "error");
+                send_json_response(__("error"), __("salary_components_do_not_add_up_to_the_total"), "error");
                 exit;
             }
 
             // Validate basic salary
             if (empty($_POST['basic']) || (float)$_POST['basic'] <= 0) {
-                send_json_response("Error", "Basic salary is missing or invalid.", "error");
+                send_json_response(__("error"), __("basic_salary_is_missing_or_invalid"), "error");
                 exit;
             }
 
@@ -1079,12 +1071,12 @@ elseif($ajaxType == 'unassign_asset') {
             $masterSalary = $stmt->fetchColumn();
 
             if ($masterSalary === false) {
-                send_json_response("Error", "Employee not found or master salary missing.", "error");
+                send_json_response(__("error"), __("employee_not_found_or_master_salary_missing"), "error");
                 exit;
             }
 
             if (abs($masterSalary - $postedTotal) > 0.01) {
-                send_json_response("Error", "Master salary does not match the posted total salary.", "error");
+                send_json_response(__("error"), __("master_salary_does_not_match_the_posted_total_salary"), "error");
                 exit;
             }
 
@@ -1103,7 +1095,7 @@ elseif($ajaxType == 'unassign_asset') {
 
             // Verify we have data to insert
             if (count($columns) <= 1) {
-                send_json_response("Error", "No valid salary components provided.", "error");
+                send_json_response(__("error"), __("no_valid_salary_components_provided"), "error");
                 exit;
             }
 
@@ -1133,18 +1125,18 @@ elseif($ajaxType == 'unassign_asset') {
             // Commit transaction
             $pdo->commit();
 
-            send_json_response("Success", "Salary updated successfully.", "success");
+            send_json_response(__("success"), __("salary_updated_successfully"), "success");
 
         } catch (PDOException $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            send_json_response("Error", "Database error: " . $e->getMessage(), "error");
+            send_json_response(__("error"), __("database_error") . ": " . $e->getMessage(), "error");
         } catch (Exception $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            send_json_response("Error", "General error: " . $e->getMessage(), "error");
+            send_json_response(__("error"), __("general_error") . ": " . $e->getMessage(), "error");
         }
         exit;
 } elseif($ajaxType == 'add_social_links'){
@@ -1227,12 +1219,12 @@ elseif($ajaxType == 'unassign_asset') {
         $stmt = $pdo->prepare("UPDATE `employees` SET `iqama_exp` = :iqama_exp, `iqama_exp_g` = :iqama_exp_g WHERE `id` = :id");
         $stmt->execute([':iqama_exp' => $iqama_exp, ':iqama_exp_g' => $iqama_exp_g, ':id' => $_POST['id']]);
         if($stmt->rowCount() > 0){
-            send_json_response("Updated!", "This record has been update successfully.", "success");
+            send_json_response(__("updated"), __("this_record_has_been_updated_successfully"), "success");
         } else {
-            send_json_response("Error!", "Record not updated because there are some error.", "error");
+            send_json_response(__("error"), __("record_not_updated_because_there_are_some_error"), "error");
         }
     } catch(Exception $e) {
-        send_json_response("Database Error", "The catch block is working. The error was: " . $e->getMessage(), "error");
+        send_json_response(__("database_error"), __("the_catch_block_is_working_the_error_was") . ": " . $e->getMessage(), "error");
     }
 } elseif($ajaxType == 'emp_doc_type'){
     $stmt = mysqli_query($conDB, "SELECT * FROM `docu_type` ORDER BY `duc_type` REGEXP '^[^A-Za-z]' ASC, `duc_type`");
@@ -1250,7 +1242,7 @@ elseif($ajaxType == 'unassign_asset') {
     try {
         // Validate required inputs
         if (!isset($_POST['id'], $_POST['docu_typ'], $_POST['emp_id'], $_POST['emptype'])) {
-            throw new Exception('Missing required parameters');
+            throw new Exception(__('missing_required_parameters'));
         }
         // Sanitize inputs
         $id = filter_var($_POST['id'], FILTER_SANITIZE_NUMBER_INT);
@@ -1259,7 +1251,7 @@ elseif($ajaxType == 'unassign_asset') {
         $emptype = $_POST['emptype'];
         // File upload handling
         if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
-            throw new Exception('No file uploaded or upload error');
+            throw new Exception(__('no_file_uploaded_or_upload_error'));
         }
         $uploadDir = "./../../assets/emp_documents/";
         $filepathup = "./assets/emp_documents/";
@@ -1269,7 +1261,7 @@ elseif($ajaxType == 'unassign_asset') {
         $file_ext = pathinfo($fileName, PATHINFO_EXTENSION);
         $allowed_extensions = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'];
         if (!in_array(strtolower($file_ext), $allowed_extensions)) {
-            throw new Exception('Invalid file type. Allowed types: ' . implode(', ', $allowed_extensions));
+            throw new Exception(__('invalid_file_type_allowed_types') . ': ' . implode(', ', $allowed_extensions));
         }
         // Generate unique filename
         $rand = rand(0000, 9999) . time();
@@ -1278,14 +1270,46 @@ elseif($ajaxType == 'unassign_asset') {
 
         // Move uploaded file
         if (!move_uploaded_file($tmp_name, $uploadFilePath)) {
-            throw new Exception('Failed to move uploaded file');
+            throw new Exception(__('failed_to_move_uploaded_file'));
         }
+        
         // Begin transaction for multiple database operations
         $pdo->beginTransaction();
         
+        // Check if this is employee self-upload (emptype == 'employee') or admin upload
+        if ($emptype === 'employee') {
+            // Employee upload: needs approval
+            // First, create temp request for approval
+            $stmt1 = $pdo->prepare("INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES (:emp_id, 'Employee Documents', :filepath)");
+            $stmt1->execute([':emp_id' => $emp_id_up, ':filepath' => $filepathup . $filename_po]);
+            
+            // Get the temp request ID
+            $tempRequestId = (int)$pdo->lastInsertId();
+            
+            // Insert into emp_docu with status = 'I' (Inactive/Pending) and link to temp request
+            $stmt2 = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`, `status`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid, 'I')");
+            $stmt2->execute([
+                ':emp_id'   => $emp_id_up,
+                ':docu_typ' => $docu_typ_up,
+                ':filename' => $filename_po,
+                ':ext'      => $file_ext,
+                ':pgid'     => $tempRequestId
+            ]);
+        } else {
+            // Admin/HR upload: direct approval
+            $stmt = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`, `status`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid, 'A')");
+            $stmt->execute([
+                ':emp_id'   => $emp_id_up,
+                ':docu_typ' => $docu_typ_up,
+                ':filename' => $filename_po,
+                ':ext'      => $file_ext,
+                ':pgid'     => $id // Use the posted id as pgid
+            ]);
+        }
+        
         // Commit transaction if all queries succeeded
         $pdo->commit();
-        send_json_response("Added!", "Record has been added successfully.", "success");
+        send_json_response(__("success"), __("document_has_been_uploaded_successfully"), "success");
     } catch (PDOException $e) {
         // Rollback transaction on error
         if (isset($pdo) && $pdo->inTransaction()) {
@@ -1295,13 +1319,13 @@ elseif($ajaxType == 'unassign_asset') {
         if (isset($uploadFilePath) && file_exists($uploadFilePath)) {
             unlink($uploadFilePath);
         }
-        send_json_response("Database Error", "Failed to add record: " . $e->getMessage(), "error");
+        send_json_response(__("database_error"), __("failed_to_add_record") . ": " . $e->getMessage(), "error");
     } catch (Exception $e) {
         // Delete uploaded file if validation failed
         if (isset($uploadFilePath) && file_exists($uploadFilePath)) {
             unlink($uploadFilePath);
         }
-        send_json_response("Error", $e->getMessage(), "error");
+        send_json_response(__("error"), $e->getMessage(), "error");
     }
 } elseif($ajaxType == 'emp_temp_contannt'){
     $ckh_query = mysqli_query($conDB, "SELECT * FROM `employee_temp_contants` WHERE `status` = 'A' AND `emp_id` = '".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
@@ -1312,20 +1336,20 @@ elseif($ajaxType == 'unassign_asset') {
         if ($datackh['type'] == 'Profile Picture' ) {
             mysqli_query($conDB, "UPDATE `employees` SET `avatar`='".$datackh['path']."' WHERE `emp_id`='".(int)$_POST['empid']."' ");
             mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
-            send_json_response("Approved!", "Record has been approve successfully.", "success");
+            send_json_response(__("approved"), __("record_has_been_approve_successfully"), "success");
         } elseif($datackh['type'] == 'Employee Documents'){
             mysqli_query($conDB, "UPDATE `emp_docu` SET `status`='A' WHERE `emp_id`='".(int)$_POST['empid']."' AND `pgid` = '".(int)$_POST['id']."' "); // Corrected WHERE clause
             mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
-            send_json_response("Approved!", "Record has been approve successfully.", "success");
+            send_json_response(__("approved"), __("record_has_been_approve_successfully"), "success");
         } else {
             mysqli_query($conDB, "UPDATE `employees` SET `".$datackh['type']."` ='".$datackh['path']."' WHERE `emp_id`='".(int)$_POST['empid']."'"); // Used $datackh['type']
     
             mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = 'approve' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
-            send_json_response("Approved!", "Record has been approve successfully.", "success");
+            send_json_response(__("approved"), __("record_has_been_approve_successfully"), "success");
         }
     } else {
         mysqli_query($conDB, "UPDATE `employee_temp_contants` SET `status`='I', `notes` = '".$_POST['notes']."' WHERE `emp_id`='".(int)$_POST['empid']."' AND `id` = '".(int)$_POST['id']."' ");
-        send_json_response("Rejected!", "Record not approve.", "error");
+        send_json_response(__("rejected"), __("record_not_approve"), "error");
     }
 }elseif ($ajaxType == "bank_list") {
     $stmt = mysqli_query($conDB, "SELECT * FROM `bank_list` ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name`");
@@ -1347,7 +1371,7 @@ elseif($ajaxType == 'unassign_asset') {
     if (empty($empid)) {
         echo json_encode([
             'status' => 400,
-            'message' => 'Employee ID is required'
+            'message' => __('employee_id_is_required')
         ]);
         exit;
     }
@@ -1355,7 +1379,7 @@ elseif($ajaxType == 'unassign_asset') {
     if (empty($type)) {
         echo json_encode([
             'status' => 400,
-            'message' => 'Type is required'
+            'message' => __('type_is_required')
         ]);
         exit;
     }
@@ -1383,9 +1407,9 @@ elseif($ajaxType == 'unassign_asset') {
 }elseif ($ajaxType == "emp_edit_contannt") {
     $sql = "INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES ('".(int)$_POST['empid']."', '".$_POST['edit_contant_check']."', '".$_POST[$_POST['edit_contant_check']]."')";
     if(mysqli_query($conDB, $sql)){
-         send_json_response("Added!", "Record has been added successfully.", "success");
+         send_json_response(__("added"), __("record_has_been_added_successfully"), "success");
     } else {
-        send_json_response("Error!", "Record not added because there are some error.", "error");
+        send_json_response(__("error"), __("record_not_added_because_there_are_some_error"), "error");
     }
 } elseif ($ajaxType == "add_note") {
     try {
@@ -1396,7 +1420,7 @@ elseif($ajaxType == 'unassign_asset') {
         
         // Validate required fields
         if (empty($empid) || empty($note) || empty($noteType)) {
-            send_json_response("Error!", "Missing required fields.", "error");
+            send_json_response(__("error"), __("missing_required_fields"), "error");
             exit;
         }
 
@@ -1410,13 +1434,13 @@ elseif($ajaxType == 'unassign_asset') {
             
             // Validate file type
             if (!in_array($file['type'], $allowedTypes)) {
-                send_json_response("Error!", "Invalid file type. Only PDF, DOC, DOCX, JPG, PNG allowed.", "error");
+                send_json_response(__("error"), __("invalid_file_type_only_pdf_doc_docx_jpg_png_allowed"), "error");
                 exit;
             }
             
             // Validate file size (max 5MB)
             if ($file['size'] > 5 * 1024 * 1024) {
-                send_json_response("Error!", "File size must be less than 5MB.", "error");
+                send_json_response(__("error"), __("file_size_must_be_less_than_5mb"), "error");
                 exit;
             }
             
@@ -1435,7 +1459,7 @@ elseif($ajaxType == 'unassign_asset') {
             if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
                 $attachmentPath = 'assets/emp_notes/' . $uniqueFilename;
             } else {
-                send_json_response("Error!", "Failed to upload attachment.", "error");
+                send_json_response(__("error"), __("failed_to_upload_attachment"), "error");
                 exit;
             }
         }
@@ -1453,16 +1477,16 @@ elseif($ajaxType == 'unassign_asset') {
         
         if ($stmt->execute($dataPost)) {
             $message = $attachmentPath 
-                ? "Note with attachment has been added successfully." 
-                : "Note has been added successfully.";
-            send_json_response("Added!", $message, "success");
+                ? __("note_with_attachment_has_been_added_successfully") 
+                : __("note_has_been_added_successfully");
+            send_json_response(__("added"), $message, "success");
         } else {
-            send_json_response("Error!", "Failed to add note. Please try again.", "error");
+            send_json_response(__("error"), __("failed_to_add_note_please_try_again"), "error");
         }
         
     } catch (Exception $e) {
-        error_log("Add Note Error: " . $e->getMessage());
-        send_json_response("Error!", "An error occurred while adding the note.", "error");
+        
+        send_json_response(__("error"), __("an_error_occurred_while_adding_the_note"), "error");
     }
 } elseif($ajaxType == "view_notes"){
     // Use INNER JOIN to ensure only employees with notes are returned.
@@ -1495,7 +1519,7 @@ elseif($ajaxType == 'unassign_asset') {
         $request = $stmt->fetch();
 
         if (!$request) {
-            echo json_encode(['type' => 'error', 'title' => 'Not Found', 'message' => 'The original request could not be found.']);
+            echo json_encode(['type' => 'error', 'title' => __("not_found"), 'message' => __("the_original_request_could_not_be_found")]);
             exit;
         }
         $updateField = '';
@@ -1520,19 +1544,18 @@ elseif($ajaxType == 'unassign_asset') {
             $docStmt->execute([$empId, $requestId]);
             $rowsUpdated = $docStmt->rowCount();
             
-            // Log for debugging
-            error_log("Document Approval: emp_id={$empId}, pgid={$requestId}, rows_updated={$rowsUpdated}");
+            
             
             if ($rowsUpdated === 0) {
-                error_log("WARNING: No emp_docu records found with emp_id={$empId} AND pgid={$requestId}");
+                // No emp_docu records found to update
             }
         }
         // 5. Update the status of the temp request to 'Approved'
         $finalStmt = $pdo->prepare("UPDATE employee_temp_contants SET status = 'Approved', notes = ? WHERE id = ?");
         $finalStmt->execute([$notes, $requestId]);
-        echo json_encode(['type' => 'success', 'title' => 'Approved!', 'message' => 'Employee information has been successfully updated.']);
+        echo json_encode(['type' => 'success', 'title' => __('approved'), 'message' => __('employee_information_has_been_successfully_updated')]);
     } catch (PDOException $e) {
-        echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => 'An error occurred while updating the data.']);
+        echo json_encode(['type' => 'error', 'title' => __('database_error'), 'message' => __('an_error_occurred_while_updating_the_data')]);
     }
     // --- If the request is REJECTED ---
     } elseif ($approvalAction == 'not_approve') {
@@ -1552,12 +1575,12 @@ elseif($ajaxType == 'unassign_asset') {
                     // Verify file exists and delete it
                     if ($filePath && file_exists($filePath)) {
                         if (unlink($filePath)) {
-                            error_log("Rejected file deleted successfully: {$filePath}");
+                            // Rejected file deleted successfully
                         } else {
-                            error_log("Failed to delete file: {$filePath}");
+                            // Failed to delete file
                         }
                     } else {
-                        error_log("File not found for deletion: " . __DIR__ . '/../../' . $relativePath);
+                        
                     }
                 }
                 
@@ -1565,20 +1588,18 @@ elseif($ajaxType == 'unassign_asset') {
                 if ($request['type'] === 'Employee Documents' || $request['type'] === 'Upload Documents') {
                     $deleteDocStmt = $pdo->prepare("DELETE FROM emp_docu WHERE emp_id = ? AND pgid = ? AND status = 'I'");
                     $deleteDocStmt->execute([$empId, $requestId]);
-                    error_log("Rejected document removed from emp_docu: emp_id={$empId}, pgid={$requestId}");
                 }
             }
             
             // 4. Update the status to 'Rejected' and add the reason
             $finalStmt = $pdo->prepare("UPDATE employee_temp_contants SET status = 'Rejected', notes = ? WHERE id = ?");
             $finalStmt->execute([$notes, $requestId]);
-            echo json_encode(['type' => 'success', 'title' => 'Rejected', 'message' => 'The update request has been rejected and the file has been deleted.']);
+            echo json_encode(['type' => 'success', 'title' => __('rejected'), 'message' => __('the_update_request_has_been_rejected_and_the_file_has_been_deleted')]);
         } catch (PDOException $e) {
-            error_log("Rejection error: " . $e->getMessage());
-            echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => 'An error occurred while updating the request status.']);
+            echo json_encode(['type' => 'error', 'title' => __('database_error'), 'message' => __('an_error_occurred_while_updating_the_request_status')]);
         }
     } else {
-        echo json_encode(['type' => 'error', 'title' => 'Invalid Action', 'message' => 'No valid action was submitted.']);
+        echo json_encode(['type' => 'error', 'title' => __('invalid_action'), 'message' => __('no_valid_action_was_submitted')]);
     }
     exit;
 } elseif(isset($ajaxType) && $ajaxType == 'create_update_request'){
@@ -1593,7 +1614,7 @@ elseif($ajaxType == 'unassign_asset') {
 
     // Basic Validation
     if (empty($empId) || empty($type)) {
-        echo json_encode(['type' => 'error', 'title' => 'Missing Information', 'message' => 'Employee ID or request type is missing.']);
+        echo json_encode(['type' => 'error', 'title' => __('missing_information'), 'message' => __('employee_id_or_request_type_is_missing')]);
         exit;
     }
 
@@ -1607,7 +1628,7 @@ elseif($ajaxType == 'unassign_asset') {
 
             $data = base64_decode($data);
             if ($data === false) {
-                echo json_encode(['type' => 'error', 'title' => 'Upload Failed', 'message' => 'Base64 decode failed.']);
+                echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('base64_decode_failed')]);
                 exit;
             }
 
@@ -1621,11 +1642,11 @@ elseif($ajaxType == 'unassign_asset') {
             if (file_put_contents($targetPath, $data)) {
                 $path = $targetPath;
             } else {
-                echo json_encode(['type' => 'error', 'title' => 'Upload Failed', 'message' => 'Could not save the cropped image.']);
+                echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('could_not_save_the_cropped_image')]);
                 exit;
             }
         } else {
-            echo json_encode(['type' => 'error', 'title' => 'Invalid Image', 'message' => 'The provided image data was not in a valid format.']);
+            echo json_encode(['type' => 'error', 'title' => __('invalid_image'), 'message' => __('the_provided_image_data_was_not_in_a_valid_format')]);
             exit;
         }
     }
@@ -1642,14 +1663,14 @@ elseif($ajaxType == 'unassign_asset') {
         if (move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
             $path = $targetPath;
         } else {
-            echo json_encode(['type' => 'error', 'title' => 'Upload Failed', 'message' => 'Server could not save the uploaded file.']);
+            echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('server_could_not_save_the_uploaded_file')]);
             exit;
         }
     }
 
     // Final check: ensure a value or a path was provided
     if (empty($newValue) && empty($path)) {
-        echo json_encode(['type' => 'error', 'title' => 'Invalid Input', 'message' => 'Please provide a new value or select a file to submit.']);
+        echo json_encode(['type' => 'error', 'title' => __('invalid_input'), 'message' => __('please_provide_a_new_value_or_select_a_file_to_submit')]);
         exit;
     }
 
@@ -1659,24 +1680,109 @@ elseif($ajaxType == 'unassign_asset') {
         $stmt = mysqli_prepare($conDB, $sql);
         mysqli_stmt_bind_param($stmt, 'isss', $empId, $type, $newValue, $path);
         mysqli_stmt_execute($stmt);
+        $request_id = mysqli_insert_id($conDB);
         mysqli_stmt_close($stmt); // <-- FIX
+
+        // Get employee details for email
+        $emp_query = "SELECT e.emp_id, e.name, e.email, e.mobile, e.address, e.passport_number, e.passport_exp, 
+                      d.dep_nme as department 
+                      FROM employees e 
+                      LEFT JOIN department d ON e.dept = d.id 
+                      WHERE e.emp_id = ?";
+        $emp_stmt = mysqli_prepare($conDB, $emp_query);
+        mysqli_stmt_bind_param($emp_stmt, 'i', $empId);
+        mysqli_stmt_execute($emp_stmt);
+        $emp_result = mysqli_stmt_get_result($emp_stmt);
+        $employee = mysqli_fetch_assoc($emp_result);
+        mysqli_stmt_close($emp_stmt);
+
+        // Get current value based on field type
+        $current_value = 'N/A';
+        if ($employee) {
+            switch($type) {
+                case 'Mobile':
+                    $current_value = $employee['mobile'] ?? 'N/A';
+                    break;
+                case 'Email':
+                    $current_value = $employee['email'] ?? 'N/A';
+                    break;
+                case 'Address':
+                    $current_value = $employee['address'] ?? 'N/A';
+                    break;
+                case 'Passport No':
+                    $current_value = $employee['passport_number'] ?? 'N/A';
+                    break;
+                case 'Passport Exp':
+                    $current_value = $employee['passport_exp'] ?? 'N/A';
+                    break;
+                case 'Profile Picture':
+                    $current_value = 'See current profile picture';
+                    break;
+                case 'Upload Documents':
+                    $current_value = 'New document uploaded';
+                    break;
+            }
+        }
+
+        // Get all HR users to notify
+        $hr_query = "SELECT al.email, al.fullname 
+                     FROM admin_login al 
+                     WHERE al.user_type = 'hr' 
+                     AND al.status = 1 
+                     AND al.email IS NOT NULL 
+                     AND al.email != ''";
+        $hr_result = mysqli_query($conDB, $hr_query);
+        
+        if ($hr_result && mysqli_num_rows($hr_result) > 0) {
+            $base_url = get_base_url();
+            $request_url = $base_url . '/emp_temp_contant.php';
+            
+            // Prepare email template data
+            $template_data = [
+                'EMP_ID' => $employee['emp_id'] ?? $empId,
+                'EMP_NAME' => $employee['name'] ?? 'Unknown Employee',
+                'UPDATE_TYPE' => $type,
+                'CURRENT_VALUE' => $current_value,
+                'NEW_VALUE' => $newValue ? $newValue : 'See attachment',
+                'SUBMISSION_DATE' => date('Y-m-d H:i:s'),
+                'REQUEST_URL' => $request_url,
+                'APPROVER_NAME' => '' // Will be set per HR user
+            ];
+            
+            // Send email to each HR user
+            while ($hr_user = mysqli_fetch_assoc($hr_result)) {
+                $template_data['APPROVER_NAME'] = $hr_user['fullname'];
+                
+                if (function_exists('send_approval_email')) {
+                    send_approval_email(
+                        $conDB,
+                        $hr_user['email'],
+                        $hr_user['fullname'],
+                        'Employee Update Request - ' . $type,
+                        'modification_request',
+                        $template_data
+                    );
+                }
+            }
+            mysqli_free_result($hr_result);
+        }
 
         // Send a success response back to the browser
         echo json_encode([
             'type' => 'success',
-            'title' => 'Request Submitted!',
-            'message' => 'Your request to update your ' . strtolower($type) . ' has been sent to HR for approval.'
+            'title' => __('request_submitted'),
+            'message' => sprintf(__('your_request_to_update_your_s_has_been_sent_to_hr_for_approval'), strtolower($type))
         ]);
 
     } catch (Exception $e) {
-        echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => 'Could not submit your request at this time.']);
+        echo json_encode(['type' => 'error', 'title' => __('database_error'), 'message' => __('could_not_submit_your_request_at_this_time')]);
     }
     // IMPORTANT: Stop script execution after handling the AJAX request
     exit;
 } elseif ($ajaxType == 'get_emp_vacation_details') {
     $empid = $_POST['empid'] ?? null;
     if (!$empid) {
-        echo json_encode(['status' => 400, 'message' => 'Employee ID is required.']);
+        echo json_encode(['status' => 400, 'message' => __('employee_id_is_required')]);
         exit;
     }
 
@@ -1697,7 +1803,7 @@ elseif($ajaxType == 'unassign_asset') {
         echo json_encode(['status' => 200, 'data' => $data]);
     } else {
         $result->free(); // <-- FIX
-        echo json_encode(['status' => 404, 'message' => 'Employee not found or has no vacation contract assigned.']);
+        echo json_encode(['status' => 404, 'message' => __('employee_not_found_or_has_no_vacation_contract_assigned')]);
     }
     $stmt->close();
     exit;
@@ -1738,14 +1844,14 @@ elseif($ajaxType == 'unassign_asset') {
             echo json_encode([
                 'status' => 404,
                 'balance' => 0,
-                'message' => 'No vacation balance record found.'
+                'message' => __('no_vacation_balance_record_found')
             ]);
         }
     } else {
         echo json_encode([
             'status' => 400,
             'balance' => 0,
-            'message' => 'Invalid employee ID.'
+            'message' => __('invalid_employee_id')
         ]);
     }
     exit;
@@ -1791,14 +1897,14 @@ elseif($ajaxType == 'unassign_asset') {
             echo json_encode([
                 'status' => 404,
                 'salary' => '0.00',
-                'message' => 'Employee salary data not found.'
+                'message' => __('employee_salary_data_not_found')
             ]);
         }
     } else {
         echo json_encode([
             'status' => 400,
             'salary' => '0.00',
-            'message' => 'Invalid employee ID or days.'
+            'message' => __('invalid_employee_id_or_days')
         ]);
     }
     exit;
@@ -1815,13 +1921,13 @@ elseif($ajaxType == 'get_document_types') {
         echo json_encode([
             'status' => 200,
             'data' => $documentTypes,
-            'message' => 'Document types loaded successfully.'
+            'message' => __('document_types_loaded_successfully')
         ]);
     } catch (PDOException $e) {
         echo json_encode([
             'status' => 500,
             'data' => [],
-            'message' => 'Error loading document types: ' . $e->getMessage()
+            'message' => __('error_loading_document_types') . ': ' . $e->getMessage()
         ]);
     }
     exit;
@@ -1845,22 +1951,22 @@ elseif($ajaxType == 'upload_employee_document') {
 
         // Basic validation
         if ($emp_id_up <= 0) {
-            send_json_response("Error", "Invalid employee ID.", "error");
+            send_json_response("error", __("invalid_employee_id"), "error");
             exit;
         }
         if (empty($docu_typ_up)) {
-            send_json_response("Error", "Document type is required.", "error");
+            send_json_response("error", __("document_type_is_required"), "error");
             exit;
         }
         if (!$file || !isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
-            send_json_response("Error", "No file uploaded or upload error.", "error");
+            send_json_response("error", __("no_file_uploaded_or_upload_error"), "error");
             exit;
         }
 
         // Validate file size (max 5MB)
         $maxFileSize = 5 * 1024 * 1024;
         if (($file['size'] ?? 0) > $maxFileSize) {
-            send_json_response("Error", "File size exceeds 5MB limit.", "error");
+            send_json_response("error", __("file_too_large_5"), "error");
             exit;
         }
 
@@ -1868,7 +1974,7 @@ elseif($ajaxType == 'upload_employee_document') {
         $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png'];
         if (!in_array($file_ext, $allowed_extensions)) {
-            send_json_response("Error", 'Invalid file type. Allowed: ' . implode(', ', $allowed_extensions), "error");
+            send_json_response("error", __('invalid_file_type_allowed_types') . ': ' . implode(', ', $allowed_extensions), "error");
             exit;
         }
 
@@ -1887,7 +1993,7 @@ elseif($ajaxType == 'upload_employee_document') {
 
         // Move uploaded file
         if (!move_uploaded_file($file['tmp_name'], $uploadFilePath)) {
-            send_json_response("Error", "Failed to save uploaded file.", "error");
+            send_json_response("error", __("failed_to_save_uploaded_file"), "error");
             exit;
         }
 
@@ -1904,7 +2010,7 @@ elseif($ajaxType == 'upload_employee_document') {
             $tempRequestId = (int)$pdo->lastInsertId();
             
             // Log for debugging
-            error_log("Document Upload: emp_id={$emp_id_up}, tempRequestId={$tempRequestId}, filename={$filename_po}");
+            
 
             // Insert into emp_docu with status = 'I' and link to temp request via pgid
             $stmt2 = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`, `status`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid, 'I')");
@@ -1916,8 +2022,7 @@ elseif($ajaxType == 'upload_employee_document') {
                 ':pgid'     => $tempRequestId // Link to temp request for approval
             ]);
             
-            // Log the inserted emp_docu record
-            error_log("emp_docu inserted with pgid={$tempRequestId}, status=I");
+            
         } else {
             // Direct admin upload -> insert without status (let DB default apply) and use posted pgid (or 0)
             $stmt = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid)");
@@ -1931,7 +2036,7 @@ elseif($ajaxType == 'upload_employee_document') {
         }
 
         $pdo->commit();
-        send_json_response("Success", "Document uploaded successfully.", "success");
+        send_json_response("success", __("document_uploaded_successfully"), "success");
     } catch (PDOException $e) {
         if (isset($pdo) && $pdo->inTransaction()) {
             $pdo->rollBack();
@@ -1939,12 +2044,12 @@ elseif($ajaxType == 'upload_employee_document') {
         if (isset($uploadFilePath) && file_exists($uploadFilePath)) {
             unlink($uploadFilePath);
         }
-        send_json_response("Database Error", "Failed to save record: " . $e->getMessage(), "error");
+        send_json_response("error", __("failed_to_save_record") . ": " . $e->getMessage(), "error");
     } catch (Exception $e) {
         if (isset($uploadFilePath) && file_exists($uploadFilePath)) {
             unlink($uploadFilePath);
         }
-        send_json_response("Error", $e->getMessage(), "error");
+        send_json_response("error", $e->getMessage(), "error");
     }
 }
 

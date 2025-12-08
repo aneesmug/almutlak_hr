@@ -22,7 +22,8 @@ $can_see_all_companies = (
     $user_type == 'administrator' ||
     $user_dept == 5 || // HR Department
     $isHR || 
-    $isDeptHr
+    $isDeptHr ||
+    $user_dept == 1 // Administration Department
 );
 
 // If user cannot see all companies, verify this company has employees in their department

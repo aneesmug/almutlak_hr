@@ -280,7 +280,7 @@ try {
     if($pdo->inTransaction()){
         $pdo->rollBack();
     }
-    error_log('Payroll processing error: ' . $e->getMessage());
+    // error_log('Payroll processing error: ' . $e->getMessage());
     echo json_encode(['status' => 'error', 'message' => 'Processing failed: ' . $e->getMessage()]);
 }
 
@@ -304,8 +304,12 @@ function addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary) 
 /**
  * Checks for active loans and inserts a deduction for the monthly installment,
  * but only if a loan deduction doesn't already exist (checks for any loan-related deduction).
- * MODIFIED: Now checks for ANY loan deduction (not just "Loan Installment") to work with 
- * automated loan approval system that creates specific loan deductions.
+ * 
+ * ENHANCED WITH SKIP LOGIC:
+ * - Checks emp_loan_monthly_status table for month-specific skip status (status = 0)
+ * - If month is skipped, calculates carry-forward amount for next active months
+ * - Distributes skipped amounts across remaining loan term
+ * - Respects manual deduction mode
  */
 function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
     // If employee has any approved loans set to manual mode, do not auto-insert deductions
@@ -315,50 +319,128 @@ function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
     if ($stmtHasManual->fetchColumn()) {
         return; // Respect manual mode: no automatic loan deduction creation
     }
+    
     // Check if ANY loan-related deduction already exists for this month
     $stmtCheck = $pdo->prepare("SELECT id FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND (deduction = 'Loan Installment' OR deduction LIKE '%Loan%')");
     $stmtCheck->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     if ($stmtCheck->fetch()) {
         return; // Skip if any loan deduction already exists
     }
-    $payrollMonthEnd = date('Y-m-t', strtotime($monthYear . '-01'));
-    // Fetch latest approved automatic loan (even if start_date invalid) and decide effective start date in PHP.
-    $stmtLoan = $pdo->prepare("SELECT id, total_payable, monthly_deduction, deduction_mode, start_date, created_at FROM emp_loan WHERE emp_id = :emp_id AND status = 'approved' AND deduction_mode = 'automatic' ORDER BY id DESC LIMIT 1");
+    
+    // Fetch latest approved automatic loan
+    $stmtLoan = $pdo->prepare("SELECT id, inv_no, total_payable, monthly_deduction, deduction_mode, start_date, end_date, created_at FROM emp_loan WHERE emp_id = :emp_id AND status = 'approved' AND deduction_mode = 'automatic' ORDER BY id DESC LIMIT 1");
     $stmtLoan->execute([':emp_id' => $empId]);
     $loan = $stmtLoan->fetch(PDO::FETCH_ASSOC);
-    if ($loan) {
-        // Extra safety: skip if deduction_mode somehow not automatic
-        if (isset($loan['deduction_mode']) && $loan['deduction_mode'] !== 'automatic') {
-            return; // Manual mode: do not auto insert deduction
-        }
-        // Determine effective start date: prefer start_date, fallback to created_at
-        $rawStart = $loan['start_date'];
-        if (!$rawStart || $rawStart === '0000-00-00') {
-            $rawStart = substr($loan['created_at'],0,10); // fallback to created_at date
-        }
-        // If effective start date is after payroll month end, skip until that month
-        if (strtotime($rawStart) > strtotime($payrollMonthEnd)) {
-            return; // Not started yet in this payroll period
-        }
-        $loanId = $loan['id'];
-        $stmtPaid = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM emp_loan_payments WHERE loan_id = :loan_id");
-        $stmtPaid->execute([':loan_id' => $loanId]);
-        $totalPaid = $stmtPaid->fetchColumn();
-        $remainingBalance = $loan['total_payable'] - $totalPaid;
-        if ($remainingBalance > 0) {
-            $deductionAmount = min($loan['monthly_deduction'], $remainingBalance);
-            $stmtInsertDeduction = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status) VALUES (:emp_id, 'Loan Installment', :amount, :month_year, 1)");
-            $stmtInsertDeduction->execute([':emp_id' => $empId, ':amount' => number_format($deductionAmount, 2, '.', ''), ':month_year' => $monthYear]);
-            
-            // MODIFIED: Added payment_method
-            $stmtInsertPayment = $pdo->prepare("INSERT INTO emp_loan_payments (loan_id, payment_date, amount, payment_method) VALUES (:loan_id, :payment_date, :amount, 'payroll')");
-            $stmtInsertPayment->execute([':loan_id' => $loanId, ':payment_date' => $payrollMonthEnd, ':amount' => number_format($deductionAmount, 2, '.', '')]);
-
-            if (($totalPaid + $deductionAmount) >= $loan['total_payable']) {
-                $stmtUpdateLoan = $pdo->prepare("UPDATE emp_loan SET status = 'paid' WHERE id = :loan_id");
-                $stmtUpdateLoan->execute([':loan_id' => $loanId]);
-            }
-        }
+    
+    if (!$loan) {
+        return; // No automatic loan found
+    }
+    
+    // Extra safety: skip if deduction_mode somehow not automatic
+    if (isset($loan['deduction_mode']) && $loan['deduction_mode'] !== 'automatic') {
+        return; // Manual mode: do not auto insert deduction
+    }
+    
+    // Determine effective start date: prefer start_date, fallback to created_at
+    $rawStart = $loan['start_date'];
+    if (!$rawStart || $rawStart === '0000-00-00') {
+        $rawStart = substr($loan['created_at'], 0, 10);
+    }
+    
+    // If effective start date is after payroll month end, skip until that month
+    if (strtotime($rawStart) > strtotime($payrollMonthEnd)) {
+        return; // Not started yet in this payroll period
+    }
+    
+    $loanId = $loan['id'];
+    
+    // === NEW: CHECK MONTHLY STATUS ===
+    // Check if this month is marked as skip (status = 0) in emp_loan_monthly_status
+    $stmtMonthStatus = $pdo->prepare("SELECT status, skip_reason FROM emp_loan_monthly_status WHERE loan_id = :loan_id AND month_year = :month_year");
+    $stmtMonthStatus->execute([':loan_id' => $loanId, ':month_year' => $monthYear]);
+    $monthStatus = $stmtMonthStatus->fetch(PDO::FETCH_ASSOC);
+    
+    // If explicitly skipped (status = 0), do not create deduction
+    if ($monthStatus && $monthStatus['status'] == 0) {
+        // Skip this month - the deduction will be carried forward automatically
+        // when future months are processed
+        return;
+    }
+    
+    // Calculate remaining balance and skipped amounts
+    $stmtPaid = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM emp_loan_payments WHERE loan_id = :loan_id");
+    $stmtPaid->execute([':loan_id' => $loanId]);
+    $totalPaid = $stmtPaid->fetchColumn();
+    $remainingBalance = $loan['total_payable'] - $totalPaid;
+    
+    if ($remainingBalance <= 0) {
+        // Loan fully paid, mark as paid if not already
+        $stmtUpdateLoan = $pdo->prepare("UPDATE emp_loan SET status = 'paid' WHERE id = :loan_id AND status != 'paid'");
+        $stmtUpdateLoan->execute([':loan_id' => $loanId]);
+        return;
+    }
+    
+    // === CARRY-FORWARD LOGIC ===
+    // Count how many months were skipped before this month
+    $stmtSkippedCount = $pdo->prepare("
+        SELECT COUNT(*) 
+        FROM emp_loan_monthly_status 
+        WHERE loan_id = :loan_id 
+        AND status = 0 
+        AND month_year < :month_year 
+        AND month_year >= :start_month
+    ");
+    $startMonth = date('Y-m', strtotime($rawStart));
+    $stmtSkippedCount->execute([
+        ':loan_id' => $loanId, 
+        ':month_year' => $monthYear,
+        ':start_month' => $startMonth
+    ]);
+    $skippedMonthsCount = $stmtSkippedCount->fetchColumn();
+    
+    // Calculate how many months remain from current month to end date
+    $currentMonthDate = new DateTime($monthYear . '-01');
+    $endDate = new DateTime($loan['end_date']);
+    $interval = $currentMonthDate->diff($endDate);
+    $remainingMonths = ($interval->y * 12) + $interval->m + 1; // +1 to include current month
+    
+    // Calculate deduction amount with carry-forward
+    $baseMonthlyDeduction = floatval($loan['monthly_deduction']);
+    $skippedAmount = $skippedMonthsCount * $baseMonthlyDeduction;
+    
+    // Distribute skipped amount across remaining months
+    $carryForwardPerMonth = $remainingMonths > 0 ? ($skippedAmount / $remainingMonths) : 0;
+    $deductionAmount = $baseMonthlyDeduction + $carryForwardPerMonth;
+    
+    // Don't exceed remaining balance
+    $deductionAmount = min($deductionAmount, $remainingBalance);
+    
+    // Insert deduction with carry-forward note if applicable
+    $deductionNote = $skippedMonthsCount > 0 
+        ? "Including " . number_format($carryForwardPerMonth, 2) . " SAR carry-forward from {$skippedMonthsCount} skipped month(s)"
+        : "";
+    
+    $stmtInsertDeduction = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status) VALUES (:emp_id, 'Loan Installment', :amount, :month_year, 1)");
+    $stmtInsertDeduction->execute([
+        ':emp_id' => $empId, 
+        ':amount' => number_format($deductionAmount, 2, '.', ''), 
+        ':month_year' => $monthYear
+    ]);
+    
+    // Insert payment record
+    $stmtInsertPayment = $pdo->prepare("INSERT INTO emp_loan_payments (loan_id, payment_date, amount, payment_method, notes) VALUES (:loan_id, :payment_date, :amount, 'payroll', :notes)");
+    $stmtInsertPayment->execute([
+        ':loan_id' => $loanId, 
+        ':payment_date' => $payrollMonthEnd, 
+        ':amount' => number_format($deductionAmount, 2, '.', ''),
+        ':notes' => $deductionNote
+    ]);
+    
+    // Check if loan is now fully paid
+    $newTotalPaid = $totalPaid + $deductionAmount;
+    if ($newTotalPaid >= $loan['total_payable']) {
+        $stmtUpdateLoan = $pdo->prepare("UPDATE emp_loan SET status = 'paid' WHERE id = :loan_id");
+        $stmtUpdateLoan->execute([':loan_id' => $loanId]);
     }
 }
 

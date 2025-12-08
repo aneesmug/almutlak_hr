@@ -138,20 +138,30 @@
                                         <?= __('add_new_translation_desc', 'Use the form below to add a new translation key and its English and Arabic versions.') ?>
                                     </p>
 
-                                    <form id="addTranslationForm" class="form-inline">
-                                        <div class="form-group">
-                                            <label for="lang_key" class="sr-only"><?= __('language_key') ?></label>
-                                            <input type="text" class="form-control" id="lang_key_input" name="lang_key" placeholder="<?= __('language_key') ?>" style="margin: 2px;">
+                                    <form id="addTranslationForm">
+                                        <div class="row">
+                                            <div class="col-4">
+                                                <div class="form-group">
+                                                    <label for="lang_key"><?= __('language_key') ?></label>
+                                                    <input type="text" class="form-control" id="lang_key_input" name="lang_key" placeholder="<?= __('language_key') ?>">
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="form-group">
+                                                    <label for="en_translation"><?= __('english_translation') ?></label>
+                                                    <textarea class="form-control" id="en_translation_input" name="en_translation" placeholder="<?= __('english_translation') ?>" rows="3"></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="form-group">
+                                                    <label for="ar_translation"><?= __('arabic_translation') ?></label>
+                                                    <textarea class="form-control" id="ar_translation_input" name="ar_translation" placeholder="<?= __('arabic_translation') ?>" rows="3"></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <button type="submit" class="btn btn-primary waves-effect waves-light"><?= __('add_language', 'Add') ?></button>
+                                            </div>
                                         </div>
-                                        <div class="form-group">
-                                            <label for="en_translation" class="sr-only"><?= __('english_translation') ?></label>
-                                            <input type="text" class="form-control" id="en_translation_input" name="en_translation" placeholder="<?= __('english_translation') ?>" style="margin: 2px;">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="ar_translation" class="sr-only"><?= __('arabic_translation') ?></label>
-                                            <input type="text" class="form-control" id="ar_translation_input" name="ar_translation" placeholder="<?= __('arabic_translation') ?>" style="margin: 2px;">
-                                        </div>
-                                        <button type="submit" class="btn btn-primary waves-effect waves-light" style="margin: 2px;"><?= __('add_language', 'Add') ?></button>
                                     </form>
                                 </div>
                             </div>
@@ -249,21 +259,114 @@ $(document).ready(function(){
     // =================================================================
     // Auto-generate English translation from Language Key
     // =================================================================
-    $('#lang_key_input').on('keyup', function() {
-        let originalText = $(this).val();
+    let isPasting = false; // Track if user is pasting
+    let clipboardText = ''; // Store the actual clipboard text
+    
+    // Capture the clipboard data directly from paste event
+    $('#lang_key_input').on('paste', function(e) {
+        isPasting = true;
+        // Get clipboard data from the paste event
+        clipboardText = (e.originalEvent || e).clipboardData.getData('text/plain');
+        // Set the original clipboard text to English translation field
+        $('#en_translation_input').val(clipboardText);
+        
+        // Focus on Arabic translation field after paste
+        setTimeout(function() {
+            $('#ar_translation_input').focus();
+        }, 50);
+        
+        // Reset isPasting flag after a short delay
+        setTimeout(function() {
+            isPasting = false;
+            clipboardText = '';
+        }, 100);
+    });
 
-        // 1. Keep original for English translation
-        let englishText = originalText.replace(/_/g, ' ');
-        englishText = englishText.charAt(0).toUpperCase() + englishText.slice(1);
-        $('#en_translation_input').val(englishText);
+    // Clean lang_key and populate en_translation
+    $('#lang_key_input').on('input', function() {
+        let currentText = $(this).val();
 
-        // 2. For lang_key: lowercase + replace spaces with underscores + remove special chars
-        let langKey = originalText
-            .toLowerCase()
-            .replace(/\s+/g, '_')        // spaces → underscore
-            .replace(/[.()'*\-]/g, '');   // remove ( ) ' * -
+        // For lang_key: convert spaces to underscores, remove special chars, keep user-typed underscores
+        let langKey = currentText
+            .replace(/\s+/g, '_')             // Replace spaces with underscore first
+            .replace(/[^a-z0-9_]/gi, '')      // Remove all characters EXCEPT letters, numbers, and underscore
+            .toLowerCase()                    // Convert to lowercase
+            .replace(/_+/g, '_');             // Replace multiple underscores with single underscore
 
-        $(this).val(langKey);
+        // Only update if value has changed to prevent cursor jumping
+        if ($(this).val() !== langKey) {
+            $(this).val(langKey);
+        }
+
+        // For English translation: populate from cleaned langKey (only when typing, not pasting)
+        if (!isPasting) {
+            let englishText = langKey.replace(/_/g, ' ');
+            if (englishText) {
+                englishText = englishText.charAt(0).toUpperCase() + englishText.slice(1);
+            }
+            $('#en_translation_input').val(englishText);
+        }
+    });
+
+    // Submit form with Ctrl+Enter
+    $('#addTranslationForm').on('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.keyCode === 13) {
+            e.preventDefault();
+            $(this).submit();
+        }
+    });
+
+    // =================================================================
+    // Auto-translate to Arabic when focusing on Arabic textarea
+    // =================================================================
+    let isTranslating = false; // Prevent multiple simultaneous translations
+    
+    $('#ar_translation_input').on('focus', function() {
+        // Only translate if:
+        // 1. Not already translating
+        // 2. English field has text
+        // 3. Arabic field is empty
+        const englishText = $('#en_translation_input').val().trim();
+        const arabicText = $(this).val().trim();
+        
+        if (!isTranslating && englishText && !arabicText) {
+            isTranslating = true;
+            const $arabicField = $(this);
+            const originalPlaceholder = $arabicField.attr('placeholder');
+            
+            // Show loading state
+            $arabicField.attr('placeholder', 'Translating...');
+            $arabicField.prop('disabled', true);
+            
+            // Call translation API
+            $.ajax({
+                url: './includes/ajaxFile/translateText.php',
+                type: 'POST',
+                data: {
+                    text: englishText,
+                    source: 'en',
+                    target: 'ar'
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.translation) {
+                        $arabicField.val(response.translation);
+                    } else {
+                        // If translation fails, just focus on the field for manual entry
+                        console.warn('Translation failed:', response.error || 'Unknown error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Translation request failed:', error);
+                },
+                complete: function() {
+                    // Restore original state
+                    $arabicField.attr('placeholder', originalPlaceholder);
+                    $arabicField.prop('disabled', false);
+                    isTranslating = false;
+                }
+            });
+        }
     });
 
     // =================================================================
@@ -291,6 +394,41 @@ $(document).ready(function(){
     $('#addTranslationForm').on('submit', function(e) {
     // Prevent the default form submission behavior
     e.preventDefault();
+
+    // Validate required fields
+    const langKey = $('#lang_key_input').val().trim();
+    const enTranslation = $('#en_translation_input').val().trim();
+    const arTranslation = $('#ar_translation_input').val().trim();
+
+    if (!langKey) {
+        Swal.fire({
+            title: __('validation_error', 'Validation Error'),
+            text: __('language_key_required', 'Language Key is required'),
+            icon: 'warning',
+            confirmButtonClass: 'btn btn-lg',
+        });
+        return false;
+    }
+
+    if (!enTranslation) {
+        Swal.fire({
+            title: __('validation_error', 'Validation Error'),
+            text: __('english_translation_required', 'English Translation is required'),
+            icon: 'warning',
+            confirmButtonClass: 'btn btn-lg',
+        });
+        return false;
+    }
+
+    if (!arTranslation) {
+        Swal.fire({
+            title: __('validation_error', 'Validation Error'),
+            text: __('arabic_translation_required', 'Arabic Translation is required'),
+            icon: 'warning',
+            confirmButtonClass: 'btn btn-lg',
+        });
+        return false;
+    }
 
     $.ajax({
         url: './includes/ajaxFile/addLanguageAjax.php',

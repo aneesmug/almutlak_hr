@@ -43,21 +43,223 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                 overflow: auto;
                 width: 100% !important;
             }
-
-            /* Fix header row overlap */
             .dataTables_scrollHeadInner {
                 width: 100% !important;
             }
-
             .dataTables_scrollHeadInner table {
                 width: 100% !important;
             }
-
-            /* Prevent body content from overflowing */
             .dataTables_scrollBody {
                 width: 100% !important;
                 overflow: hidden !important;
             }
+
+            /* Modern Stats Card Design */
+            .stats-card {
+                border-radius: 16px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                padding: 32px 24px 24px 24px;
+                margin-bottom: 28px;
+                transition: box-shadow 0.2s, transform 0.2s;
+                border: none;
+                position: relative;
+                min-height: 180px;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                background: var(--card-gradient, linear-gradient(90deg,#2196f3 0%,#21cbf3 100%));
+                color: #fff;
+                overflow: hidden;
+            }
+            /* Gradient backgrounds for each color */
+            .stats-card[data-color="primary"] {
+                --card-gradient: linear-gradient(90deg,#556ee6 0%,#50a5f1 100%);
+            }
+            .stats-card[data-color="success"] {
+                --card-gradient: linear-gradient(90deg,#34c38f 0%,#43e97b 100%);
+            }
+            .stats-card[data-color="info"] {
+                --card-gradient: linear-gradient(90deg,#50a5f1 0%,#2196f3 100%);
+            }
+            .stats-card[data-color="danger"] {
+                --card-gradient: linear-gradient(90deg,#f46a6a 0%,#ff6a88 100%);
+            }
+            .stats-card[data-color="warning"] {
+                --card-gradient: linear-gradient(90deg,#f1b44c 0%,#ffde7d 100%);
+            }
+            .stats-card[data-color="secondary"] {
+                --card-gradient: linear-gradient(90deg,#6c757d 0%,#343a40 100%);
+            }
+            .stats-card[data-color="dark"] {
+                --card-gradient: linear-gradient(90deg,#343a40 0%,#232526 100%);
+            }
+            .stats-card:hover {
+                box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+                transform: translateY(-4px) scale(1.02);
+            }
+            .stats-card-icon {
+                background: rgba(255,255,255,0.18);
+                border-radius: 50%;
+                width: 72px;
+                height: 72px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 40px;
+                margin-right: 28px;
+                box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+                position: relative;
+                transition: transform 0.2s;
+                flex-direction: column;
+            }
+            .stats-card-count-circle {
+                background: #fff;
+                color: #2196f3;
+                border-radius: 50%;
+                width: 38px;
+                height: 38px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 20px;
+                font-weight: 700;
+                margin-bottom: 6px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+            }
+            .stats-card-icon i {
+                font-size: 28px;
+                color: #2196f3;
+            }
+            .stats-card-icon[data-color="primary"] i { color: #556ee6; }
+            .stats-card-icon[data-color="success"] i { color: #34c38f; }
+            .stats-card-icon[data-color="info"] i { color: #50a5f1; }
+            .stats-card-icon[data-color="danger"] i { color: #f46a6a; }
+            .stats-card-icon[data-color="warning"] i { color: #f1b44c; }
+            .stats-card-icon[data-color="secondary"] i { color: #6c757d; }
+            .stats-card-icon[data-color="dark"] i { color: #343a40; }
+            .stats-card-icon:hover {
+                transform: scale(1.10) rotate(-6deg);
+            }
+            .stats-card-icon .stats-card-tooltip {
+                display: none;
+                position: absolute;
+                top: -32px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: #222;
+                color: #fff;
+                padding: 4px 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                white-space: nowrap;
+                z-index: 10;
+            }
+            .stats-card-icon:hover .stats-card-tooltip {
+                display: block;
+            }
+            .stats-card-content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                position: relative;
+            }
+            .stats-card-badge {
+                position: absolute;
+                top: 0;
+                right: 0;
+                background: #50a5f1;
+                color: #fff;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 2px 8px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(80,165,241,0.12);
+                z-index: 2;
+            }
+            .stats-card-value {
+                font-size: 36px;
+                font-weight: 700;
+                color: #222;
+                margin-bottom: 4px;
+            }
+            .stats-card-label {
+                font-size: 18px;
+                font-weight: 700;
+                color: #fff;
+                margin-bottom: 12px;
+                letter-spacing: 0.5px;
+            }
+            .stats-card-footer {
+                display: flex;
+                align-items: center;
+                gap: 18px;
+            }
+            .stats-card-percentage {
+                font-size: 15px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+            }
+            .stats-card-percentage.positive {
+                color: #34c38f;
+            }
+            .stats-card-percentage.negative {
+                color: #f46a6a;
+            }
+            .stats-card-percentage i {
+                font-size: 18px;
+                margin-right: 4px;
+            }
+            .stats-card-status {
+                font-size: 13px;
+                font-weight: 600;
+                color: #34c38f;
+                background: #eaf7ea;
+                border-radius: 8px;
+                padding: 2px 10px;
+            }
+            .stats-card-status.active {
+                color: #34c38f;
+                background: #eaf7ea;
+            }
+            @media (max-width: 767px) {
+                .stats-card {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    padding: 16px 8px;
+                    min-height: 160px;
+                }
+                .stats-card-icon {
+                    margin-bottom: 10px;
+                    margin-right: 0;
+                }
+                .stats-card-value {
+                    font-size: 26px;
+                }
+            }
+            /* Dynamic department color for icon */
+            <?php foreach (["primary","success","warning","danger","info","dark"] as $clr) { ?>
+                :root {
+                    --dept-color-<?= $clr ?>: <?php
+                        if ($clr == "primary") {
+                            echo "#556ee6";
+                        } elseif ($clr == "success") {
+                            echo "#34c38f";
+                        } elseif ($clr == "info") {
+                            echo "#50a5f1";
+                        } elseif ($clr == "warning") {
+                            echo "#f1b44c";
+                        } elseif ($clr == "danger") {
+                            echo "#f46a6a";
+                        } elseif ($clr == "secondary") {
+                            echo "#6c757d";
+                        } else {
+                            echo "#343a40";
+                        }
+                    ?>;
+                }
+            <?php } ?>
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -154,7 +356,8 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 $user_type == 'administrator' ||
                                                 $user_dept == 5 || // HR Department
                                                 $isHR || 
-                                                $isDeptHr
+                                                $isDeptHr ||
+                                                $user_dept == 1 // Administration Department
                                             );
                                             
                                             if (!$can_see_all_departments) {
@@ -187,17 +390,46 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             }
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
                                             if ($querygrp) {
+                                                $colorArr = ["primary","success","warning","danger","info","dark"];
+                                                $colorCount = count($colorArr);
+                                                $cardIndex = 0;
+                                                // Total active employees (for percentage calculation)
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1");
+                                                $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
+                                                $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
+                                                    $cardColor = $colorArr[$cardIndex % $colorCount];
+                                                    $deptCount = (int)$rec["empcountgrp"];
+                                                    $percentage = round(($deptCount / $totalEmployees) * 100, 1);
                                             ?>
-                                                <div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee_by_dept.php?page=1&status=1&dept=<?= $rec["dept"] ?>'" style="cursor: pointer;">
-                                                    <?php  ?><div class="card-box widget-flat border-<?= $rec["color"] ?> bg-<?= $rec["color"] ?> text-white">
-                                                        <?php /* ?><div class="card-box widget-flat bg-<?=$color[rand(0,5)]?> text-white" ><?php */ ?>
-                                                        <i class="mdi mdi-account-convert"></i>
-                                                        <h3 class="m-b-10"><?= $rec["empcountgrp"] ?></h3>
-                                                        <p class="text-uppercase m-b-5 font-13 font-600"><?= ($is_rtl ?? false) ? $rec["dep_nme_ar"] : $rec["dep_nme"] ?></p>
+                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='filter_employee_by_dept.php?page=1&status=1&dept=<?= $rec["dept"] ?>'" style="cursor: pointer;">
+                                                    <div class="stats-card" data-color="<?= $cardColor ?>">
+                                                        <div class="stats-card-icon" data-color="<?= $cardColor ?>">
+                                                            <div class="stats-card-count-circle"><?= $deptCount ?></div>
+                                                            <span class="stats-card-tooltip">Department Info</span>
+                                                            <i class="fa fa-building"></i>
+                                                        </div>
+                                                        <div class="stats-card-content">
+                                                            <div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= ($is_rtl ?? false) ? $rec["dep_nme_ar"] : $rec["dep_nme"] ?></div>
+                                                            <div class="stats-card-footer">
+                                                                <span class="stats-card-percentage positive">
+                                                                    <i class="mdi mdi-trending-up"></i>
+                                                                </span>
+                                                            </div>
+                                                            <!-- Progress from department share of total employees -->
+                                                            <div style="width:100%;margin-top:18px;">
+                                                                <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+                                                                    <div style="height:12px;border-radius:8px;width:<?= $percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+                                                                </div>
+                                                                <div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+                                                                    <?= $percentage ?>% of total employees
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             <?php 
+                                                    $cardIndex++;
                                                 } // end while
                                             } // end if ($querygrp)
                                             ?>
@@ -219,7 +451,8 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 $user_type == 'administrator' ||
                                                 $user_dept == 5 || // HR Department
                                                 $isHR || 
-                                                $isDeptHr
+                                                $isDeptHr ||
+                                                $user_dept == 1 // Administration Department
                                             );
                                             
                                             if (!$can_see_all_companies) {
@@ -250,17 +483,46 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             }
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
                                             if ($querygrp) {
+                                                $colorArr = ["primary","success","warning","danger","info","dark"];
+                                                $colorCount = count($colorArr);
+                                                $cardIndex = 0;
+                                                // Total active employees (for percentage calculation)
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1");
+                                                $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
+                                                $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
+                                                    $cardColor = $colorArr[$cardIndex % $colorCount];
+                                                    $compCount = (int)$rec["empcountgrp"];
+                                                    $percentage = round(($compCount / $totalEmployees) * 100, 1);
                                             ?>
-                                                <div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee_by_comp.php?page=1&status=1&comp=<?= $rec["comp_no"] ?>'" style="cursor: pointer;">
-                                                    <?php  ?><div class="card-box widget-flat border-<?=$color[rand(0,5)]?> bg-<?=$color[rand(0,5)]?> text-white">
-                                                        <?php /* ?><div class="card-box widget-flat bg-<?=$color[rand(0,5)]?> text-white" ><?php */ ?>
-                                                        <i class="mdi mdi-account-convert"></i>
-                                                        <h3 class="m-b-10"><?= $rec["empcountgrp"] ?></h3>
-                                                        <p class="text-uppercase m-b-5 font-13 font-600"><?= ($is_rtl ?? false) ? $rec["comp_name_ar"] : $rec["comp_name"] ?></p>
+                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='filter_employee_by_comp.php?page=1&status=1&comp=<?= $rec["comp_no"] ?>'" style="cursor: pointer;">
+                                                    <div class="stats-card" data-color="<?= $cardColor ?>">
+                                                        <div class="stats-card-icon" data-color="<?= $cardColor ?>">
+                                                            <div class="stats-card-count-circle"><?= $compCount ?></div>
+                                                            <span class="stats-card-tooltip">Company Info</span>
+                                                            <i class="fa fa-industry"></i>
+                                                        </div>
+                                                        <div class="stats-card-content">
+                                                            <div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= ($is_rtl ?? false) ? $rec["comp_name_ar"] : $rec["comp_name"] ?></div>
+                                                            <div class="stats-card-footer">
+                                                                <span class="stats-card-percentage positive">
+                                                                    <i class="mdi mdi-trending-up"></i>
+                                                                </span>
+                                                            </div>
+                                                            <!-- Progress from company share of total employees -->
+                                                            <div style="width:100%;margin-top:18px;">
+                                                                <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+                                                                    <div style="height:12px;border-radius:8px;width:<?=$percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+                                                                </div>
+                                                                <div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+                                                                    <?= $percentage ?>% of total employees
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             <?php 
+                                                    $cardIndex++;
                                                 } // end while
                                             } // end if ($querygrp)
                                             ?>
@@ -380,7 +642,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                         <td><?= $emp_id; ?></td>
                                                         <td>
                                                             <img src="<?= $emp_avatar; ?>" class="rounded-circle bx-shadow-lg" width="50">
-                                                             <span class='copyToClipboard'><?= (explode(" ", $rec["name"])[0]) . " " . (explode(" ", $rec["name"])[1]); ?></span> <i class='fa fa-clipboard'></i>
+                                                             <span class='copyToClipboard'><?= translate_name(parseName($rec["name"]), $current_lang ?? 'en'); ?></span> <i class='fa fa-clipboard'></i>
                                                         </td>
                                                         <td><?= ($is_rtl ?? false) ? $dept_ar : $dept ?></td>
                                                         <td><span class='copyToClipboard'><?= $iqama; ?></span> <i class='fa fa-clipboard'></i></td>

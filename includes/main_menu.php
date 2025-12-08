@@ -98,8 +98,8 @@ $page_roles = [
     'add_new_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'reg_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'emp_temp_contant.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'employee_audit_gen.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'employee_salary_report.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'employee_audit_gen.php' => ['Administrator'],
+    'employee_salary_report.php' => ['Administrator'],
     'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
@@ -121,7 +121,7 @@ $page_roles = [
     'import_iqama_exp.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager', 'IT_Team_Manager'],
     'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'],
+    'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager','HR_Recruitment'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -201,16 +201,25 @@ $can_see_vouchers_page = [
 ];
 
 $can_see_employee_evaluation_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'
+    'Administrator', 'GM', 'DPT_Manager', 'HR_Manager', 'Finance_Manager',
+    // 'Administrator'
+];
+
+$can_see_evaluations_report_strict = [
+    'Administrator', 'GM', 'HR_Recruitment'
+    // 'Administrator'
 ];
 
 $can_see_all_evaluations_report = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Supervisor', 'HR_Recruitment', 'HR_Manager'
+    'Administrator', 'GM','HR_Manager', 'HR_Recruitment'
+    // 'Administrator'
 ];
 
-$can_see_reports_page = [
-    'Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'
+$can_see_reports_page = [ 
+    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager','GM'
 ];
 
 $is_admin = $is_system_admin; 
@@ -423,13 +432,13 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_all_employees_page) || in_array($user_type, $can_see_all_employees_page)): ?>
                     <li><a href="<?= $allEmployeesLink ?>"><i class="fa fa-users"></i><span><?=__('all_employees') ?></span></a></li>
-                <?php endif; ?>
+                <?php endif; /* ?>
                 <?php if (in_array($user_role, $can_see_employees_bank_page) || in_array($user_type, $can_see_employees_bank_page)): ?>
                     <li><a href="<?= $yearlyEOSLink ?>"><i class="fa fa-calendar-time"></i><span><?=__('employees_bank') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($isHR || $is_system_admin || $isDeptHr): ?>
                     <li><a href="<?= $employeeSalaryReportLink ?>"><i class="fa fa-money-bill"></i><span>Salary Report</span></a></li>
-                <?php endif; ?>
+                <?php endif; */?>
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $payrollLink ?>"><i class="fa fa-money-bill-transfer"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
@@ -449,20 +458,15 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
                 <?php endif; ?>
-                
-                <?php /* if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page) || $isDeptManager): ?>
-                    <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
-                <?php endif; ?>
-                
-                <?php
-                $can_see_evaluations_report_strict = ['GM', 'administrator', 'hr_recruitment'];
+
+                <?php /* 
                 if (
                     in_array($user_role, $can_see_evaluations_report_strict) ||
                     in_array($user_type, $can_see_evaluations_report_strict) ||
                     $is_gm || $is_admin
                 ): ?>
                     <li><a href="<?= $allEmployeeEvaluationsLink ?>"><i class="fa fa-file-chart-line"></i><span><?=__('evaluation_reports', 'Evaluation Reports') ?></span></a></li>
-                <?php endif; */?>
+                <?php endif; */ ?>
 
             </ul>
         </li>
@@ -494,6 +498,11 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             <li><a href="<?= $smartRequestsLink ?>"><i class="fa fa-layer-group"></i> <span> <?=__('smart_requests') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
         <?php endif; ?>
 
+        <!-- Employee Evaluation -->
+        <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page) || $isDeptManager): ?>
+            <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
+        <?php endif; ?>
+
         <!-- Vouchers -->
         <?php if (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page)): ?>
             <li><a href="<?= $vouchersLink ?>"><i class="fa fa-box-archive"></i> <span> <?=__('vouchers') ?> </span></a></li>
@@ -506,7 +515,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php endif; ?>
         <!-- Reports -->
         <?php if (in_array($user_role, $can_see_reports_page) || in_array($user_type, $can_see_reports_page)): ?>
-            <li><a href="reports.php"><i class="fa fa-file-chart-line"></i> <span> <?=__('reports') ?> </span></a></li>
+            <li><a href="reports.php"><i class="fa fa-chart-simple"></i> <span> <?=__('reports') ?> </span></a></li>
         <?php endif; ?>
         <?php if ($is_system_admin): ?>
         <li>

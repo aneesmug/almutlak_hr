@@ -1,14 +1,88 @@
 <?php
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
+require_once __DIR__ . '/../evaluation_acknowledgment_handler.php';
+// Include shared functions to ensure __() translation helper is available (robust path resolution)
+($functionPath = (function() {
+    $candidates = [
+        __DIR__ . '/../functions.php',
+        dirname(__DIR__, 2) . '/includes/functions.php',
+        dirname(__DIR__, 2) . '/functions.php',
+    ];
+    foreach ($candidates as $p) {
+        if (file_exists($p)) return $p;
+    }
+    return null;
+})()) && require_once $functionPath;
+
+// Safe shim: ensure __() exists to avoid fatal errors
+if (!function_exists('__')) {
+    function __($key) { return $key; }
+}
 
 header('Content-Type: application/json');
+// Avoid sending notices/warnings in JSON responses
+ini_set('display_errors', '0');
 
 // Check authorization
-$can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'];
+$can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager', 'HR_Payroll', 'HR_Recruitment'];
 
 if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'is_system_admin') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
+    exit();
+}
+
+// Handle AJAX actions
+$action = isset($_POST['action']) ? $_POST['action'] : '';
+
+// Get evaluation details endpoint
+if ($action === 'getEvaluationDetails') {
+    $evalId = isset($_POST['evalId']) ? intval($_POST['evalId']) : 0;
+    
+    if ($evalId <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid evaluation ID']);
+        exit();
+    }
+    
+    $query = "SELECT 
+        ev.*,
+        e.name AS employee_name,
+        e.emp_id AS employee_emp_id_display,
+        e.iqama AS employee_iqama,
+        em.name AS manager_name,
+        ack_em.name AS acknowledged_by_name,
+        d.dep_nme AS department,
+        s.section_name AS section,
+        j.job AS position,
+        DATE_FORMAT(ev.manager_acknowledgment_date, '%Y-%m-%d %H:%i') AS acknowledgment_date,
+        CASE 
+            WHEN ev.total_score >= 90 THEN 'Excellent'
+            WHEN ev.total_score >= 80 THEN 'Very Good'
+            WHEN ev.total_score >= 70 THEN 'Good'
+            WHEN ev.total_score >= 60 THEN 'Satisfactory'
+            ELSE 'Needs Improvement'
+        END AS rating
+        FROM emp_evaluations ev
+        LEFT JOIN employees e ON ev.employee_emp_id = e.emp_id
+        LEFT JOIN employees em ON ev.manager_emp_id = em.emp_id
+        LEFT JOIN employees ack_em ON ev.manager_acknowledged_by = ack_em.emp_id
+        LEFT JOIN department d ON e.dept = d.id
+        LEFT JOIN section s ON e.sectin_nme = s.id
+        LEFT JOIN ac_jobs j ON e.actual_job = j.id
+        WHERE ev.id = " . intval($evalId);
+    
+    $result = mysqli_query($conDB, $query);
+    
+    if (!$result) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        exit();
+    }
+    
+    if ($row = mysqli_fetch_assoc($result)) {
+        echo json_encode(['success' => true, 'data' => $row]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Evaluation not found']);
+    }
     exit();
 }
 
@@ -59,7 +133,11 @@ try {
             $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept);
             break;
         case 'evaluation':
-            $result = generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
+            // Check if user can acknowledge evaluations (managers only)
+            if (!can_acknowledge_evaluations($user_type, $user_role)) {
+                throw new Exception('Unauthorized: Only authorized managers can access evaluation reports');
+            }
+            $result = generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
             break;
         case 'resignation':
             $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
@@ -91,6 +169,14 @@ try {
 
 // Helper function to get column label
 function getColumnLabel($column) {
+    // Prefer translation key by column id if available
+    if (function_exists('__')) {
+        $translated = __($column);
+        if (!empty($translated) && $translated !== $column) {
+            return $translated;
+        }
+    }
+    // Fallback labels (English)
     $labels = [
         'name' => 'Name',
         'emp_id' => 'Employee ID',
@@ -170,7 +256,6 @@ function getColumnLabel($column) {
         'vacation_balance' => 'Vacation Balance',
         'total_amount' => 'Total Amount',
         'department' => 'Department',
-        'total_employees' => 'Total Employees',
         'active_employees' => 'Active Employees',
         'inactive_employees' => 'Inactive Employees',
         'avg_salary' => 'Average Salary',
@@ -180,7 +265,7 @@ function getColumnLabel($column) {
         'total_loan_amount' => 'Total Loan Amount',
         'avg_service_years' => 'Avg Service Years'
     ];
-    return isset($labels[$column]) ? $labels[$column] : ucfirst(str_replace('_', ' ', $column));
+    return isset($labels[$column]) ? $labels[$column] : ucwords(str_replace('_', ' ', $column));
 }
 
 // Employee Report
@@ -684,8 +769,8 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
 
 // Document Report
 function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept) {
-    // Build SELECT clause
-    $selectCols = [];
+    // Build SELECT clause - always include d.id and d.path for attachment button
+    $selectCols = ['d.id AS document_id', 'd.path AS file_path', 'd.docu_ext AS file_extension'];
     
     foreach ($columns as $col) {
         if ($col == 'emp_name') {
@@ -700,6 +785,8 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
             $selectCols[] = 'd.path AS document_name';
         } elseif ($col == 'upload_date') {
             $selectCols[] = 'd.created_at AS upload_date';
+        } elseif ($col == 'status') {
+            $selectCols[] = "CASE WHEN d.status = 'A' THEN 'Active' ELSE 'Inactive' END AS status";
         } else {
             $selectCols[] = 'd.' . $col;
         }
@@ -740,8 +827,20 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
         $headers[] = getColumnLabel($col);
     }
     
+    // Add Attachment header
+    $headers[] = function_exists('__') ? __('attachment') : 'Attachment';
+    
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
+        $docId = $row['document_id'];
+        $filePath = $row['file_path'];
+        $fileExt = $row['file_extension'];
+        
+        // Create attachment button with file path
+        $viewText = function_exists('__') ? __('view') : 'View';
+        $viewDocTitle = function_exists('__') ? __('view_document') : 'View Document';
+        $row['attachment'] = '<a href="./assets/emp_documents/' . htmlspecialchars($filePath) . '" target="_blank" class="btn btn-sm btn-primary" title="' . htmlspecialchars($viewDocTitle) . '"><i class="mdi mdi-paperclip"></i> ' . htmlspecialchars($viewText) . '</a>';
+        
         $data[] = $row;
     }
     
@@ -749,7 +848,7 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
 }
 
 // Evaluation Report
-function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept) {
+function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
     // Add column mappings
     $columnMap = [
         'dept' => 'd.dep_nme',
@@ -759,8 +858,8 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
         'sectin_nme' => 's.section_name'
     ];
 
-    // Build SELECT clause
-    $selectCols = [];
+    // Build SELECT clause - always include ev.id for action buttons
+    $selectCols = ['ev.id AS evaluation_id'];
     
     foreach ($columns as $col) {
         if ($col == 'emp_name') {
@@ -782,6 +881,10 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
                               END AS rating";
         } elseif ($col == 'evaluator') {
             $selectCols[] = 'em.name AS evaluator';
+        } elseif ($col == 'acknowledgment_status') {
+            $selectCols[] = 'ev.manager_acknowledgment_status AS acknowledgment_status';
+        } elseif ($col == 'objection_note') {
+            $selectCols[] = 'ev.manager_objection_note AS objection_note';
         } else {
             $selectCols[] = 'ev.' . $col;
         }
@@ -805,6 +908,16 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
     }
     if (!empty($dateTo)) {
         $where[] = "ev.created_at <= '" . mysqli_real_escape_string($conDB, $dateTo) . "'";
+    }
+    
+    // Acknowledgment status filter
+    // IMPORTANT: By default, exclude pending evaluations (they haven't been acknowledged/objected yet)
+    if ($status === 'objected') {
+        // Show only objected evaluations
+        $where[] = "ev.manager_acknowledgment_status = 'objected'";
+    } else {
+        // Default behavior: exclude pending evaluations, show only acknowledged or objected
+        $where[] = "ev.manager_acknowledgment_status IN ('acknowledged', 'objected')";
     }
     
     $whereClause = implode(' AND ', $where);
@@ -834,8 +947,14 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
         $headers[] = getColumnLabel($col);
     }
     
+    // Add Actions header
+    $headers[] = function_exists('__') ? __('actions') : 'Actions';
+    
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
+        $evalId = $row['evaluation_id'];
+        $viewDetails = function_exists('__') ? __('view_details') : 'View Details';
+        $row['actions'] = '<button class="btn btn-sm btn-info view-evaluation-details" data-eval-id="' . $evalId . '"><i class="mdi mdi-eye"></i> ' . htmlspecialchars($viewDetails) . '</button>';
         $data[] = $row;
     }
     
@@ -1218,6 +1337,10 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
     // Filter and validate selected columns
     $safeColumns = [];
     $columnAliases = [];
+    // Track extra joins needed when selecting human-readable fields from employees
+    $extraJoins = [];
+    $addedCustomJoins = [];
+    $useArabic = isset($is_rtl) ? (bool)$is_rtl : (isset($GLOBALS['is_rtl']) ? (bool)$GLOBALS['is_rtl'] : false);
     foreach ($columns as $col) {
         // Skip ID columns
         if ($col === 'id' || strtolower($col) === 'id' || preg_match('/\.id$/i', $col)) {
@@ -1235,9 +1358,97 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
             }
             
             if (in_array($tbl, $validatedTables) && in_array($col_name, $tableColumns[$tbl])) {
-                $safeColumn = "`" . mysqli_real_escape_string($conDB, $tbl) . "`.`" . mysqli_real_escape_string($conDB, $col_name) . "`";
-                $safeColumns[] = $safeColumn . " AS `" . str_replace('.', '_', $col) . "`";
-                $columnAliases[] = str_replace('.', '_', $col);
+                // Special mapping for employees lookup fields to show readable names
+                if ($tbl === 'employees') {
+                    $aliasName = str_replace('.', '_', $col); // e.g., employees_dept
+                    switch ($col_name) {
+                        case 'dept':
+                            // Department name (EN/AR)
+                            if (empty($addedCustomJoins['department'])) {
+                                $extraJoins[] = "LEFT JOIN `department` d ON `employees`.`dept` = d.`id`";
+                                $addedCustomJoins['department'] = true;
+                            }
+                            $deptField = $useArabic ? 'dep_nme_ar' : 'dep_nme';
+                            $safeColumns[] = "d.`$deptField` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'sectin_nme':
+                            if (empty($addedCustomJoins['section'])) {
+                                $extraJoins[] = "LEFT JOIN `section` s ON `employees`.`sectin_nme` = s.`id`";
+                                $addedCustomJoins['section'] = true;
+                            }
+                            $safeColumns[] = "s.`section_name` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'country':
+                            if (empty($addedCustomJoins['countries'])) {
+                                $extraJoins[] = "LEFT JOIN `countries` c ON `employees`.`country` = c.`id`";
+                                $addedCustomJoins['countries'] = true;
+                            }
+                            $countryField = $useArabic ? 'name_ar' : 'name';
+                            $safeColumns[] = "c.`$countryField` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'bank_name':
+                            if (empty($addedCustomJoins['bank_list'])) {
+                                $extraJoins[] = "LEFT JOIN `bank_list` b ON `employees`.`bank_name` = b.`id`";
+                                $addedCustomJoins['bank_list'] = true;
+                            }
+                            $bankField = $useArabic ? 'bank_name_ar' : 'name';
+                            $safeColumns[] = "b.`$bankField` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'vac_period':
+                            if (empty($addedCustomJoins['contract_period'])) {
+                                $extraJoins[] = "LEFT JOIN `contract_period` cp ON `employees`.`vac_period` = cp.`id`";
+                                $addedCustomJoins['contract_period'] = true;
+                            }
+                            $safeColumns[] = "cp.`period` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'actual_job':
+                            if (empty($addedCustomJoins['ac_jobs'])) {
+                                $extraJoins[] = "LEFT JOIN `ac_jobs` j ON `employees`.`actual_job` = j.`id`";
+                                $addedCustomJoins['ac_jobs'] = true;
+                            }
+                            $jobField = $useArabic ? 'job_ar' : 'job';
+                            $safeColumns[] = "j.`$jobField` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'emp_sup_type':
+                            if (empty($addedCustomJoins['sponsorship'])) {
+                                $extraJoins[] = "LEFT JOIN `sponsorship` sp ON `employees`.`emp_sup_type` = sp.`id`";
+                                $addedCustomJoins['sponsorship'] = true;
+                            }
+                            $safeColumns[] = "sp.`sponsor` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'comp_no':
+                            if (empty($addedCustomJoins['companies'])) {
+                                $extraJoins[] = "LEFT JOIN `companies` co ON `employees`.`comp_no` = co.`comp_id`";
+                                $addedCustomJoins['companies'] = true;
+                            }
+                            $compField = $useArabic ? 'comp_name_ar' : 'comp_name';
+                            $safeColumns[] = "co.`$compField` AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        case 'sex':
+                            $safeColumns[] = "CASE WHEN `employees`.`sex` = '1' THEN 'Male' WHEN `employees`.`sex` = '2' THEN 'Female' ELSE `employees`.`sex` END AS `{$aliasName}`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                        default:
+                            // Default raw employees column
+                            $safeColumn = "`" . mysqli_real_escape_string($conDB, $tbl) . "`.`" . mysqli_real_escape_string($conDB, $col_name) . "`";
+                            $safeColumns[] = $safeColumn . " AS `" . $aliasName . "`";
+                            $columnAliases[] = $aliasName;
+                            break;
+                    }
+                } else {
+                    // Default behavior for non-employees tables
+                    $safeColumn = "`" . mysqli_real_escape_string($conDB, $tbl) . "`.`" . mysqli_real_escape_string($conDB, $col_name) . "`";
+                    $safeColumns[] = $safeColumn . " AS `" . str_replace('.', '_', $col) . "`";
+                    $columnAliases[] = str_replace('.', '_', $col);
+                }
             }
         } else {
             // Non-prefixed column - check in primary table
@@ -1320,16 +1531,20 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
     
     // Build the query
     $columnList = implode(', ', $safeColumns);
+    // Merge any additional joins required for readable employees columns
+    if (!empty($extraJoins)) {
+        $joins = array_merge($joins, $extraJoins);
+    }
     $joinClause = !empty($joins) ? implode(' ', $joins) : '';
     
     $sql = "SELECT " . $columnList . " FROM `" . mysqli_real_escape_string($conDB, $primaryTable) . "` " . $joinClause . " " . $whereClause . " LIMIT 1000";
     
     // Log the SQL query for debugging
-    error_log("Custom Report SQL: " . $sql);
+    // error_log("Custom Report SQL: " . $sql);
     
     $result = mysqli_query($conDB, $sql);
     if (!$result) {
-        error_log("Custom Report Query Error: " . mysqli_error($conDB));
+        // error_log("Custom Report Query Error: " . mysqli_error($conDB));
         throw new Exception('Query error: ' . mysqli_error($conDB));
     }
     
@@ -1339,11 +1554,46 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
         $data[] = $row;
     }
     
-    // Build headers (use column aliases as headers, format them nicely)
+    // Build headers with translation support; normalize keys and add smart fallbacks
     $headers = array_map(function($col) {
-        // Replace underscores with spaces and capitalize words
+        // Normalize spaces/dashes to underscores for key lookup
+        $normalized = strtolower(str_replace([' ', '-'], '_', $col));
+
+        // Helper to check if a translation exists and differs from key
+        $resolveTranslation = function($key) {
+            if (function_exists('__')) {
+                $t = __($key);
+                if (!empty($t) && $t !== $key) {
+                    return $t;
+                }
+            }
+            return null;
+        };
+
+        // 1) Try full normalized key (e.g., employees_dept)
+        $t1 = $resolveTranslation($normalized);
+        if ($t1 !== null) return $t1;
+
+        // 2) If composite key, try last segment as base (e.g., dept)
+        if (strpos($normalized, '_') !== false) {
+            $parts = explode('_', $normalized);
+            $base = end($parts);
+            $t2 = $resolveTranslation($base);
+            if ($t2 !== null) return $t2;
+        }
+
+        // 3) Try original alias as given
+        $t3 = $resolveTranslation($col);
+        if ($t3 !== null) return $t3;
+
+        // 4) Fallback: humanize alias
         return ucwords(str_replace('_', ' ', $col));
     }, $columnAliases);
+    
+    // Post-process: remove underscores from all headers for cleaner display
+    $headers = array_map(function($h) {
+        return str_replace('_', ' ', $h);
+    }, $headers);
     
     return ['data' => $data, 'headers' => $headers];
 }

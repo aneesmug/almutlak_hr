@@ -901,3 +901,137 @@ input[type="file"]::file-selector-button:hover {
     margin-right: 0 !important;
     margin-left: 0.25rem !important; /* Icon spacing for RTL */
 }
+
+/*
+=================================================================
+  RTL Modifications for Vacation Request Cards (all_applied_vac.php)
+=================================================================
+*/
+
+/**
+ * This section provides RTL overrides for vacation request cards
+ * to ensure proper icon positioning, text alignment, and layout.
+ */
+
+/* --- Complete Card RTL Flip --- */
+[dir="rtl"] .request-card {
+    direction: rtl !important;
+    text-align: right !important;
+}
+
+/* --- Card Header RTL --- */
+[dir="rtl"] .request-card .card-header {
+    text-align: right !important;
+    direction: rtl !important;
+}
+
+[dir="rtl"] .request-card .card-header .float-right {
+    float: left !important;
+}
+
+/* --- Card Body RTL --- */
+[dir="rtl"] .request-card .card-body {
+    text-align: right !important;
+    direction: rtl !important;
+}
+
+/* --- Detail Items in Cards --- */
+[dir="rtl"] .request-card .detail-item {
+    flex-direction: row-reverse !important;
+    text-align: right !important;
+    direction: rtl !important;
+}
+
+[dir="rtl"] .request-card .detail-item i.fad,
+[dir="rtl"] .request-card .detail-item i.fa {
+    margin-right: 0 !important;
+    margin-left: 15px !important;
+}
+
+[dir="rtl"] .request-card .detail-item strong {
+    text-align: right !important;
+    margin-right: 0 !important;
+    margin-left: 10px !important;
+}
+
+/* --- Generic Detail Items (fallback) --- */
+[dir="rtl"] .detail-item {
+    flex-direction: row-reverse !important;
+    text-align: right !important;
+}
+
+[dir="rtl"] .detail-item i.fad,
+[dir="rtl"] .detail-item i.fa {
+    margin-right: 0 !important;
+    margin-left: 15px !important;
+}
+
+[dir="rtl"] .detail-item strong {
+    text-align: right !important;
+    margin-right: 0 !important;
+    margin-left: 10px !important;
+}
+
+/* --- Card Header and Body --- */
+[dir="rtl"] .card-header {
+    text-align: right !important;
+}
+
+[dir="rtl"] .card-body {
+    text-align: right !important;
+}
+
+/* --- Badge Spacing --- */
+[dir="rtl"] .badge {
+    margin-right: 0 !important;
+    margin-left: 5px !important;
+}
+
+/* --- Attachment Links --- */
+[dir="rtl"] .detail-item a i.fa-file-pdf,
+[dir="rtl"] .detail-item a i.fa-file-image {
+    margin-right: 0 !important;
+    margin-left: 8px !important;
+}
+
+/* --- Attachment Container --- */
+[dir="rtl"] .detail-item > div {
+    margin-right: 20px !important;
+    margin-left: 0 !important;
+}
+
+/* --- Button Icons --- */
+[dir="rtl"] .btn i.fa,
+[dir="rtl"] .btn i.fas {
+    margin-right: 0 !important;
+    margin-left: 5px !important;
+}
+
+/* --- Card Footer Buttons --- */
+[dir="rtl"] .card-footer {
+    text-align: right !important;
+    direction: rtl !important;
+}
+
+[dir="rtl"] .card-footer .btn-group {
+    direction: rtl !important;
+}
+
+/* --- Dropdown Menu RTL --- */
+[dir="rtl"] .dropdown-menu {
+    text-align: right !important;
+    right: auto !important;
+    left: 0 !important;
+}
+
+[dir="rtl"] .dropdown-item {
+    text-align: right !important;
+}
+
+[dir="rtl"] .dropdown-item i {
+    margin-right: 0 !important;
+    margin-left: 10px !important;
+    float: right !important;
+}
+
+

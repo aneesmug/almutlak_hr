@@ -279,6 +279,8 @@
         <script src="./plugins/datatables/dataTables.select.min.js"></script>
 
         
+        <!-- SweetAlert2 -->
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         
         <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
         <!-- jsPDF and jspdf-autotable for PDF export -->
@@ -481,7 +483,11 @@ const calculateDeductionAmount = function() {
 // --- Main Script Logic (Your existing functions) ---
 $(document).ready(function() {
     window.today = new Date();
-    $('#payrollMonth').val(`${getDateParts(today, 'year')}-${getDateParts(today, 'month')}`);
+    
+    // Set current month as default for month input
+    const currentMonth = `${getDateParts(today, 'year')}-${getDateParts(today, 'month')}`;
+    $('#payrollMonth').val(currentMonth);
+    
     initializeDataTable();
     $('#payrollMonth').on('change', fetchEmployees);
     fetchEmployees();
@@ -853,6 +859,15 @@ async function generatePayrollReport() {
                     if (data.months.length > 0) {
                         reportMonthSelect.value = data.months[0].value;
                     }
+                    
+                    // Initialize Select2 for the modal select element
+                    $(reportMonthSelect).select2({
+                        placeholder: __('choose_month_for_report_label'),
+                        allowClear: false,
+                        width: '100%',
+                        dropdownParent: $('.swal2-container')
+                    });
+                    
                     Swal.hideLoading(); // Hide loading indicator
                 } else {
                     Swal.hideLoading();
@@ -1694,7 +1709,8 @@ async function showPayrollDetails(empId, empName, month) {
                         <div class="mb-4 text-center">
                             <button id="markAsPaidBtn" class="btn btn-custom"><i class="fas fa-check-circle"></i> ${__('mark_as_paid_button')}</button>
                             <button id="exportPdfBtn" class="btn btn-danger"><i class="fas fa-file-pdf"></i> ${__('pdf_button')}</button>
-                            <button id="exportExcelBtn" class="btn btn-success"><i class="fas fa-file-excel"></i> ${__('excel_button')}</button>
+                            <button id="exportExcelBtn" class="btn btn-success"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
+                            <button id="exportDetailedExcelBtn" class="btn btn-info"><i class="fas fa-file-excel"></i> Detailed Excel</button>
                         </div>
                         <table class="table table-bordered" id="payrollgentbl" style="width:100%;">
                             <thead>
@@ -1764,6 +1780,7 @@ async function showPayrollDetails(empId, empName, month) {
 
                         $('#exportPdfBtn').on('click', () => exportPdfReport(reportData, selectedMonth));
                         $('#exportExcelBtn').on('click', () => exportExcelReport(reportData, selectedMonth));
+                        $('#exportDetailedExcelBtn').on('click', () => exportDetailedExcelReport(reportData, selectedMonth));
                     }
                 });
             } else {
@@ -1985,6 +2002,142 @@ async function showPayrollDetails(empId, empName, month) {
 
             // Generate the XLSX file and trigger download with a dynamic filename
             const fileName = `payroll_report_${selectedMonth.replace('-', '_')}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        // --- Detailed Excel Export Function (MATCHES PDF REPORT) ---
+        function exportDetailedExcelReport(reportData, selectedMonth) {
+            // Ensure the XLSX library is available
+            if (typeof XLSX === 'undefined') {
+                console.error("The XLSX library (SheetJS) is not loaded. Please include it in your project.");
+                showError('Error', 'XLSX library not loaded. Cannot export to Excel.');
+                return;
+            }
+
+            // Sort the reportData array by emp_id in ascending order
+            reportData.sort((a, b) => a.emp_id.localeCompare(b.emp_id, undefined, { numeric: true }));
+
+            // Create a new workbook
+            const wb = XLSX.utils.book_new();
+
+            // 1. Create header rows (matching PDF structure)
+            const headerRow1 = [
+                '#', 'Emp ID', 'Employee Name', 'Company', 'Department',
+                // Salary & Allowances Breakdown (11 columns)
+                'Basic Salary', 'Housing', 'Transport', 'Food', 'Miscellaneous', 'Cashier', 'Fuel', 'Telephone', 'Other', 'Guard', 'Total Gross',
+                // Benefits (2 columns)
+                'Benefits Details', 'Total Benefits',
+                // Deductions (2 columns)
+                'Deductions Details', 'Total Deductions',
+                // Net Salary
+                'Net Salary'
+            ];
+
+            // 2. Map reportData to detailed row format
+            const dataRows = reportData.map((p, index) => {
+                // Format benefits details
+                const benefitsDetails = p.benefits_list && p.benefits_list.length > 0
+                    ? p.benefits_list.map(b => `${b.benefit || 'Benefit'}: ${parseFloat(b.note || 0).toFixed(2)}`).join('\n')
+                    : 'N/A';
+
+                // Format deductions details
+                const deductionsDetails = p.deductions_list && p.deductions_list.length > 0
+                    ? p.deductions_list.map(d => `${d.deduction || 'Deduction'}: ${parseFloat(d.note || 0).toFixed(2)}`).join('\n')
+                    : 'N/A';
+
+                return [
+                    index + 1, // Serial number
+                    p.emp_id,
+                    p.employee_name,
+                    p.comp_name || 'N/A',
+                    p.department_name || 'N/A',
+                    // Salary & Allowances
+                    parseFloat(p.basic_salary || 0),
+                    parseFloat(p.housing_allowance || 0),
+                    parseFloat(p.transport_allowance || 0),
+                    parseFloat(p.food_allowance || 0),
+                    parseFloat(p.miscellaneous_allowance || 0),
+                    parseFloat(p.cashier_allowance || 0),
+                    parseFloat(p.fuel_allowance || 0),
+                    parseFloat(p.telephone_allowance || 0),
+                    parseFloat(p.other_allowance || 0),
+                    parseFloat(p.guard_allowance || 0),
+                    parseFloat(p.total_gross_salary || 0),
+                    // Benefits
+                    benefitsDetails,
+                    parseFloat(p.total_benefits || 0),
+                    // Deductions
+                    deductionsDetails,
+                    parseFloat(p.total_deductions || 0),
+                    // Net Salary
+                    parseFloat(p.net_salary || 0)
+                ];
+            });
+
+            // Combine headers and data rows
+            const allRows = [headerRow1, ...dataRows];
+
+            // Convert the array of rows into an Excel worksheet
+            const ws = XLSX.utils.aoa_to_sheet(allRows);
+
+            // Set column widths for better readability
+            const colWidths = [
+                { wch: 5 },  // #
+                { wch: 10 }, // Emp ID
+                { wch: 25 }, // Name
+                { wch: 20 }, // Company
+                { wch: 20 }, // Department
+                { wch: 12 }, // Basic
+                { wch: 10 }, // Housing
+                { wch: 10 }, // Transport
+                { wch: 10 }, // Food
+                { wch: 12 }, // Miscellaneous
+                { wch: 10 }, // Cashier
+                { wch: 10 }, // Fuel
+                { wch: 10 }, // Telephone
+                { wch: 10 }, // Other
+                { wch: 10 }, // Guard
+                { wch: 12 }, // Total Gross
+                { wch: 40 }, // Benefits Details
+                { wch: 12 }, // Total Benefits
+                { wch: 40 }, // Deductions Details
+                { wch: 14 }, // Total Deductions
+                { wch: 12 }  // Net Salary
+            ];
+            ws['!cols'] = colWidths;
+
+            // Format numeric columns with 2 decimal places
+            const numberFormat = '#,##0.00';
+            const numericColumns = ['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'T', 'U']; // All monetary columns
+
+            // Apply number format to all data rows
+            for (let i = 1; i <= dataRows.length; i++) {
+                numericColumns.forEach(colLetter => {
+                    const cellAddress = colLetter + (i + 1);
+                    if (ws[cellAddress]) {
+                        ws[cellAddress].z = numberFormat;
+                    }
+                });
+            }
+
+            // Style header row (bold and background color)
+            const headerRange = XLSX.utils.decode_range(ws['!ref']);
+            for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+                const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+                if (!ws[cellAddress]) continue;
+                
+                ws[cellAddress].s = {
+                    font: { bold: true, color: { rgb: "FFFFFF" } },
+                    fill: { fgColor: { rgb: "2980B9" } },
+                    alignment: { horizontal: "center", vertical: "center", wrapText: true }
+                };
+            }
+
+            // Add the worksheet to the workbook
+            XLSX.utils.book_append_sheet(wb, ws, "Detailed Payroll Report");
+
+            // Generate the XLSX file and trigger download
+            const fileName = `detailed_payroll_report_${selectedMonth.replace('-', '_')}.xlsx`;
             XLSX.writeFile(wb, fileName);
         }
 

@@ -1,9 +1,23 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/evaluation_acknowledgment_handler.php';
 
 // Define who can see reports
-$can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'];
+$can_see_reports_page = [
+    'Administrator', 
+    'GM', 
+    'Auditor', 
+    'HR_Senior_BP', 
+    'HR_Payroll', 
+    'HR_Operations', 
+    'HR_Supervisor', 
+    'Finance_Officer', 
+    'DPT_Manager', 
+    'HR_Manager', 
+    'Finance_Manager',
+    'HR_Recruitment'
+];
 
 // Check authorization
 if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'is_system_admin') {
@@ -12,17 +26,26 @@ if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'is_system_ad
 }
 
 // Determine if user has full access (can see all departments)
-$has_full_access = in_array($user_role, ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor']) || $user_type === 'is_system_admin';
+$has_full_access = in_array($user_role, [
+    'Administrator', 
+    'GM', 
+    'Auditor', 
+    'HR_Senior_BP', 
+    'HR_Operations', 
+    'HR_Supervisor',
+    'HR_Recruitment'
+    ]) || $user_type === 'is_system_admin';
 
 // Get user's department for filtering
 $user_dept = isset($_SESSION['user_dept']) ? $_SESSION['user_dept'] : '';
 
-$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
-if(mysqli_num_rows($query) == 1){
-include("./includes/avatar_select.php");
+$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
+if (mysqli_num_rows($query) == 1) {
+    include("./includes/avatar_select.php");
 ?>
-<!doctype html>
-<html lang="en">
+    <!doctype html>
+    <html lang="<?= $is_rtl ? 'ar' : 'en' ?>" dir="<?= $is_rtl ? 'rtl' : 'ltr' ?>">
+
     <head>
         <meta charset="utf-8" />
         <title><?= $site_title ?> - Reports</title>
@@ -31,14 +54,14 @@ include("./includes/avatar_select.php");
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- App favicon -->
-        <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
+        <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
 
         <!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
@@ -46,11 +69,11 @@ include("./includes/avatar_select.php");
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
         <!-- Select2 (CDN) -->
-            <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-            <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
+        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+        <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
 
         <!-- <link rel="stylesheet" href="./plugins/bootstrap-select/css/bootstrap-select.min.css"> -->
-		<!-- <link rel="stylesheet" href="./plugins/select2/css/select2.min.css"> -->
+        <!-- <link rel="stylesheet" href="./plugins/select2/css/select2.min.css"> -->
 
         <script src="assets/js/modernizr.min.js"></script>
 
@@ -63,33 +86,41 @@ include("./includes/avatar_select.php");
                 border-radius: 4px;
                 background-color: #f8f9fa;
             }
+
             .column-checkbox {
                 display: block;
                 margin-bottom: 8px;
             }
+
             .filter-section {
                 background-color: #fff;
                 padding: 20px;
                 border-radius: 4px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 margin-bottom: 20px;
             }
+
             .report-actions {
                 margin-top: 15px;
             }
+
             #reportTableContainer {
                 margin-top: 30px;
             }
+
             .select2-container--bootstrap4 .select2-selection--multiple {
                 min-height: 42px;
             }
+
             .select2-container {
-            width: 100% !important;
+                width: 100% !important;
             }
+
             /* Select2 Multi-select polish */
             .select2-container {
                 width: 100% !important;
             }
+
             .select2-container--bootstrap4 .select2-selection--multiple {
                 min-height: 38px;
                 border: 1px solid #ced4da;
@@ -98,17 +129,20 @@ include("./includes/avatar_select.php");
                 background-color: #fff;
                 transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
             }
+
             .select2-container--bootstrap4.select2-container--focus .select2-selection--multiple {
                 border-color: #80bdff;
                 outline: 0;
                 box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
             }
+
             .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 4px;
                 padding: 0;
             }
+
             .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
                 background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
                 color: #ffffff;
@@ -123,10 +157,12 @@ include("./includes/avatar_select.php");
                 transition: all 0.2s ease;
                 position: relative;
             }
+
             .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice:hover {
                 transform: translateY(-1px);
                 box-shadow: 0 3px 6px rgba(40, 167, 69, 0.4);
             }
+
             .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
                 color: #fff;
                 background: rgba(255, 255, 255, 0.25);
@@ -145,39 +181,47 @@ include("./includes/avatar_select.php");
                 font-weight: bold;
                 transition: background 0.2s ease;
             }
+
             .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove:hover {
                 background: rgba(255, 255, 255, 0.4);
                 color: #fff;
             }
+
             .select2-dropdown {
                 border: 1px solid #ced4da;
                 border-radius: 4px;
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             }
+
             .select2-container--bootstrap4 .select2-dropdown .select2-search__field {
                 border: 1px solid #ced4da;
                 border-radius: 4px;
                 padding: 6px 12px;
                 font-size: 14px;
             }
+
             .select2-container--bootstrap4 .select2-dropdown .select2-search__field:focus {
                 border-color: #80bdff;
                 outline: 0;
                 box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
             }
+
             .select2-results__option {
                 font-size: 14px;
                 padding: 8px 12px;
                 transition: background-color 0.15s ease;
             }
+
             .select2-results__option--highlighted {
                 background-color: #007bff !important;
                 color: white !important;
             }
+
             .select2-results__option[aria-selected=true] {
                 background-color: #f8f9fa;
                 font-weight: 500;
             }
+
             /* Draggable Column Styles */
             .column-item {
                 display: flex;
@@ -192,22 +236,26 @@ include("./includes/avatar_select.php");
                 user-select: none;
                 font-size: 13px;
             }
+
             .column-item:hover {
                 background-color: #f8f9fa;
                 box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
                 border-color: #007bff;
             }
+
             .column-item.dragging {
                 opacity: 0.5;
                 background-color: #e7f3ff;
                 border-color: #007bff;
                 box-shadow: 0 3px 8px rgba(0, 123, 255, 0.3);
             }
+
             .column-item.drag-over {
                 background-color: #d4edff;
                 border-color: #0056b3;
                 border-top: 2px solid #0056b3;
             }
+
             .column-item input[type="checkbox"] {
                 margin: 0 8px 0 0;
                 cursor: pointer;
@@ -215,6 +263,7 @@ include("./includes/avatar_select.php");
                 height: 16px;
                 flex-shrink: 0;
             }
+
             .column-item .drag-handle {
                 display: flex;
                 align-items: center;
@@ -225,9 +274,11 @@ include("./includes/avatar_select.php");
                 cursor: grab;
                 flex-shrink: 0;
             }
+
             .column-item .drag-handle:active {
                 cursor: grabbing;
             }
+
             .column-item label {
                 flex-grow: 1;
                 margin: 0;
@@ -237,38 +288,47 @@ include("./includes/avatar_select.php");
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
+
             #columnSortableContainer {
                 scrollbar-width: thin;
                 scrollbar-color: #007bff #f1f1f1;
             }
+
             #columnSortableContainer::-webkit-scrollbar {
                 width: 8px;
             }
+
             #columnSortableContainer::-webkit-scrollbar-track {
                 background: #f1f1f1;
                 border-radius: 4px;
             }
+
             #columnSortableContainer::-webkit-scrollbar-thumb {
                 background: #007bff;
                 border-radius: 4px;
             }
+
             #columnSortableContainer::-webkit-scrollbar-thumb:hover {
                 background: #0056b3;
             }
+
             #selectByTable {
                 border: 1px solid #ced4da;
                 border-radius: 4px;
                 padding: 5px 10px;
                 font-size: 13px;
             }
+
             #selectByTable:focus {
                 border-color: #007bff;
                 outline: none;
                 box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
             }
+
             .select2-search__field {
                 font-size: 14px;
             }
+
             /* Badge styling for selected count */
             .badge-success {
                 background-color: #28a745;
@@ -279,9 +339,26 @@ include("./includes/avatar_select.php");
                 margin-left: 8px;
                 box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
             }
+            <?php if ($is_rtl): ?>
+            /* RTL overrides */
+            body { direction: rtl; text-align: right; }
+            .column-item { direction: rtl; }
+            .column-item .drag-handle { margin-right: 0; margin-left: 6px; }
+            .column-item input[type="checkbox"] { margin: 0 0 0 8px; }
+            #reportTable th, #reportTable td { text-align: right; }
+            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice { padding: 2px 24px 2px 10px; }
+            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove { left: auto; right: 4px; }
+            <?php endif; ?>
         </style>
+        <?php if ($is_rtl): ?>
+            <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+        <?php endif; ?>
+        <script>
+            window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+        </script>
     </head>
-    <body class="enlarged" data-keep-enlarged="true">
+
+    <body class="enlarged<?= $is_rtl ? ' rtl' : '' ?>" data-keep-enlarged="true">
 
         <!-- Begin page -->
         <div id="wrapper">
@@ -295,10 +372,10 @@ include("./includes/avatar_select.php");
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
                             <span>
-                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
+                                <img src="<?= get_setting($conDB, 'logo') ?>" alt="" height="22">
                             </span>
                             <i>
-                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
+                                <img src="<?= get_setting($conDB, 'white_logo') ?>" alt="" height="28">
                             </i>
                         </a>
                     </div>
@@ -334,7 +411,7 @@ include("./includes/avatar_select.php");
                             <div class="col-12">
                                 <div class="page-title-box">
                                     <h4 class="page-title float-left">
-                                        <i class="mdi mdi-file-chart mr-2"></i>Reports
+                                        <i class="fa fa-chart-simple mr-2"></i><?= __('reports') ?>
                                     </h4>
                                     <div class="clearfix"></div>
                                 </div>
@@ -345,144 +422,145 @@ include("./includes/avatar_select.php");
                         <div class="row">
                             <div class="col-12">
                                 <div class="filter-section">
-                                    <h5 class="mb-3">Report Configuration</h5>
-                                    
+                                    <h5 class="mb-3"><?= __('report_configuration') ?></h5>
+
                                     <div class="row">
-                        <!-- Report Type -->
-                        <div class="col-md-4 mb-3">
-                            <label for="reportType">Report Type</label>
-                            <select class="form-control" id="reportType">
-                                <option value="">Select Report Type</option>
-                                <option value="employee">Employee Report</option>
-                                <option value="vacation">Vacation Report</option>
-                                <option value="loan">Loan Report</option>
-                                <option value="salary">Salary Report</option>
-                                <option value="payroll">Payroll Report</option>
-                                <option value="attendance">Attendance Report</option>
-                                <option value="document">Document Report</option>
-                                <option value="evaluation">Evaluation Report</option>
-                                <option value="resignation">Resignation Report</option>
-                                <option value="eos">End of Service Report</option>
-                                <option value="dept_comparison">Department Comparison Report</option>
-                                <option value="custom">Custom Report</option>
-                            </select>
-                        </div>                        <!-- Department Filter (if authorized) -->
-                        <?php if ($has_full_access): ?>
-                        <div class="col-md-4 mb-3" id="singleDeptFilter">
-                            <label for="deptFilter">Department</label>
-                            <select class="form-control" id="deptFilter">
-                                <option value="">All Departments</option>
-                                <?php
-                                $dept_query = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme FROM department ORDER BY dep_nme");
-                                while ($dept = mysqli_fetch_assoc($dept_query)) {
-                                    echo '<option value="'.$dept['id'].'">'.$dept['dep_nme'].'</option>';
-                                }
-                                ?>
-                            </select>
-                        </div>
-                        <div class="col-md-4 mb-3" id="multiDeptFilter" style="display:none;">
-                            <label for="deptMultiFilter">Select Departments</label>
-                            <select class="form-control" id="deptMultiFilter" multiple="multiple" size="8" style="height: auto;">
-                                <option value="all" data-select-all="true">✓ All Departments</option>
-                                <?php
-                                $dept_query2 = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme FROM department ORDER BY dep_nme");
-                                while ($dept = mysqli_fetch_assoc($dept_query2)) {
-                                    echo '<option value="'.$dept['id'].'">'.$dept['dep_nme'].'</option>';
-                                }
-                                ?>
-                            </select>
-                            <small class="text-muted d-block mt-1">Select "All Departments" or choose specific departments.</small>
-                        </div>
-                        <?php endif; ?>                                        <!-- Date Range -->
+                                        <!-- Report Type -->
                                         <div class="col-md-4 mb-3">
-                                            <label for="dateFrom">Date From</label>
-                                            <input type="text" class="form-control datepicker" id="dateFrom" placeholder="Select Start Date">
+                                            <label for="reportType"><?= __('report_type') ?></label>
+                                            <select class="form-control" id="reportType">
+                                                <option value=""><?= __('select_report_type') ?></option>
+                                                <option value="employee"><?= __('employee_report') ?></option>
+                                                <option value="vacation"><?= __('vacation_report') ?></option>
+                                                <option value="loan"><?= __('loan_report') ?></option>
+                                                <option value="salary"><?= __('salary_report') ?></option>
+                                                <option value="payroll"><?= __('payroll_report') ?></option>
+                                                <option value="attendance"><?= __('attendance_report') ?></option>
+                                                <option value="document"><?= __('document_report') ?></option>
+                                                <?php if (can_acknowledge_evaluations($user_type, $user_role)):
+                                                ?>
+                                                    <option value="evaluation"><?= __('evaluation_report') ?></option>
+                                                <?php endif; ?>
+                                                <option value="resignation"><?= __('resignation_report') ?></option>
+                                                <option value="eos"><?= __('eos_report') ?></option>
+                                                <option value="dept_comparison"><?= __('dept_comparison_report') ?></option>
+                                                <option value="custom"><?= __('custom_report') ?></option>
+                                            </select>
+                                        </div> <!-- Department Filter (if authorized) -->
+                                        <?php if ($has_full_access): ?>
+                                            <div class="col-md-4 mb-3" id="singleDeptFilter">
+                                                <label for="deptFilter"><?= __('department') ?></label>
+                                                <select class="form-control" id="deptFilter">
+                                                    <option value=""><?= __('all_departments') ?></option>
+                                                    <?php
+                                                    $dept_query = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
+                                                    while ($dept = mysqli_fetch_assoc($dept_query)) {
+                                                        echo '<option value="' . $dept['id'] . '">' . ($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
+                                                    }
+                                                    ?>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-4 mb-3" id="multiDeptFilter" style="display:none;">
+                                                <label for="deptMultiFilter"><?= __('select_departments') ?></label>
+                                                <select class="form-control" id="deptMultiFilter" multiple="multiple" size="8" style="height: auto;">
+                                                    <option value="all" data-select-all="true">✓ <?= __('all_departments') ?></option>
+                                                    <?php
+                                                    $dept_query2 = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
+                                                    while ($dept = mysqli_fetch_assoc($dept_query2)) {
+                                                        echo '<option value="' . $dept['id'] . '">' . ($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
+                                                    }
+                                                    ?>
+                                                </select>
+                                                <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_departments') ?></small>
+                                            </div>
+                                        <?php endif; ?> <!-- Date Range -->
+                                        <div class="col-md-4 mb-3">
+                                            <label for="dateFrom"><?= __('date_from') ?></label>
+                                            <input type="text" class="form-control datepicker" id="dateFrom" placeholder="<?= __('select_start_date') ?>">
                                         </div>
                                         <div class="col-md-4 mb-3">
-                                            <label for="dateTo">Date To</label>
-                                            <input type="text" class="form-control datepicker" id="dateTo" placeholder="Select End Date">
+                                            <label for="dateTo"><?= __('date_to') ?></label>
+                                            <input type="text" class="form-control datepicker" id="dateTo" placeholder="<?= __('select_end_date') ?>">
                                         </div>
 
                                         <!-- Status Filter -->
                                         <div class="col-md-4 mb-3">
-                                            <label for="statusFilter">Status</label>
+                                            <label for="statusFilter"><?= __('status') ?></label>
                                             <select class="form-control" id="statusFilter">
-                                                <option value="">All Status</option>
-                                                <option value="1">Active</option>
-                                                <option value="0">Inactive</option>
+                                                <option value=""><?= __('all_status') ?></option>
+                                                <option value="1" selected><?= __('active') ?></option>
+                                                <option value="0"><?= __('inactive') ?></option>
                                             </select>
                                         </div>
 
                                         <!-- Custom Report Table Selection -->
                                         <div class="col-md-4 mb-3" id="customTableSelection" style="display:none;">
-                                            <label for="customTables">Select Tables (Multi-select)</label>
+                                            <label for="customTables"><?= __('select_tables_multiselect') ?></label>
                                             <select class="form-control" id="customTables" multiple="multiple" style="width: 100%; height: auto;">
                                                 <?php
-                                                $tables_query = mysqli_query($conDB, "SHOW TABLES");
-                                                $excluded_tables = ['admin_login', 'settings', 'notifications', 'audit_log'];
-                                                
-                                                // User-friendly table names mapping
+                                                // User-friendly table names mapping - only these tables will be available
                                                 $table_names = [
-                                                    'employees' => 'Employees',
-                                                    'department' => 'Departments',
-                                                    'section' => 'Sections',
-                                                    'ac_jobs' => 'Job Titles',
-                                                    'countries' => 'Countries',
-                                                    'bank_list' => 'Banks',
-                                                    'emp_vacation' => 'Employee Vacations',
-                                                    'emp_loan' => 'Employee Loans',
-                                                    'emp_loan_payments' => 'Loan Payments',
-                                                    'emp_salary' => 'Employee Salaries',
-                                                    'emp_docu' => 'Employee Documents',
-                                                    'emp_evaluations' => 'Employee Evaluations',
-                                                    'emp_resignations' => 'Employee Resignations',
-                                                    'emp_eos' => 'End of Service',
-                                                    'payrolls' => 'Payrolls',
-                                                    'attendance' => 'Attendance Records',
-                                                    'gender' => 'Gender',
-                                                    'user_type' => 'User Types',
-                                                    'locations' => 'Locations',
-                                                    'machines' => 'Machines',
-                                                    'car' => 'Vehicles',
-                                                    'brands' => 'Brands'
+                                                    'employees' => __('employees'),
+                                                    'department' => __('departments'),
+                                                    'section' => __('sections'),
+                                                    'ac_jobs' => __('job_titles'),
+                                                    'countries' => __('countries'),
+                                                    'bank_list' => __('banks'),
+                                                    'emp_vacation' => __('employee_vacations'),
+                                                    'emp_loan' => __('employee_loans'),
+                                                    'emp_loan_payments' => __('loan_payments'),
+                                                    'emp_salary' => __('employee_salaries'),
+                                                    'emp_docu' => __('employee_documents'),
+                                                    'emp_eos' => __('end_of_service'),
+                                                    'payrolls' => __('payrolls'),
+                                                    'attendance' => __('attendance_records'),
+                                                    'gender' => __('gender'),
+                                                    'user_type' => __('user_types'),
+                                                    'locations' => __('locations'),
+                                                    'machines' => __('machines'),
+                                                    'cars' => __('vehicles'),
+                                                    'brands' => __('brands')
                                                 ];
-                                                
-                                                while ($table = mysqli_fetch_row($tables_query)) {
-                                                    if (!in_array($table[0], $excluded_tables)) {
-                                                        $display_name = isset($table_names[$table[0]]) ? $table_names[$table[0]] : str_replace('_', ' ', ucwords(str_replace('_', ' ', $table[0])));
-                                                        echo '<option value="'.$table[0].'">'.$display_name.'</option>';
-                                                    }
+
+                                                // Add emp_evaluations only for authorized users
+                                                if (can_acknowledge_evaluations($user_type, $user_role)) {
+                                                    $table_names['emp_evaluations'] = __('employee_evaluations');
+                                                }
+
+                                                // Display only the tables defined in $table_names array
+                                                foreach ($table_names as $table_key => $table_display_name) {
+                                                    echo '<option value="' . $table_key . '">' . $table_display_name . '</option>';
                                                 }
                                                 ?>
                                             </select>
-                                            <small class="text-muted d-block mt-1">Select one or more tables. Columns from all selected tables will be available.</small>
+                                            <small class="text-muted d-block mt-1"><?= __('select_one_or_more_tables') ?></small>
                                         </div>
 
                                         <!-- Department Filter for Custom Report -->
                                         <div class="col-md-4 mb-3" id="customDeptFilter" style="display:none;">
-                                            <label for="customDeptMultiFilter">Select Departments</label>
+                                            <label for="customDeptMultiFilter"><?= __('select_departments') ?></label>
                                             <select class="form-control" id="customDeptMultiFilter" multiple="multiple" style="width: 100%; height: auto;">
-                                                <option value="all" data-select-all="true">✓ All Departments</option>
+                                                <option value="all" data-select-all="true">✓ <?= __('all_departments') ?></option>
                                                 <?php
-                                                $dept_query_custom = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme FROM department ORDER BY dep_nme");
+                                                $dept_query_custom = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
                                                 while ($dept = mysqli_fetch_assoc($dept_query_custom)) {
-                                                    echo '<option value="'.$dept['id'].'">'.$dept['dep_nme'].'</option>';
+                                                    echo '<option value="' . $dept['id'] . '">' . ($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
                                                 }
                                                 ?>
                                             </select>
-                                            <small class="text-muted d-block mt-1">Select "All Departments" or choose specific departments.</small>
+                                            <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_departments') ?></small>
                                         </div>
-                                        
+
                                         <!-- Date Range Filter for Custom Report -->
                                         <div class="col-md-4 mb-3" id="customDateFromFilter" style="display:none;">
-                                            <label for="customDateFrom">From Date</label>
-                                            <input type="date" class="form-control" id="customDateFrom">
-                                            <small class="text-muted">Optional: Filter records from this date</small>
+                                            <label for="customDateFrom"><?= __('from_date') ?></label>
+                                            <input type="text" class="form-control datepicker" id="customDateFrom" placeholder="<?= __('select_start_date') ?>">
+                                            <small class="text-muted"><?= __('optional_filter_from_date') ?></small>
                                         </div>
                                         <div class="col-md-4 mb-3" id="customDateToFilter" style="display:none;">
-                                            <label for="customDateTo">To Date</label>
-                                            <input type="date" class="form-control" id="customDateTo">
-                                            <small class="text-muted">Optional: Filter records up to this date</small>
+                                            <label for="customDateTo"><?= __('to_date') ?></label>
+                                            <input type="text" class="form-control datepicker" id="customDateTo" placeholder="<?= __('select_end_date') ?>">
+                                            <small class="text-muted"><?= __('optional_filter_to_date') ?></small>
                                         </div>
                                     </div>
 
@@ -490,19 +568,19 @@ include("./includes/avatar_select.php");
                                     <div class="row mt-3" id="columnSelectionRow" style="display:none;">
                                         <div class="col-12">
                                             <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">
-                                                <label for="columnMultiSelect" class="mb-0 mb-md-0"><strong>Select Columns to Display:</strong> <span id="selectedColumnCount" class="badge badge-primary">0 selected</span></label>
+                                                <label for="columnMultiSelect" class="mb-0 mb-md-0"><strong><?= __('select_columns_to_display') ?></strong> <span id="selectedColumnCount" class="badge badge-primary">0 selected</span></label>
                                                 <div class="d-flex align-items-center flex-wrap">
                                                     <div class="mr-2 mb-2 mb-md-0" id="selectByTableContainer" style="display:none;">
                                                         <select class="form-control form-control-sm" id="selectByTable" style="width: auto; min-width: 200px;">
-                                                            <option value="">Select by Table...</option>
+                                                            <option value=""><?= __('select_by_table') ?></option>
                                                         </select>
                                                     </div>
                                                     <div>
                                                         <button type="button" class="btn btn-sm btn-info mr-2" id="selectAllColumnsBtn">
-                                                            <i class="mdi mdi-check-all mr-1"></i>Select All
+                                                            <i class="mdi mdi-check-all mr-1"></i><?= __('select_all') ?>
                                                         </button>
                                                         <button type="button" class="btn btn-sm btn-warning" id="deselectAllColumnsBtn">
-                                                            <i class="mdi mdi-close-circle mr-1"></i>Deselect All
+                                                            <i class="mdi mdi-close-circle mr-1"></i><?= __('deselect_all') ?>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -510,23 +588,20 @@ include("./includes/avatar_select.php");
                                             <div id="columnSortableContainer" style="border: 1px solid #ddd; border-radius: 4px; padding: 15px; background-color: #f9f9f9; max-height: 400px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px;">
                                                 <!-- Sortable columns will be rendered here -->
                                             </div>
-                                            <small class="text-muted d-block mt-2"><i class="mdi mdi-information mr-1"></i>Drag columns to reorder • Click checkbox to select/deselect • Scroll to see more</small>
+                                            <small class="text-muted d-block mt-2"><i class="mdi mdi-information mr-1"></i><?= __('drag_columns_to_reorder_click_checkbox_to_select_deselect_scroll_to_see_more') ?></small>
                                         </div>
                                     </div>
 
                                     <!-- Report Actions -->
                                     <div class="report-actions">
                                         <button type="button" class="btn btn-primary" id="generateReportBtn">
-                                            <i class="mdi mdi-file-chart mr-1"></i>Generate Report
+                                            <i class="mdi mdi-file-chart mr-1"></i><?= __('generate_report') ?>
                                         </button>
                                         <button type="button" class="btn btn-success" id="exportExcelBtn" style="display:none;">
-                                            <i class="mdi mdi-file-excel mr-1"></i>Export to Excel
-                                        </button>
-                                        <button type="button" class="btn btn-danger" id="exportPdfBtn" style="display:none;">
-                                            <i class="mdi mdi-file-pdf mr-1"></i>Export to PDF
+                                            <i class="mdi mdi-file-excel mr-1"></i><?= __('export_to_excel') ?>
                                         </button>
                                         <button type="button" class="btn btn-secondary" id="resetBtn">
-                                            <i class="mdi mdi-refresh mr-1"></i>Reset
+                                            <i class="mdi mdi-refresh mr-1"></i><?= __('reset') ?>
                                         </button>
                                     </div>
                                 </div>
@@ -619,10 +694,10 @@ include("./includes/avatar_select.php");
 
                 // Format function for dropdown options with checkmarks
                 function formatDeptOption(data) {
-                    if (!data.id) { 
-                        return data.text; 
+                    if (!data.id) {
+                        return data.text;
                     }
-                    
+
                     // Special formatting for "All Departments"
                     if (data.id === 'all') {
                         var $result = $('<span><i class="mdi mdi-select-all text-primary mr-2" style="font-size: 16px;"></i><strong>' + data.text + '</strong></span>');
@@ -636,11 +711,11 @@ include("./includes/avatar_select.php");
                     var $select = $('#deptMultiFilter');
                     var selectedValues = $select.val() || [];
                     var isSelected = selectedValues.indexOf(data.id) !== -1;
-                    
-                    var checkmark = isSelected 
-                        ? '<i class="mdi mdi-check-circle text-success mr-2" style="font-size: 16px;"></i>' 
-                        : '<i class="mdi mdi-checkbox-blank-circle-outline text-muted mr-2" style="font-size: 16px;"></i>';
-                    
+
+                    var checkmark = isSelected ?
+                        '<i class="mdi mdi-check-circle text-success mr-2" style="font-size: 16px;"></i>' :
+                        '<i class="mdi mdi-checkbox-blank-circle-outline text-muted mr-2" style="font-size: 16px;"></i>';
+
                     var $result = $('<span>' + checkmark + data.text + '</span>');
                     return $result;
                 }
@@ -660,24 +735,24 @@ include("./includes/avatar_select.php");
                             var selected = $select.val() || [];
                             var $none = $select.find('option[value="none"]');
                             if (selected.length === allValues.length && !$none.length) {
-                                $select.prepend('<option value="none" data-deselect-all="true">✗ Deselect All</option>');
+                                $select.prepend(`<option value="none" data-deselect-all="true">✗ ${__('deselect_all')}</option>`);
                             } else if (selected.length !== allValues.length && $none.length) {
                                 $none.remove();
                             }
                         }
                         $('#deptMultiFilter').select2({
                             theme: 'bootstrap4',
-                            placeholder: 'Select departments',
+                            placeholder: __('select_departments'),
                             allowClear: true,
                             closeOnSelect: false,
                             width: '100%',
                             templateResult: formatDeptOption,
-                            templateSelection: function (data) {
+                            templateSelection: function(data) {
                                 if (data.id === 'all') {
-                                    return 'All Departments';
+                                    return __('all_departments')
                                 }
                                 if (data.id === 'none') {
-                                    return 'Deselect All';
+                                    return __('deselect_all')
                                 }
                                 return data.text;
                             }
@@ -725,19 +800,19 @@ include("./includes/avatar_select.php");
                         updateDeselectOption();
                     }
                 }
-                
+
                 function initCustomTablesSelect2() {
                     if ($.fn.select2) {
                         $('#customTables').select2({
                             theme: 'bootstrap4',
-                            placeholder: 'Select tables to generate report',
+                            placeholder: (typeof __ === 'function') ? __('select_tables_to_generate_report') : 'Select tables to generate report',
                             allowClear: true,
                             closeOnSelect: false,
                             width: '100%'
                         });
                     }
                 }
-                
+
                 function initCustomDeptSelect2() {
                     if ($.fn.select2) {
                         // Dynamically add Deselect All option if all departments are selected
@@ -752,24 +827,24 @@ include("./includes/avatar_select.php");
                             var selected = $select.val() || [];
                             var $none = $select.find('option[value="none"]');
                             if (selected.length === allValues.length && !$none.length) {
-                                $select.prepend('<option value="none" data-deselect-all="true">✗ Deselect All</option>');
+                                $select.prepend(`<option value="none" data-deselect-all="true">✗ ${__('deselect_all')}</option>`);
                             } else if (selected.length !== allValues.length && $none.length) {
                                 $none.remove();
                             }
                         }
                         $('#customDeptMultiFilter').select2({
                             theme: 'bootstrap4',
-                            placeholder: 'Select departments',
+                            placeholder: (typeof __ === 'function') ? __('select_departments') : 'Select departments',
                             allowClear: true,
                             closeOnSelect: false,
                             width: '100%',
                             templateResult: formatDeptOption,
-                            templateSelection: function (data) {
+                            templateSelection: function(data) {
                                 if (data.id === 'all') {
-                                    return 'All Departments';
+                                    return (typeof __ === 'function') ? __('all_departments') : 'All Departments';
                                 }
                                 if (data.id === 'none') {
-                                    return 'Deselect All';
+                                    return (typeof __ === 'function') ? __('deselect_all') : 'Deselect All';
                                 }
                                 return data.text;
                             }
@@ -814,151 +889,686 @@ include("./includes/avatar_select.php");
                         updateCustomDeselectOption();
                     }
                 }
-                
+
                 initDeptSelect2();
+
+                // Set default status filter to "Active" (value="1")
+                $('#statusFilter').val('1');
+
+                // Client-side translation for custom column selector labels
+                function normalizeKey(str) {
+                    if (!str) return '';
+                    return String(str)
+                        .trim()
+                        .replace(/[\s\-]+/g, '_')
+                        .replace(/__+/g, '_')
+                        .toLowerCase();
+                }
+
+                function translateLabel(raw) {
+                    var key = normalizeKey(raw);
+                    // Try full key via __()
+                    if (typeof __ === 'function') {
+                        var t1 = __(key);
+                        if (t1 && t1 !== key) return t1;
+                        // Try last segment if composite key
+                        if (key.indexOf('_') !== -1) {
+                            var parts = key.split('_');
+                            var base = parts[parts.length - 1];
+                            var t2 = __(base);
+                            if (t2 && t2 !== base) return t2;
+                        }
+                    }
+                    // Fallback to humanized text
+                    return raw;
+                }
+
+                // Observe column items container to translate labels when rendered
+                var columnContainer = document.getElementById('columnSortableContainer');
+                if (columnContainer) {
+                    var observer = new MutationObserver(function(mutations) {
+                        mutations.forEach(function(mutation) {
+                            if (mutation.type === 'childList' && mutation.addedNodes.length) {
+                                mutation.addedNodes.forEach(function(node) {
+                                    if (node.nodeType === 1) {
+                                        var label = node.querySelector && node.querySelector('label');
+                                        if (label && label.textContent) {
+                                            var newText = translateLabel(label.textContent);
+                                            if (newText && newText !== label.textContent) {
+                                                label.textContent = newText;
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    });
+                    observer.observe(columnContainer, { childList: true, subtree: true });
+                    // Initial pass for already-rendered items
+                    $('#columnSortableContainer label').each(function() {
+                        var txt = $(this).text();
+                        var t = translateLabel(txt);
+                        if (t && t !== txt) $(this).text(t);
+                    });
+                }
 
                 // Column definitions for each report type
                 const reportColumns = {
-                    employee: [
-                        { id: 'name', label: 'Name', default: true },
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'iqama', label: 'Iqama', default: true },
-                        { id: 'mobile', label: 'Mobile', default: true },
-                        { id: 'email', label: 'Email', default: false },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'sectin_nme', label: 'Section', default: false },
-                        { id: 'actual_job', label: 'Job Title', default: true },
-                        { id: 'emptype', label: 'Employee Type', default: true },
-                        { id: 'salary', label: 'Salary', default: false },
-                        { id: 'joining_date', label: 'Joining Date', default: true },
-                        { id: 'country', label: 'Nationality', default: false },
-                        { id: 'supervisor_id', label: 'Supervisor', default: false },
-                        { id: 'vacation_days', label: 'Vacation Days', default: false },
-                        { id: 'fly', label: 'Flight Ticket', default: false },
-                        { id: 'bank_name', label: 'Bank Name', default: false },
-                        { id: 'iban', label: 'IBAN', default: false },
-                        { id: 'dob', label: 'Date of Birth', default: false },
-                        { id: 'sex', label: 'Gender', default: false },
-                        { id: 'blood_type', label: 'Blood Type', default: false },
-                        { id: 'mar_status', label: 'Marital Status', default: false },
-                        { id: 'gosi', label: 'GOSI', default: false },
-                        { id: 'insurance_no', label: 'Insurance No', default: false },
-                        { id: 'status', label: 'Status', default: true }
+                    employee: [{
+                            id: 'name',
+                            label: (typeof __ === 'function') ? __('name') : 'Name',
+                            default: true
+                        },
+                        {
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('emp_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'iqama',
+                            label: (typeof __ === 'function') ? __('iqama') : 'Iqama',
+                            default: true
+                        },
+                        {
+                            id: 'mobile',
+                            label: (typeof __ === 'function') ? __('mobile') : 'Mobile',
+                            default: true
+                        },
+                        {
+                            id: 'email',
+                            label: (typeof __ === 'function') ? __('email') : 'Email',
+                            default: false
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('dept') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'sectin_nme',
+                            label: (typeof __ === 'function') ? __('sectin_nme') : 'Section',
+                            default: false
+                        },
+                        {
+                            id: 'actual_job',
+                            label: (typeof __ === 'function') ? __('actual_job') : 'Job Title',
+                            default: true
+                        },
+                        {
+                            id: 'emptype',
+                            label: (typeof __ === 'function') ? __('emptype') : 'Employee Type',
+                            default: true
+                        },
+                        {
+                            id: 'salary',
+                            label: (typeof __ === 'function') ? __('salary') : 'Salary',
+                            default: false
+                        },
+                        {
+                            id: 'joining_date',
+                            label: (typeof __ === 'function') ? __('joining_date') : 'Joining Date',
+                            default: true
+                        },
+                        {
+                            id: 'country',
+                            label: (typeof __ === 'function') ? __('country') : 'Nationality',
+                            default: false
+                        },
+                        {
+                            id: 'supervisor_id',
+                            label: (typeof __ === 'function') ? __('supervisor_id') : 'Supervisor',
+                            default: false
+                        },
+                        {
+                            id: 'vacation_days',
+                            label: (typeof __ === 'function') ? __('vacation_days') : 'Vacation Days',
+                            default: false
+                        },
+                        {
+                            id: 'fly',
+                            label: (typeof __ === 'function') ? __('fly') : 'Flight Ticket',
+                            default: false
+                        },
+                        {
+                            id: 'bank_name',
+                            label: (typeof __ === 'function') ? __('bank_name') : 'Bank Name',
+                            default: false
+                        },
+                        {
+                            id: 'iban',
+                            label: (typeof __ === 'function') ? __('iban') : 'IBAN',
+                            default: false
+                        },
+                        {
+                            id: 'dob',
+                            label: (typeof __ === 'function') ? __('dob') : 'Date of Birth',
+                            default: false
+                        },
+                        {
+                            id: 'sex',
+                            label: (typeof __ === 'function') ? __('sex') : 'Gender',
+                            default: false
+                        },
+                        {
+                            id: 'blood_type',
+                            label: (typeof __ === 'function') ? __('blood_type') : 'Blood Type',
+                            default: false
+                        },
+                        {
+                            id: 'mar_status',
+                            label: (typeof __ === 'function') ? __('mar_status') : 'Marital Status',
+                            default: false
+                        },
+                        {
+                            id: 'gosi',
+                            label: (typeof __ === 'function') ? __('gosi') : 'GOSI',
+                            default: false
+                        },
+                        {
+                            id: 'insurance_no',
+                            label: (typeof __ === 'function') ? __('insurance_no') : 'Insurance No',
+                            default: false
+                        },
+                        {
+                            id: 'status',
+                            label: (typeof __ === 'function') ? __('status') : 'Status',
+                            default: true
+                        }
                     ],
-                    vacation: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'vac_type', label: 'Vacation Type', default: true },
-                        { id: 'start_date', label: 'Start Date', default: true },
-                        { id: 'return_date', label: 'Return Date', default: true },
-                        { id: 'vacdays', label: 'Days', default: true },
-                        { id: 'fly_type', label: 'Flight Type', default: false },
-                        { id: 'permit_no', label: 'Permit No', default: false },
-                        { id: 'current_status', label: 'Status', default: true },
-                        { id: 'created_at', label: 'Applied Date', default: false }
+                    vacation: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('emp_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('emp_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('dept') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'vac_type',
+                            label: (typeof __ === 'function') ? __('vac_type') : 'Vacation Type',
+                            default: true
+                        },
+                        {
+                            id: 'start_date',
+                            label: (typeof __ === 'function') ? __('start_date') : 'Start Date',
+                            default: true
+                        },
+                        {
+                            id: 'return_date',
+                            label: (typeof __ === 'function') ? __('return_date') : 'Return Date',
+                            default: true
+                        },
+                        {
+                            id: 'vacdays',
+                            label: (typeof __ === 'function') ? __('vacdays') : 'Days',
+                            default: true
+                        },
+                        {
+                            id: 'fly_type',
+                            label: (typeof __ === 'function') ? __('fly_type') : 'Flight Type',
+                            default: false
+                        },
+                        {
+                            id: 'permit_no',
+                            label: (typeof __ === 'function') ? __('permit_no') : 'Permit No',
+                            default: false
+                        },
+                        {
+                            id: 'current_status',
+                            label: (typeof __ === 'function') ? __('current_status') : 'Status',
+                            default: true
+                        },
+                        {
+                            id: 'created_at',
+                            label: (typeof __ === 'function') ? __('created_at') : 'Applied Date',
+                            default: false
+                        }
                     ],
-                    loan: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'loan_amount', label: 'Loan Amount', default: true },
-                        { id: 'monthly_deduction', label: 'Monthly Deduction', default: true },
-                        { id: 'start_date', label: 'Start Date', default: true },
-                        { id: 'end_date', label: 'End Date', default: true },
-                        { id: 'loan_type', label: 'Loan Type', default: true },
-                        { id: 'status', label: 'Status', default: true },
-                        { id: 'final_approved_amount', label: 'Approved Amount', default: false },
-                        { id: 'total_payable', label: 'Total Payable', default: false },
-                        { id: 'remaining_amount', label: 'Remaining Amount', default: true }
+                    loan: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('emp_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('emp_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('dept') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'loan_amount',
+                            label: (typeof __ === 'function') ? __('loan_amount') : 'Loan Amount',
+                            default: true
+                        },
+                        {
+                            id: 'monthly_deduction',
+                            label: (typeof __ === 'function') ? __('monthly_deduction') : 'Monthly Deduction',
+                            default: true
+                        },
+                        {
+                            id: 'start_date',
+                            label: (typeof __ === 'function') ? __('start_date') : 'Start Date',
+                            default: true
+                        },
+                        {
+                            id: 'end_date',
+                            label: (typeof __ === 'function') ? __('end_date') : 'End Date',
+                            default: true
+                        },
+                        {
+                            id: 'loan_type',
+                            label: (typeof __ === 'function') ? __('loan_type') : 'Loan Type',
+                            default: true
+                        },
+                        {
+                            id: 'status',
+                            label: (typeof __ === 'function') ? __('status') : 'Status',
+                            default: true
+                        },
+                        {
+                            id: 'final_approved_amount',
+                            label: (typeof __ === 'function') ? __('final_approved_amount') : 'Approved Amount',
+                            default: false
+                        },
+                        {
+                            id: 'total_payable',
+                            label: (typeof __ === 'function') ? __('total_payable') : 'Total Payable',
+                            default: false
+                        },
+                        {
+                            id: 'remaining_amount',
+                            label: (typeof __ === 'function') ? __('remaining_amount') : 'Remaining Amount',
+                            default: true
+                        }
                     ],
-                    salary: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'basic', label: 'Basic Salary', default: true },
-                        { id: 'housing', label: 'Housing', default: true },
-                        { id: 'transport', label: 'Transport', default: true },
-                        { id: 'food', label: 'Food', default: false },
-                        { id: 'misc', label: 'Misc', default: false },
-                        { id: 'fuel', label: 'Fuel', default: false },
-                        { id: 'tel', label: 'Telephone', default: false },
-                        { id: 'cashier', label: 'Cashier', default: false },
-                        { id: 'other', label: 'Other', default: false },
-                        { id: 'guard', label: 'Guard', default: false },
-                        { id: 'total_salary', label: 'Total Salary', default: true }
+                    salary: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('emp_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('emp_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('dept') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'basic',
+                            label: (typeof __ === 'function') ? __('basic') : 'Basic Salary',
+                            default: true
+                        },
+                        {
+                            id: 'housing',
+                            label: (typeof __ === 'function') ? __('housing') : 'Housing',
+                            default: true
+                        },
+                        {
+                            id: 'transport',
+                            label: (typeof __ === 'function') ? __('transport') : 'Transport',
+                            default: true
+                        },
+                        {
+                            id: 'food',
+                            label: (typeof __ === 'function') ? __('food') : 'Food',
+                            default: false
+                        },
+                        {
+                            id: 'misc',
+                            label: (typeof __ === 'function') ? __('misc') : 'Misc',
+                            default: false
+                        },
+                        {
+                            id: 'fuel',
+                            label: (typeof __ === 'function') ? __('fuel') : 'Fuel',
+                            default: false
+                        },
+                        {
+                            id: 'tel',
+                            label: (typeof __ === 'function') ? __('tel') : 'Telephone',
+                            default: false
+                        },
+                        {
+                            id: 'cashier',
+                            label: (typeof __ === 'function') ? __('cashier') : 'Cashier',
+                            default: false
+                        },
+                        {
+                            id: 'other',
+                            label: (typeof __ === 'function') ? __('other') : 'Other',
+                            default: false
+                        },
+                        {
+                            id: 'guard',
+                            label: (typeof __ === 'function') ? __('guard') : 'Guard',
+                            default: false
+                        },
+                        {
+                            id: 'total_salary',
+                            label: (typeof __ === 'function') ? __('total_salary') : 'Total Salary',
+                            default: true
+                        }
                     ],
-                    payroll: [
-                        { id: 'payroll_id', label: 'Payroll ID', default: true },
-                        { id: 'month', label: 'Month', default: true },
-                        { id: 'year', label: 'Year', default: true },
-                        { id: 'total_employees', label: 'Total Employees', default: true },
-                        { id: 'total_salary', label: 'Total Salary', default: true },
-                        { id: 'total_deductions', label: 'Total Deductions', default: true },
-                        { id: 'net_salary', label: 'Net Salary', default: true },
-                        { id: 'generated_by', label: 'Generated By', default: false },
-                        { id: 'created_at', label: 'Generated Date', default: true }
+                    payroll: [{
+                            id: 'payroll_id',
+                            label: (typeof __ === 'function') ? __('payroll_id') : 'Payroll ID',
+                            default: true
+                        },
+                        {
+                            id: 'month',
+                            label: (typeof __ === 'function') ? __('month') : 'Month',
+                            default: true
+                        },
+                        {
+                            id: 'year',
+                            label: (typeof __ === 'function') ? __('year') : 'Year',
+                            default: true
+                        },
+                        {
+                            id: 'total_employees',
+                            label: (typeof __ === 'function') ? __('total_employees') : 'Total Employees',
+                            default: true
+                        },
+                        {
+                            id: 'total_salary',
+                            label: (typeof __ === 'function') ? __('total_salary') : 'Total Salary',
+                            default: true
+                        },
+                        {
+                            id: 'total_deductions',
+                            label: (typeof __ === 'function') ? __('total_deductions') : 'Total Deductions',
+                            default: true
+                        },
+                        {
+                            id: 'net_salary',
+                            label: (typeof __ === 'function') ? __('net_salary') : 'Net Salary',
+                            default: true
+                        },
+                        {
+                            id: 'generated_by',
+                            label: (typeof __ === 'function') ? __('generated_by') : 'Generated By',
+                            default: false
+                        },
+                        {
+                            id: 'created_at',
+                            label: (typeof __ === 'function') ? __('generated_date') : 'Generated Date',
+                            default: true
+                        }
                     ],
-                    attendance: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'date', label: 'Date', default: true },
-                        { id: 'check_in', label: 'Check In', default: true },
-                        { id: 'check_out', label: 'Check Out', default: true },
-                        { id: 'hours', label: 'Hours', default: true },
-                        { id: 'status', label: 'Status', default: true }
+                    attendance: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'date',
+                            label: (typeof __ === 'function') ? __('date') : 'Date',
+                            default: true
+                        },
+                        {
+                            id: 'check_in',
+                            label: (typeof __ === 'function') ? __('check_in') : 'Check In',
+                            default: true
+                        },
+                        {
+                            id: 'check_out',
+                            label: (typeof __ === 'function') ? __('check_out') : 'Check Out',
+                            default: true
+                        },
+                        {
+                            id: 'hours',
+                            label: (typeof __ === 'function') ? __('hours') : 'Hours',
+                            default: true
+                        },
+                        {
+                            id: 'status',
+                            label: (typeof __ === 'function') ? __('status') : 'Status',
+                            default: true
+                        }
                     ],
-                    document: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'document_type', label: 'Document Type', default: true },
-                        { id: 'document_name', label: 'Document Name', default: true },
-                        { id: 'upload_date', label: 'Upload Date', default: true },
-                        { id: 'status', label: 'Status', default: true }
+                    document: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'document_type',
+                            label: (typeof __ === 'function') ? __('document_type') : 'Document Type',
+                            default: true
+                        },
+                        {
+                            id: 'document_name',
+                            label: (typeof __ === 'function') ? __('document_name') : 'Document Name',
+                            default: true
+                        },
+                        {
+                            id: 'upload_date',
+                            label: (typeof __ === 'function') ? __('upload_date') : 'Upload Date',
+                            default: true
+                        },
+                        {
+                            id: 'status',
+                            label: (typeof __ === 'function') ? __('status') : 'Status',
+                            default: true
+                        }
                     ],
-                    evaluation: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'evaluation_date', label: 'Evaluation Date', default: true },
-                        { id: 'score', label: 'Score', default: true },
-                        { id: 'rating', label: 'Rating', default: true },
-                        { id: 'evaluator', label: 'Evaluator', default: false }
+                    evaluation: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'evaluation_date',
+                            label: (typeof __ === 'function') ? __('evaluation_date') : 'Evaluation Date',
+                            default: true
+                        },
+                        {
+                            id: 'score',
+                            label: (typeof __ === 'function') ? __('score') : 'Score',
+                            default: true
+                        },
+                        {
+                            id: 'rating',
+                            label: (typeof __ === 'function') ? __('rating') : 'Rating',
+                            default: true
+                        },
+                        {
+                            id: 'evaluator',
+                            label: (typeof __ === 'function') ? __('evaluator') : 'Evaluator',
+                            default: false
+                        },
+                        {
+                            id: 'acknowledgment_status',
+                            label: (typeof __ === 'function') ? __('acknowledgment_status') : 'Acknowledgment Status',
+                            default: true
+                        },
+                        {
+                            id: 'objection_note',
+                            label: (typeof __ === 'function') ? __('objection_note') : 'Objection Note',
+                            default: true
+                        }
                     ],
-                    resignation: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'resignation_date', label: 'Resignation Date', default: true },
-                        { id: 'last_working_day', label: 'Last Working Day', default: true },
-                        { id: 'reason', label: 'Reason', default: false },
-                        { id: 'status', label: 'Status', default: true }
+                    resignation: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'resignation_date',
+                            label: (typeof __ === 'function') ? __('resignation_date') : 'Resignation Date',
+                            default: true
+                        },
+                        {
+                            id: 'last_working_day',
+                            label: (typeof __ === 'function') ? __('last_working_day') : 'Last Working Day',
+                            default: true
+                        },
+                        {
+                            id: 'reason',
+                            label: (typeof __ === 'function') ? __('reason') : 'Reason',
+                            default: false
+                        },
+                        {
+                            id: 'status',
+                            label: (typeof __ === 'function') ? __('status') : 'Status',
+                            default: true
+                        }
                     ],
-                    eos: [
-                        { id: 'emp_id', label: 'Employee ID', default: true },
-                        { id: 'emp_name', label: 'Employee Name', default: true },
-                        { id: 'dept', label: 'Department', default: true },
-                        { id: 'joining_date', label: 'Joining Date', default: true },
-                        { id: 'termination_date', label: 'Termination Date', default: true },
-                        { id: 'service_years', label: 'Service Years', default: true },
-                        { id: 'eos_amount', label: 'EOS Amount', default: true },
-                        { id: 'vacation_balance', label: 'Vacation Balance', default: false },
-                        { id: 'total_amount', label: 'Total Amount', default: true }
+                    eos: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'joining_date',
+                            label: (typeof __ === 'function') ? __('joining_date') : 'Joining Date',
+                            default: true
+                        },
+                        {
+                            id: 'termination_date',
+                            label: (typeof __ === 'function') ? __('termination_date') : 'Termination Date',
+                            default: true
+                        },
+                        {
+                            id: 'service_years',
+                            label: (typeof __ === 'function') ? __('service_years') : 'Service Years',
+                            default: true
+                        },
+                        {
+                            id: 'eos_amount',
+                            label: (typeof __ === 'function') ? __('eos_amount') : 'EOS Amount',
+                            default: true
+                        },
+                        {
+                            id: 'vacation_balance',
+                            label: (typeof __ === 'function') ? __('vacation_balance') : 'Vacation Balance',
+                            default: false
+                        },
+                        {
+                            id: 'total_amount',
+                            label: (typeof __ === 'function') ? __('total_amount') : 'Total Amount',
+                            default: true
+                        }
                     ],
-                    dept_comparison: [
-                        { id: 'department', label: 'Department', default: true },
-                        { id: 'total_employees', label: 'Total Employees', default: true },
-                        { id: 'active_employees', label: 'Active Employees', default: true },
-                        { id: 'inactive_employees', label: 'Inactive Employees', default: false },
-                        { id: 'total_salary', label: 'Total Salary', default: true },
-                        { id: 'avg_salary', label: 'Average Salary', default: true },
-                        { id: 'pending_vacations', label: 'Pending Vacations', default: true },
-                        { id: 'approved_vacations', label: 'Approved Vacations', default: false },
-                        { id: 'active_loans', label: 'Active Loans', default: true },
-                        { id: 'total_loan_amount', label: 'Total Loan Amount', default: true },
-                        { id: 'avg_service_years', label: 'Avg Service Years', default: false }
+                    dept_comparison: [{
+                            id: 'department',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'total_employees',
+                            label: (typeof __ === 'function') ? __('total_employees') : 'Total Employees',
+                            default: true
+                        },
+                        {
+                            id: 'active_employees',
+                            label: (typeof __ === 'function') ? __('active_employees') : 'Active Employees',
+                            default: true
+                        },
+                        {
+                            id: 'inactive_employees',
+                            label: (typeof __ === 'function') ? __('inactive_employees') : 'Inactive Employees',
+                            default: false
+                        },
+                        {
+                            id: 'total_salary',
+                            label: (typeof __ === 'function') ? __('total_salary') : 'Total Salary',
+                            default: true
+                        },
+                        {
+                            id: 'avg_salary',
+                            label: (typeof __ === 'function') ? __('average_salary') : 'Average Salary',
+                            default: true
+                        },
+                        {
+                            id: 'pending_vacations',
+                            label: (typeof __ === 'function') ? __('pending_vacations') : 'Pending Vacations',
+                            default: true
+                        },
+                        {
+                            id: 'approved_vacations',
+                            label: (typeof __ === 'function') ? __('approved_vacations') : 'Approved Vacations',
+                            default: false
+                        },
+                        {
+                            id: 'active_loans',
+                            label: (typeof __ === 'function') ? __('active_loans') : 'Active Loans',
+                            default: true
+                        },
+                        {
+                            id: 'total_loan_amount',
+                            label: (typeof __ === 'function') ? __('total_loan_amount') : 'Total Loan Amount',
+                            default: true
+                        },
+                        {
+                            id: 'avg_service_years',
+                            label: (typeof __ === 'function') ? __('avg_service_years') : 'Avg Service Years',
+                            default: false
+                        }
                     ],
                     custom: []
                 };
@@ -966,49 +1576,65 @@ include("./includes/avatar_select.php");
                 // When report type changes, load column checkboxes
                 $('#reportType').on('change', function() {
                     const reportType = $(this).val();
-                    
-                    console.log('*** REPORT TYPE CHANGED TO:', reportType);
-                    
+
+                    // console.log('*** REPORT TYPE CHANGED TO:', reportType);
+
                     // Destroy DataTable if exists BEFORE hiding/clearing
                     if ($.fn.DataTable.isDataTable('#reportTable')) {
                         try {
                             const table = $('#reportTable').DataTable();
                             table.destroy(); // Destroy DataTable but keep table structure
-                            console.log('DataTable destroyed successfully');
+                            // console.log('DataTable destroyed successfully');
                         } catch (e) {
                             console.error('Error destroying DataTable:', e);
                         }
                     }
-                    
+
                     // Hide report table and export buttons when changing report type
                     $('#reportTableContainer').hide();
                     $('#exportExcelBtn, #exportPdfBtn').hide();
-                    
+
                     // Clear table content AFTER destroying DataTable
                     $('#reportTableHead').empty();
                     $('#reportTableBody').empty()
-                    
+
                     // Reset all filter fields
                     $('#dateFrom').val('');
                     $('#dateTo').val('');
                     $('#statusFilter').val('');
                     $('#deptFilter').val('');
-                    
+
                     // Clear multi-select department filters
                     $('#deptMultiFilter').val(null).trigger('change');
                     $('#customDeptMultiFilter').val(null).trigger('change');
-                    
+
                     // Clear column selection container and hidden select
                     $('#columnSortableContainer').empty();
                     $('#columnMultiSelect').empty();
                     $('#selectedColumnCount').text('0 selected');
-                    
-                    console.log('Cleared column container and select');
-                    
+
+                    // console.log('Cleared column container and select');
+
                     // Hide select by table dropdown and clear it
                     $('#selectByTableContainer').hide();
                     $('#selectByTable').empty().append('<option value="">Select by Table...</option>');
-                    
+
+                    // Update status filter based on report type
+                    if (reportType === 'evaluation') {
+                        // For evaluation report, show objection status filter
+                        $('#statusFilter').html(`
+                            <option value=""><?= __('all_status') ?></option>
+                            <option value="objected"><?= __('objected_evaluations') ?></option>
+                        `);
+                    } else {
+                        // For other reports, show active/inactive filter
+                        $('#statusFilter').html(`
+                            <option value=""><?= __('all_status') ?></option>
+                            <option value="1" selected><?= __('active') ?></option>
+                            <option value="0"><?= __('inactive') ?></option>
+                        `);
+                    }
+
                     // Show/hide custom table selector
                     if (reportType === 'custom') {
                         $('#customTableSelection').show();
@@ -1034,10 +1660,10 @@ include("./includes/avatar_select.php");
                         // Show global date filters for non-custom reports
                         $('#dateFrom').closest('.col-md-4, .form-group').show();
                         $('#dateTo').closest('.col-md-4, .form-group').show();
-                        
+
                         // Hide column selection first
                         $('#columnSelectionRow').hide();
-                        
+
                         // Show/hide department filters based on report type
                         // Show multi-department filter for all report types
                         if (reportType) {
@@ -1047,10 +1673,10 @@ include("./includes/avatar_select.php");
                             $('#dateTo').closest('.col-md-4, .form-group').show();
                             initDeptSelect2();
                             updateDeptSelectionCount();
-                            
+
                             // Only show column selection if report type has columns defined
                             if (reportColumns[reportType]) {
-                                console.log('Calling loadColumnCheckboxes with forceDefault=true');
+                                // console.log('Calling loadColumnCheckboxes with forceDefault=true');
                                 loadColumnCheckboxes(reportType, true); // Force default selections
                                 $('#columnSelectionRow').show();
                             }
@@ -1076,7 +1702,9 @@ include("./includes/avatar_select.php");
                     $.ajax({
                         url: 'includes/ajaxFile/getTableColumns.php',
                         method: 'POST',
-                        data: { tables: JSON.stringify(tableNames) },
+                        data: {
+                            tables: JSON.stringify(tableNames)
+                        },
                         dataType: 'json',
                         success: function(response) {
                             if (response.success) {
@@ -1086,20 +1714,19 @@ include("./includes/avatar_select.php");
                                     label: col.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
                                     default: true
                                 }));
-                                
+
                                 // Check if any selected table has department-related columns
                                 const hasDeptColumn = response.columns.some(col => {
                                     const colName = col.includes('.') ? col.split('.')[1] : col;
                                     return ['dept', 'dept_id', 'department'].includes(colName.toLowerCase());
                                 });
-                                
+
                                 // Check if any selected table has date-related columns
                                 const hasDateColumn = response.columns.some(col => {
                                     const colName = col.includes('.') ? col.split('.')[1] : col;
-                                    return colName.toLowerCase().includes('date') || 
-                                           ['created_at', 'updated_at', 'month_year', 'start_date', 'end_date', 'joining_date'].includes(colName.toLowerCase());
+                                    return colName.toLowerCase().includes('date') || ['created_at', 'updated_at', 'month_year', 'start_date', 'end_date', 'joining_date'].includes(colName.toLowerCase());
                                 });
-                                
+
                                 // Show/hide department filter based on column availability
                                 if (hasDeptColumn) {
                                     $('#customDeptFilter').show();
@@ -1107,7 +1734,7 @@ include("./includes/avatar_select.php");
                                     $('#customDeptFilter').hide();
                                     $('#customDeptMultiFilter').val(null).trigger('change');
                                 }
-                                
+
                                 // Show/hide date filters based on column availability
                                 if (hasDateColumn) {
                                     // Show custom date filters and keep global hidden in custom mode
@@ -1124,16 +1751,16 @@ include("./includes/avatar_select.php");
                                     $('#dateFrom').closest('.col-md-4, .form-group').hide();
                                     $('#dateTo').closest('.col-md-4, .form-group').hide();
                                 }
-                                
-                                console.log('Department columns available:', hasDeptColumn);
-                                console.log('Date columns available:', hasDateColumn);
-                                
+
+                                // console.log('Department columns available:', hasDeptColumn);
+                                // console.log('Date columns available:', hasDateColumn);
+
                                 // Populate table selector dropdown for custom reports
                                 if (tableNames.length > 1) {
                                     const $selectByTable = $('#selectByTable');
                                     $selectByTable.empty();
                                     $selectByTable.append('<option value="">Select by Table...</option>');
-                                    
+
                                     // Get unique table names from columns
                                     const tables = {};
                                     response.columns.forEach(col => {
@@ -1144,18 +1771,18 @@ include("./includes/avatar_select.php");
                                             }
                                         }
                                     });
-                                    
+
                                     // Add options for each table
                                     Object.keys(tables).forEach(table => {
                                         const displayName = table.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
                                         $selectByTable.append(`<option value="${table}">${displayName}</option>`);
                                     });
-                                    
+
                                     $('#selectByTableContainer').show();
                                 } else {
                                     $('#selectByTableContainer').hide();
                                 }
-                                
+
                                 // Load checkboxes for custom report
                                 loadColumnCheckboxes('custom');
                                 $('#columnSelectionRow').show();
@@ -1174,9 +1801,9 @@ include("./includes/avatar_select.php");
                     const count = $('#deptMultiFilter').val() ? $('#deptMultiFilter').val().length : 0;
                     const label = $('#multiDeptFilter label');
                     if (count > 0) {
-                        label.html(`Select Departments <span class="badge badge-success">${count} selected</span>`);
+                        label.html(`${__('select_departments')} <span class="badge badge-success">${count} selected</span>`);
                     } else {
-                        label.html('Select Departments');
+                        label.html(__('select_departments'));
                     }
                 }
 
@@ -1186,56 +1813,56 @@ include("./includes/avatar_select.php");
                 });
 
                 function loadColumnCheckboxes(reportType, forceDefault = false) {
-                    console.log('=== loadColumnCheckboxes START ===');
-                    console.log('reportType:', reportType);
-                    console.log('forceDefault:', forceDefault);
-                    console.log('reportColumns[reportType] length:', reportColumns[reportType] ? reportColumns[reportType].length : 'undefined');
-                    console.log('reportColumns[reportType]:', reportColumns[reportType]);
-                    
+                    // console.log('=== loadColumnCheckboxes START ===');
+                    // console.log('reportType:', reportType);
+                    // console.log('forceDefault:', forceDefault);
+                    // console.log('reportColumns[reportType] length:', reportColumns[reportType] ? reportColumns[reportType].length : 'undefined');
+                    // console.log('reportColumns[reportType]:', reportColumns[reportType]);
+
                     const columns = reportColumns[reportType];
                     const $container = $('#columnSortableContainer');
                     const $select = $('#columnMultiSelect');
-                    
-                    console.log('Before clear - $select.val():', $select.val());
-                    
+
+                    // console.log('Before clear - $select.val():', $select.val());
+
                     // Clear existing items and select options FIRST
                     $container.empty();
                     $select.empty();
-                    
+
                     // Destroy Select2 if exists
                     if ($select.data('select2')) {
                         $select.select2('destroy');
                     }
-                    
+
                     // Get currently selected columns to preserve user selections (only if not forcing default)
                     // Since we cleared above, this will always be empty when forceDefault is true
                     const currentSelected = forceDefault ? [] : [];
-                    
-                    console.log('currentSelected:', currentSelected);
-                    
+
+                    // console.log('currentSelected:', currentSelected);
+
                     // Extract base column names from currently selected (remove table prefix)
                     const currentSelectedBase = currentSelected.map(col => {
                         const parts = col.split('.');
                         return parts.length > 1 ? parts[parts.length - 1] : col;
                     });
-                    
-                    console.log('currentSelectedBase:', currentSelectedBase);
-                    
+
+                    // console.log('currentSelectedBase:', currentSelectedBase);
+
                     // Track default and selected columns
                     const defaultColumns = [];
                     let htmlItems = '';
-                    
+
                     columns.forEach(function(col, index) {
                         const option = $('<option></option>')
                             .attr('value', col.id)
                             .text(col.label);
-                        
+
                         // Extract base column name for comparison
                         const colBase = col.id.split('.').pop();
-                        
+
                         // Determine if column should be selected
                         let isSelected = false;
-                        
+
                         if (forceDefault) {
                             // Force default selection when switching report types - ignore previous selections
                             if (col.default) {
@@ -1255,13 +1882,13 @@ include("./includes/avatar_select.php");
                                 defaultColumns.push(col.id);
                             }
                         }
-                        
+
                         if (isSelected) {
                             option.attr('selected', 'selected');
                         }
-                        
+
                         $select.append(option);
-                        
+
                         // Build draggable column item
                         const checked = isSelected ? 'checked' : '';
                         // Escape column ID for use in HTML attribute
@@ -1274,35 +1901,35 @@ include("./includes/avatar_select.php");
                             </div>
                         `;
                     });
-                    
+
                     // Render draggable items
                     $container.html(htmlItems);
-                    
+
                     // Initialize drag and drop
                     initDragAndDrop();
-                    
+
                     // Initialize or reinitialize Select2
                     if ($select.data('select2')) {
                         $select.select2('destroy');
                     }
-                    
+
                     $select.select2({
                         theme: 'bootstrap4',
-                        placeholder: 'Select columns to display',
+                        placeholder: (typeof __ === 'function') ? __('select_columns_to_display') : 'Select columns to display',
                         allowClear: true,
                         closeOnSelect: false,
                         width: '100%'
                     });
-                    
-                    console.log('defaultColumns to set:', defaultColumns);
-                    
+
+                    // console.log('defaultColumns to set:', defaultColumns);
+
                     // Set selected values
                     $select.val(defaultColumns).trigger('change');
-                    
-                    console.log('After setting - $select.val():', $select.val());
-                    console.log('Column items in DOM:', $('.column-item').length);
-                    console.log('=== loadColumnCheckboxes END ===');
-                    
+
+                    // console.log('After setting - $select.val():', $select.val());
+                    // console.log('Column items in DOM:', $('.column-item').length);
+                    // console.log('=== loadColumnCheckboxes END ===');
+
                     // Update column count badge
                     updateColumnCount();
                 }
@@ -1350,12 +1977,12 @@ include("./includes/avatar_select.php");
                 function updateColumnSelectOrder() {
                     const $select = $('#columnMultiSelect');
                     const newOrder = [];
-                    
+
                     $('#columnSortableContainer .column-item').each(function() {
                         const columnId = $(this).data('column-id');
                         newOrder.push(columnId);
                     });
-                    
+
                     // Reorder the select options to match the drag order
                     newOrder.forEach(colId => {
                         const $option = $select.find(`option[value="${colId}"]`);
@@ -1367,7 +1994,7 @@ include("./includes/avatar_select.php");
                 function updateColumnCount() {
                     const count = $('#columnSortableContainer .column-checkbox:checked').length;
                     const total = $('#columnSortableContainer .column-checkbox').length;
-                    $('#selectedColumnCount').text(count + ' of ' + total + ' selected');
+                    $('#selectedColumnCount').text((typeof __ === 'function') ? (count + ' ' + __('of') + ' ' + total + ' ' + __('selected')) : (count + ' of ' + total + ' selected'));
                 }
 
                 // Handle column checkbox changes
@@ -1375,7 +2002,7 @@ include("./includes/avatar_select.php");
                     const columnId = $(this).val();
                     const $select = $('#columnMultiSelect');
                     const $option = $select.find(`option[value="${columnId}"]`);
-                    
+
                     if ($(this).is(':checked')) {
                         $option.attr('selected', 'selected');
                         $(this).closest('.column-item').css('background-color', '#fff9e6');
@@ -1383,7 +2010,7 @@ include("./includes/avatar_select.php");
                         $option.removeAttr('selected');
                         $(this).closest('.column-item').css('background-color', '#fff');
                     }
-                    
+
                     $select.val($select.val()).trigger('change');
                     updateColumnCount();
                 });
@@ -1402,7 +2029,7 @@ include("./includes/avatar_select.php");
                 $('#selectByTable').on('change', function() {
                     const selectedTable = $(this).val();
                     if (!selectedTable) return;
-                    
+
                     // Find all checkboxes that belong to the selected table
                     $('#columnSortableContainer .column-checkbox').each(function() {
                         const columnId = $(this).val();
@@ -1413,7 +2040,7 @@ include("./includes/avatar_select.php");
                             }
                         }
                     });
-                    
+
                     // Reset dropdown
                     $(this).val('');
                 });
@@ -1424,8 +2051,9 @@ include("./includes/avatar_select.php");
                     if (!reportType) {
                         Swal.fire({
                             icon: 'warning',
-                            title: 'Report Type Required',
-                            text: 'Please select a report type'
+                            allowOutsideClick: false,
+                            title: (typeof __ === 'function') ? __('report_type_required') : 'Report Type Required',
+                            text: (typeof __ === 'function') ? __('please_select_report_type') : 'Please select a report type'
                         });
                         return;
                     }
@@ -1439,8 +2067,9 @@ include("./includes/avatar_select.php");
                     if (selectedColumns.length === 0) {
                         Swal.fire({
                             icon: 'warning',
-                            title: 'No Columns Selected',
-                            text: 'Please select at least one column to display'
+                            allowOutsideClick: false,
+                            title: (typeof __ === 'function') ? __('no_columns_selected') : 'No Columns Selected',
+                            text: (typeof __ === 'function') ? __('please_select_at_least_one_column') : 'Please select at least one column to display'
                         });
                         return;
                     }
@@ -1479,21 +2108,21 @@ include("./includes/avatar_select.php");
                         if (!customTables || customTables.length === 0) {
                             Swal.fire({
                                 icon: 'warning',
-                                title: 'Tables Required',
-                                text: 'Please select at least one table for the custom report'
+                                title: (typeof __ === 'function') ? __('tables_required') : 'Tables Required',
+                                text: (typeof __ === 'function') ? __('please_select_at_least_one_table') : 'Please select at least one table for the custom report'
                             });
                             return;
                         }
-                        
+
                         // Get selected departments for custom report
                         let customDepts = [];
                         $('#customDeptMultiFilter option:selected').each(function() {
                             customDepts.push($(this).val());
                         });
-                        
+
                         filterData.customTables = customTables;
                         filterData.customDepartments = customDepts;
-                        
+
                         // Get custom date filters if visible
                         if ($('#customDateFromFilter').is(':visible')) {
                             filterData.dateFrom = $('#customDateFrom').val();
@@ -1505,7 +2134,7 @@ include("./includes/avatar_select.php");
 
                     // Show loading
                     Swal.fire({
-                        title: 'Generating Report...',
+                        title: (typeof __ === 'function') ? __('generating_report') : 'Generating Report...',
                         allowOutsideClick: false,
                         didOpen: () => {
                             Swal.showLoading();
@@ -1520,22 +2149,22 @@ include("./includes/avatar_select.php");
                         dataType: 'json',
                         success: function(response) {
                             Swal.close();
-                            console.log('=== REPORT RESPONSE ===');
-                            console.log('Full response:', response);
-                            console.log('Success:', response.success);
-                            console.log('Data length:', response.data ? response.data.length : 0);
-                            console.log('Headers:', response.headers);
-                            console.log('First data row:', response.data && response.data.length > 0 ? response.data[0] : 'No data');
-                            console.log('======================');
-                            
+                            // console.log('=== REPORT RESPONSE ===');
+                            // console.log('Full response:', response);
+                            // console.log('Success:', response.success);
+                            // console.log('Data length:', response.data ? response.data.length : 0);
+                            // console.log('Headers:', response.headers);
+                            // console.log('First data row:', response.data && response.data.length > 0 ? response.data[0] : 'No data');
+                            // console.log('======================');
+
                             if (response.success) {
                                 displayReport(response.data, response.headers, reportType, selectedColumns, filterData.columns);
                                 $('#exportExcelBtn, #exportPdfBtn').show();
                             } else {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'Error',
-                                    text: response.message || 'Failed to generate report'
+                                    title: (typeof __ === 'function') ? __('error') : 'Error',
+                                    text: response.message || ((typeof __ === 'function') ? __('failed_to_generate_report') : 'Failed to generate report')
                                 });
                             }
                         },
@@ -1544,65 +2173,98 @@ include("./includes/avatar_select.php");
                             console.error('AJAX error:', error, xhr);
                             Swal.fire({
                                 icon: 'error',
-                                title: 'Error',
-                                text: 'Failed to generate report: ' + error
+                                title: (typeof __ === 'function') ? __('error') : 'Error',
+                                text: ((typeof __ === 'function') ? __('failed_to_generate_report') : 'Failed to generate report') + ': ' + error
                             });
                         }
                     });
                 });
 
                 function displayReport(data, headers, reportType, selectedColumnsOrder, columnIds) {
-                    console.log('displayReport called with:');
-                    console.log('- Data:', data);
-                    console.log('- Data length:', data ? data.length : 0);
-                    console.log('- Headers:', headers);
-                    console.log('- Headers length:', headers ? headers.length : 0);
-                    console.log('- Column IDs:', columnIds);
-                    console.log('- Column IDs length:', columnIds ? columnIds.length : 0);
-                    console.log('- Report type:', reportType);
-                    console.log('- Selected columns order:', selectedColumnsOrder);
-                    
+                    // Helper: translate status keys using global __()
+                    function translateStatusKey(key) {
+                        if (!key) return '';
+                        var k = String(key).toLowerCase().replace(/\s+/g, '_');
+                        // Known status keys
+                        var known = ['approved', 'active', 'completed', 'rejected', 'inactive', 'cancelled', 'pending', 'pending_approval', 'awaiting', 'draft', 'paid', 'processing', 'in_progress'];
+                        if (known.indexOf(k) !== -1 && typeof __ === 'function') {
+                            return __(k) || key;
+                        }
+                        return key;
+                    }
+                    // console.log('displayReport called with:');
+                    // console.log('- Data:', data);
+                    // console.log('- Data length:', data ? data.length : 0);
+                    // console.log('- Headers:', headers);
+                    // console.log('- Headers length:', headers ? headers.length : 0);
+                    // console.log('- Column IDs:', columnIds);
+                    // console.log('- Column IDs length:', columnIds ? columnIds.length : 0);
+                    // console.log('- Report type:', reportType);
+                    // console.log('- Selected columns order:', selectedColumnsOrder);
+
+                    // Add 'actions' to columnIds if this is evaluation report with Actions column
+                    if (reportType === 'evaluation' && headers.length > columnIds.length && headers[headers.length - 1] === 'Actions') {
+                        columnIds = columnIds.concat(['actions']);
+                        // console.log('Added actions column. New columnIds length:', columnIds.length);
+                    }
+
+                    // Add 'attachment' to columnIds if this is document report with Attachment column
+                    if (reportType === 'document' && headers.length > columnIds.length && headers[headers.length - 1] === 'Attachment') {
+                        columnIds = columnIds.concat(['attachment']);
+                        // console.log('Added attachment column. New columnIds length:', columnIds.length);
+                    }
+
                     // Ensure headers and columnIds have same length
                     if (headers.length !== columnIds.length) {
                         console.error('MISMATCH: Headers length (' + headers.length + ') != Column IDs length (' + columnIds.length + ')');
                         console.error('Headers:', headers);
                         console.error('Column IDs:', columnIds);
                     }
-                    
+
                     // Build table headers (store, apply later after cleanup)
                     let headerHtml = '<tr>';
                     headers.forEach(function(header) {
-                        headerHtml += `<th>${header}</th>`;
+                        // Remove underscores from header display
+                        var cleanHeader = String(header).replace(/_/g, ' ');
+                        headerHtml += `<th>${(typeof __ === 'function') ? __(header.toLowerCase().replace(/\s+/g, '_')) || cleanHeader : cleanHeader}</th>`;
                     });
                     headerHtml += '</tr>';
 
                     // Build table rows (store, apply later)
                     let bodyHtml = '';
-                    
+
                     if (!data || data.length === 0) {
                         console.warn('No data returned for report');
-                        bodyHtml = '<tr><td colspan="' + headers.length + '" class="text-center text-muted py-4">No records found</td></tr>';
+                        bodyHtml = '<tr><td colspan="' + headers.length + '" class="text-center text-muted py-4">' + ((typeof __ === 'function') ? __('no_records_found') : 'No records found') + '</td></tr>';
                     } else {
-                        console.log('Processing', data.length, 'rows...');
+                        // console.log('Processing', data.length, 'rows...');
                         data.forEach(function(row, rowIndex) {
                             if (rowIndex < 3) { // Log first 3 rows for debugging
-                                console.log('Row', rowIndex, ':', row);
+                                // console.log('Row', rowIndex, ':', row);
                             }
                             bodyHtml += '<tr>';
-                            
+
+                            // Build column array - add 'actions' if this is evaluation report with Actions column
+                            let columnsToRender = columnIds.slice();
+                            if (reportType === 'evaluation' && headers.length > columnIds.length) {
+                                columnsToRender.push('actions');
+                            }
+                            if (reportType === 'document' && headers.length > columnIds.length) {
+                                columnsToRender.push('attachment');
+                            }
+
                             // IMPORTANT: Use the same number of columns as headers
-                            // If we have more columnIds than headers, only use headers.length
-                            const columnsToUse = columnIds.slice(0, headers.length);
-                            
+                            const columnsToUse = columnsToRender.slice(0, headers.length);
+
                             columnsToUse.forEach(function(columnId, colIndex) {
                                 // Try to find the column in the row data
                                 let cell = '';
-                                
+
                                 // Direct key match
                                 if (row.hasOwnProperty(columnId)) {
                                     cell = row[columnId];
                                     if (rowIndex < 3 && colIndex < 5) {
-                                        console.log('Direct match - columnId:', columnId, 'cell:', cell);
+                                        // console.log('Direct match - columnId:', columnId, 'cell:', cell);
                                     }
                                 } else {
                                     // Try with underscore replacement for prefixed columns (replace all dots)
@@ -1610,7 +2272,7 @@ include("./includes/avatar_select.php");
                                     if (row.hasOwnProperty(altKey)) {
                                         cell = row[altKey];
                                         if (rowIndex < 3 && colIndex < 5) {
-                                            console.log('Alt match - columnId:', columnId, 'altKey:', altKey, 'cell:', cell);
+                                            // console.log('Alt match - columnId:', columnId, 'altKey:', altKey, 'cell:', cell);
                                         }
                                     } else {
                                         if (rowIndex < 3 && colIndex < 5) {
@@ -1618,50 +2280,97 @@ include("./includes/avatar_select.php");
                                         }
                                     }
                                 }
-                                
+
+                                // Apply status badge formatting for status columns
+                                if (cell !== null && cell !== undefined && cell !== '') {
+                                    const lowerCell = String(cell).toLowerCase();
+                                    const isStatusColumn = columnId.includes('status') || columnId === 'current_status';
+
+                                    if (isStatusColumn) {
+                                        let badgeClass = 'secondary';
+
+                                        // Special handling for acknowledgment_status
+                                        if (columnId === 'acknowledgment_status') {
+                                            if (lowerCell === 'acknowledged') {
+                                                badgeClass = 'success';
+                                            } else if (lowerCell === 'objected') {
+                                                badgeClass = 'danger';
+                                            } else if (lowerCell === 'pending') {
+                                                badgeClass = 'warning';
+                                            }
+                                        } else {
+                                            // Status badge colors matching system standards
+                                            if (lowerCell === 'approved' || lowerCell === 'active' || lowerCell === 'completed') {
+                                                badgeClass = 'success';
+                                            } else if (lowerCell === 'rejected' || lowerCell === 'inactive' || lowerCell === 'cancelled') {
+                                                badgeClass = 'danger';
+                                            } else if (lowerCell === 'pending' || lowerCell === 'pending_approval' || lowerCell === 'awaiting') {
+                                                badgeClass = 'warning';
+                                            } else if (lowerCell === 'draft') {
+                                                badgeClass = 'secondary';
+                                            } else if (lowerCell === 'paid' || lowerCell === 'processing') {
+                                                badgeClass = 'primary';
+                                            } else if (lowerCell === 'in_progress' || lowerCell === 'in progress') {
+                                                badgeClass = 'info';
+                                            }
+                                        }
+
+                                        // Translate status text via __('key'), fallback to formatted text
+                                        const translated = translateStatusKey(lowerCell);
+                                        const formattedText = String(translated)
+                                            .replace(/_/g, ' ')
+                                            .replace(/\b\w/g, char => char.toUpperCase());
+
+                                        cell = `<span class="badge badge-${badgeClass}">${formattedText}</span>`;
+                                    }
+                                }
+
                                 bodyHtml += `<td>${cell !== null && cell !== undefined ? cell : ''}</td>`;
                             });
                             bodyHtml += '</tr>';
                         });
                     }
-                    console.log('Body HTML length:', bodyHtml.length);
-                    console.log('Header columns:', headers.length, 'Body columns per row:', columnIds.slice(0, headers.length).length);
-                    
+                    // console.log('Body HTML length:', bodyHtml.length);
+                    // console.log('Header columns:', headers.length, 'Body columns per row:', columnIds.slice(0, headers.length).length);
+
                     // (Delay applying header/body until after potential wrapper cleanup)
-                    
-                    console.log('Table body HTML set, checking DOM...');
-                    console.log('Rows in tbody:', $('#reportTableBody tr').length);
-                    
+
+                    // console.log('Table body HTML set, checking DOM...');
+                    // console.log('Rows in tbody:', $('#reportTableBody tr').length);
+
                     // CRITICAL: Verify column counts match
                     const firstRow = $('#reportTableBody tr:first');
                     const tdCount = firstRow.find('td').length;
                     const thCount = $('#reportTableHead th').length;
-                    console.log('TH count:', thCount, 'TD count in first row:', tdCount);
-                    
+                    // console.log('TH count:', thCount, 'TD count in first row:', tdCount);
+
                     if (thCount !== tdCount && data.length > 0) {
                         console.error('COLUMN MISMATCH! TH:', thCount, 'TD:', tdCount);
                         console.error('This will cause DataTables to fail');
                         Swal.fire({
                             icon: 'error',
-                            title: 'Table Structure Error',
-                            text: 'Column count mismatch. Headers: ' + thCount + ', Data columns: ' + tdCount
+                            title: (typeof __ === 'function') ? __('table_structure_error') : 'Table Structure Error',
+                            text: (typeof __ === 'function') ? __('column_count_mismatch') + ' ' + __('headers') + ': ' + thCount + ', ' + __('data_columns') + ': ' + tdCount : 'Column count mismatch. Headers: ' + thCount + ', Data columns: ' + tdCount
                         });
                         return;
                     }
 
-                    // Update title
-                    $('#reportTitle').text(reportType.charAt(0).toUpperCase() + reportType.slice(1) + ' Report - ' + data.length + ' records');
+                    // Update title with translation: reports
+                    var reportWord = (typeof __ === 'function') ? __('reports') || 'Reports' : 'Reports';
+                    var typeLabel = (typeof __ === 'function') ? __(reportType.toLowerCase()) || (reportType.charAt(0).toUpperCase() + reportType.slice(1)) : (reportType.charAt(0).toUpperCase() + reportType.slice(1));
+                    var recordsWord = (typeof __ === 'function') ? __('records') : 'records';
+                    $('#reportTitle').text(typeLabel + ' ' + reportWord + ' - ' + data.length + ' ' + recordsWord);
 
                     // Show/hide table container based on data
                     if (data.length > 0 && headers.length > 0) {
-                        console.log('Showing report table container');
+                        // console.log('Showing report table container');
                         $('#reportTableContainer').show();
-                        
+
                         // Safely destroy/reinitialize DataTable
                         if ($.fn.DataTable.isDataTable('#reportTable')) {
                             try {
                                 $('#reportTable').DataTable().destroy();
-                                console.log('DataTable destroyed in displayReport');
+                                // console.log('DataTable destroyed in displayReport');
                             } catch (e) {
                                 console.error('Error destroying DataTable in displayReport:', e);
                             }
@@ -1671,12 +2380,12 @@ include("./includes/avatar_select.php");
                             $('#reportTable_wrapper').remove();
                         }
                         // Rebuild single clean table markup
-                        const tableMarkup = '<table id="reportTable" class="table table-bordered table-striped dt-responsive nowrap" width="100%">'
-                            + '<thead id="reportTableHead">' + headerHtml + '</thead>'
-                            + '<tbody id="reportTableBody">' + bodyHtml + '</tbody>'
-                            + '</table>';
+                        const tableMarkup = '<table id="reportTable" class="table table-bordered table-striped dt-responsive nowrap" width="100%">' +
+                            '<thead id="reportTableHead">' + headerHtml + '</thead>' +
+                            '<tbody id="reportTableBody">' + bodyHtml + '</tbody>' +
+                            '</table>';
                         $('#reportTableContainer').html(tableMarkup);
-                        
+
                         // Generate filename with report name and timestamp
                         const reportName = $('#reportType').val();
                         const now = new Date();
@@ -1687,9 +2396,9 @@ include("./includes/avatar_select.php");
                         const month = String(now.getMonth() + 1).padStart(2, '0');
                         const year = now.getFullYear();
                         const filename = `${reportName}_${hours}${minutes}${seconds}${date}${month}${year}`;
-                        
-                        console.log('Initializing DataTable on fresh table...');
-                        
+
+                        // console.log('Initializing DataTable on fresh table...');
+
                         // Use setTimeout to ensure DOM is fully rendered
                         setTimeout(function() {
                             try {
@@ -1699,18 +2408,71 @@ include("./includes/avatar_select.php");
                                         'copy',
                                         {
                                             extend: 'excel',
-                                            filename: filename
+                                            filename: filename,
+                                            exportOptions: {
+                                                columns: function(idx, data, node) {
+                                                    // Export all columns except the last one (Actions/Attachment) for evaluation and document reports
+                                                    if (reportType === 'evaluation' || reportType === 'document') {
+                                                        var colCount = $('#reportTable').DataTable().columns().header().length;
+                                                        return idx < colCount - 1;
+                                                    }
+                                                    return true;
+                                                },
+                                                modifier: {
+                                                    page: 'all',
+                                                    search: 'applied',
+                                                    order: 'applied'
+                                                }
+                                            }
                                         },
                                         {
                                             extend: 'pdf',
-                                            filename: filename
+                                            filename: filename,
+                                            exportOptions: {
+                                                columns: function(idx, data, node) {
+                                                    // Export all columns except the last one (Actions/Attachment) for evaluation and document reports
+                                                    if (reportType === 'evaluation' || reportType === 'document') {
+                                                        var colCount = $('#reportTable').DataTable().columns().header().length;
+                                                        return idx < colCount - 1;
+                                                    }
+                                                    return true;
+                                                },
+                                                modifier: {
+                                                    page: 'all',
+                                                    search: 'applied',
+                                                    order: 'applied'
+                                                }
+                                            }
                                         },
                                         'print'
                                     ],
                                     responsive: true,
-                                    pageLength: 50
+                                    pageLength: 50,
+                                    columnDefs: (reportType === 'evaluation' || reportType === 'document') ? [{
+                                            targets: -1,
+                                            orderable: false,
+                                            searchable: false
+                                        } // Actions/Attachment column
+                                    ] : [],
+                                    language: {
+                                        search: `<span>${__('search')}:</span> _INPUT_`,
+                                        searchPlaceholder: `${__('search')}...`,
+                                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+                                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                                        paginate: {
+                                            first: __('first'),
+                                            last: __('last'),
+                                            next: __('next'),
+                                            previous: __('previous')
+                                        },
+                                        emptyTable: __('no_data_available_in_table'),
+                                        zeroRecords: __('no_matching_records_found'),
+                                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                                    }
                                 });
-                                console.log('DataTable initialized successfully');
+                                // console.log('DataTable initialized successfully');
                             } catch (e) {
                                 console.error('Error initializing DataTable:', e);
                             }
@@ -1733,23 +2495,265 @@ include("./includes/avatar_select.php");
                     $('#reportTable').DataTable().button('.buttons-pdf').trigger();
                 });
 
+                // View Evaluation Details Handler
+                $(document).on('click', '.view-evaluation-details', function() {
+                    const evalId = $(this).data('eval-id');
+
+                    // Show loading
+                    Swal.fire({
+                        title: __('loading'),
+                        text: __('fetching_evaluation_details', 'Fetching evaluation details'),
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // Fetch evaluation details
+                    $.ajax({
+                        url: 'includes/ajaxFile/ajaxReports.php',
+                        type: 'POST',
+                        data: {
+                            action: 'getEvaluationDetails',
+                            evalId: evalId
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                const eval = response.data;
+
+                                // Determine badge color for total score based on rating
+                                let totalScoreBadge = 'success'; // Default Excellent
+                                if (eval.total_score < 60) {
+                                    totalScoreBadge = 'danger'; // Needs Improvement
+                                } else if (eval.total_score < 70) {
+                                    totalScoreBadge = 'warning'; // Satisfactory
+                                } else if (eval.total_score < 80) {
+                                    totalScoreBadge = 'info'; // Good
+                                } else if (eval.total_score < 90) {
+                                    totalScoreBadge = 'primary'; // Very Good
+                                }
+
+                                // Function to get badge color for individual scores (out of 10)
+                                function getScoreBadge(score) {
+                                    if (score >= 9) return 'success'; // 90-100%
+                                    if (score >= 8) return 'primary'; // 80-89%
+                                    if (score >= 7) return 'info'; // 70-79%
+                                    if (score >= 6) return 'warning'; // 60-69%
+                                    return 'danger'; // Below 60%
+                                }
+
+                                // Build detailed HTML matching the image format
+                                let detailsHtml = `
+                                    <div class="evaluation-details-print" id="evaluationDetailsPrint" style="text-align: left; padding: 20px;">
+                                        <div style="display: flex; justify-content: space-between; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #dee2e6;">
+                                            <div style="flex: 1;">
+                                                <p style="margin-bottom: 10px;"><strong>${__('employee_name', 'Employee Name')}:</strong> <span class="emp-name">${eval.employee_name}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('employee_id', 'Employee ID')}:</strong> ${eval.employee_emp_id_display || eval.employee_emp_id}</p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('department', 'Department')}:</strong> <span class="dept-name">${eval.department}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('position', 'Position')}:</strong> <span class="emp-position">${eval.position || 'IT'}</span></p>
+                                            </div>
+                                            <div style="flex: 1; text-align: right;">
+                                                <p style="margin-bottom: 10px;"><strong>${__('evaluated_by', 'Evaluated By')}:</strong> <span class="manager-name">${eval.manager_name}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('evaluation_date', 'Evaluation Date')}:</strong> ${eval.created_at ? eval.created_at.substring(0, 16).replace('T', ' ') : 'N/A'}</p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('total_score', 'Total Score')}:</strong> <span class="badge badge-${totalScoreBadge}" style="font-size: 14px; padding: 5px 10px;">${eval.total_score || '0'}/100</span></p>
+                                            </div>
+                                        </div>
+                                        
+                                        <h5 style="margin-top: 20px; margin-bottom: 15px; color: #333;">${__('evaluation_criteria', 'Evaluation Criteria')}</h5>
+                                        <table class="table table-bordered" style="width: 100%; margin-bottom: 20px;">
+                                            <thead style="background-color: #f8f9fa;">
+                                                <tr>
+                                                    <th style="padding: 10px; width: 70%;">${__('criteria', 'Criteria')}</th>
+                                                    <th style="padding: 10px; text-align: center;">${__('score', 'Score')}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('punctuality_attendance', 'Punctuality Attendance')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.punctuality || 0)}">${eval.punctuality || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('achieving_at_the_specified_time', 'Achieving at the specified time')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.achieving_time || 0)}">${eval.achieving_time || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('knowledge_of_job', 'Knowledge of job')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.job_knowledge || 0)}">${eval.job_knowledge || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('the_ability_to_solve_problems', 'The Ability to solve problems')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.problem_solving || 0)}">${eval.problem_solving || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('receptiveness_to_feedback_and_instructions', 'Receptiveness to Feedback and Instructions')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.feedback_receptiveness || 0)}">${eval.feedback_receptiveness || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('self_professional_development', 'Self & Professional Development')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.self_development || 0)}">${eval.self_development || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('work_under_pressure', 'Work under pressure')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.work_under_pressure || 0)}">${eval.work_under_pressure || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('communication_skills_and_teamwork', 'Communication skills and Teamwork')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.communication_teamwork || 0)}">${eval.communication_teamwork || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('creativity_and_speed_of_response', 'Creativity and speed of response')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.creativity_response || 0)}">${eval.creativity_response || '0'}/10</span></td>
+                                                </tr>
+                                                <tr>
+                                                    <td style="padding: 10px;">${__('initiative_and_cooperation', 'Initiative and cooperation')}</td>
+                                                    <td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.initiative_cooperation || 0)}">${eval.initiative_cooperation || '0'}/10</span></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        
+                                        ${eval.observation 
+                                            ? `<h5 style="margin-top: 30px; margin-bottom: 15px; color: #333;">${__('observationremarks', 'Observation/Remarks')}</h5><p style="padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">${eval.observation}</p>` 
+                                            : `<h5 style="margin-top: 30px; margin-bottom: 15px; color: #333;">${__('observationremarks', 'Observation/Remarks')}</h5><p style="padding: 15px; background-color: #f8f9fa; border-radius: 5px;">${__('no_observation_provided', 'No observation provided.')}</p>`}
+                                        
+                                        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #dee2e6;">
+                                            <h5 style="margin-bottom: 15px; color: #333;">
+                                                ${eval.manager_acknowledgment_status === 'acknowledged' ? __('acknowledgment', 'Acknowledgment') : eval.manager_acknowledgment_status === 'objected' ? __('objection', 'Objection') : __('acknowledgment_status', 'Acknowledgment Status')}
+                                            </h5>
+                                            ${eval.manager_acknowledgment_status === 'pending' 
+                                                ? `<div class="alert alert-warning" style="border-left: 4px solid #ffc107;"><i class="mdi mdi-clock-outline"></i> <strong>${__('status', 'Status')}:</strong> ${__('pending_acknowledgment', 'Pending Acknowledgment')}</div>`
+                                                : eval.manager_acknowledgment_status === 'acknowledged'
+                                                    ? `<div class="alert alert-success" style="border-left: 4px solid #28a745;">
+                                                        <p style="margin-bottom: 5px;"><i class="mdi mdi-check-circle"></i> <strong>${__('status', 'Status')}:</strong> ${__('acknowledged', 'Acknowledged')}</p>
+                                                        ${eval.acknowledged_by_name ? `<span style="margin-bottom: 5px;"><strong>${__('acknowledged_by', 'Acknowledged By')}:</strong> <span class="acknow_by_name">${eval.acknowledged_by_name}</span></span></p>` : ''}
+                                                        ${eval.acknowledgment_date ? `<p style="margin-bottom: 0;"><strong>${__('date', 'Date')}:</strong> ${eval.acknowledgment_date}</p>` : ''}
+                                                    </div>`
+                                                    : eval.manager_acknowledgment_status === 'objected'
+                                                        ? `<div class="alert alert-danger" style="border-left: 4px solid #dc3545;">
+                                                            <p style="margin-bottom: 10px;"><i class="mdi mdi-close-circle"></i> <strong>${__('status', 'Status')}:</strong> ${__('objected', 'Objected')}</p>
+                                                            ${eval.manager_objection_note ? `<p style="margin-bottom: 10px;"><strong>${__('objection_note', 'Objection Note')}:</strong></p><p style="padding: 10px; background-color: #fff; border-radius: 4px; white-space: pre-wrap;">${eval.manager_objection_note}</p>` : ''}
+                                                            ${eval.acknowledged_by_name ? `<p style="margin-bottom: 5px;"><strong>${__('objected_by', 'Objected By')}:</strong> <span class="acknow_by_name">${eval.acknowledged_by_name}</span></p>` : ''}
+                                                            ${eval.acknowledgment_date ? `<p style="margin-bottom: 0;"><strong>${__('date', 'Date')}:</strong> ${eval.acknowledgment_date}</p>` : ''}
+                                                        </div>`
+                                                        : `<div class="alert alert-secondary"><i class="mdi mdi-information-outline"></i> <strong>${__('status', 'Status')}:</strong> ${__('unknown', 'Unknown')}</div>`
+                                            }
+                                        </div>
+                                    </div>
+                                `;
+
+                                Swal.fire({
+                                    title: 'Evaluation Details',
+                                    html: detailsHtml,
+                                    width: '900px',
+                                    showCloseButton: true,
+                                    showCancelButton: true,
+                                    confirmButtonText: `<i class="mdi mdi-printer"></i> ${__('print', 'Print')}`,
+                                    confirmButtonColor: '#28a745',
+                                    cancelButtonText: __('close', 'Close'),
+                                    customClass: {
+                                        confirmButton: 'btn btn-success',
+                                        cancelButton: 'btn btn-secondary'
+                                    },
+                                    allowOutsideClick: false,
+                                    didOpen: () => {
+                                    var currentLang = getCurrentLanguage();
+									// Translate employee name
+									if (eval.acknowledged_by_name && currentLang === 'ar') {
+										translateName(eval.acknowledged_by_name, 'en', 'ar', function(translated) {
+											const empNameEl = document.querySelector('.acknow_by_name');
+											if (empNameEl) empNameEl.textContent = translated;
+										});
+									}
+									// Translate employee name
+									if (eval.employee_name && currentLang === 'ar') {
+										translateName(eval.employee_name, 'en', 'ar', function(translated) {
+											const empNameEl = document.querySelector('.emp-name');
+											if (empNameEl) empNameEl.textContent = translated;
+										});
+									}
+									// Translate department name
+									if (eval.dept_name && currentLang === 'ar') {
+										translateName(eval.dept_name, 'en', 'ar', function(translated) {
+											const deptNameEl = document.querySelector('.dept-name');
+											if (deptNameEl) deptNameEl.textContent = translated;
+										});
+									}
+									// Translate position
+									if (eval.employee_position && currentLang === 'ar') {
+										translateName(eval.employee_position, 'en', 'ar', function(translated) {
+											const empPosEl = document.querySelector('.emp-position');
+											if (empPosEl) empPosEl.textContent = translated;
+										});
+									}
+									// Translate manager name
+									if (eval.manager_name && currentLang === 'ar') {
+										translateName(eval.manager_name, 'en', 'ar', function(translated) {
+											const managerNameEl = document.querySelector('.manager-name');
+											if (managerNameEl) managerNameEl.textContent = translated;
+										});
+									}
+								}
+                                }).then((result) => {
+                                    if (result.isConfirmed) {
+                                        // Print the evaluation details using window.print()
+                                        const printWindow = window.open('', '_blank');
+                                        const printContent = document.getElementById('evaluationDetailsPrint').innerHTML;
+                                        printWindow.document.write('<!DOCTYPE html>' +
+                                            '<html>' +
+                                            '<head>' +
+                                            '<title>Evaluation Details - ' + eval.employee_name + '</title>' +
+                                            '<link rel="stylesheet" href="assets/css/bootstrap.min.css">' +
+                                            '<style>' +
+                                            'body { margin: 20px; font-family: Arial, sans-serif; }' +
+                                            '.badge { display: inline-block; padding: 5px 10px; border-radius: 3px; font-weight: bold; }' +
+                                            '.badge-primary { background-color: #007bff; color: white; }' +
+                                            '.badge-success { background-color: #28a745; color: white; }' +
+                                            'table { width: 100%; border-collapse: collapse; }' +
+                                            'table, th, td { border: 1px solid #dee2e6; }' +
+                                            'th, td { padding: 10px; }' +
+                                            '@media print { body { margin: 15px; } .no-print { display: none; } }' +
+                                            '</style>' +
+                                            '</head>' +
+                                            '<body>' +
+                                            printContent +
+                                            '</body>' +
+                                            '</html>');
+                                        printWindow.document.close();
+                                        setTimeout(function() {
+                                            printWindow.print();
+                                            setTimeout(function() {
+                                                printWindow.close();
+                                            }, 500);
+                                        }, 250);
+                                    }
+                                });
+                            } else {
+                                Swal.fire('Error', response.message || 'Failed to load evaluation details', 'error');
+                            }
+                        },
+                        error: function() {
+                            Swal.fire('Error', 'Failed to fetch evaluation details', 'error');
+                        }
+                    });
+                });
+
                 // Reset form
                 $('#resetBtn').on('click', function() {
-                    console.log('Reset button clicked');
-                    
+                    // console.log('Reset button clicked');
+
                     // Safely destroy DataTable FIRST before clearing anything
                     if ($.fn.DataTable.isDataTable('#reportTable')) {
                         try {
                             $('#reportTable').DataTable().destroy();
-                            console.log('DataTable destroyed during reset');
+                            // console.log('DataTable destroyed during reset');
                         } catch (e) {
                             console.error('Error destroying DataTable during reset:', e);
                         }
                     }
-                    
+
                     // Reset report type
                     $('#reportType').val('');
-                    
+
                     // Reset all filter fields
                     $('#deptFilter').val('');
                     $('#dateFrom').val('');
@@ -1758,22 +2762,22 @@ include("./includes/avatar_select.php");
                     // Show global date filters after reset
                     $('#dateFrom').closest('.col-md-4, .form-group').show();
                     $('#dateTo').closest('.col-md-4, .form-group').show();
-                    
+
                     // Reset custom report date filters
                     $('#customDateFrom').val('');
                     $('#customDateTo').val('');
-                    
+
                     // Reset multi-select filters
                     $('#deptMultiFilter').val(null).trigger('change');
                     $('#customDeptMultiFilter').val(null).trigger('change');
                     $('#customTables').val(null).trigger('change');
-                    
+
                     // Clear and hide column selection
                     $('#columnSortableContainer').empty();
                     $('#columnMultiSelect').empty();
                     $('#selectedColumnCount').text('0 selected');
                     $('#columnSelectionRow').hide();
-                    
+
                     // Hide custom report elements
                     $('#customTableSelection').hide();
                     $('#customDeptFilter').hide();
@@ -1781,31 +2785,32 @@ include("./includes/avatar_select.php");
                     $('#customDateToFilter').hide();
                     $('#selectByTableContainer').hide();
                     $('#selectByTable').empty().append('<option value="">Select by Table...</option>');
-                    
+
                     // Hide report table and export buttons
                     $('#reportTableContainer').hide();
                     $('#exportExcelBtn, #exportPdfBtn').hide();
-                    
+
                     // Clear report table content AFTER destroying DataTable
                     $('#reportTableHead').empty();
                     $('#reportTableBody').empty();
-                    
+
                     // Show default department filter
                     $('#singleDeptFilter').show();
                     $('#multiDeptFilter').hide();
-                    
+
                     // Reset department selection count
                     updateDeptSelectionCount();
-                    
-                    console.log('Reset completed');
+
+                    // console.log('Reset completed');
                 });
             });
         </script>
 
     </body>
-</html>
+
+    </html>
 <?php
-}else{
+} else {
     header("Location: login.php");
     exit();
 }

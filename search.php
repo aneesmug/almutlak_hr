@@ -11,9 +11,8 @@ if (isset($_GET['dept'])) {
 	$gdept = mysqli_query($conDB, "SELECT * FROM `department` WHERE `id`={$_GET['dept']} ");
 	$allDeptData = mysqli_fetch_all($gdept, MYSQLI_ASSOC);
 	if (isset($_GET['dept']) && isset($_SESSION['user_type']) && isset($_SESSION['user_dept'])) {
-		$access1 = 'administrator';
 		if (
-			$_SESSION['user_type'] !== $access1 &&
+			$_SESSION['user_type'] !== $is_system_admin &&
 			$_SESSION['user_type'] !== 'hr' &&
 			$_SESSION['user_type'] !== 'gm' &&
 			$_SESSION['user_dept'] != $_GET['dept'] &&
@@ -73,7 +72,8 @@ if (strlen($search_term) > 1) {
         $user_type == 'administrator' ||
         $user_dept == 5 || // HR Department
         $isHR || 
-        $isDeptHr
+        $isDeptHr ||
+		$user_dept == 1 // Administration Department
     );
     
     if (!$can_see_all_employees && isset($user_dept)) {

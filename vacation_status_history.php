@@ -222,8 +222,26 @@ if ($vacation['fly_type'] === 'annual') {
                     <?php if (!empty($vacation['remarks'])): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-comment"></i> <?= function_exists('__') ? __('remarks') : 'Remarks' ?>:</div><div class="info-value"><?= nl2br(htmlspecialchars($vacation['remarks'])) ?></div></div>
                     <?php endif; ?>
-                    <?php if (!empty($vacation['attachment_path'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-paperclip"></i> <?= function_exists('__') ? __('attachment') : 'Attachment' ?>:</div><div class="info-value"><a href="<?= htmlspecialchars($vacation['attachment_path']) ?>" target="_blank" class="attachment-link"><i class="fas fa-download"></i> <?= function_exists('__') ? __('view_document') : 'View Document' ?></a></div></div>
+                    <?php if (!empty($vacation['attachment_path'])): 
+                        // Decode JSON array of attachments
+                        $attachments = json_decode($vacation['attachment_path'], true);
+                        if (!is_array($attachments)) {
+                            // Fallback for old single file format
+                            $attachments = [$vacation['attachment_path']];
+                        }
+                    ?>
+                    <div class="info-row">
+                        <div class="info-label"><i class="fas fa-paperclip"></i> <?= function_exists('__') ? __('attachments') : 'Attachments' ?> (<?= count($attachments) ?>):</div>
+                        <div class="info-value">
+                            <?php foreach ($attachments as $index => $attachment): ?>
+                                <a href="<?= htmlspecialchars($attachment) ?>" target="_blank" class="attachment-link" style="margin-bottom: 8px; display: inline-flex;">
+                                    <i class="fas fa-file-<?= pathinfo($attachment, PATHINFO_EXTENSION) === 'pdf' ? 'pdf' : 'image' ?>"></i> 
+                                    <?= function_exists('__') ? __('document') : 'Document' ?> <?= $index + 1 ?>
+                                </a>
+                                <?php if ($index < count($attachments) - 1): ?>&nbsp;&nbsp;<?php endif; ?>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
                     <?php endif; ?>
                 </div>
             </div>

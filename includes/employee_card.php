@@ -40,7 +40,7 @@
         <div class="employee-card-body">
             <!-- Name -->
             <div class="employee-info-primary">
-                <h5 class="employee-name"><?= htmlspecialchars($name) ?></h5>
+                <h5 class="employee-name"><?= translate_name($name, $current_lang ?? 'en') ?></h5>
             </div>
 
             <!-- Position/Type Badge -->

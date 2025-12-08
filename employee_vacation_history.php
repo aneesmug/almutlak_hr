@@ -154,59 +154,43 @@ $status_badges = [
             .qr-code { justify-self: center; }
         }
     </style>
+    <?php if ($is_rtl): ?>
+        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+    <?php endif; ?>
+    <script>
+        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+    </script>
 </head>
 <body class="authentication-bg-pattern">
-    <div class="profile-container">
-        <div class="profile-header">
-            <div class="container-custom">
-                <img src="<?= htmlspecialchars($emprow['avatar'] ?? './assets/images/users/avatar-1.jpg') ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
-                <div class="profile-header-info">
-                    <h1><?= htmlspecialchars($emprow['name']) ?></h1>
-                    <p><strong><?= __('employee_id') ?>:</strong> <?= htmlspecialchars($emprow['emp_id']) ?></p>
-                </div>
-                <?php
-                    $qrPath = "./assets/qrcodes/" . (($emprow['eid'] ?? '') . $emprow['emp_id']) . ".png";
-                    if (!empty($emprow['emp_id']) && file_exists($qrPath)):
-                ?>
-                    <img src="<?= $qrPath ?>" alt="QR Code" class="qr-code">
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <div class="account-pages my-5 pt-5">
-        <div class="container">
+    <?php include('./includes/profile_employee_header.php'); ?>
+    <div class="account-pages" style="max-width: 1400px; margin: 20px auto; padding: 0 20px;">
+        <div class="container-fluid" style="max-width: none;">
             <div class="row">
                 <div class="col-lg-12">
                     <div class="card">
-                        <div class="card-body p-4">
-                            <div class="row mb-4">
-                                <div class="col-sm-8">
-                                    <h4><?= htmlspecialchars($emprow['name']) ?> - Vacation History</h4>
-                                    <p class="text-muted">Employee ID: <?= htmlspecialchars($emprow['emp_id']) ?></p>
-                                </div>
-                                <div class="col-sm-4 text-right">
-                                    <a href="profile.php" class="btn btn-sm btn-secondary">
-                                        <i class="fa fa-arrow-left"></i> Back to Profile
-                                    </a>
-                                </div>
-                            </div>
-
+                        <div class="card-body">
                             <div class="table-responsive">
                                 <table class="table table-hover mb-0 datatable">
                                     <thead>
                                         <tr>
-                                            <th>From Date</th>
-                                            <th>To Date</th>
-                                            <th>Days</th>
-                                            <th>Type</th>
-                                            <th>Fly Type</th>
-                                            <th>Status</th>
-                                            <th>Applied Date</th>
-                                            <th>Action</th>
+                                            <th><?= __('from_date', 'From Date') ?></th>
+                                            <th><?= __('to_date', 'To Date') ?></th>
+                                            <th><?= __('days', 'Days') ?></th>
+                                            <th><?= __('type', 'Type') ?></th>
+                                            <th><?= __('fly_type', 'Fly Type') ?></th>
+                                            <th><?= __('status', 'Status') ?></th>
+                                            <th><?= __('applied_date', 'Applied Date') ?></th>
+                                            <th><?= __('action', 'Action') ?></th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php while ($vac = $vacation_result->fetch_assoc()): ?>
+                                        <?php 
+                                            while ($vac = $vacation_result->fetch_assoc()): 
+                                                // Do not show legacy invoices in loan history
+                                                if (isset($vac['request_inv_no']) && strpos($vac['request_inv_no'], 'LEGACY-') === 0) {
+                                                    continue;
+                                                }
+                                        ?>
                                             <tr>
                                                 <td>
                                                     <?= date('M d, Y', strtotime($vac['start_date'])) ?>
@@ -242,7 +226,7 @@ $status_badges = [
 
                             <?php if ($vacation_result->num_rows == 0): ?>
                                 <div class="alert alert-info">
-                                    <i class="fa fa-info-circle"></i> No vacation history found for this employee.
+                                    <i class="fa fa-info-circle"></i> <?= __('no_vacation_history_found', 'No vacation history found for this employee.') ?>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -256,11 +240,29 @@ $status_badges = [
     <script src="./assets/js/bootstrap.bundle.min.js"></script>
     <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
+    <script src="assets/js/employee_profile.js"></script>
     <script>
         $(document).ready(function() {
             $('.datatable').DataTable({
                 order: [[6, 'desc']],
-                pageLength: 25
+                pageLength: 8,
+                language: {
+                    search: `<span>${__('search')}:</span> _INPUT_`,
+                    searchPlaceholder: `${__('search')}...`,
+                    lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+                    info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                    infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                    infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                    paginate: {
+                        first: __('first'),
+                        last: __('last'),
+                        next: __('next'),
+                        previous: __('previous')
+                    },
+                    emptyTable: __('no_data_available_in_table'),
+                    zeroRecords: __('no_matching_records_found'),
+                    processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                }
             });
         });
     </script>

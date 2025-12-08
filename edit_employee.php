@@ -375,7 +375,7 @@ if (mysqli_num_rows($query) == 1) {
 												$query_dep_nme = mysqli_query($conDB, "SELECT * FROM `section` ORDER BY `section_name` REGEXP '^[^A-Za-z]' ASC, section_name");
 												while ($rec = mysqli_fetch_assoc($query_dep_nme)) {
 												?>
-													<option value="<?= $rec["id"] ?>" <?= ($rec["id"] == $emprow['sectin_id']) ? "selected=selected" : "" ?>><?= $rec["section_name"] ?></option>
+													<option value="<?= $rec["id"] ?>" <?= ($rec["id"] == $emprow['sectin_id']) ? "selected=selected" : "" ?>><?= translate_name($rec["section_name"], $current_lang ?? 'en') ?></option>
 												<?php } ?>
 												</select>
 											</div>
@@ -410,7 +410,7 @@ if (mysqli_num_rows($query) == 1) {
 															$dept_name = ' - ' . $dept_r['dep_nme'];
 														}
 														echo "<option value='{$supervisor['emp_id']}' {$selected}>" . 
-															 htmlspecialchars($supervisor['name']) . " ({$supervisor['emp_id']}) - {$supervisor['emptype']}{$dept_name}</option>";
+															 translate_name($supervisor['name'], $current_lang ?? 'en') . " ({$supervisor['emp_id']}) - " . translate_name($supervisor['emptype'], $current_lang ?? 'en') . " - " . ($is_rtl ?? false ? $emprow['deptnme_ar'] : $emprow['deptnme']) . "</option>";
 													}
 													?>
 												</select>
@@ -497,7 +497,7 @@ if (mysqli_num_rows($query) == 1) {
 												$query_cp = mysqli_query($conDB, "SELECT * FROM `sponsorship` ORDER BY `sponsor` REGEXP '^[^A-Za-z]' ASC, `sponsor`");
 												while ($rec_con = mysqli_fetch_assoc($query_cp)) {
 												?>
-													<option value="<?= $rec_con["id"]; ?>" <?= ($rec_con["id"] == $emprow['emp_sup_type']) ? "selected=selected" : "" ?>><?= $rec_con["sponsor"]; ?></option>
+													<option value="<?= $rec_con["id"]; ?>" <?= ($rec_con["id"] == $emprow['emp_sup_type']) ? "selected=selected" : "" ?>><?= translate_name($rec_con["sponsor"], $current_lang ?? 'en'); ?></option>
 												<?php } ?>
 												</select>
 											</div>
@@ -509,7 +509,7 @@ if (mysqli_num_rows($query) == 1) {
 												$query_cp = mysqli_query($conDB, "SELECT * FROM `companies` ORDER BY `comp_name` REGEXP '^[^A-Za-z]' ASC, `comp_name`");
 												while ($rec_con = mysqli_fetch_assoc($query_cp)) {
 												?>
-													<option value="<?= $rec_con["comp_id"]; ?>" <?= ($rec_con["comp_id"] == $emprow['comp_no']) ? "selected=selected" : "" ?>><?= $rec_con["comp_name"]; ?></option>
+													<option value="<?= $rec_con["comp_id"]; ?>" <?= ($rec_con["comp_id"] == $emprow['comp_no']) ? "selected=selected" : "" ?>><?= translate_name($rec_con["comp_name"], $current_lang ?? 'en'); ?></option>
 												<?php } ?>
 												</select>
 											</div>

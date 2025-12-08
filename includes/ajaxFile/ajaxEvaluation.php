@@ -67,9 +67,12 @@ try {
                 SELECT 
                     e.*,
                     em.name AS manager_name,
-                    DATE_FORMAT(e.created_at, '%Y-%m-%d %H:%i') AS created_at
+                    ack_em.name AS acknowledged_by_name,
+                    DATE_FORMAT(e.created_at, '%Y-%m-%d %H:%i') AS created_at,
+                    DATE_FORMAT(e.manager_acknowledgment_date, '%Y-%m-%d %H:%i') AS acknowledgment_date
                 FROM emp_evaluations e
                 LEFT JOIN employees em ON e.manager_emp_id = em.emp_id
+                LEFT JOIN employees ack_em ON e.manager_acknowledged_by = ack_em.emp_id
                 WHERE e.id = ?
             ");
             

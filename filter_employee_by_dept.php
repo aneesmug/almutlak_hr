@@ -22,7 +22,8 @@ $can_see_all_employees = (
     $user_type == 'administrator' ||
     $user_dept == 5 || // HR Department
     $isHR || 
-    $isDeptHr
+    $isDeptHr ||
+    $user_dept == 1 // Administration Department
 );
 
 if (!$can_see_all_employees && $user_dept != $department_id) {

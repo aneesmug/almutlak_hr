@@ -1,36 +1,5 @@
 <?php
 
-/****************************************************************
- * MODIFICATION SUMMARY (001-view_employee.php):
- * 1. FIXED ADMINISTRATOR ACCESS: Modified the department access check to grant access to system administrators (`user_type` = 'administrator').
- * 2. ADDED `$is_system_admin` CHECK: The access logic now includes the `$is_system_admin` variable (defined in `session_check.php`). This ensures that an administrator can view any employee's profile, regardless of their department, fixing the "You don't have access" error.
- ****************************************************************/
-
-/*******************************************************************************************************************
- * MODIFICATION SUMMARY (004-view_employee.php):
- *
- * 1. ADDED EMERGENCY LOAN BUTTON: A new "Emergency Loan" button is now present next to the regular loan button.
- * - It has the class `applyEmergencyLoan` to trigger the new JavaScript function in `loanHandling.js`.
- * 2. UPDATED PAYMENT HISTORY TABLE: The "Payment History" table now includes columns for "Receipt ID" and "Attachment".
- * - It will display the receipt ID if available.
- * - It will show a "View" button to open the attachment in a new tab if one exists.
- * 3. SIMPLIFIED LOAN BUTTON: The "Apply for Loan" button's data attributes have been simplified. It now only
- * requires `data-emp_id`. The salary and other details are now securely fetched on the server-side by `ajaxLoan.php`
- * when the loan process begins, preventing data manipulation on the client-side.
- * 4. ADDED LOAN TYPE DISPLAY: The "Loan History" table now has a "Type" column to show whether a loan is 'Regular' or 'Emergency'.
- * 5. CONDITIONAL BUTTON DISPLAY: The "Apply for Loan" and "Emergency Loan" buttons are now conditionally displayed.
- * - The regular loan button is hidden if the employee has an active regular loan.
- * - The emergency loan button is hidden if the employee has an active emergency loan.
- *******************************************************************************************************************/
-
-/*******************************************************************************************************************
- * MODIFICATION SUMMARY (005-view_employee.php):
- *
- * 1. ADDED LOAN SUMMARY CALCULATION: Added PHP logic to fetch the employee's active approved loan details from the `emp_loan` table.
- * 2. CALCULATED PAID AND REMAINING AMOUNTS: The script queries the `emp_loan_payments` table to calculate the total amount paid against the loan and determines the remaining balance.
- * 3. POPULATED `$loan_summary` VARIABLE: A new `$loan_summary` array is created containing the total payable, total paid, remaining balance, and disbursement details. This fixes the issue where the loan summary section was not displaying because the variable was missing.
- *******************************************************************************************************************/
-
 // require_once __DIR__ . '/includes/db.php';
 // require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
@@ -47,23 +16,20 @@ if (mysqli_num_rows($query) == 1) {
 	$format = "YYYY-MM-DD";
 	require("./includes/emp_query.php");
 
-
 	// DEPARTMENT-BASED ACCESS CONTROL
-	// Get the employee's department
-	$target_dept = $emprow["dept"] ?? 0;
-
-	// Check if user has permission to view this employee
+	// Check if user has permission to view this department's employees
+	// Allow: System admin, administrator, HR department users, HR roles, IT team, and same department managers
 	$can_see_all_employees = (
-		$is_system_admin ||
+		$is_system_admin || 
 		$user_type == 'administrator' ||
 		$user_dept == 5 || // HR Department
-		$isHR ||
-		$isDeptHr
+		$isHR || 
+		$isDeptHr ||
+		$isItTeam ||
+		($user_dept == $emprow['dept'] && ($user_role == 'DPT_Manager' || $user_type == 'dept_manager')) // Same department manager
 	);
-
-	$hasAccess = $can_see_all_employees || ($user_dept == $target_dept);
-
-	if (!$hasAccess) {
+	
+	if (!$can_see_all_employees) {
 		$_SESSION['error_msg'] = sprintf(
 			'<div class="col-xl-12">
 				<div class="alert alert-danger bg-danger text-white border-0" role="alert">
@@ -188,6 +154,10 @@ if (mysqli_num_rows($query) == 1) {
 		'rejected' => __('rejected'),
 	];
 
+
+	// debug($emprow);
+
+
 ?>
 	<!doctype html>
 	<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -241,10 +211,27 @@ if (mysqli_num_rows($query) == 1) {
 		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 		<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+		<!-- Dropzone CSS -->
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.css">
+
 		<script src="assets/js/modernizr.min.js"></script>
 
 		<link rel="stylesheet" href="./plugins/croppie/croppie.css">
 		<style type="text/css">
+			:root {
+				--primary: #007bff;
+				--secondary: #6c757d;
+				--success: #28a745;
+				--danger: #dc3545;
+				--warning: #ffc107;
+				--info: #17a2b8;
+				--light: #f8f9fa;
+				--dark: #343a40;
+				--white: #ffffff;
+				--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+				--shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
+				--shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.2);
+			}
 			.card-box.social {
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 				transition: all 0.2s ease-in-out;
@@ -372,6 +359,15 @@ if (mysqli_num_rows($query) == 1) {
 
 			.more-actions-modal .menu-item.text-info {
 				color: var(--info) !important;
+			}
+
+			.more-actions-modal .menu-item.text-success {
+            color: var(--success) !important;
+			}
+
+			.more-actions-modal .menu-item.text-success:hover {
+				background-color: rgba(40, 167, 69, 0.08);
+				border-left-color: var(--success);
 			}
 
 			.more-actions-modal .menu-item.text-info:hover {
@@ -735,13 +731,13 @@ if (mysqli_num_rows($query) == 1) {
 												<i class="mdi mdi-book-open-page-variant mr-2"></i> <?= __('notes') ?> <?= ($emprow['empnote'] > 0) ? "(" . $emprow['empnote'] . ")" : "" ?>
 											</a>
 										</li>
-										<?php /* ?>
+										<?php  ?>
 										<li class="nav-item">
 											<a href="#evaluations" data-toggle="tab" aria-expanded="false" class="nav-link">
 												<i class="mdi mdi-chart-line mr-2"></i> <?= __('evaluations', 'Performance Evaluations') ?>
 											</a>
 										</li>
-										<?php */ ?>
+										<?php  ?>
 										<?php /*}*/ ?>
 
 										<?php /* ?>	
@@ -759,7 +755,7 @@ if (mysqli_num_rows($query) == 1) {
 												<tbody>
 													<tr>
 														<th><?= __('name_of_employee') ?>:</th>
-														<td><span class="copyToClipboard"><?= $emprow['name']; ?></span> <i class="fa fa-clipboard"></i></td>
+														<td><span class="copyToClipboard"><?= translate_name($emprow['name'], $current_lang ?? 'en'); ?></span> <i class="fa fa-clipboard"></i></td>
 														<th><?= __('email') ?>:</th>
 														<td><?= ($emprow['c_email']) ? "<b>" . __('personal') . "</b> : <span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i> | <b>" . __('company') . "</b> : <span class='copyToClipboard'>" . $emprow['c_email'] . "</span> <i class='fa fa-clipboard'></i>" : "<span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i>" ?></td>
 													</tr>
@@ -827,7 +823,7 @@ if (mysqli_num_rows($query) == 1) {
 													</tr>
 													<tr>
 														<th><?= __('employee_type') ?? "Employee Type" ?>:</th>
-														<td><?= $emprow['emptype'] ?? 'N/A' ?></td>
+														<td><?= translate_name($emprow['emptype'], $current_lang ?? 'en') ?? 'N/A' ?></td>
 														<th><?= __('direct_supervisor') ?? "Direct Supervisor" ?>:</th>
 														<td>
 															<?php
@@ -841,8 +837,8 @@ if (mysqli_num_rows($query) == 1) {
 																$supervisor = mysqli_fetch_assoc($supervisor_query);
 																if ($supervisor) {
 																	echo '<a href="view_employee.php?emp_id=' . $supervisor['emp_id'] . '" class="text-primary">' .
-																		htmlspecialchars($supervisor['name']) . ' (' . $supervisor['emp_id'] . ')</a>' .
-																		' <span class="badge badge-soft-info">' . $supervisor['emptype'] . '</span>';
+																		translate_name($supervisor['name'], $current_lang ?? 'en') . ' (' . $supervisor['emp_id'] . ')</a>' .
+																		' <span class="badge badge-soft-info">' . translate_name($supervisor['emptype'], $current_lang ?? 'en') . '</span>';
 																} else {
 																	echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
 																}
@@ -864,7 +860,7 @@ if (mysqli_num_rows($query) == 1) {
 
 													<tr>
 														<th><?= __('section_area_sponsorship') ?>:</th>
-														<td><?= $emprow["sectin_nme"] . " | " . $emprow['sponsor'] ?></td>
+														<td><?= translate_name($emprow["sectin_nme"], $current_lang ?? 'en') . " | " . translate_name($emprow['sponsor'], $current_lang ?? 'en') ?></td>
 														<th><?= __('total_salary') ?>:</th>
 														<td><?= $emprow['salary']; ?><i class="icon-saudi_riyal" style="font-size: 14px !important;"></i> -
 															<?= ($emprow['payment_type'] == 1 ? __('bank_transfer') : ($emprow['payment_type'] == 2 ? __('cash_payment') : __('about_to_hold'))) ?>
@@ -911,7 +907,7 @@ if (mysqli_num_rows($query) == 1) {
 														<th><?= __('emergency_contact') ?>:</th>
 														<td><?= $emprow["emg_mobile"] . " | " . $emprow['emg_name'] ?></td>
 														<th><?= __('address') ?>:</th>
-														<td><?= ucfirst($emprow['address']) ?></td>
+														<td><?= translate_name(ucfirst($emprow['address']), $current_lang ?? 'en') ?></td>
 													</tr>
 												</tbody>
 											</table>
@@ -1001,7 +997,12 @@ if (mysqli_num_rows($query) == 1) {
 
 															$date_reg_emp = $rec["created_at"];
 															$timestamp_reg = strtotime("$date_reg_emp");
-															$new_date_format = date('d, M Y H:i', $timestamp_reg);														?>
+															$new_date_format = date('d, M Y H:i', $timestamp_reg);
+															// Do not show legacy invoices in loan history
+															if (isset($rec['request_inv_no']) && strpos($rec['request_inv_no'], 'LEGACY-') === 0) {
+																continue;
+															}
+															?>
 															<tr>
 																<td><?= $id_emp_reg; ?></td>
 																<td>
@@ -1254,6 +1255,10 @@ if (mysqli_num_rows($query) == 1) {
 														$paid_rec_hist = mysqli_fetch_assoc($query_total_paid_hist);
 														$total_paid_hist = $paid_rec_hist['total_paid'];
 														$remaining_balance_hist = $total_payable_hist - $total_paid_hist;
+				                                        // Do not show legacy invoices in loan history
+				                                        if (isset($loan_rec['inv_no']) && strpos($loan_rec['inv_no'], 'LEGACY-') === 0) {
+				                                            continue;
+				                                        }
 													?>
 														<tr>
 															<td><?= number_format($loan_rec['loan_amount'], 2); ?></td>
@@ -1545,10 +1550,10 @@ if (mysqli_num_rows($query) == 1) {
 
 											</div>
 										</div>
-										<?php /* ?>
+										<?php  ?>
 										<div class="tab-pane" id="evaluations">
 											<div class="card-box">
-												<h4 class="header-title m-b-30"><?= __('performance_evaluations', 'Performance Evaluations') ?></h4>
+												<h4 class="header-title m-b-30"><?= __('evaluations', 'Performance Evaluations') ?></h4>
 												
 												<table id="evaluations_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
@@ -1570,12 +1575,20 @@ if (mysqli_num_rows($query) == 1) {
 																ev.id,
 																ev.manager_emp_id,
 																em.name AS manager_name,
-																ev.dept_name,
+																de.dep_nme,
+																de.dep_nme_ar,
 																ev.total_score,
 																ev.observation,
-																DATE_FORMAT(ev.created_at, '%Y-%m-%d %H:%i') AS eval_date
+																ev.manager_acknowledgment_status,
+																ev.manager_objection_note,
+																ev.manager_acknowledged_by,
+																DATE_FORMAT(ev.created_at, '%Y-%m-%d %H:%i') AS eval_date,
+																DATE_FORMAT(ev.manager_acknowledgment_date, '%Y-%m-%d %H:%i') AS acknowledgment_date,
+																ack_em.name AS acknowledged_by_name
 															FROM emp_evaluations ev
 															LEFT JOIN employees em ON ev.manager_emp_id = em.emp_id
+															LEFT JOIN employees ack_em ON ev.manager_acknowledged_by = ack_em.emp_id
+															LEFT JOIN department de ON em.dept = de.id
 															WHERE ev.employee_emp_id = ?
 															ORDER BY ev.created_at DESC
 														");
@@ -1592,8 +1605,8 @@ if (mysqli_num_rows($query) == 1) {
 															<tr>
 																<td><?= htmlspecialchars($eval['id']) ?></td>
 																<td><?= htmlspecialchars($eval['eval_date']) ?></td>
-																<td><?= htmlspecialchars($eval['manager_name'] ?? 'N/A') ?></td>
-																<td><?= htmlspecialchars($eval['dept_name']) ?></td>
+																<td><?= translate_name($eval['manager_name'], $current_lang ?? 'en') ?></td>
+																<td><?= ($is_rtl ?? false ? $eval['dep_nme_ar'] : $eval['dep_nme']) ?></td>
 																<td>
 																	<span class="badge badge-<?= $score_class ?>" style="font-size: 14px;">
 																		<?= htmlspecialchars($eval['total_score']) ?>/100
@@ -1601,14 +1614,57 @@ if (mysqli_num_rows($query) == 1) {
 																</td>
 																<td><?= htmlspecialchars(substr($eval['observation'], 0, 100)) ?><?= strlen($eval['observation']) > 100 ? '...' : '' ?></td>
 																<td>
-																	<button class="btn btn-sm btn-primary view-eval-details" 
-																		data-id="<?= $eval['id'] ?>" 
-																		data-toggle="modal" 
-																		data-target="#evaluationModal">
-																		<i class="mdi mdi-eye"></i> <?= __('view_details', 'View Details') ?>
-																	</button>
+																	<div class="btn-group" role="group">
+																		<button class="btn btn-sm btn-primary view-eval-details" 
+																			data-id="<?= $eval['id'] ?>">
+																			<i class="mdi mdi-eye"></i> <?= __('view_details', 'View Details') ?>
+																		</button>
+																		<?php if ($eval['manager_acknowledgment_status'] === 'pending'): ?>
+																			<button class="btn btn-sm btn-success acknowledge-eval" 
+																				data-id="<?= $eval['id'] ?>"
+																				data-manager-name="<?= htmlspecialchars($eval['manager_name']) ?>"
+																				title="<?= __('acknowledge_evaluation', 'Acknowledge Evaluation') ?>">
+																				<i class="mdi mdi-check-circle"></i> <?= __('acknowledge', 'Acknowledge') ?>
+																			</button>
+																			<button class="btn btn-sm btn-warning object-eval" 
+																				data-id="<?= $eval['id'] ?>"
+																				data-manager-name="<?= htmlspecialchars($eval['manager_name']) ?>"
+																				title="<?= __('object_to_evaluation', 'Object to Evaluation') ?>">
+																				<i class="mdi mdi-close-circle"></i> <?= __('object', 'Object') ?>
+																			</button>
+																		<?php else: ?>
+																			<span class="badge badge-<?= $eval['manager_acknowledgment_status'] === 'acknowledged' ? 'success' : 'danger' ?>" style="padding: 8px 12px; font-size: 12px;">
+																				<?php if ($eval['manager_acknowledgment_status'] === 'acknowledged'): ?>
+																					<i class="mdi mdi-check-circle"></i> <?= __('acknowledged', 'Acknowledged') ?>
+																				<?php else: ?>
+																					<i class="mdi mdi-close-circle"></i> <?= __('objected', 'Objected') ?>
+																				<?php endif; ?>
+																			</span>
+																			<?php if (!empty($eval['acknowledged_by_name'])): ?>
+																				<small class="text-muted ml-2"><?= __('by', 'by') ?> <?= translate_name($eval['acknowledged_by_name'], $current_lang ?? 'en') ?></small>
+																			<?php endif; ?>
+																		<?php endif; ?>
+																	</div>
 																</td>
 															</tr>
+															<?php if ($eval['manager_acknowledgment_status'] === 'objected' && !empty($eval['manager_objection_note'])): ?>
+															<tr class="bg-light-danger">
+																<td colspan="7" class="border-top-0 pt-2 pb-2">
+																	<div class="alert alert-danger mb-0" style="border-left: 4px solid #f46a6a;">
+																		<strong><i class="mdi mdi-alert-circle"></i> <?= __('objection_note', 'Objection Note') ?>:</strong>
+																		<p class="mb-0 mt-2"><?= nl2br(htmlspecialchars($eval['manager_objection_note'])) ?></p>
+																		<?php if (!empty($eval['acknowledgment_date'])): ?>
+																			<small class="text-muted">
+																				<i class="mdi mdi-clock-outline"></i> <?= __('objected_on', 'Objected on') ?>: <?= htmlspecialchars($eval['acknowledgment_date']) ?>
+																				<?php if (!empty($eval['acknowledged_by_name'])): ?>
+																					<?= __('by', 'by') ?> <?= translate_name($eval['acknowledged_by_name'], $current_lang ?? 'en') ?>
+																				<?php endif; ?>
+																			</small>
+																		<?php endif; ?>
+																	</div>
+																</td>
+															</tr>
+															<?php endif; ?>
 														<?php 
 															endforeach;
 														else:
@@ -1623,7 +1679,7 @@ if (mysqli_num_rows($query) == 1) {
 												</table>
 											</div>
 										</div>
-										<?php */ ?>
+										<?php  ?>
 
 
 									</div>
@@ -1648,80 +1704,6 @@ if (mysqli_num_rows($query) == 1) {
 			<!-- ============================================================== -->
 		</div>
 		<!-- END wrapper -->
-		<?php /* ?>
-		<div class="modal fade terminat" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
-			<form action="./includes/apply_vac_emp.php" method="get">
-				<div class="modal-dialog modal-dialog-centered">
-					<div class="modal-content">
-						<div class="modal-header" style="background-color: #02C0CE !important; color: #fff !important;">
-							<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-							<h4 class="modal-title" id="mySmallModalLabel">
-								<i class="mdi mdi-format-rotate-90"></i>
-								Are you sure!
-							</h4>
-						</div>
-						<div class="modal-body">
-							<h5>Please select Replacement Person!</h5>
-							<div class="form-row">
-								<div class="form-group col-md-6">
-									<!--	<a href="" class="btn btn-da nger waves-effect waves-light" ><i class="mdi mdi-account-off"></i> Terminat</a>-->
-									<input type="hidden" name="id" value="<?= $_GET['id'] ?>">
-									<input type="hidden" name="emp_id" value="<?= $emprow['empid'] ?>">
-									<input type="hidden" name="emp_name" value="<?= $emprow['name'] ?>">
-									<input type="hidden" name="dept" value="<?= $emprow["dept"] ?>">
-
-									<div class="input-group">
-										<select class="form-control" name="replacement_per" required>
-											<option value="">Select</option>
-											<?php
-											$query_emp_apl_nme = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `dept`='" . $emprow["dept"] . "' AND `dept`<>'' AND `status`=1 ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, name");
-											while ($rec = mysqli_fetch_assoc($query_emp_apl_nme)) {
-												$emp_apl_nme = $rec["name"];
-											?>
-												<option value="<?= $emp_apl_nme ?>"><?= $emp_apl_nme ?></option>
-											<?php } ?>
-										</select>
-									</div>
-								</div>
-								<div class="form-group col-md-6">
-									<div class="custom-control custom-radio">
-										<input type="radio" id="customRadio1" name="vac_type" value="annual" class="custom-control-input" required>
-										<label class="custom-control-label" for="customRadio1">Annual Vacation</label>
-									</div>
-									<div class="custom-control custom-radio">
-										<input type="radio" id="customRadio2" name="vac_type" value="emergency" class="custom-control-input" required>
-										<label class="custom-control-label" for="customRadio2">Emergency Vacation</label>
-									</div>
-								</div>
-
-
-								<div class="form-group col-md-6">
-									<label for="date_select" class="col-form-label">Vacation Date<span class="text-danger">*</span></label>
-									<input type="text" name="date" parsley-trigger="change" required
-										placeholder="YYYY-MM-DD" class="form-control" id="date_select" autocomplete="off">
-								</div>
-								<div class="form-group col-md-6">
-									<label for="return_dated" class="col-form-label">Return Date<span class="text-danger">*</span></label>
-									<input type="text" name="return_date" parsley-trigger="change"
-										placeholder="YYYY-MM-DD" class="form-control" id="return_dated" autocomplete="off" required>
-								</div>
-
-								<div class="input-group-append">
-									<button type="submit" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-format-rotate-90"></i> Apply Now</button>
-								</div>
-							</div>
-						</div>
-						<div class="modal-footer">
-							<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
-
-
-						</div>
-					</div><!-- /.modal-content -->
-				</div><!-- /.modal-dialog -->
-			</form>
-		</div>
-		<?php */ ?>
-
 		<!-- jQuery  -->
 		<script src="assets/js/jquery.min.js"></script>
 		<!--        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>-->
@@ -1780,6 +1762,9 @@ if (mysqli_num_rows($query) == 1) {
 		<!-- App js -->
 		<script src="assets/js/jquery.app.js"></script>
 		<script src="assets/js/empVacationHandle.js"></script>
+
+		<!-- Dropzone JS -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js"></script>
 
 		<script src="./plugins/summernote/summernote.min.js"></script>
 		<!-- <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-bs4.min.js"></script> -->
@@ -2568,37 +2553,22 @@ if (mysqli_num_rows($query) == 1) {
 			});
 		</script>
 
-		<!-- Evaluation Details Modal -->
-		<div class="modal fade" id="evaluationModal" tabindex="-1" role="dialog" aria-labelledby="evaluationModalLabel" aria-hidden="true">
-			<div class="modal-dialog modal-lg" role="document">
-				<div class="modal-content">
-					<div class="modal-header">
-						<h5 class="modal-title" id="evaluationModalLabel"><?= __('evaluation_details', 'Evaluation Details') ?></h5>
-						<button type="button" class="close" data-dismiss="modal" aria-label="Close">
-							<span aria-hidden="true">&times;</span>
-						</button>
-					</div>
-					<div class="modal-body" id="evaluationModalBody">
-						<div class="text-center">
-							<div class="spinner-border text-primary" role="status">
-								<span class="sr-only"><?= __('loading') ?>...</span>
-							</div>
-						</div>
-					</div>
-					<div class="modal-footer">
-						<button type="button" class="btn btn-secondary" data-dismiss="modal"><?= __('close') ?></button>
-					</div>
-				</div>
-			</div>
-		</div>
-
 		<script>
-			// Load evaluation details when view button is clicked
+			// Load evaluation details when view button is clicked using SweetAlert2
 			$(document).on('click', '.view-eval-details', function() {
 				var evalId = $(this).data('id');
 
-				$('#evaluationModalBody').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>');
+				// Show loading
+				Swal.fire({
+					title: __('loading', 'Loading...'),
+					text: __('fetching_evaluation_details', 'Fetching evaluation details'),
+					allowOutsideClick: false,
+					didOpen: () => {
+						Swal.showLoading();
+					}
+				});
 
+				// Fetch evaluation details
 				$.ajax({
 					url: 'includes/ajaxFile/ajaxEvaluation.php',
 					method: 'POST',
@@ -2609,53 +2579,223 @@ if (mysqli_num_rows($query) == 1) {
 					dataType: 'json',
 					success: function(response) {
 						if (response.status === 'success') {
-							var data = response.data;
-							var html = `
-							<div class="row">
-								<div class="col-md-6">
-									<p><strong><?= __('employee_name', 'Employee Name') ?>:</strong> ${data.employee_name}</p>
-									<p><strong><?= __('department', 'Department') ?>:</strong> ${data.dept_name}</p>
-									<p><strong><?= __('position', 'Position') ?>:</strong> ${data.employee_position}</p>
+							var eval = response.data;
+
+							// Determine badge color for total score based on rating
+							let totalScoreBadge = 'success'; // Default Excellent
+							if (eval.total_score < 60) {
+								totalScoreBadge = 'danger'; // Needs Improvement
+							} else if (eval.total_score < 70) {
+								totalScoreBadge = 'warning'; // Satisfactory
+							} else if (eval.total_score < 80) {
+								totalScoreBadge = 'info'; // Good
+							} else if (eval.total_score < 90) {
+								totalScoreBadge = 'primary'; // Very Good
+							}
+
+							// Function to get badge color for individual scores (out of 10)
+							function getScoreBadge(score) {
+								if (score >= 9) return 'success'; // 90-100%
+								if (score >= 8) return 'primary'; // 80-89%
+								if (score >= 7) return 'info'; // 70-79%
+								if (score >= 6) return 'warning'; // 60-69%
+								return 'danger'; // Below 60%
+							}
+
+							var currentLang = getCurrentLanguage();
+
+							// Build detailed HTML
+							let detailsHtml = `
+								<div class="evaluation-details-print" id="evaluationDetailsPrint" style="text-align: left; padding: 20px;">
+									<div style="display: flex; justify-content: space-between; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #dee2e6;">
+										<div style="flex: 1;">
+											<p style="margin-bottom: 10px;"><strong><?= __('employee_name') ?>:</strong> <span class="emp-name">${eval.employee_name}</span></p>
+											<p style="margin-bottom: 10px;"><strong><?= __('employee_id') ?>:</strong> ${eval.employee_emp_id}</p>
+											<p style="margin-bottom: 10px;"><strong><?= __('department') ?>:</strong> <span class="dept-name">${eval.dept_name}</span></p>
+											<p style="margin-bottom: 10px;"><strong><?= __('position') ?>:</strong> <span class="emp-position">${eval.employee_position}</span></p>
+										</div>
+										<div style="flex: 1; text-align: right;">
+											<p style="margin-bottom: 10px;"><strong><?= __('evaluated_by') ?>:</strong> <span class="manager-name">${eval.manager_name}</span></p>
+											<p style="margin-bottom: 10px;"><strong><?= __('evaluation_date') ?>:</strong> ${eval.created_at ? eval.created_at.substring(0, 16).replace('T', ' ') : 'N/A'}</p>
+											<p style="margin-bottom: 10px;"><strong><?= __('total_score') ?>:</strong> <span class="badge badge-${totalScoreBadge}" style="font-size: 14px; padding: 5px 10px;">${eval.total_score || '0'}/100</span></p>
+										</div>
+									</div>
+									
+									<h5 style="margin-top: 20px; margin-bottom: 15px; color: #333;"><?= __('evaluation_criteria') ?></h5>
+									<table class="table table-bordered" style="width: 100%; margin-bottom: 20px;">
+										<thead style="background-color: #f8f9fa;">
+											<tr>
+												<th style="padding: 10px; width: 70%;"><?= __('criteria') ?></th>
+												<th style="padding: 10px; text-align: center;"><?= __('score') ?></th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr>
+												<td style="padding: 10px;"><?= __('punctuality_attendance') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.punctuality || 0)}">${eval.punctuality || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('achieving_at_the_specified_time') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.achieving_time || 0)}">${eval.achieving_time || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('knowledge_of_job') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.job_knowledge || 0)}">${eval.job_knowledge || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('the_ability_to_solve_problems') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.problem_solving || 0)}">${eval.problem_solving || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('receptiveness_to_feedback_and_instructions') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.feedback_receptiveness || 0)}">${eval.feedback_receptiveness || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('self_professional_development') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.self_development || 0)}">${eval.self_development || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('work_under_pressure') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.work_under_pressure || 0)}">${eval.work_under_pressure || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('communication_skills_and_teamwork') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.communication_teamwork || 0)}">${eval.communication_teamwork || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('creativity_and_speed_of_response') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.creativity_response || 0)}">${eval.creativity_response || '0'}/10</span></td>
+											</tr>
+											<tr>
+												<td style="padding: 10px;"><?= __('initiative_and_cooperation') ?></td>
+												<td style="padding: 10px; text-align: center;"><span class="badge badge-${getScoreBadge(eval.initiative_cooperation || 0)}">${eval.initiative_cooperation || '0'}/10</span></td>
+											</tr>
+										</tbody>
+									</table>
+									
+									${eval.observation 
+										? `<h5 style="margin-top: 30px; margin-bottom: 15px; color: #333;"><?= __('observationremarks') ?></h5><p style="padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">${eval.observation}</p>` 
+										: `<h5 style="margin-top: 30px; margin-bottom: 15px; color: #333;"><?= __('observationremarks') ?></h5><p style="padding: 15px; background-color: #f8f9fa; border-radius: 5px;"><?= __('no_observation_provided') ?></p>`}
+									
+									<div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #dee2e6;">
+										<h5 style="margin-bottom: 15px; color: #333;">
+											${eval.manager_acknowledgment_status === 'acknowledged' ? '<?= __('acknowledgment') ?>' : eval.manager_acknowledgment_status === 'objected' ? '<?= __('objection') ?>' : '<?= __('acknowledgment_status') ?>'}
+										</h5>
+										${eval.manager_acknowledgment_status === 'pending' 
+											? `<div class="alert alert-warning" style="border-left: 4px solid #ffc107;"><i class="mdi mdi-clock-outline"></i> <strong><?= __('status') ?>:</strong> <?= __('pending_acknowledgments') ?></div>`
+											: eval.manager_acknowledgment_status === 'acknowledged'
+												? `<div class="alert alert-success" style="border-left: 4px solid #28a745;">
+													<p style="margin-bottom: 5px;"><i class="mdi mdi-check-circle"></i> <strong><?= __('status') ?>:</strong> <?= __('acknowledged') ?></p>
+													${eval.acknowledged_by_name ? `<p style="margin-bottom: 5px;"><strong><?= __('acknowledged_by') ?>:</strong> <span class="acknow_by_name">${eval.acknowledged_by_name}</span></p>` : ''}
+													${eval.acknowledgment_date ? `<p style="margin-bottom: 0;"><strong><?= __('date') ?>:</strong> ${eval.acknowledgment_date}</p>` : ''}
+												</div>`
+												: eval.manager_acknowledgment_status === 'objected'
+													? `<div class="alert alert-danger" style="border-left: 4px solid #dc3545;">
+														<p style="margin-bottom: 10px;"><i class="mdi mdi-close-circle"></i> <strong><?= __('status') ?>:</strong> <?= __('objected') ?></p>
+														${eval.manager_objection_note ? `<p style="margin-bottom: 10px;"><strong><?= __('objection_note') ?>:</strong></p><p style="padding: 10px; background-color: #fff; border-radius: 4px; white-space: pre-wrap;">${eval.manager_objection_note}</p>` : ''}
+														${eval.acknowledged_by_name ? `<p style="margin-bottom: 5px;"><strong><?= __('objected_by') ?>:</strong> <span class="acknow_by_name">${eval.acknowledged_by_name}</span></p>` : ''}
+														${eval.acknowledgment_date ? `<p style="margin-bottom: 0;"><strong><?= __('date') ?>:</strong> ${eval.acknowledgment_date}</p>` : ''}
+													</div>`
+													: `<div class="alert alert-secondary"><i class="mdi mdi-information-outline"></i> <strong><?= __('status') ?>:</strong> <?= __('unknown') ?></div>`
+										}
+									</div>
 								</div>
-								<div class="col-md-6">
-									<p><strong><?= __('evaluated_by', 'Evaluated By') ?>:</strong> ${data.manager_name || 'N/A'}</p>
-									<p><strong><?= __('evaluation_date', 'Evaluation Date') ?>:</strong> ${data.created_at}</p>
-									<p><strong><?= __('total_score', 'Total Score') ?>:</strong> <span class="badge badge-success" style="font-size: 16px;">${data.total_score}/100</span></p>
-								</div>
-							</div>
-							<hr>
-							<h5><?= __('evaluation_criteria', 'Evaluation Criteria') ?></h5>
-							<table class="table table-bordered table-sm">
-								<thead>
-									<tr>
-										<th><?= __('criteria', 'Criteria') ?></th>
-										<th width="100"><?= __('score', 'Score') ?></th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr><td>Punctuality Attendance</td><td class="text-center"><span class="badge badge-primary">${data.punctuality}/10</span></td></tr>
-									<tr><td>Achieving at the specified time</td><td class="text-center"><span class="badge badge-primary">${data.achieving_time}/10</span></td></tr>
-									<tr><td>Knowledge of job</td><td class="text-center"><span class="badge badge-primary">${data.job_knowledge}/10</span></td></tr>
-									<tr><td>The Ability to solve problems</td><td class="text-center"><span class="badge badge-primary">${data.problem_solving}/10</span></td></tr>
-									<tr><td>Receptiveness to Feedback and Instructions</td><td class="text-center"><span class="badge badge-primary">${data.feedback_receptiveness}/10</span></td></tr>
-									<tr><td>Self & Professional Development</td><td class="text-center"><span class="badge badge-primary">${data.self_development}/10</span></td></tr>
-									<tr><td>Work under pressure</td><td class="text-center"><span class="badge badge-primary">${data.work_under_pressure}/10</span></td></tr>
-									<tr><td>Communication skills and Teamwork</td><td class="text-center"><span class="badge badge-primary">${data.communication_teamwork}/10</span></td></tr>
-									<tr><td>Creativity and speed of response</td><td class="text-center"><span class="badge badge-primary">${data.creativity_response}/10</span></td></tr>
-									<tr><td>Initiative and cooperation</td><td class="text-center"><span class="badge badge-primary">${data.initiative_cooperation}/10</span></td></tr>
-								</tbody>
-							</table>
-							<hr>
-							<h5><?= __('observation', 'Observation/Remarks') ?></h5>
-							<p>${data.observation || '<?= __('no_observation', 'No observation provided.') ?>'}</p>
-						`;
-							$('#evaluationModalBody').html(html);
+							`;
+
+							Swal.fire({
+								title: __('evaluation_details'),
+								html: detailsHtml,
+								width: '900px',
+								showCloseButton: true,
+								showCancelButton: true,
+								confirmButtonText: '<i class="mdi mdi-printer"></i> ' + __('print'),
+								confirmButtonColor: '#28a745',
+								cancelButtonText: __('close'),
+								customClass: {
+									confirmButton: 'btn btn-success',
+									cancelButton: 'btn btn-secondary'
+								},
+								allowOutsideClick: false,
+								didOpen: () => {
+									// Translate employee name
+									if (eval.acknowledged_by_name && currentLang === 'ar') {
+										translateName(eval.acknowledged_by_name, 'en', 'ar', function(translated) {
+											const empNameEl = document.querySelector('.acknow_by_name');
+											if (empNameEl) empNameEl.textContent = translated;
+										});
+									}
+									// Translate employee name
+									if (eval.employee_name && currentLang === 'ar') {
+										translateName(eval.employee_name, 'en', 'ar', function(translated) {
+											const empNameEl = document.querySelector('.emp-name');
+											if (empNameEl) empNameEl.textContent = translated;
+										});
+									}
+									// Translate department name
+									if (eval.dept_name && currentLang === 'ar') {
+										translateName(eval.dept_name, 'en', 'ar', function(translated) {
+											const deptNameEl = document.querySelector('.dept-name');
+											if (deptNameEl) deptNameEl.textContent = translated;
+										});
+									}
+									// Translate position
+									if (eval.employee_position && currentLang === 'ar') {
+										translateName(eval.employee_position, 'en', 'ar', function(translated) {
+											const empPosEl = document.querySelector('.emp-position');
+											if (empPosEl) empPosEl.textContent = translated;
+										});
+									}
+									// Translate manager name
+									if (eval.manager_name && currentLang === 'ar') {
+										translateName(eval.manager_name, 'en', 'ar', function(translated) {
+											const managerNameEl = document.querySelector('.manager-name');
+											if (managerNameEl) managerNameEl.textContent = translated;
+										});
+									}
+								}
+							}).then((result) => {
+								if (result.isConfirmed) {
+									// Print the evaluation details
+									const printWindow = window.open('', '_blank');
+									const printContent = document.getElementById('evaluationDetailsPrint').innerHTML;
+									printWindow.document.write('<!DOCTYPE html>' +
+										'<html>' +
+										'<head>' +
+										'<title>Evaluation Details - ' + eval.employee_name + '</title>' +
+										'<link rel="stylesheet" href="assets/css/bootstrap.min.css">' +
+										'<style>' +
+										'body { margin: 20px; font-family: Arial, sans-serif; }' +
+										'.badge { display: inline-block; padding: 5px 10px; border-radius: 3px; font-weight: bold; }' +
+										'.badge-primary { background-color: #007bff; color: white; }' +
+										'.badge-success { background-color: #28a745; color: white; }' +
+										'.badge-info { background-color: #17a2b8; color: white; }' +
+										'.badge-warning { background-color: #ffc107; color: #212529; }' +
+										'.badge-danger { background-color: #dc3545; color: white; }' +
+										'table { width: 100%; border-collapse: collapse; }' +
+										'table, th, td { border: 1px solid #dee2e6; }' +
+										'th, td { padding: 10px; }' +
+										'@media print { body { margin: 15px; } .no-print { display: none; } }' +
+										'</style>' +
+										'</head>' +
+										'<body>' +
+										printContent +
+										'</body>' +
+										'</html>');
+									printWindow.document.close();
+									setTimeout(function() {
+										printWindow.print();
+										setTimeout(function() {
+											printWindow.close();
+										}, 500);
+									}, 250);
+								}
+							});
 						} else {
-							$('#evaluationModalBody').html('<div class="alert alert-danger">Failed to load evaluation details.</div>');
+							Swal.fire('Error', 'Failed to load evaluation details', 'error');
 						}
 					},
 					error: function() {
-						$('#evaluationModalBody').html('<div class="alert alert-danger">An error occurred while loading the evaluation details.</div>');
+						Swal.fire('Error', 'An error occurred while loading the evaluation details', 'error');
 					}
 				});
 			});
@@ -2753,12 +2893,12 @@ if (mysqli_num_rows($query) == 1) {
 						formData.append('payment_note', payment_note);
 
 						// Debug logging
-						console.log('=== FormData Debug ===');
-						console.log('loanId:', loanId);
-						console.log('empId:', empId);
-						console.log('payment_proof file:', payment_proof);
+						// console.log('=== FormData Debug ===');
+						// console.log('loanId:', loanId);
+						// console.log('empId:', empId);
+						// console.log('payment_proof file:', payment_proof);
 						for (let pair of formData.entries()) {
-							console.log(pair[0] + ':', pair[1]);
+							// console.log(pair[0] + ':', pair[1]);
 						}
 
 						// Submit via AJAX
@@ -3000,6 +3140,134 @@ if (mysqli_num_rows($query) == 1) {
 							icon: 'error',
 							title: '<?= __('error') ?>',
 							text: '<?= __('request_failed') ?>'
+						});
+					}
+				});
+			}
+			// Evaluation Acknowledgment/Objection handlers
+			$(document).on('click', '.acknowledge-eval', function() {
+				const evalId = $(this).data('id');
+				const managerName = $(this).data('manager-name');
+				const btn = this;
+
+				Swal.fire({
+					title: '<?= __('acknowledge_evaluation', 'Acknowledge Evaluation') ?>',
+					html: '<p><?= __('manager_acknowledgment_confirm', 'Are you sure you want to acknowledge this evaluation from') ?> <strong class="manager-name">' + managerName + '</strong>?</p>',
+					icon: 'question',
+					showCancelButton: true,
+					confirmButtonColor: '#28a745',
+					cancelButtonColor: '#6c757d',
+					confirmButtonText: __('yes_acknowledge', 'Acknowledge'),
+					cancelButtonText: __('cancel'),
+					allowOutsideClick: false,
+					didOpen: () => {
+						var currentLang = getCurrentLanguage();
+						// Translate manager name
+						if (managerName && currentLang === 'ar') {
+							translateName(managerName, 'en', 'ar', function(translated) {
+								const managerNameEl = document.querySelector('.manager-name');
+								if (managerNameEl) managerNameEl.textContent = translated;
+							});
+						}
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						// Submit acknowledgment
+						submitManagerAcknowledgment(evalId, 'acknowledged', '', function() {
+							location.reload();
+						});
+					}
+				});
+			});
+
+			$(document).on('click', '.object-eval', function() {
+				const evalId = $(this).data('id');
+				const managerName = $(this).data('manager-name');
+
+				Swal.fire({
+					title: '<?= __('object_to_evaluation', 'Object to Evaluation') ?>',
+					html: '<p><?= __('please_enter_your_objection_reasonnote', 'Please enter your objection reason/note:') ?></p><textarea id="objectionNote" class="form-control swal2-input" placeholder="<?= __('enter_your_objection_here', 'Enter your objection here...') ?>" rows="4" style="resize: vertical; margin-top: 10px;"></textarea>',
+					icon: 'warning',
+					showCancelButton: true,
+					confirmButtonColor: '#ffc107',
+					cancelButtonColor: '#6c757d',
+					confirmButtonText: __('submit_objection', 'Submit Objection'),
+					cancelButtonText: __('cancel'),
+					allowOutsideClick: false,
+					didOpen: () => {
+						$('#objectionNote').focus();
+					},
+					preConfirm: () => {
+						const note = $('#objectionNote').val().trim();
+						if (!note) {
+							Swal.showValidationMessage('<?= __('please_provide_an_objection_reason', 'Objection note is required!') ?>');
+							return false;
+						}
+						if (note.length < 10) {
+							Swal.showValidationMessage('<?= __('objection_note_min_length', 'Please provide at least 10 characters.') ?>');
+							return false;
+						}
+						return note;
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						// Submit objection
+						submitManagerAcknowledgment(evalId, 'objected', result.value, function() {
+							location.reload();
+						});
+					}
+				});
+			});
+
+			// Function to submit manager acknowledgment
+			function submitManagerAcknowledgment(evalId, status, objectionNote, onSuccess) {
+				Swal.fire({
+					title: '<?= __('processing') ?>',
+					html: '<i class="fa fa-spinner fa-spin" style="font-size: 32px; color: #007bff;"></i><p style="margin-top: 15px;"><?= __('please_wait') ?></p>',
+					allowOutsideClick: false,
+					allowEscapeKey: false,
+					showConfirmButton: false,
+					didOpen: () => {
+						$.ajax({
+							url: './includes/ajaxFile/ajaxEvaluationAcknowledgment.php',
+							method: 'POST',
+							dataType: 'json',
+							data: {
+								ajaxType: 'submit_acknowledgment',
+								eval_id: evalId,
+								acknowledgment_status: status,
+								objection_note: objectionNote || ''
+							},
+							success: function(resp) {
+								Swal.close();
+								if (resp.status === 200 || resp.status === 'success') {
+									Swal.fire({
+										icon: 'success',
+										title: '<?= __('success') ?>',
+										text: resp.message || '<?= __('evaluation_acknowledgment_submitted', 'Evaluation acknowledgment submitted successfully!') ?>',
+										confirmButtonColor: '#007bff'
+									}).then(() => {
+										if (typeof onSuccess === 'function') {
+											onSuccess();
+										}
+									});
+								} else {
+									Swal.fire({
+										icon: 'error',
+										title: '<?= __('error') ?>',
+										text: resp.message || '<?= __('failed_to_submit') ?>'
+									});
+								}
+							},
+							error: function(xhr, status, error) {
+								Swal.close();
+								console.error('AJAX Error:', error, xhr.responseText);
+								Swal.fire({
+									icon: 'error',
+									title: '<?= __('error') ?>',
+									text: '<?= __('request_failed') ?>'
+								});
+							}
 						});
 					}
 				});

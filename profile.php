@@ -1,68 +1,69 @@
 <?php
-    require_once("./includes/init.php");
-    require_once("./includes/session_check.php");
-    include('./includes/MainClass.php');
-    include("./includes/avatar_select.php");
-    include("./includes/Hijri_GregorianConvert.php");
-    $DateConv = new Hijri_GregorianConvert;
-    $format = "YYYY-MM-DD";
+require_once("./includes/init.php");
+require_once("./includes/session_check.php");
+include('./includes/MainClass.php');
+include("./includes/avatar_select.php");
+include("./includes/Hijri_GregorianConvert.php");
+$DateConv = new Hijri_GregorianConvert;
+$format = "YYYY-MM-DD";
 
-    require("./includes/emp_query.php");
-    $emprow = mysqli_fetch_assoc($get_emp_data);
+require("./includes/emp_query.php");
+$emprow = mysqli_fetch_assoc($get_emp_data);
 
-    if (!$emprow) {
-        die("Employee data not found.");
-    }
+if (!$emprow) {
+    die("Employee data not found.");
+}
 
-    // Safe display helper: returns translated not_available when empty/null
-    if (!function_exists('display_or_na')) {
-        function display_or_na($val) {
-            if (is_null($val) || $val === '' || $val === false) {
-                return __('not_available');
-            }
-            return htmlspecialchars((string)$val);
+// Safe display helper: returns translated not_available when empty/null
+if (!function_exists('display_or_na')) {
+    function display_or_na($val)
+    {
+        if (is_null($val) || $val === '' || $val === false) {
+            return __('not_available');
         }
+        return htmlspecialchars((string)$val);
     }
+}
 
-    // Compute age in years from DOB for header and personal info
-    $years = '';
-    if (!empty($emprow['dob']) && $emprow['dob'] !== '0000-00-00') {
-        try {
-            $dobDate = new DateTime($emprow['dob']);
-            $today = new DateTime();
-            $years = $dobDate->diff($today)->y;
-        } catch (Exception $e) {
-            $years = '';
-        }
+// Compute age in years from DOB for header and personal info
+$years = '';
+if (!empty($emprow['dob']) && $emprow['dob'] !== '0000-00-00') {
+    try {
+        $dobDate = new DateTime($emprow['dob']);
+        $today = new DateTime();
+        $years = $dobDate->diff($today)->y;
+    } catch (Exception $e) {
+        $years = '';
     }
+}
 
-    // Get available vacation balance directly from emp_vacation_balance table
-    // (Updated daily by cron job - no need for live calculation)
-    $displayBalance = 0;
-    $empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];    
-    if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
-        $balance_query = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' ORDER BY `last_updated` DESC LIMIT 1");
-        if ($balance_query && mysqli_num_rows($balance_query) > 0) {
-            $balance_row = mysqli_fetch_assoc($balance_query);
-            $displayBalance = (float)$balance_row['available_balance'];
-            mysqli_free_result($balance_query);
-        }
+// Get available vacation balance directly from emp_vacation_balance table
+// (Updated daily by cron job - no need for live calculation)
+$displayBalance = 0;
+$empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];
+if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
+    $balance_query = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' ORDER BY `last_updated` DESC LIMIT 1");
+    if ($balance_query && mysqli_num_rows($balance_query) > 0) {
+        $balance_row = mysqli_fetch_assoc($balance_query);
+        $displayBalance = (float)$balance_row['available_balance'];
+        mysqli_free_result($balance_query);
     }
+}
 
-    // Build More Actions HTML for SweetAlert2
-    $moreActionsHtml = '';
-    if ($emprow['status'] == 1) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-hourglass-end\"></i><span>" . __('excuse_leave') . "</span></a>";
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
-        // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
-    } else {
-        $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
-    }
-    // Add HR and Sign Out button
-    $moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a>";
+// Build More Actions HTML for SweetAlert2
+$moreActionsHtml = '';
+if ($emprow['status'] == 1) {
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
+    // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+} else {
+    $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
+}
+// Add HR and Sign Out button
+$moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
+$moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a>";
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -85,11 +86,14 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/css/bootstrap-datepicker.min.css" rel="stylesheet" />
 
     <!-- Plugins CSS -->
-    
+
     <!-- Additional Plugins -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Dropzone CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.css" />
 
     <style>
         :root {
@@ -336,6 +340,10 @@
             border-top-color: var(--danger);
         }
 
+        .action-card.purple {
+            border-top-color: #6f42c1;
+        }
+
         .action-icon {
             font-size: 36px;
             margin-bottom: 12px;
@@ -360,6 +368,10 @@
 
         .action-card.danger .action-icon {
             color: var(--danger);
+        }
+
+        .action-card.purple .action-icon {
+            color: #6f42c1;
         }
 
         .action-title {
@@ -411,6 +423,11 @@
 
         .action-card.danger .action-btn:hover {
             background: var(--danger);
+            color: white;
+        }
+
+        .action-card.purple .action-btn:hover {
+            background: #6f42c1;
             color: white;
         }
 
@@ -738,50 +755,70 @@
         }
 
         /* Select2 alignment with Bootstrap form controls */
-        .select2-container { width: 100% !important; }
-        .select2-container .select2-selection--single { 
-            height: 38px; 
-            border: 1px solid #ced4da; 
+        .select2-container {
+            width: 100% !important;
+        }
+
+        .select2-container .select2-selection--single {
+            height: 38px;
+            border: 1px solid #ced4da;
             border-radius: 4px;
         }
-        .select2-container--default .select2-selection--single .select2-selection__rendered { 
-            line-height: 36px; 
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 36px;
             padding-left: 12px;
         }
-        .select2-container--default .select2-selection--single .select2-selection__arrow { 
-            height: 36px; 
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 36px;
         }
 
         /* Ensure dropdowns appear above SweetAlert2 */
-        .select2-container--open { z-index: 99999 !important; }
-        .select2-dropdown { 
-            z-index: 99999 !important; 
+        .select2-container--open {
+            z-index: 99999 !important;
+        }
+
+        .select2-dropdown {
+            z-index: 99999 !important;
             border: 1px solid #ced4da;
             border-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
-        .select2-results__option { 
+
+        .select2-results__option {
             padding: 8px 12px;
             font-size: 14px;
         }
-        .select2-results__option--highlighted { 
+
+        .select2-results__option--highlighted {
             background-color: #4e73df !important;
             color: white !important;
         }
+
         .select2-results__option[aria-selected="true"] {
             background-color: #e9ecef;
         }
+
         .select2-search--dropdown {
             padding: 8px;
         }
+
         .select2-search__field {
             border: 1px solid #ced4da;
             border-radius: 4px;
             padding: 6px 12px;
             width: 100% !important;
         }
-        .datepicker-dropdown { z-index: 99999 !important; }
-        .daterangepicker { z-index: 99999 !important; }
+
+        .datepicker-dropdown {
+            z-index: 99999 !important;
+        }
+
+        .daterangepicker {
+            z-index: 99999 !important;
+        }
+
         .datepicker table tr td.disabled,
         .datepicker table tr td.disabled:hover {
             color: #ff0000;
@@ -848,7 +885,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: linear-gradient(90deg, rgba(0,0,0,0.02) 0%, transparent 50%);
+            background: linear-gradient(90deg, rgba(0, 0, 0, 0.02) 0%, transparent 50%);
             opacity: 0;
             transition: opacity 0.3s ease;
             pointer-events: none;
@@ -920,7 +957,7 @@
             background-color: rgba(244, 106, 106, 0.08);
             border-left-color: var(--danger);
         }
-        
+
         .more-actions-modal .menu-item.text-success {
             color: var(--success) !important;
         }
@@ -938,7 +975,7 @@
             background-color: rgba(52, 58, 64, 0.08);
             border-left-color: var(--dark);
         }
-        
+
         .more-actions-modal .menu-item.text-secondary {
             color: var(--secondary) !important;
         }
@@ -1101,509 +1138,573 @@
    Documents List View with Viewer
    ========================================== */
 
-.documents-list-container {
-  max-height: 600px;
-  overflow-y: auto;
-  border: 1px solid #e3eaef;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.doc-list-item {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px;
-  border-bottom: 1px solid #f0f2f5;
-  cursor: pointer;
-  transition: all 0.2s ease;
-    gap: 8px;
-}
-
-.doc-list-item:last-child {
-  border-bottom: none;
-}
-
-.doc-list-item:hover {
-  background: #f8f9fa;
-}
-
-.doc-list-item.active {
-  background: #e3f2fd;
-  border-left: 3px solid #3f51b5;
-}
-
-.doc-item-icon {
-    font-size: 20px;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.doc-item-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.doc-item-name {
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0 0 2px 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: #313a46;
-}
-
-.doc-item-meta {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-}
-
-.doc-item-meta .badge-sm {
-  padding: 2px 6px;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.doc-item-actions {
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.doc-list-item:hover .doc-item-actions {
-  opacity: 1;
-}
-
-.btn-icon {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  border: 1px solid #e3eaef;
-  background: #fff;
-  color: #74788d;
-  transition: all 0.2s ease;
-}
-
-.btn-icon:hover {
-  background: #f8f9fa;
-  color: #313a46;
-  border-color: #c8ccd4;
-}
-
-.btn-download-doc:hover {
-  background: #e8f5e9;
-  color: #51cf66;
-  border-color: #51cf66;
-}
-
-.btn-delete-item:hover {
-  background: #ffebee;
-  color: #f1556c;
-  border-color: #f1556c;
-}
-
-/* Document Viewer */
-.document-viewer-container {
-  border: 1px solid #e3eaef;
-  border-radius: 8px;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  height: 600px;
-}
-
-.viewer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e3eaef;
-  background: #f8f9fa;
-  border-radius: 8px 8px 0 0;
-}
-
-.viewer-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: #313a46;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.viewer-title i {
-  color: #74788d;
-}
-
-.viewer-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.viewer-body {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  background: #f0f2f5;
-}
-
-.viewer-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #98a6ad;
-}
-
-.viewer-body iframe,
-.viewer-body embed,
-.viewer-body img {
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
-}
-
-.viewer-body img {
-  object-fit: contain;
-  background: #fff;
-}
-
-/* Scrollbar Styling */
-.documents-list-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.documents-list-container::-webkit-scrollbar-track {
-  background: #f0f2f5;
-}
-
-.documents-list-container::-webkit-scrollbar-thumb {
-  background: #c8ccd4;
-  border-radius: 3px;
-}
-
-.documents-list-container::-webkit-scrollbar-thumb:hover {
-  background: #98a6ad;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .document-viewer-container {
-    height: 400px;
-    margin-top: 20px;
-  }
-  
-  .documents-list-container {
-    max-height: 300px;
-  }
-}
-
-/* Old Grid System - Deprecated */
-.documents-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-  padding: 10px 0;
-}
-
-.document-card {
-  background: #fff;
-  border: 1px solid #e3eaef;
-  border-radius: 8px;
-  padding: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-}
-
-.document-card:hover {
-  border-color: #3f51b5;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
-  transform: translateY(-4px);
-}
-
-.document-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-  gap: 8px;
-}
-
-.file-type-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  font-size: 24px;
-  color: #fff;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.file-type-badge.badge-danger {
-  background: linear-gradient(135deg, #f1556c 0%, #ee3d54 100%);
-}
-
-.file-type-badge.badge-success {
-  background: linear-gradient(135deg, #51cf66 0%, #37b24d 100%);
-}
-
-.file-type-badge.badge-primary {
-  background: linear-gradient(135deg, #3f51b5 0%, #303f9f 100%);
-}
-
-.file-type-badge.badge-info {
-  background: linear-gradient(135deg, #00bcd4 0%, #00acc1 100%);
-}
-
-.file-type-badge.badge-warning {
-  background: linear-gradient(135deg, #ffc107 0%, #ffb300 100%);
-}
-
-.file-type-badge.badge-secondary {
-  background: linear-gradient(135deg, #98a6ad 0%, #7a8a97 100%);
-}
-
-.btn-delete-doc {
-  background: transparent;
-  border: none;
-  color: #98a6ad;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-  opacity: 0.6;
-}
-
-.btn-delete-doc:hover {
-  background: rgba(241, 85, 108, 0.1);
-  color: #f1556c;
-  opacity: 1;
-}
-
-.document-preview {
-  margin-bottom: 12px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: #f8f9fa;
-  min-height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-grow: 1;
-}
-
-.preview-image {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.preview-image img {
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: transform 0.3s ease;
-}
-
-.preview-image img:hover {
-  transform: scale(1.05);
-}
-
-.preview-icon {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 48px;
-  color: #fff;
-  opacity: 0.8;
-  background-size: cover;
-  background-position: center;
-}
-
-.preview-icon.bg-danger {
-  background: linear-gradient(135deg, rgba(241, 85, 108, 0.2) 0%, rgba(238, 61, 84, 0.2) 100%);
-  color: #f1556c;
-}
-
-.preview-icon.bg-success {
-  background: linear-gradient(135deg, rgba(81, 207, 102, 0.2) 0%, rgba(55, 178, 77, 0.2) 100%);
-  color: #51cf66;
-}
-
-.preview-icon.bg-primary {
-  background: linear-gradient(135deg, rgba(63, 81, 181, 0.2) 0%, rgba(48, 63, 159, 0.2) 100%);
-  color: #3f51b5;
-}
-
-.preview-icon.bg-info {
-  background: linear-gradient(135deg, rgba(0, 188, 212, 0.2) 0%, rgba(0, 172, 193, 0.2) 100%);
-  color: #00bcd4;
-}
-
-.preview-icon.bg-warning {
-  background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 179, 0, 0.2) 100%);
-  color: #ffc107;
-}
-
-.preview-icon.bg-secondary {
-  background: linear-gradient(135deg, rgba(152, 166, 173, 0.2) 0%, rgba(122, 138, 151, 0.2) 100%);
-  color: #98a6ad;
-}
-
-.document-info {
-  margin-bottom: 12px;
-}
-
-.document-type {
-  font-size: 14px;
-  font-weight: 600;
-  color: #313a46;
-  margin: 0 0 4px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.document-category {
-  font-size: 13px;
-  color: #7a8a97;
-  margin: 0 0 8px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.document-meta {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: #98a6ad;
-}
-
-.document-meta span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.document-meta i {
-  font-size: 11px;
-}
-
-.document-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: auto;
-}
-
-.document-actions .btn {
-  flex: 1;
-  padding: 6px 8px;
-  font-size: 12px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-  border: none;
-  font-weight: 500;
-}
-
-.document-actions .btn-view {
-  background: #e3f2fd;
-  color: #3f51b5;
-}
-
-.document-actions .btn-view:hover {
-  background: #bbdefb;
-  color: #303f9f;
-}
-
-.document-actions .btn-download {
-  background: #e8f5e9;
-  color: #51cf66;
-}
-
-.document-actions .btn-download:hover {
-  background: #c8e6c9;
-  color: #37b24d;
-}
-
-/* Responsive Grid Adjustments */
-@media (max-width: 768px) {
-  .documents-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-  }
-}
-
-@media (max-width: 576px) {
-  .documents-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .document-card {
-    padding: 12px;
-  }
-  
-  .document-actions {
-    flex-direction: column;
-  }
-}
-/* ==========================================
+        .documents-list-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #e3eaef;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .doc-list-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #f0f2f5;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            gap: 8px;
+        }
+
+        .doc-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .doc-list-item:hover {
+            background: #f8f9fa;
+        }
+
+        .doc-list-item.active {
+            background: #e3f2fd;
+            border-left: 3px solid #3f51b5;
+        }
+
+        .doc-item-icon {
+            font-size: 20px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .doc-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .doc-item-name {
+            font-size: 13px;
+            font-weight: 600;
+            margin: 0 0 2px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #313a46;
+        }
+
+        .doc-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+        }
+
+        .doc-item-meta .badge-sm {
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .doc-item-actions {
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .doc-list-item:hover .doc-item-actions {
+            opacity: 1;
+        }
+
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            border: 1px solid #e3eaef;
+            background: #fff;
+            color: #74788d;
+            transition: all 0.2s ease;
+        }
+
+        .btn-icon:hover {
+            background: #f8f9fa;
+            color: #313a46;
+            border-color: #c8ccd4;
+        }
+
+        .btn-download-doc:hover {
+            background: #e8f5e9;
+            color: #51cf66;
+            border-color: #51cf66;
+        }
+
+        .btn-delete-item:hover {
+            background: #ffebee;
+            color: #f1556c;
+            border-color: #f1556c;
+        }
+
+        /* Document Viewer */
+        .document-viewer-container {
+            border: 1px solid #e3eaef;
+            border-radius: 8px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+
+        .viewer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e3eaef;
+            background: #f8f9fa;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .viewer-title {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: #313a46;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .viewer-title i {
+            color: #74788d;
+        }
+
+        .viewer-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .viewer-body {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: #f0f2f5;
+        }
+
+        .viewer-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #98a6ad;
+        }
+
+        .viewer-body iframe,
+        .viewer-body embed,
+        .viewer-body img {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        .viewer-body img {
+            object-fit: contain;
+            background: #fff;
+        }
+
+        /* Scrollbar Styling */
+        .documents-list-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .documents-list-container::-webkit-scrollbar-track {
+            background: #f0f2f5;
+        }
+
+        .documents-list-container::-webkit-scrollbar-thumb {
+            background: #c8ccd4;
+            border-radius: 3px;
+        }
+
+        .documents-list-container::-webkit-scrollbar-thumb:hover {
+            background: #98a6ad;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .document-viewer-container {
+                height: 400px;
+                margin-top: 20px;
+            }
+
+            .documents-list-container {
+                max-height: 300px;
+            }
+        }
+
+        /* Old Grid System - Deprecated */
+        .documents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            padding: 10px 0;
+        }
+
+        .document-card {
+            background: #fff;
+            border: 1px solid #e3eaef;
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+
+        .document-card:hover {
+            border-color: #3f51b5;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+            transform: translateY(-4px);
+        }
+
+        .document-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            gap: 8px;
+        }
+
+        .file-type-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            font-size: 24px;
+            color: #fff;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .file-type-badge.badge-danger {
+            background: linear-gradient(135deg, #f1556c 0%, #ee3d54 100%);
+        }
+
+        .file-type-badge.badge-success {
+            background: linear-gradient(135deg, #51cf66 0%, #37b24d 100%);
+        }
+
+        .file-type-badge.badge-primary {
+            background: linear-gradient(135deg, #3f51b5 0%, #303f9f 100%);
+        }
+
+        .file-type-badge.badge-info {
+            background: linear-gradient(135deg, #00bcd4 0%, #00acc1 100%);
+        }
+
+        .file-type-badge.badge-warning {
+            background: linear-gradient(135deg, #ffc107 0%, #ffb300 100%);
+        }
+
+        .file-type-badge.badge-secondary {
+            background: linear-gradient(135deg, #98a6ad 0%, #7a8a97 100%);
+        }
+
+        .btn-delete-doc {
+            background: transparent;
+            border: none;
+            color: #98a6ad;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            opacity: 0.6;
+        }
+
+        .btn-delete-doc:hover {
+            background: rgba(241, 85, 108, 0.1);
+            color: #f1556c;
+            opacity: 1;
+        }
+
+        .document-preview {
+            margin-bottom: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #f8f9fa;
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-grow: 1;
+        }
+
+        .preview-image {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .preview-image img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .preview-image img:hover {
+            transform: scale(1.05);
+        }
+
+        .preview-icon {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: #fff;
+            opacity: 0.8;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .preview-icon.bg-danger {
+            background: linear-gradient(135deg, rgba(241, 85, 108, 0.2) 0%, rgba(238, 61, 84, 0.2) 100%);
+            color: #f1556c;
+        }
+
+        .preview-icon.bg-success {
+            background: linear-gradient(135deg, rgba(81, 207, 102, 0.2) 0%, rgba(55, 178, 77, 0.2) 100%);
+            color: #51cf66;
+        }
+
+        .preview-icon.bg-primary {
+            background: linear-gradient(135deg, rgba(63, 81, 181, 0.2) 0%, rgba(48, 63, 159, 0.2) 100%);
+            color: #3f51b5;
+        }
+
+        .preview-icon.bg-info {
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.2) 0%, rgba(0, 172, 193, 0.2) 100%);
+            color: #00bcd4;
+        }
+
+        .preview-icon.bg-warning {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 179, 0, 0.2) 100%);
+            color: #ffc107;
+        }
+
+        .preview-icon.bg-secondary {
+            background: linear-gradient(135deg, rgba(152, 166, 173, 0.2) 0%, rgba(122, 138, 151, 0.2) 100%);
+            color: #98a6ad;
+        }
+
+        .document-info {
+            margin-bottom: 12px;
+        }
+
+        .document-type {
+            font-size: 14px;
+            font-weight: 600;
+            color: #313a46;
+            margin: 0 0 4px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .document-category {
+            font-size: 13px;
+            color: #7a8a97;
+            margin: 0 0 8px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .document-meta {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: #98a6ad;
+        }
+
+        .document-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .document-meta i {
+            font-size: 11px;
+        }
+
+        .document-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: auto;
+        }
+
+        .document-actions .btn {
+            flex: 1;
+            padding: 6px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            border: none;
+            font-weight: 500;
+        }
+
+        .document-actions .btn-view {
+            background: #e3f2fd;
+            color: #3f51b5;
+        }
+
+        .document-actions .btn-view:hover {
+            background: #bbdefb;
+            color: #303f9f;
+        }
+
+        .document-actions .btn-download {
+            background: #e8f5e9;
+            color: #51cf66;
+        }
+
+        .document-actions .btn-download:hover {
+            background: #c8e6c9;
+            color: #37b24d;
+        }
+
+        /* Responsive Grid Adjustments */
+        @media (max-width: 768px) {
+            .documents-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 16px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .documents-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .document-card {
+                padding: 12px;
+            }
+
+            .document-actions {
+                flex-direction: column;
+            }
+        }
+
+        /* ==========================================
 RTL Support
 ========================================== */
-    .rtl {
-        direction: rtl;
-        text-align: right;
-    }
-/* Flip common spacing utilities used here */
-    .rtl .ml-2 { margin-left: 0 !important; margin-right: .5rem !important; }
-    .rtl .mr-3 { margin-right: 0 !important; margin-left: 1rem !important; }
-    .rtl .viewer-actions { flex-direction: row-reverse; }
-    .rtl .doc-list-item { flex-direction: row-reverse; }
-    /* Ensure icon renders at right side with proper spacing in RTL */
-    .rtl .doc-item-icon { order: 3; margin-left: 0; margin-right: 8px; }
-    .rtl .doc-item-actions { order: 1; }
-    .rtl .doc-item-info { order: 2; text-align: right; }
-    .rtl .doc-item-info { text-align: right; }
-    .rtl .documents-list-container { text-align: right; }
-    .rtl .viewer-title { flex-direction: row-reverse; }
-    .rtl .document-meta { justify-content: flex-end; }
-    .rtl .action-cards-grid { direction: rtl; }
-    .rtl .info-row { justify-content: space-between; }
-    .rtl .info-label { margin-left: 0; margin-right: 8px; }
-    .rtl .profile-header-info p { text-align: right; }
-    .rtl .menu-items-container { direction: rtl; }
-    .rtl .swal2-close { left: 12px; right: auto; }
-</style>
+        .rtl {
+            direction: rtl;
+            text-align: right;
+        }
 
-    <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
+        /* Flip common spacing utilities used here */
+        .rtl .ml-2 {
+            margin-left: 0 !important;
+            margin-right: .5rem !important;
+        }
+
+        .rtl .mr-3 {
+            margin-right: 0 !important;
+            margin-left: 1rem !important;
+        }
+
+        .rtl .viewer-actions {
+            flex-direction: row-reverse;
+        }
+
+        .rtl .doc-list-item {
+            flex-direction: row-reverse;
+        }
+
+        /* Ensure icon renders at right side with proper spacing in RTL */
+        .rtl .doc-item-icon {
+            order: 3;
+            margin-left: 0;
+            margin-right: 8px;
+        }
+
+        .rtl .doc-item-actions {
+            order: 1;
+        }
+
+        .rtl .doc-item-info {
+            order: 2;
+            text-align: right;
+        }
+
+        .rtl .doc-item-info {
+            text-align: right;
+        }
+
+        .rtl .documents-list-container {
+            text-align: right;
+        }
+
+        .rtl .viewer-title {
+            flex-direction: row-reverse;
+        }
+
+        .rtl .document-meta {
+            justify-content: flex-end;
+        }
+
+        .rtl .action-cards-grid {
+            direction: rtl;
+        }
+
+        .rtl .info-row {
+            justify-content: space-between;
+        }
+
+        .rtl .info-label {
+            margin-left: 0;
+            margin-right: 8px;
+        }
+
+        .rtl .profile-header-info p {
+            text-align: right;
+        }
+
+        .rtl .menu-items-container {
+            direction: rtl;
+        }
+
+        .rtl .swal2-close {
+            left: 12px;
+            right: auto;
+        }
+        .action-btn{
+            width: 60px !important;
+        }
+    </style>
+
+    <script>
+        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+    </script>
 
 </head>
 
@@ -1615,7 +1716,7 @@ RTL Support
                 <img src="<?= $emprow['avatar'] ?>" alt="<?= $emprow['name'] ?>" class="profile-avatar">
 
                 <div class="profile-header-info">
-                    <h1><?= display_or_na($emprow['name'] ?? null) ?></h1>
+                    <h1><?= translate_name($emprow['name'], $current_lang ?? 'en') ?></h1>
                     <p><strong><?= __('employee_id') ?>:</strong> <?= display_or_na($emprow['empid'] ?? null) ?></p>
                     <p><strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></p>
                     <p><strong><?= __('actual_job_label') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["jobname_ar"] : $emprow["jobname"] ?></p>
@@ -1627,10 +1728,10 @@ RTL Support
                         <div class="stat-label"><?= __('age') ?></div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-number"><?= $displayBalance < 0 
-                            ? number_format($displayBalance, 2) 
-                            : ($displayBalance == floor($displayBalance) ? number_format($displayBalance, 0) : number_format($displayBalance, 2)) 
-                        ?></div>
+                        <div class="stat-number"><?= $displayBalance < 0
+                                                        ? number_format($displayBalance, 2)
+                                                        : ($displayBalance == floor($displayBalance) ? number_format($displayBalance, 0) : number_format($displayBalance, 2))
+                                                    ?></div>
                         <div class="stat-label"><?= __('vacation_days') ?></div>
                     </div>
                     <div class="stat-item">
@@ -1688,23 +1789,25 @@ RTL Support
                         <span class="info-label"><?= __('iqama_id_expiry') ?></span>
                         <span class="info-value">
                             <?php
-                                $iqama_h = trim($emprow['iqama_exp'] ?? '');
-                                $iqama_g = trim($emprow['iqama_exp_g'] ?? '');
-                                if ($iqama_h) {
-                                    echo htmlspecialchars($iqama_h) . ' (' . __('hijri') . ')';
-                                    try {
-                                        $convG = $DateConv->HijriToGregorian($iqama_h, $format);
-                                        if (!empty($convG)) echo ' / ' . htmlspecialchars($convG) . ' (' . __('gregorian') . ')';
-                                    } catch (Exception $e) { /* ignore */ }
-                                } elseif ($iqama_g) {
-                                    echo htmlspecialchars($iqama_g) . ' (' . __('gregorian') . ')';
-                                    try {
-                                        $convH = $DateConv->GregorianToHijri($iqama_g, $format);
-                                        if (!empty($convH)) echo ' / ' . htmlspecialchars($convH) . ' (' . __('hijri') . ')';
-                                    } catch (Exception $e) { /* ignore */ }
-                                } else {
-                                    echo 'N/A';
+                            $iqama_h = trim($emprow['iqama_exp'] ?? '');
+                            $iqama_g = trim($emprow['iqama_exp_g'] ?? '');
+                            if ($iqama_h) {
+                                echo htmlspecialchars($iqama_h) . ' (' . __('hijri') . ')';
+                                try {
+                                    $convG = $DateConv->HijriToGregorian($iqama_h, $format);
+                                    if (!empty($convG)) echo ' / ' . htmlspecialchars($convG) . ' (' . __('gregorian') . ')';
+                                } catch (Exception $e) { /* ignore */
                                 }
+                            } elseif ($iqama_g) {
+                                echo htmlspecialchars($iqama_g) . ' (' . __('gregorian') . ')';
+                                try {
+                                    $convH = $DateConv->GregorianToHijri($iqama_g, $format);
+                                    if (!empty($convH)) echo ' / ' . htmlspecialchars($convH) . ' (' . __('hijri') . ')';
+                                } catch (Exception $e) { /* ignore */
+                                }
+                            } else {
+                                echo 'N/A';
+                            }
                             ?>
                         </span>
                     </div>
@@ -1715,14 +1818,16 @@ RTL Support
                     <div class="info-row">
                         <span class="info-label"><?= __('passport_expiry') ?></span>
                         <span class="info-value">
-                            <?php if (!empty($emprow['passport_exp'])): 
+                            <?php if (!empty($emprow['passport_exp'])):
                                 $pexp_g = $emprow['passport_exp'];
                                 echo htmlspecialchars($pexp_g) . ' (' . __('gregorian') . ')';
                                 try {
                                     $pexp_h = $DateConv->GregorianToHijri($pexp_g, $format);
                                     if (!empty($pexp_h)) echo ' / ' . htmlspecialchars($pexp_h) . ' (' . __('hijri') . ')';
-                                } catch (Exception $e) { /* ignore */ }
-                              else: echo 'N/A'; endif; ?>
+                                } catch (Exception $e) { /* ignore */
+                                }
+                            else: echo 'N/A';
+                            endif; ?>
                         </span>
                     </div>
                     <div class="info-row">
@@ -1773,7 +1878,7 @@ RTL Support
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('section_name_header') ?></span>
-                        <span class="info-value"><?= display_or_na($emprow['sectin_nme'] ?? null) ?></span>
+                        <span class="info-value"><?= translate_name($emprow['sectin_nme'] ?? null, $current_lang ?? 'en') ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('contract_period_label') ?></span>
@@ -1801,27 +1906,27 @@ RTL Support
                         <span class="info-value"><?= number_format($emprow['basic'], 2) ?> SAR</span>
                     </div>
                     <?php
-                        // Dynamically list all additional salary components (allowances/benefits)
-                        $salary_components = [
-                            'housing'   => __('housing', 'Housing Allowance'),
-                            'transport' => __('transport_allowance', 'Transport Allowance'),
-                            'food'      => __('food_allowance', 'Food Allowance'),
-                            'fuel'      => __('fuel_allowance', 'Fuel Allowance'),
-                            'tel'       => __('telephone_allowance', 'Telephone Allowance'),
-                            'cashier'   => __('cashier_allowance', 'Cashier Allowance'),
-                            'misc'      => __('misc_allowance', 'Misc Allowance'),
-                            'other'     => __('other_allowance', 'Other Allowance'),
-                            'guard'     => __('guard_allowance', 'Guard Allowance'),
-                        ];
+                    // Dynamically list all additional salary components (allowances/benefits)
+                    $salary_components = [
+                        'housing'   => __('housing', 'Housing Allowance'),
+                        'transport' => __('transport_allowance', 'Transport Allowance'),
+                        'food'      => __('food_allowance', 'Food Allowance'),
+                        'fuel'      => __('fuel_allowance', 'Fuel Allowance'),
+                        'tel'       => __('telephone_allowance', 'Telephone Allowance'),
+                        'cashier'   => __('cashier_allowance', 'Cashier Allowance'),
+                        'misc'      => __('misc_allowance', 'Misc Allowance'),
+                        'other'     => __('other_allowance', 'Other Allowance'),
+                        'guard'     => __('guard_allowance', 'Guard Allowance'),
+                    ];
 
-                        foreach ($salary_components as $field => $label) {
-                            if (isset($emprow[$field]) && floatval($emprow[$field]) > 0) {
-                                echo '<div class="info-row">'
-                                    . '<span class="info-label">' . htmlspecialchars($label) . '</span>'
-                                    . '<span class="info-value">' . number_format((float)$emprow[$field], 2) . ' SAR</span>'
-                                    . '</div>';
-                            }
+                    foreach ($salary_components as $field => $label) {
+                        if (isset($emprow[$field]) && floatval($emprow[$field]) > 0) {
+                            echo '<div class="info-row">'
+                                . '<span class="info-label">' . htmlspecialchars($label) . '</span>'
+                                . '<span class="info-value">' . number_format((float)$emprow[$field], 2) . ' SAR</span>'
+                                . '</div>';
                         }
+                    }
                     ?>
                 </div>
 
@@ -1891,32 +1996,52 @@ RTL Support
                         <span class="info-label"><?= __('encashed') ?></span>
                         <span class="info-value"><?= (int)($emprow['encashstus'] ?? 0) ?></span>
                     </div>
-                    <?php 
-                        $carInfo = null;
-                        if (!empty($emprow['car_id']) && function_exists('car_get_info')) {
-                            $carInfo = car_get_info($emprow['car_id']);
-                        }
+                    <?php
+                    // Count all assigned assets (employee_assets) - only active ones
+                    $assets_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total 
+                                                               FROM employee_assets ea 
+                                                               WHERE ea.emp_id = '" . mysqli_real_escape_string($conDB, $emprow['empid']) . "' 
+                                                               AND (ea.return_date IS NULL OR ea.return_date = '' OR ea.return_date = '0000-00-00')");
+                    $assets_count = 0;
+                    if ($assets_count_query) {
+                        $assets_result = mysqli_fetch_assoc($assets_count_query);
+                        $assets_count = (int)$assets_result['total'];
+                        mysqli_free_result($assets_count_query);
+                    }
+                    
+                    // Count assigned cars (cars_drv) - only active ones
+                    $cars_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total 
+                                                             FROM cars_drv cd 
+                                                             WHERE cd.car_user = '" . mysqli_real_escape_string($conDB, $emprow['empid']) . "' 
+                                                             AND (cd.rtn_date IS NULL OR cd.rtn_date = '' OR cd.rtn_date = '0000-00-00')");
+                    $cars_count = 0;
+                    if ($cars_count_query) {
+                        $cars_result = mysqli_fetch_assoc($cars_count_query);
+                        $cars_count = (int)$cars_result['total'];
+                        mysqli_free_result($cars_count_query);
+                    }
+                    
+                    $total_assets = $assets_count + $cars_count;
                     ?>
                     <div class="info-row">
-                        <span class="info-label"><?= __('assigned_car', 'Assigned Car') ?></span>
+                        <span class="info-label"><?= __('assigned_assets', 'Assigned Assets') ?></span>
                         <span class="info-value">
-                            <?php if ($carInfo): ?>
-                                <?= htmlspecialchars(trim(($carInfo['maker_name'] ?? '') . ' ' . ($carInfo['model'] ?? ''))) ?>
-                                <?php if (!empty($carInfo['plate_no'])): ?> - <?= htmlspecialchars($carInfo['plate_no']) ?><?php endif; ?>
+                            <?php if ($total_assets > 0): ?>
+                                <strong><?= $total_assets ?></strong>
                             <?php else: ?>
                                 <?= __('none', 'None') ?>
                             <?php endif; ?>
                         </span>
                     </div>
                     <?php if (!empty($emprow['leaving_reason']) || !empty($emprow['end_date'])): ?>
-                    <div class="info-row">
-                        <span class="info-label"><?= __('eos_leaving_reason', 'Leaving Reason') ?></span>
-                        <span class="info-value"><?= htmlspecialchars(($is_rtl ?? false) ? ($emprow['leaving_reason_ar'] ?? $emprow['leaving_reason']) : ($emprow['leaving_reason'] ?? '')) ?></span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label"><?= __('eos_end_date', 'End Date') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['end_date'] ?? '') ?></span>
-                    </div>
+                        <div class="info-row">
+                            <span class="info-label"><?= __('eos_leaving_reason', 'Leaving Reason') ?></span>
+                            <span class="info-value"><?= htmlspecialchars(($is_rtl ?? false) ? ($emprow['leaving_reason_ar'] ?? $emprow['leaving_reason']) : ($emprow['leaving_reason'] ?? '')) ?></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><?= __('eos_end_date', 'End Date') ?></span>
+                            <span class="info-value"><?= htmlspecialchars($emprow['end_date'] ?? '') ?></span>
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -1929,18 +2054,18 @@ RTL Support
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0"><i class="fa fa-file-upload"></i> <?= __('employee_documents') ?></h5>
                     <span class="badge badge-primary badge-pill">
-                        <?php 
+                        <?php
                         $doc_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "'");
                         $doc_result = mysqli_fetch_assoc($doc_query);
                         echo $doc_result['total'] ?? 0;
                         ?>
                     </span>
                 </div>
-                
+
                 <?php
                 $queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status`='A' ORDER BY `id` DESC ");
                 $doc_count = mysqli_num_rows($queryempdocu);
-                
+
                 if ($doc_count > 0):
                 ?>
                     <div class="row">
@@ -1957,7 +2082,7 @@ RTL Support
                                     $doc_date_reg_get = $recempdoc["created_at"];
                                     $times_reg = strtotime("$doc_date_reg_get");
                                     $doc_date_formatted = date('d M Y', $times_reg);
-                                    
+
                                     // Determine file type and icon
                                     $file_type_map = [
                                         'pdf' => ['icon' => 'fa-file-pdf', 'color' => 'danger', 'label' => 'PDF'],
@@ -1968,8 +2093,8 @@ RTL Support
                                     ];
                                     $file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
                                 ?>
-                                    <div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>" 
-                                        data-doc-path="./assets/emp_documents/<?= $attachment_get ?>" 
+                                    <div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>"
+                                        data-doc-path="./assets/emp_documents/<?= $attachment_get ?>"
                                         data-doc-ext="<?= $docu_ext_get ?>"
                                         data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>">
                                         <div class="doc-item-icon">
@@ -1991,7 +2116,7 @@ RTL Support
                                 <?php } ?>
                             </div>
                         </div>
-                        
+
                         <!-- Document Viewer Column -->
                         <div class="col-md-7">
                             <div class="document-viewer-container" style="display:none;">
@@ -2051,9 +2176,9 @@ RTL Support
                 </a>
 
                 <a href="employee_assigned_assets.php?emp_id=<?= $emprow['empid'] ?>" class="action-card info">
-                    <i class="fa fa-car action-icon"></i>
+                    <i class="fa fa-briefcase action-icon"></i>
                     <div class="action-title"><?= __('assigned_assets') ?></div>
-                    <div class="action-desc"><?= __('view_equipment_vehicles') ?></div>
+                    <div class="action-desc"><?= __('view_assigned_assets') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
 
@@ -2070,6 +2195,13 @@ RTL Support
                     <div class="action-desc"><?= __('view_disciplinary_records') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
+
+                <a href="employee_evaluation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card purple">
+                    <i class="fa fa-star action-icon"></i>
+                    <div class="action-title"><?= __('evaluations') ?></div>
+                    <div class="action-desc"><?= __('view_performance_evaluations') ?></div>
+                    <button class="action-btn"><?= __('view') ?></button>
+                </a>
             </div>
         </div>
     </div>
@@ -2080,6 +2212,10 @@ RTL Support
     <script src="assets/js/jquery.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script>
+
+    <!-- Dropzone JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js"></script>
+
     <!-- Moment.js for date manipulation -->
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
     <!-- Date Pickers -->
@@ -2093,7 +2229,7 @@ RTL Support
     <script src="assets/js/resignationWizard.js"></script>
     <script>
         $(document).ready(function() {
-            
+
             var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
             $('#moreActionsBtn').click(function() {
                 Swal.fire({
@@ -2112,7 +2248,7 @@ RTL Support
                     didOpen: function() {
                         // Get modal container and wrap it with jQuery
                         var modalContainer = $(Swal.getHtmlContainer());
-                        
+
                         // Edit Information
                         modalContainer.find('#startUpdateRequest').on('click', function(e) {
                             e.preventDefault();
@@ -2186,7 +2322,11 @@ RTL Support
                 }
 
                 function fallbackCopy(t) {
-                    var $temp = $('<textarea>').css({ position: 'fixed', left: '-9999px', top: '-9999px' }).val(t).appendTo('body');
+                    var $temp = $('<textarea>').css({
+                        position: 'fixed',
+                        left: '-9999px',
+                        top: '-9999px'
+                    }).val(t).appendTo('body');
                     $temp[0].focus();
                     $temp[0].select();
                     try {
@@ -2200,7 +2340,9 @@ RTL Support
                 }
 
                 if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(text).then(showSuccess).catch(function() { fallbackCopy(text); });
+                    navigator.clipboard.writeText(text).then(showSuccess).catch(function() {
+                        fallbackCopy(text);
+                    });
                 } else {
                     fallbackCopy(text);
                 }
@@ -2215,14 +2357,14 @@ RTL Support
                 $('.doc-list-item').removeClass('active');
                 // Add active class to clicked item
                 $(this).addClass('active');
-                
+
                 // Get document details
                 var docPath = $(this).data('doc-path');
                 var docExt = $(this).data('doc-ext');
                 var docName = $(this).data('doc-name');
-                
+
                 currentDocPath = docPath;
-                
+
                 // Show viewer container now that a file is selected
                 $('.document-viewer-container').show();
 
@@ -2231,18 +2373,18 @@ RTL Support
                 $listCol.removeClass('col-12').addClass('col-md-5');
                 var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
                 $viewerCol.removeClass('col-12').addClass('col-md-7');
-                
+
                 // Update viewer title
                 $('#viewer-doc-name-profile').text(docName);
-                
+
                 // Show download button
                 $('#viewer-download-profile').show().off('click').on('click', function() {
                     window.location.href = './downloadFile.php?file=' + docPath;
                 });
-                
+
                 // Load document based on type
                 var viewer = $('#document-viewer-profile');
-                
+
                 if (docExt === 'pdf') {
                     viewer.html('<embed src="' + docPath + '" type="application/pdf" width="100%" height="100%">');
                 } else if (['jpg', 'jpeg', 'png', 'gif'].includes(docExt)) {
@@ -2257,7 +2399,7 @@ RTL Support
                     viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3">Preview not available for this file type</p><a href="' + docPath + '" download class="btn btn-primary mt-3"><i class="fa fa-download"></i> Download File</a></div>');
                 }
             });
-            
+
             // Fullscreen toggle for profile viewer
             $('#viewer-fullscreen-profile').on('click', function() {
                 var container = $('.document-viewer-container')[0];
@@ -2294,7 +2436,7 @@ RTL Support
                 var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
                 $viewerCol.removeClass('col-md-7').addClass('col-12');
             });
-            
+
             // Do not auto-load any document; wait for user selection
         });
     </script>

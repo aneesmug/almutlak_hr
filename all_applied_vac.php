@@ -25,6 +25,7 @@ $all_statuses = [
     'my_team' => (function_exists('__') ? __('my_team_requests') : 'My Team') ,
     'my_dept' => __('my_department_requests'),
     'pending_approval' => __('all_pending'),
+    'pending_payment' => __('approved_pending_payment'),
     'approved' => __('approved'),
     'rejected' => __('rejected'),
     'all' => __('all_requests')
@@ -107,6 +108,12 @@ if ($current_filter === 'my_pending') {
         $params[] = $empid;
         $types .= "i";
     }
+    
+} elseif ($current_filter === 'pending_payment') {
+    // Show approved annual vacation (fly) requests without payment details
+    $where_clauses[] = "v.current_status = 'approved'";
+    $where_clauses[] = "v.fly_type = 'annual'";
+    $where_clauses[] = "(v.departure_date IS NULL OR v.arrival_date IS NULL OR v.ticket_pay IS NULL OR v.ticket_pay = 0 OR v.permit_fee IS NULL OR v.permit_fee = 0)";
     
 } elseif (in_array($current_filter, ['pending_approval', 'approved', 'rejected'])) {
     // Filter by the main status on the vacation table
@@ -303,7 +310,7 @@ if ($can_see_all_depts) {
             .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
             .request-card .card-header .float-right { font-size: 0.85em; opacity: 0.9; }
             .request-card .card-body { padding: 1.5rem; }
-            .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
+            .detail-item { display: flex; align-items: center; /*margin-bottom: 1rem;*/ font-size: 1.09em; }
             .detail-item i.fad { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
             .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
             .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; overflow: visible; }
@@ -479,7 +486,7 @@ if ($can_see_all_depts) {
 												<div class="col-lg-4 col-md-6 mb-4">
 													<div class="card request-card h-100">
 														<div class="card-header">
-															<?=parseName($req['employee_name']); ?>
+															<?=translate_name($req['employee_name'], $current_lang ?? 'en'); ?>
 															<span class="float-right"><?=__('emp_id')?>: <?=htmlspecialchars($req['emp_id']); ?></span>
 														</div>
 														<div class="card-body">
@@ -495,11 +502,25 @@ if ($can_see_all_depts) {
                                                             <?php endif; ?>
 															<div class="detail-item"><i class="fad fa-sun duotone-info"></i><strong><?=__('days')?>:</strong> <?=htmlspecialchars($req['vacdays']); ?></div>
                                                             
-                                                            <?php if (!empty($req['attachment_path'])): ?>
+                                                            <?php if (!empty($req['attachment_path'])): 
+                                                                // Decode JSON array of attachments
+                                                                $attachments = json_decode($req['attachment_path'], true);
+                                                                if (!is_array($attachments)) {
+                                                                    // Fallback for old single file format
+                                                                    $attachments = [$req['attachment_path']];
+                                                                }
+                                                            ?>
                                                                 <div class="detail-item">
                                                                     <i class="fad fa-paperclip duotone-info"></i>
-                                                                    <strong><?=__('attachment')?>:</strong> 
-                                                                    <a href="<?=htmlspecialchars($req['attachment_path']); ?>" target="_blank" class="ml-2 font-weight-bold text-info"><?=__('view_file')?></a>
+                                                                    <strong><?=__('attachments')?> (<?= count($attachments) ?>):</strong> 
+                                                                    <div style="margin-inline-start: 20px; margin-top: 5px; direction: inherit;">
+                                                                        <?php foreach ($attachments as $index => $attachment): ?>
+                                                                            <a href="<?=htmlspecialchars($attachment); ?>" target="_blank" class="font-weight-bold text-info" style="display: block; margin-bottom: 5px; direction: ltr; text-align: start;">
+                                                                                <i class="fa fa-file-<?= pathinfo($attachment, PATHINFO_EXTENSION) === 'pdf' ? 'pdf' : 'image' ?>"></i>
+                                                                                <?=__('document')?> <?= $index + 1 ?>
+                                                                            </a>
+                                                                        <?php endforeach; ?>
+                                                                    </div>
                                                                 </div>
                                                             <?php endif; ?>
 
@@ -537,9 +558,32 @@ if ($can_see_all_depts) {
                                                                             $status_icon = "";
                                                                             break;
                                                                     }
+                                                                    
+                                                                    // Check if payment is pending for annual fly vacation
+                                                                    // Payment is pending if ANY of these is missing/zero: departure_date, arrival_date, ticket_pay, permit_fee
+                                                                    $is_payment_pending = false;
+                                                                    if ($req['current_status'] == 'approved' && 
+                                                                        $req['vac_type'] == 'Fly' && 
+                                                                        $req['fly_type'] == 'annual') {
+                                                                        // Check all payment fields are properly filled
+                                                                        $has_departure = !empty($req['departure_date']);
+                                                                        $has_arrival = !empty($req['arrival_date']);
+                                                                        $has_ticket_pay = !empty($req['ticket_pay']) && (float)$req['ticket_pay'] > 0;
+                                                                        $has_permit_fee = !empty($req['permit_fee']) && (float)$req['permit_fee'] > 0;
+                                                                        
+                                                                        // Payment is pending if ANY field is missing or zero
+                                                                        if (!$has_departure || !$has_arrival || !$has_ticket_pay || !$has_permit_fee) {
+                                                                            $is_payment_pending = true;
+                                                                        }
+                                                                    }
 																?>
 																<i class="fad fa-info-circle duotone-info"></i>
 																<strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=$status_icon." ".htmlspecialchars($status_text); ?></span>
+                                                                <?php if ($is_payment_pending): ?>
+                                                                    <span class="badge badge-warning p-2 ml-1">
+                                                                        <i class="fa fa-credit-card"></i> <?=__('pending_payment')?>
+                                                                    </span>
+                                                                <?php endif; ?>
                                                             </div>
                                                             
                                                             <?php if ($req['current_status'] == 'approved' && isset($req['remaining_balance'])): ?>
@@ -568,9 +612,9 @@ if ($can_see_all_depts) {
                                                                 $req['vac_type'] == 'Fly' &&
                                                                 $req['fly_type'] == 'annual' &&
                                                                 $req['current_status'] == 'approved' &&
-                                                                !empty($req['travel_email_sent']) && $req['travel_email_sent'] == 1 &&
                                                                 !$payments_entered &&
-                                                                ($isHR || $is_system_admin || $isDeptHr || $isGR_Officer)
+                                                                // ($isHR || $is_system_admin || $isDeptHr || $isGR_Officer)
+                                                                ($isHR || $is_system_admin || $isDeptHr || $isHR_Payroll)
                                                             ) { $show_payment_button = true; }
 
                                                             $show_travel_email_button = false;
@@ -581,7 +625,8 @@ if ($can_see_all_depts) {
                                                                 !empty($req['departure_date']) &&
                                                                 !empty($req['arrival_date']) &&
                                                                 ($req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) &&
-                                                                ($isHR || $is_system_admin || $isGR_Officer)
+                                                                // ($isHR || $is_system_admin || $isGR_Officer)
+                                                                ($isHR || $is_system_admin)
                                                             ) { $show_travel_email_button = true; }
                                                         ?>
                                                         <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
@@ -691,6 +736,78 @@ if ($can_see_all_depts) {
          * @param {boolean} isSimpleLeave - Is this a simple leave (not annual vacation)?
          */
         function approveRequest(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave) {
+            // First, check if this approver should see asset clearance modal
+            // This is only relevant for IT/Admin/Transport managers
+            const potentialAssetClearanceRole = userRole && (
+                userRole.toLowerCase().includes('it') || 
+                userRole.toLowerCase().includes('admin') || 
+                userRole.toLowerCase().includes('transport')
+            );
+            
+            if (potentialAssetClearanceRole) {
+                // Check if employee has assets relevant to this approver's department
+                $.ajax({
+                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    async: false, // Wait for response before proceeding
+                    data: {
+                        ajaxType: 'get_assigned_assets',
+                        emp_id: employeeId
+                    },
+                    success: function(res) {
+                        if (res.status === 200 && Array.isArray(res.assets) && res.assets.length > 0) {
+                            // Check if any assets belong to approver's department
+                            const hasRelevantAssets = res.assets.some(function(asset) {
+                                const assetName = (asset.asset_name || '').toLowerCase();
+                                const userRoleLower = (userRole || '').toLowerCase();
+                                
+                                // IT Manager: check for laptop/computer
+                                if (userRoleLower.includes('it') && (assetName.includes('laptop') || assetName.includes('computer'))) {
+                                    return true;
+                                }
+                                // Admin Manager: check for mobile/phone/sim
+                                if (userRoleLower.includes('admin') && (assetName.includes('mobile') || assetName.includes('phone') || assetName.includes('sim'))) {
+                                    return true;
+                                }
+                                // Transport Manager: check for car/vehicle
+                                if (userRoleLower.includes('transport') && (assetName.includes('car') || assetName.includes('vehicle'))) {
+                                    return true;
+                                }
+                                return false;
+                            });
+                            
+                            if (!hasRelevantAssets) {
+                                // No relevant assets - proceed with normal approval (no asset clearance modal)
+                                proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, false);
+                                return;
+                            } else {
+                                // Has relevant assets - show asset clearance modal
+                                proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, true);
+                                return;
+                            }
+                        } else {
+                            // No assets assigned - proceed with normal approval
+                            proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, false);
+                            return;
+                        }
+                    },
+                    error: function() {
+                        // On error, default to normal approval
+                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, false);
+                    }
+                });
+            } else {
+                // Not an asset clearance role - proceed with normal approval
+                proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, false);
+            }
+        }
+        
+        /**
+         * Internal function to show the approval modal
+         * Separated from approveRequest to allow asset check first
+         */
+        function proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, isAssetClearanceRole) {
             // Remove request details panel from the approval modal per requirement
             let infoHtml = '';
             
@@ -703,15 +820,10 @@ if ($can_see_all_depts) {
             const isHR_Assistant = (userRole === 'assistant');
             const isHR_SeniorBP = (userRole === 'hr_senior_bp');
             const isHR_Payroll = (userRole === 'hr_payroll');
-            const isGR_Officer = (userRole === 'gr_officer');
+            // const isGR_Officer = (userRole === 'gr_officer');
             const isAnnualFly = (vacType === 'Fly');
             
-            // Check if user is asset clearance role (IT, Admin, Transport manager)
-            const isAssetClearanceRole = userRole && (
-                userRole.toLowerCase().includes('it') || 
-                userRole.toLowerCase().includes('admin') || 
-                userRole.toLowerCase().includes('transport')
-            );
+            // isAssetClearanceRole is now passed as a parameter (determined by pre-check)
             
             // Determine approval flow:
             // 1. Simple Leave with Supervisor: Level 1 = Supervisor → Level 2 = HR Senior BP
@@ -728,7 +840,9 @@ if ($can_see_all_depts) {
             
             // --- Condition 1: Show Payment Fields? ---
             // For HR Assistant OR GR Officer approving annual vacation (Fly)
-            if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+            // HR_Payroll does not enter payment during approval - can add later
+            // if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+            if ((isHR_Assistant) && isAnnualFly) {
                 paymentHtml = `
                     <div class="swal-payment-details text-left mt-3">
                         <hr>
@@ -965,7 +1079,8 @@ if ($can_see_all_depts) {
                     };
                     
                     // --- Initialize Date Pickers for Payment Fields ---
-                    if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+                    // if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+                    if ((isHR_Assistant || isHR_Payroll) && isAnnualFly) {
                         // Fetch existing departure and arrival dates from database
                         $.ajax({
                             url: './includes/ajaxFile/ajaxVacation.php',
@@ -1091,26 +1206,52 @@ if ($can_see_all_depts) {
                             dataType: 'json',
                             data: {
                                 ajaxType: 'get_assigned_assets',
-                                emp_id: employeeId
+                                emp_id: employeeId,
+                                check_department: userRole // Pass user role to filter relevant assets
                             },
                             success: function(res) {
                                 const $container = $(swalModal).find('#assets-loading-container');
                                 if (res.status === 200 && Array.isArray(res.assets) && res.assets.length > 0) {
-                                    let assetsListHtml = '<ul class="list-group mb-0">';
-                                    res.assets.forEach(function(asset) {
-                                        assetsListHtml += `
-                                            <li class="list-group-item d-flex justify-content-between align-items-start">
-                                                <div>
-                                                    <strong>${asset.asset_name}</strong><br>
-                                                    <small class="text-muted">S/N: ${asset.serial_number || 'N/A'}</small><br>
-                                                    <small class="text-muted">Assigned: ${asset.assigned_date || 'N/A'}</small>
-                                                </div>
-                                                <span class="badge bg-warning text-dark">${__('pending_clearance') || 'Pending'}</span>
-                                            </li>
-                                        `;
+                                    // Filter assets based on approver's department
+                                    let relevantAssets = res.assets.filter(function(asset) {
+                                        const assetName = (asset.asset_name || '').toLowerCase();
+                                        const userRoleLower = (userRole || '').toLowerCase();
+                                        
+                                        // IT Manager: only laptop/computer assets
+                                        if (userRoleLower.includes('it')) {
+                                            return assetName.includes('laptop') || assetName.includes('computer');
+                                        }
+                                        // Admin Manager: only mobile/phone/sim assets
+                                        if (userRoleLower.includes('admin')) {
+                                            return assetName.includes('mobile') || assetName.includes('phone') || assetName.includes('sim');
+                                        }
+                                        // Transport Manager: only car/vehicle assets
+                                        if (userRoleLower.includes('transport')) {
+                                            return assetName.includes('car') || assetName.includes('vehicle');
+                                        }
+                                        return false; // Not a clearance role
                                     });
-                                    assetsListHtml += '</ul>';
-                                    $container.html(assetsListHtml);
+                                    
+                                    if (relevantAssets.length > 0) {
+                                        let assetsListHtml = '<ul class="list-group mb-0">';
+                                        relevantAssets.forEach(function(asset) {
+                                            assetsListHtml += `
+                                                <li class="list-group-item d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <strong>${asset.asset_name}</strong><br>
+                                                        <small class="text-muted">S/N: ${asset.serial_number || 'N/A'}</small><br>
+                                                        <small class="text-muted">Assigned: ${asset.assigned_date || 'N/A'}</small>
+                                                    </div>
+                                                    <span class="badge bg-warning text-dark">${__('pending_clearance') || 'Pending'}</span>
+                                                </li>
+                                            `;
+                                        });
+                                        assetsListHtml += '</ul>';
+                                        $container.html(assetsListHtml);
+                                    } else {
+                                        // No relevant assets for this approver's department
+                                        $container.html(`<p class="text-info mb-0"><i class="fa fa-info-circle"></i> ${__('no_assets_in_your_department') || 'No assets from your department assigned to this employee.'}</p>`);
+                                    }
                                 } else {
                                     $container.html(`<p class="text-muted mb-0"><i class="fa fa-info-circle"></i> ${__('no_assets_assigned') || 'No assets assigned to this employee.'}</p>`);
                                 }
@@ -1364,8 +1505,9 @@ if ($can_see_all_depts) {
                         }
                     }
 
-                    // A.2) Validate payment fields if HR Assistant or GR Officer
-                    if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+                    // A.2) Validate payment fields if HR Assistant (not HR_Payroll - they can add payment later)
+                    // if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
+                    if ((isHR_Assistant) && isAnnualFly) {
                         const departure = $(swalModal).find('#swal_departure_date').val();
                         const arrival = $(swalModal).find('#swal_arrival_date').val();
                         const ticket = $(swalModal).find('#swal_ticket_fares').val();
@@ -1685,14 +1827,14 @@ if ($can_see_all_depts) {
                             <label for="departure_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
                                 <i class="fa fa-plane-departure"></i> ${__('departure_date')}
                             </label>
-                            <input type="date" id="departure_date_update" class="form-control" value="${currentDepartureDate || ''}" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            <input type="text" id="departure_date_update" class="form-control" placeholder="Select departure date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
                         </div>
                         
                         <div class="form-group mb-3">
                             <label for="arrival_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
                                 <i class="fa fa-plane-arrival"></i> ${__('arrival_date')}
                             </label>
-                            <input type="date" id="arrival_date_update" class="form-control" value="${currentArrivalDate || ''}" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            <input type="text" id="arrival_date_update" class="form-control" placeholder="Select arrival date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
                         </div>
                         
                         <div class="form-group mb-3">
@@ -1714,6 +1856,35 @@ if ($can_see_all_depts) {
                 showCancelButton: true,
                 allowOutsideClick: false,
                 width: '500px',
+                didOpen: () => {
+                    // Initialize departure date picker
+                    $('#departure_date_update').datepicker({
+                        format: "yyyy-mm-dd",
+                        todayHighlight: true,
+                        autoclose: true
+                    }).on('changeDate', function (e) {
+                        var departureDate = e.date;
+                        $('#arrival_date_update').datepicker('setStartDate', departureDate);
+                    });
+                    
+                    // Initialize arrival date picker
+                    $('#arrival_date_update').datepicker({
+                        format: "yyyy-mm-dd",
+                        todayHighlight: true,
+                        autoclose: true
+                    }).on('changeDate', function (e) {
+                        var arrivalDate = e.date;
+                        $('#departure_date_update').datepicker('setEndDate', arrivalDate);
+                    });
+                    
+                    // Set initial values if they exist
+                    if (currentDepartureDate) {
+                        $('#departure_date_update').datepicker('setDate', currentDepartureDate);
+                    }
+                    if (currentArrivalDate) {
+                        $('#arrival_date_update').datepicker('setDate', currentArrivalDate);
+                    }
+                },
                 preConfirm: () => {
                     return {
                         departure_date: document.getElementById('departure_date_update').value,

@@ -84,3 +84,41 @@ function __(string $key, string $default = ''): string {
     // If a default is provided, use it. Otherwise, return the key itself.
     return $default !== '' ? $default : $key;
 }
+
+/**
+ * Translate employee name to Arabic if current language is Arabic
+ * Uses the translateText.php endpoint for actual translation
+ * Returns Arabic translation if language is Arabic, otherwise returns original name
+ *
+ * @param string|null $name Employee name in English (can be null)
+ * @param string $current_lang Current language code
+ * @return string Translated or original name (returns empty string if null)
+ */
+function translate_name(?string $name, string $current_lang = 'en'): string {
+    global $is_rtl;
+    
+    // Handle NULL or empty names
+    if ($name === null || trim($name) === '') {
+        return '';
+    }
+    
+    // Only translate if Arabic language is selected
+    if ($current_lang === 'ar' || $is_rtl === true) {
+        // Ensure session is started for caching
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        // Include the translateText.php file to use its auto_translate_text function
+        $translateFile = __DIR__ . '/ajaxFile/translateText.php';
+        if (file_exists($translateFile)) {
+            require_once $translateFile;
+            if (function_exists('auto_translate_text')) {
+                return auto_translate_text($name, 'en', 'ar');
+            }
+        }
+    }
+    
+    return $name;
+}
+
