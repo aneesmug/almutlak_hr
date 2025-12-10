@@ -5513,11 +5513,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                             if (flyVal === 'annual') {
                                 $('#salaryTypeSection').removeClass('d-none');
-                                // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation)
-                                if (vacValue === 'Fly') {
+                                // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation) and NOT for country 191 (Saudi Arabia)
+                                if (vacValue === 'Fly' && country !== '191') {
                                     $('#flightDatesSection, #notesSection').removeClass('d-none');
                                 } else {
-                                    // Explicitly hide flight dates for Local Vacation
+                                    // Explicitly hide flight dates for Local Vacation or country 191
                                     $('#flightDatesSection, #notesSection').addClass('d-none');
                                 }
                             }
@@ -5534,11 +5534,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                 // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                                 if (flyVal === 'annual') {
                                     $('#salaryTypeSection').removeClass('d-none');
-                                    // Show flight dates AND remarks ONLY for Fly + Annual
-                                    if (currentVacValue === 'Fly') {
+                                    // Show flight dates AND remarks ONLY for Fly + Annual and NOT for country 191
+                                    if (currentVacValue === 'Fly' && country !== '191') {
                                         $('#flightDatesSection, #notesSection').removeClass('d-none');
                                     } else {
-                                        // Explicitly hide for Local Vacation
+                                        // Explicitly hide for Local Vacation or country 191
                                         $('#flightDatesSection, #notesSection').addClass('d-none');
                                     }
                                 } else {
@@ -8942,6 +8942,173 @@ function updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered = false)
 }
 
 //initializing main application module
+////////////////////////////////////////////////////////////////////
+////////////      Start Rejoin Request Handling      //////////////
+////////////////////////////////////////////////////////////////////
+
+$(document).on('click', '.submitRejoinRequest', function(e) {
+    e.preventDefault();
+    var vacation_id = $(this).data('vacation-id');
+    var emp_id = $(this).data('emp-id');
+    
+    // First, check if there's an active rejoin request
+    $.ajax({
+        url: './includes/ajaxFile/ajaxVacation.php',
+        type: 'POST',
+        dataType: 'JSON',
+        data: {
+            ajaxType: 'checkActiveRejoinRequest',
+            vacation_id: vacation_id,
+            emp_id: emp_id
+        },
+        success: function(checkResponse) {
+            // If there's an active request, show warning immediately
+            if(checkResponse.type === 'warning' && checkResponse.active_request) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: checkResponse.title || __('active_rejoin_request_exists'),
+                    html: `
+                        <div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('request_number')}:</strong> 
+                                <span style="color: #d32f2f;">${checkResponse.active_request.request_inv_no}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('status')}:</strong> 
+                                <span style="color: #d32f2f; font-weight: bold;">${checkResponse.active_request.status.toUpperCase()}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('requested_rejoin_date')}:</strong> 
+                                <span>${checkResponse.active_request.requested_rejoin_date}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('submitted_at')}:</strong> 
+                                <span>${checkResponse.active_request.requested_at}</span>
+                            </div>
+                            <hr style="margin: 10px 0;">
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('associated_vacation')}:</strong> 
+                                <span>${checkResponse.active_request.vacation_inv_no}</span>
+                            </div>
+                            <div>
+                                <strong>${__('vacation_type')}:</strong> 
+                                <span>${checkResponse.active_request.vac_type}</span>
+                            </div>
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    confirmButtonColor: '#3085d6',
+                    confirmButtonText: __('ok')
+                });
+                return;
+            }
+            
+            // No active request - show the submission form
+            Swal.fire({
+                title: __('submit_rejoin_request_title'),
+                html: `
+                    <form id="rejoinRequestForm" class="text-left">
+                        <div class="form-group">
+                            <label for="rejoin_date">${__('rejoin_date')} <span class="text-danger">*</span></label>
+                            <input type="text" id="rejoin_date" name="rejoin_date" class="form-control" placeholder="YYYY-MM-DD" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="rejoin_reason">${__('rejoin_reason')}</label>
+                            <textarea id="rejoin_reason" name="rejoin_reason" class="form-control" rows="3" placeholder="${__('enter_rejoin_reason')}"></textarea>
+                        </div>
+                    </form>`,
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                cancelButtonText: __('cancel'),
+                confirmButtonText: __('submit_request'),
+                showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                width: '500px',
+                didOpen: function() {
+                    // Initialize date picker for rejoin_date
+                    $('#rejoin_date').datepicker({
+                        format: "yyyy-mm-dd",
+                        autoclose: true,
+                        todayHighlight: true,
+                        startDate: '+0d'
+                    });
+                },
+                preConfirm: function() {
+                    var rejoin_date = $('#rejoin_date').val();
+                    
+                    // Validate rejoin_date is required
+                    if(!rejoin_date || rejoin_date.trim() === '') {
+                        Swal.showValidationMessage(__('rejoin_date_required'));
+                        return false;
+                    }
+                    
+                    return $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'JSON',
+                        data: {
+                            ajaxType: 'submitRejoinRequest',
+                            vacation_id: vacation_id,
+                            emp_id: emp_id,
+                            rejoin_date: rejoin_date,
+                            rejoin_reason: $('#rejoin_reason').val()
+                        }
+                    }).then(function(response) {
+                        if(response.type === 'success') {
+                            return response;
+                        } else {
+                            throw response;
+                        }
+                    }).catch(function(error) {
+                        if(error.responseJSON) {
+                            throw error.responseJSON;
+                        }
+                        throw error;
+                    });
+                }
+            }).then(function(result) {
+                if(result.value && result.value.type === 'success') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: result.value.title || __('rejoin_request_submitted'),
+                        text: result.value.message,
+                        allowOutsideClick: false,
+                        confirmButtonColor: '#3085d6',
+                        confirmButtonText: __('ok')
+                    }).then(function() {
+                        location.reload();
+                    });
+                }
+            }).catch(function(error) {
+                if(error && error.type === 'error') {
+                    Swal.fire({
+                        icon: 'error',
+                        title: error.title || __('error'),
+                        text: error.message || __('request_failed_status'),
+                        allowOutsideClick: false,
+                        confirmButtonColor: '#d32f2f',
+                        confirmButtonText: __('ok')
+                    });
+                }
+            });
+        },
+        error: function(jqXHR, textStatus) {
+            Swal.fire({
+                icon: 'error',
+                title: __('error'),
+                text: __('request_failed_status') + ' - ' + textStatus,
+                confirmButtonColor: '#d32f2f',
+                confirmButtonText: __('ok')
+            });
+        }
+    });
+});
+
+////////////////////////////////////////////////////////////////////
+////////////      End Rejoin Request Handling        //////////////
+////////////////////////////////////////////////////////////////////
+
 (function ($) {
     "use_strict";
     $.App.init();

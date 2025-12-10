@@ -159,7 +159,7 @@
 			`id` AS `vacid`,
 			`return_date` AS `returndate`
 			FROM `emp_vacation`
-			WHERE `emp_id` = {$empidget} AND `current_status` = 'approved'
+			WHERE `emp_id` = {$empidget} AND `current_status` = 'completed' AND `review` = 'A'
 			ORDER BY `id` DESC 
 			LIMIT 1";
 		$result = mysqli_query($conDB, $query);

@@ -50,6 +50,8 @@ if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
     }
 }
 
+$lastVacationId = !empty($emprow['lastvacid']) ? (int)$emprow['lastvacid'] : null;
+
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
 if ($emprow['status'] == 1) {
@@ -57,6 +59,9 @@ if ($emprow['status'] == 1) {
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
+    if (!empty($lastVacationId)) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitRejoinRequest text-warning\" data-vacation-id=\"{$lastVacationId}\" data-emp-id=\"{$emprow['empid']}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "</span></a>";
+    }
     // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
 } else {
     $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
@@ -1702,6 +1707,32 @@ RTL Support
         }
     </style>
 
+    <?php if($is_rtl ?? false): ?> 
+        <style>
+            .swal2-html-container > div{
+                direction: rtl !important;
+                text-align: right !important;
+            }
+        </style>
+    <?php endif; ?>
+    <?php
+		// Determine status styling
+		$header_class = 'profile-header';
+		$status_label = __('active');
+		$status_icon = 'fa-check-circle';
+		
+		// Check vacation status first (has priority)
+		if ($emprow["fly"] == 1) {
+			$header_class .= ' vacation';
+			$status_label = __('on_vacation');
+			$status_icon = 'fa-plane-departure';
+		} elseif ($emprow["status"] == "0") {
+			$header_class .= ' inactive';
+			$status_label = __('inactive');
+			$status_icon = 'fa-times-circle';
+		}
+		?>
+
     <script>
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
     </script>
@@ -1711,7 +1742,7 @@ RTL Support
 <body dir="<?= ($is_rtl ?? false) ? 'rtl' : 'ltr' ?>" class="<?= ($is_rtl ?? false) ? 'rtl' : '' ?>">
     <div class="profile-container">
         <!-- HEADER SECTION -->
-        <div class="profile-header<?= ((int)($emprow['status'] ?? 1) === 0 ? ' inactive' : '') ?>">
+        <div class="<?= $header_class ?>">
             <div class="container-custom">
                 <img src="<?= $emprow['avatar'] ?>" alt="<?= $emprow['name'] ?>" class="profile-avatar">
 

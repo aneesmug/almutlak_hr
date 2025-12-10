@@ -1802,3 +1802,206 @@ function calculateTotalDays() {
         $('#total_days').val(''); // Clear if one or both dates are missing
     }
 }
+
+
+////////////////////////////////////////////////////////////////////
+////////////      Start Rejoin Request Handling       //////////////
+////////////////////////////////////////////////////////////////////
+
+/**
+ * Handle rejoin request submission
+ * Prevents duplicate active requests and shows active request status
+ */
+$(document).on('click', '.submitRejoinRequest', function(e) {
+    e.preventDefault();
+    
+    const vacationId = $(this).data('vacation-id');
+    const empId = $(this).data('emp-id');
+    
+    if (!vacationId || !empId) {
+        Swal.fire({
+            icon: 'error',
+            title: __('error'),
+            text: __('required_information_missing'),
+            confirmButtonText: __('ok')
+        });
+        return;
+    }
+
+    // First, check if there's an active rejoin request
+    $.ajax({
+        url: './includes/ajaxFile/ajaxVacation.php',
+        type: 'POST',
+        dataType: 'JSON',
+        data: {
+            ajaxType: 'checkActiveRejoinRequest',
+            vacation_id: vacationId,
+            emp_id: empId
+        },
+        success: function(checkResponse) {
+            // If there's an active request, show warning immediately
+            if(checkResponse.type === 'warning' && checkResponse.active_request) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: checkResponse.title || __('active_rejoin_request_exists'),
+                    html: `
+                        <div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('request_number')}:</strong> 
+                                <span style="color: #d32f2f;">${checkResponse.active_request.request_inv_no}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('status')}:</strong> 
+                                <span class="status" style="color: #d32f2f; font-weight: bold;">${checkResponse.active_request.status.toUpperCase()}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('requested_rejoin_date')}:</strong> 
+                                <span>${checkResponse.active_request.requested_rejoin_date}</span>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('submitted_at')}:</strong> 
+                                <span>${checkResponse.active_request.requested_at}</span>
+                            </div>
+                            <hr style="margin: 10px 0;">
+                            <div style="margin-bottom: 10px;">
+                                <strong>${__('associated_vacation')}:</strong> 
+                                <span>${checkResponse.active_request.vacation_inv_no}</span>
+                            </div>
+                            <div>
+                                <strong>${__('vacation_type')}:</strong> 
+                                <span class="vacType">${checkResponse.active_request.vac_type}</span>
+                            </div>
+                        </div>
+                    `,
+                    didOpen: () => {
+                        var vacType = checkResponse.active_request.vac_type;
+                        var statusCkh = checkResponse.active_request.status.toUpperCase();
+                        var currentLang = getCurrentLanguage();
+                        if (vacType && currentLang === 'ar') {
+                            translateName(vacType, 'en', 'ar', function(translated) {
+                                const vacTypeEl = document.querySelector('.vacType');
+                                if (vacTypeEl) vacTypeEl.textContent = translated;
+                            });
+                        }
+                        if (statusCkh && currentLang === 'ar') {
+                            translateName(statusCkh, 'en', 'ar', function(translated) {
+                                const statusEl = document.querySelector('.status');
+                                if (statusEl) statusEl.textContent = translated;
+                            });
+                        }
+                    },
+                    allowOutsideClick: false,
+                    confirmButtonColor: '#3085d6',
+                    confirmButtonText: __('ok')
+                });
+                return;
+            }
+            
+            // No active request - show the submission form
+            Swal.fire({
+                title: '<i class="fa fa-redo-alt"></i> ' + __('submit_rejoin_request'),
+                html: `
+                    <form id="rejoinRequestForm" class="text-left">
+                        <div class="form-group">
+                            <label for="rejoin_date">${__('requested_rejoin_date')}<span class="text-danger"> *</span></label>
+                            <input type="text" id="rejoin_date" name="rejoin_date" class="form-control datepicker" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="rejoin_reason">${__('reason')}</label>
+                            <textarea id="rejoin_reason" name="rejoin_reason" class="form-control" rows="3" placeholder="${__('enter_reason_placeholder')}"></textarea>
+                        </div>
+                    </form>
+                `,
+                width: '500px',
+                showCancelButton: true,
+                confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit'),
+                cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                allowOutsideClick: false,
+                showLoaderOnConfirm: true,
+                willOpen: () => {
+                    // Initialize date picker
+                    $('#rejoin_date').datepicker({
+                        format: "yyyy-mm-dd",
+                        todayHighlight: true,
+                        autoclose: true,
+                        startDate: '+0d'
+                    });
+                },
+                preConfirm: () => {
+                    const rejoinDate = $('#rejoin_date').val();
+                    const rejoinReason = $('#rejoin_reason').val();
+                    
+                    if (!rejoinDate) {
+                        Swal.showValidationMessage(__('rejoin_date_required'));
+                        return false;
+                    }
+                    
+                    return { rejoinDate, rejoinReason };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Submit rejoin request via AJAX
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            ajaxType: 'submitRejoinRequest',
+                            vacation_id: vacationId,
+                            emp_id: empId,
+                            rejoin_date: result.value.rejoinDate,
+                            rejoin_reason: result.value.rejoinReason
+                        },
+                        success: function(response) {
+                            if (response.type === 'success') {
+                                // Success response
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: response.title || __('success'),
+                                    text: response.message,
+                                    confirmButtonText: __('ok'),
+                                    allowOutsideClick: false
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                // Error response
+                                Swal.fire({
+                                    icon: response.type || 'error',
+                                    title: response.title || __('error'),
+                                    text: response.message,
+                                    confirmButtonText: __('ok'),
+                                    allowOutsideClick: false
+                                });
+                            }
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: __('error'),
+                                text: __('request_failed_please_try_again'),
+                                confirmButtonText: __('ok'),
+                                allowOutsideClick: false
+                            });
+                        }
+                    });
+                }
+            });
+        },
+        error: function(jqXHR, textStatus) {
+            Swal.fire({
+                icon: 'error',
+                title: __('error'),
+                text: __('request_failed_status') + ' - ' + textStatus,
+                confirmButtonColor: '#d32f2f',
+                confirmButtonText: __('ok')
+            });
+        }
+    });
+});
+
+////////////////////////////////////////////////////////////////////
+////////////       End Rejoin Request Handling        //////////////
+///////////////////////////////////////////////////////////////////;

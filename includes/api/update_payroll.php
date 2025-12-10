@@ -202,7 +202,7 @@ try {
     // Send a success response including the fresh data.
     echo json_encode([
         'status' => 'success', 
-        'message' => 'Payroll details updated successfully.',
+        'message' => __('payroll_details_updated_successfully'),
         'benefits' => $freshBenefitsData,
         'deductions' => $freshDeductionsData
     ]);

@@ -51,6 +51,23 @@ try {
     $previousMonthYear = getPreviousMonth($monthYear);
 
     foreach ($employeeIds as $empId) {
+        // --- CHECK: Payroll on Hold (payment_type = 3) ---
+        $stmtCheckHold = $pdo->prepare(
+            "SELECT payment_type FROM employees WHERE emp_id = :emp_id"
+        );
+        $stmtCheckHold->execute([':emp_id' => $empId]);
+        $employeePaymentType = $stmtCheckHold->fetch(PDO::FETCH_ASSOC);
+        
+        // Skip employee if payment_type is 3 (on hold)
+        if ($employeePaymentType && $employeePaymentType['payment_type'] == 3) {
+            $skippedEmployees[] = [
+                'emp_id' => $empId,
+                'reason' => __('payroll_on_hold')
+            ];
+            continue;
+        }
+        // --- CHECK END ---
+        
         // --- FIX STARTS: Check previous month's payroll status ---
         $stmtCheckPrevious = $pdo->prepare(
             "SELECT status FROM payrolls WHERE emp_id = :emp_id AND month_year = :previous_month_year"
@@ -59,10 +76,30 @@ try {
         $previousPayroll = $stmtCheckPrevious->fetch(PDO::FETCH_ASSOC);
 
         if ($previousPayroll && $previousPayroll['status'] === 'generated') {
-            $skippedEmployees[] = $empId;
+            $skippedEmployees[] = [
+                'emp_id' => $empId,
+                'reason' => __('previous_month_payroll_still_pending')
+            ];
             continue; // Skip to the next employee
         }
         // --- FIX ENDS ---
+        
+        // --- NEW CHECK: Employee status must be paid (not on hold) ---
+        $stmtCheckStatus = $pdo->prepare(
+            "SELECT status FROM employees WHERE emp_id = :emp_id"
+        );
+        $stmtCheckStatus->execute([':emp_id' => $empId]);
+        $employeeStatus = $stmtCheckStatus->fetch(PDO::FETCH_ASSOC);
+        
+        // Skip employee if status is not 1 (active/paid)
+        if (!$employeeStatus || $employeeStatus['status'] != 1) {
+            $skippedEmployees[] = [
+                'emp_id' => $empId,
+                'reason' => __('employee_status_is_not_active')
+            ];
+            continue;
+        }
+        // --- CHECK END ---
 
         // Get employee's salary components and country for GOSI calculation
         $stmtEmployeeData = $pdo->prepare("SELECT es.basic as basic_salary, es.housing as housing_allowance, es.transport as transport_allowance, es.food as food_allowance, es.misc as miscellaneous_allowance, es.cashier as cashier_allowance, es.fuel as fuel_allowance, es.tel as telephone_allowance, es.other as other_allowance, es.guard as guard_allowance, e.country, e.gosi
@@ -264,12 +301,21 @@ try {
     }
     // Commit the transaction to save all changes
     $pdo->commit();
-    $message = "Payroll processed for $processedCount employees.";
+    
+    // Determine response status: 'warning' if employees skipped, 'success' if all processed
+    $responseStatus = !empty($skippedEmployees) ? 'warning' : 'success';
+    
+    // $message = "Payroll processed for $processedCount employees.";
+    $message = sprintf(__('payroll_processed_for_employees'), $processedCount);
     if (!empty($skippedEmployees)) {
-        $message .= " Skipped " . count($skippedEmployees) . " employees because their previous month's payroll is not paid: " . implode(', ', $skippedEmployees);
+        // Build a readable list of skipped employees with their reasons
+        $skippedList = array_map(function($item) {
+            return __('emp_id') . ": " . $item['emp_id'] . " (" . $item['reason'] . ")";
+        }, $skippedEmployees);
+        $message .= " \n\n".__('skipped') ." " . count($skippedEmployees) . " " . __('employees') . ":\n" . implode("\n", $skippedList);
     }
     echo json_encode([
-        'status' => 'success',
+        'status' => $responseStatus,
         'message' => $message,
         'processed_count' => $processedCount,
         'skipped_count' => count($skippedEmployees),

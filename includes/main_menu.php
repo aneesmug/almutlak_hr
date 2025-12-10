@@ -60,6 +60,7 @@ $yearlyEOSLink = 'employee_audit_gen.php';
 $payrollLink = 'generate_payroll.php';
 $appliedVacationsLink = 'all_applied_vac.php';
 $appliedLoanLink = 'all_applied_loan.php';
+$rejoinApprovalsLink = 'rejoin_approvals.php';
 $allResignationsLink = 'all_resignations.php';
 $carsLink = 'all_cars.php';
 $locationsLink = 'all_locations.php';
@@ -103,6 +104,7 @@ $page_roles = [
     'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
+    'rejoin_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_resignations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll', 'DPT_Manager', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'add_manual_loan.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_cars.php' => ['Administrator', 'GR_Officer'],
@@ -164,6 +166,12 @@ $can_see_applied_vac_page = [
     'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Finance_Officer', 'Finance_Manager',
     // Asset / compliance related
     'GR_Officer', 'Auditor'
+];
+
+$can_see_rejoin_approvals_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'
 ];
 
 $can_see_loan_approvals_page = [
@@ -232,6 +240,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
 $show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_loan_approvals_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_content_approvals_page));
 
 
@@ -334,6 +343,38 @@ if ($vacation_type_id > 0) {
     }
 }
 // --- END NEW VACATION PENDING COUNT ---
+
+// --- Fetch Rejoin Pending Approval Count (NEW) ---
+$rejoin_pending_count = 0;
+$rejoin_type_id = 0;
+$rejoin_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'rejoin_request' LIMIT 1");
+if ($row = mysqli_fetch_assoc($rejoin_type_query)) {
+    $rejoin_type_id = (int)$row['id'];
+}
+if ($rejoin_type_id > 0) {
+    if ($user_role == 'Administrator') {
+        // Admin: count all distinct rejoin requests still pending anywhere
+        $rejoin_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                         FROM request_approvers ra
+                                         WHERE ra.status = 'pending' AND ra.request_type_id = $rejoin_type_id";
+        $res_rejoin_admin = mysqli_query($conDB, $rejoin_pending_query_admin);
+        if ($res_rejoin_admin && ($rra = mysqli_fetch_assoc($res_rejoin_admin))) {
+            $rejoin_pending_count = (int)$rra['count'];
+        }
+    } else {
+        // Regular user: count requests awaiting THIS user's approval
+        $rejoin_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                   FROM request_approvers ra
+                                   WHERE ra.approver_id = " . (int)$empid . "
+                                     AND ra.status = 'pending'
+                                     AND ra.request_type_id = $rejoin_type_id";
+        $res_rejoin = mysqli_query($conDB, $rejoin_pending_query);
+        if ($res_rejoin && ($rr = mysqli_fetch_assoc($res_rejoin))) {
+            $rejoin_pending_count = (int)$rr['count'];
+        }
+    }
+}
+// --- END NEW REJOIN PENDING COUNT ---
 
 // --- Fetch Resignation Pending Approval Count (NEW) ---
 $resignation_pending_count = 0;
@@ -479,6 +520,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             <ul class="nav-second-level" aria-expanded="false">
                 <?php if (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)): ?>
                     <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page)): ?>
+                    <li><a href="<?= $rejoinApprovalsLink ?>"><i class="fa fa-plane-arrival"></i><span><?=__('rejoin_approvals', 'Rejoin Approvals') ?> <?= ($rejoin_pending_count > 0) ? "<span class='badgez badge-danger'>$rejoin_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)): ?>
                     <li><a href="<?= $appliedLoanLink ?>"><i class="fa fa-money-bill-trend-up"></i><span><?=__('loans') ?></span><?= ($loan_pending_count > 0) ? "<span class='badgez badge-danger'>$loan_pending_count</span>" : "" ?></a></li>

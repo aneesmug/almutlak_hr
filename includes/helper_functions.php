@@ -411,16 +411,23 @@ if (!function_exists('sanitize_input')) {
 
 // --- JSON Response Helper ---
 if (!function_exists('send_json_response')) {
-    function send_json_response($title, $message, $type, $http_status_code = 200)
+    function send_json_response($title, $message, $type, $http_status_code = 200, $additional_data = [])
     {
         // Prevent potential errors if headers already sent
+        $response = ['title' => $title, 'message' => $message, 'type' => $type];
+        
+        // Merge additional data
+        if (!empty($additional_data) && is_array($additional_data)) {
+            $response = array_merge($response, $additional_data);
+        }
+        
         if (headers_sent($file, $line)) {
             // Still try to output JSON, but status code might be wrong
-            echo json_encode(['title' => $title, 'message' => $message, 'type' => $type]);
+            echo json_encode($response);
         } else {
             http_response_code($http_status_code);
             header('Content-Type: application/json; charset=utf-8'); // Ensure charset
-            echo json_encode(['title' => $title, 'message' => $message, 'type' => $type]);
+            echo json_encode($response);
         }
         exit(); // Terminate script after sending JSON response
     }
@@ -1149,7 +1156,8 @@ if (!function_exists('load_email_template')) {
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
             'loan_request' => 'loan_request_email_template.html',
             'resignation_request' => 'resignation_request_email_template.html',
-            'modification_request' => 'modification_request_email_template.html'
+            'modification_request' => 'modification_request_email_template.html',
+            'rejoin_request' => 'rejoin_request_email_template.html'
         ];
         
         $template_file = $template_map[$request_type] ?? 'smart_request_email_template.html';
@@ -1183,9 +1191,13 @@ if (!function_exists('load_email_template')) {
             'DESIGNATION' => 'N/A',
             'RESIGNATION_ID' => 'N/A',
             'LAST_WORKING_DAY' => 'N/A',
-            'SUBMISSION_DATE' => 'N/A'
+            'SUBMISSION_DATE' => 'N/A',
+            'UPDATE_TYPE' => 'N/A',
+            'CURRENT_VALUE' => 'N/A',
+            'NEW_VALUE' => 'N/A'
         ];
         
+        // Merge so passed data overrides defaults
         $data = array_merge($defaults, $data);
         
         // Handle rejection-specific placeholders for loan template

@@ -8,10 +8,12 @@
   $getquery = mysqli_query($conDB, "SELECT 
   `employees`.*,
   `department`.`dep_nme` AS `dept`,
+  `ac_jobs`.`job` AS `job_title`,
   `portfolio`.`description`
   FROM `employees` 
   LEFT JOIN `portfolio` ON `portfolio`.`emp_id` = `employees`.`emp_id` 
-  LEFT JOIN `department` ON `department`.`id` = `employees`.`dept` 
+  LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
+  LEFT JOIN `ac_jobs` ON `ac_jobs`.`id` = `employees`.`actual_job`
   WHERE `employees`.`id`='".$verification."' AND `employees`.`emp_id`='".$hashcode."' ");
 	if(mysqli_num_rows($getquery) !== 0){
 		while($rec = mysqli_fetch_assoc($getquery)){
@@ -22,6 +24,8 @@
 			$mobile_get = $rec["mobile"];
 			$dept_get = $rec["dept"];
       $emptype_get = $rec["emptype"];
+      $actual_job_get = $rec["actual_job"];
+      $job_title_get = $rec["job_title"];
 			$email_get = $rec["c_email"];
       $avatar_get = $rec["avatar"];
       $status_get = $rec["status"];
@@ -140,6 +144,13 @@
       <!-- /Header Buttons -->
 
       <!-- =============== PROFILE INTRO ====================-->
+      <!-- Company Logo Section -->
+      <div class="row" style="text-align: center; padding: 20px 0; margin-bottom: 30px;">
+        <div class="col-md-10 col-md-offset-1">
+          <img src="./../<?=get_setting($conDB, 'logo')?>" alt="Company Logo" style="max-height: 180px;">
+        </div>
+      </div>
+
       <div class="profile-intro row">
         <!-- Left Collum with Avatar pic -->
         <div class="col-md-4 profile-col">
@@ -157,12 +168,12 @@
         <!-- /Left columm with avatar pic -->
   
         <!-- Right Columm -->
-        <div class="col-md-7">
+        <div class="col-md-8">
           <!-- Welcome Title-->
           <h1 class="intro-title1">Hi, i'm <span class="color1 bold"><?=(explode(" ",$name_get)[0])." ".(explode(" ",$name_get)[1])?>!</span></h1>
           <!-- /Welcome Title -->
           <!-- Job - -->
-          <h2 class="intro-title2"><?=$dept_get." ".$emptype_get?></h2>
+          <h2 class="intro-title2"><?=!empty($job_title_get) ? $job_title_get : (!empty($actual_job_get) ? $actual_job_get : $dept_get." ".$emptype_get)?></h2>
           <!-- /job -->
           <!-- Description -->
           <!--<p><strong>Turpis, sit amet iaculis dui consectetur at.</strong> Cras sagittis molestie orci. <strong>Suspendisse ut laoreet mi</strong>. Phasellus eu tortor vehicula, blandit enim eu, auctor massa. Nulla ultricies tortor dolor, sit amet suscipit enim <strong>condimentum id</strong>. Etiam eget iaculis tellus.  Varius sit amet.</p>-->

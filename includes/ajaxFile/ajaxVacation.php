@@ -658,9 +658,9 @@ elseif ($ajaxType == 'applyVacation') {
         $replacement_per_esc = mysqli_real_escape_string($conDB, $replacement_per);
         $start_date_esc = mysqli_real_escape_string($conDB, $start_date);
         $end_date_esc = mysqli_real_escape_string($conDB, $end_date);
-        $notes_esc = mysqli_real_escape_string($conDB, $notes);
-        $vacation_salary_type_esc = mysqli_real_escape_string($conDB, $vacation_salary_type);
-        $attachment_path_esc = mysqli_real_escape_string($conDB, $attachment_path);
+        $notes_esc = mysqli_real_escape_string($conDB, $notes ?? '');
+        $vacation_salary_type_esc = mysqli_real_escape_string($conDB, $vacation_salary_type ?? '');
+        $attachment_path_esc = $attachment_path ? mysqli_real_escape_string($conDB, $attachment_path) : '';
         $request_inv_no_esc = mysqli_real_escape_string($conDB, $request_inv_no);
 
         // Determine is_deductible flag
@@ -1384,9 +1384,9 @@ elseif ($ajaxType == 'updateVacationPayments') {
         mysqli_stmt_close($stmt_pay);
 
         if ($rows_affected > 0) {
-            send_json_response("Success!", "payment_details_have_been_updated", "success");
+            send_json_response("Success!", __("payment_details_have_been_updated"), "success");
         } else {
-            send_json_response("Info", "no_changes_were_made_to_the_payment_details", "info");
+            send_json_response("Info", __("no_changes_were_made_to_the_payment_details"), "info");
         }
     } catch (Exception $e) {
 
@@ -1719,7 +1719,7 @@ elseif ($ajaxType == 'sendTravelEmail') {
         );
 
         if (!$email_sent) {
-            throw new Exception(__("failed_to_send_email_please_check_smtp_settings_and_traveling_company_email_configuration"));
+            throw new Exception(__("error_sending_travel_email", "Failed to send email to travel company. Please check SMTP settings and email configuration."));
         }
 
         // Update database to mark email as sent AND set status to completed
@@ -2928,8 +2928,8 @@ elseif ($ajaxType == 'applyLeave') {
 
         // Insert into emp_vacation table with pending approval status
         $sql = "INSERT INTO `emp_vacation` 
-                (`emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`, `accommodation_provided`, `transportation_provided`) 
-                VALUES (?, ?, '', '', ?, ?, ?, ?, 'payroll', ?, ?, ?, 'pending_approval', 1, ?, ?)";
+                (`emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`, `accommodation_provided`, `transportation_provided`, `review`) 
+                VALUES (?, ?, '', '', ?, ?, ?, ?, 'payroll', ?, ?, ?, 'pending_approval', 1, ?, ?, 'A')";
 
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
@@ -3076,6 +3076,758 @@ elseif ($ajaxType == 'getCurrentVacationBalance') {
         ]);
     }
     exit;
+}
+
+// ============================================================================
+// CHECK ACTIVE REJOIN REQUEST HANDLER
+// ============================================================================
+elseif ($ajaxType == 'checkActiveRejoinRequest') {
+    try {
+        $emp_id = (int)($_POST['emp_id'] ?? 0);
+
+        if (empty($emp_id)) {
+            throw new Exception(__("required_fields_missing"));
+        }
+
+        $pdo = getDbConnection();
+        
+        // Check if employee already has an active rejoin request (pending or adjusted status)
+        $stmt_check = $pdo->prepare("
+            SELECT rr.id, rr.request_inv_no, rr.status, rr.requested_rejoin_date, rr.requested_at, rr.vacation_id,
+                   v.request_inv_no as vacation_inv_no, v.vac_type
+            FROM rejoin_requests rr
+            JOIN emp_vacation v ON rr.vacation_id = v.id
+            WHERE rr.emp_id = :emp_id 
+            AND rr.status IN ('pending', 'adjusted')
+            LIMIT 1
+        ");
+        $stmt_check->execute([':emp_id' => $emp_id]);
+        $active_request = $stmt_check->fetch(PDO::FETCH_ASSOC);
+        
+        if ($active_request) {
+            // Employee has an active request - return it with warning
+            send_json_response(
+                __("active_request_exists"),
+                sprintf(
+                    __("you_already_have_an_active_rejoin_request", "You already have an active rejoin request (%s) with status '%s' for vacation %s. Please wait for approval or rejection before submitting a new request."),
+                    htmlspecialchars($active_request['request_inv_no']),
+                    htmlspecialchars($active_request['status']),
+                    htmlspecialchars($active_request['vacation_inv_no'])
+                ),
+                "warning",
+                200,
+                [
+                    'active_request' => [
+                        'id' => (int)$active_request['id'],
+                        'request_inv_no' => $active_request['request_inv_no'],
+                        'status' => $active_request['status'],
+                        'requested_rejoin_date' => $active_request['requested_rejoin_date'],
+                        'requested_at' => $active_request['requested_at'],
+                        'vacation_inv_no' => $active_request['vacation_inv_no'],
+                        'vac_type' => $active_request['vac_type']
+                    ]
+                ]
+            );
+        } else {
+            // No active request found - allow submission
+            send_json_response(
+                __("no_active_request"),
+                __("you_can_submit_rejoin_request"),
+                "success",
+                200
+            );
+        }
+
+    } catch (Exception $e) {
+        send_json_response(
+            __("error"),
+            $e->getMessage(),
+            "error",
+            400
+        );
+    }
+}
+
+// ============================================================================
+// REJOIN REQUEST HANDLER
+// ============================================================================
+elseif ($ajaxType == 'submitRejoinRequest') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $rejoin_date = escape_string($_POST['rejoin_date'] ?? '');
+        $rejoin_reason = escape_string($_POST['rejoin_reason'] ?? '');
+        $emp_id = (int)($_POST['emp_id'] ?? $current_user_id);
+
+        if (empty($vacation_id) || empty($rejoin_date) || empty($emp_id)) {
+            throw new Exception(__("required_fields_missing"));
+        }
+
+        $pdo = getDbConnection();
+        
+        // Check if employee already has an active rejoin request (not rejected or approved)
+        $stmt_check = $pdo->prepare("
+            SELECT rr.id, rr.request_inv_no, rr.status, rr.requested_rejoin_date, rr.requested_at, rr.vacation_id,
+                   v.request_inv_no as vacation_inv_no, v.vac_type
+            FROM rejoin_requests rr
+            JOIN emp_vacation v ON rr.vacation_id = v.id
+            WHERE rr.emp_id = :emp_id 
+            AND rr.status IN ('pending', 'adjusted')
+            LIMIT 1
+        ");
+        $stmt_check->execute([':emp_id' => $emp_id]);
+        $active_request = $stmt_check->fetch(PDO::FETCH_ASSOC);
+        
+        if ($active_request) {
+            // Employee has an active request - return it with alert info
+            send_json_response(
+                __("active_request_exists"),
+                sprintf(
+                    __("you_already_have_an_active_rejoin_request", "You already have an active rejoin request (%s) with status '%s' for vacation %s. Please wait for approval or rejection before submitting a new request."),
+                    htmlspecialchars($active_request['request_inv_no']),
+                    htmlspecialchars($active_request['status']),
+                    htmlspecialchars($active_request['vacation_inv_no'])
+                ),
+                "warning",
+                400,
+                [
+                    'active_request' => [
+                        'id' => (int)$active_request['id'],
+                        'request_inv_no' => $active_request['request_inv_no'],
+                        'status' => $active_request['status'],
+                        'requested_rejoin_date' => $active_request['requested_rejoin_date'],
+                        'requested_at' => $active_request['requested_at'],
+                        'vacation_inv_no' => $active_request['vacation_inv_no'],
+                        'vac_type' => $active_request['vac_type']
+                    ]
+                ]
+            );
+            exit;
+        }
+
+        $pdo->beginTransaction();
+
+        // Get vacation details
+        $stmt = $pdo->prepare("
+            SELECT v.*, e.emp_id, e.supervisor_id, e.name 
+            FROM emp_vacation v
+            JOIN employees e ON v.emp_id = e.emp_id
+            WHERE v.id = :vacation_id
+        ");
+        $stmt->execute([':vacation_id' => $vacation_id]);
+        $vacation = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$vacation) {
+            throw new Exception(__("vacation_record_not_found"));
+        }
+
+        // Create rejoin request
+        $stmt = $pdo->prepare("
+            INSERT INTO rejoin_requests 
+            (emp_id, vacation_id, requested_rejoin_date, requested_reason, requested_by_emp_id, status)
+            VALUES (:emp_id, :vacation_id, :rejoin_date, :reason, :requested_by, 'pending')
+        ");
+        $stmt->execute([
+            ':emp_id' => $emp_id,
+            ':vacation_id' => $vacation_id,
+            ':rejoin_date' => $rejoin_date,
+            ':reason' => $rejoin_reason,
+            ':requested_by' => $current_user_id
+        ]);
+        $rejoin_request_id = (int)$pdo->lastInsertId();
+        
+        if ($rejoin_request_id <= 0) {
+            throw new Exception(__("failed_to_create_rejoin_request"));
+        }
+        
+        // Generate request_inv_no with same pattern as vacation requests
+        $request_inv_no = null;
+        $max_attempts = 5;
+        $attempt = 0;
+        while ($attempt < $max_attempts) {
+            $attempt++;
+            $request_inv_no_candidate = sprintf(
+                'RR-%s-%s-%s',
+                date('YmdHis'),
+                preg_replace('/[^A-Za-z0-9]/', '', (string)$emp_id),
+                substr(bin2hex(random_bytes(4)), 0, 4)
+            );
+            
+            // Check if this request_inv_no already exists
+            $stmt_chk = $pdo->prepare("SELECT 1 FROM rejoin_requests WHERE request_inv_no = ? LIMIT 1");
+            $stmt_chk->execute([$request_inv_no_candidate]);
+            if ($stmt_chk->rowCount() === 0) {
+                $request_inv_no = $request_inv_no_candidate;
+                break;
+            }
+            usleep(30000);
+        }
+        
+        if (empty($request_inv_no)) {
+            throw new Exception(__("failed_to_generate_unique_request_id"));
+        }
+
+        // Update rejoin_requests with the request_inv_no
+        $stmt_update = $pdo->prepare("
+            UPDATE rejoin_requests 
+            SET request_inv_no = :inv_no 
+            WHERE id = :id
+        ");
+        $result = $stmt_update->execute([
+            ':inv_no' => $request_inv_no,
+            ':id' => $rejoin_request_id
+        ]);
+        
+        if (!$result || $stmt_update->rowCount() === 0) {
+            throw new Exception(__("failed_to_update_request_inv_no"));
+        }
+
+        // Create approval request using unified system with rejoin request ID
+        $supervisor_id = $vacation['supervisor_id'];
+        if (!empty($supervisor_id)) {
+            $stmt = $pdo->prepare("
+                INSERT INTO request_approvers 
+                (request_inv_no, request_type_id, approver_id, approval_level, status, note)
+                VALUES (:inv_no, 5, :approver_id, 1, 'pending', :note)
+            ");
+            $result = $stmt->execute([
+                ':inv_no' => $request_inv_no,
+                ':approver_id' => $supervisor_id,
+                ':note' => 'Rejoin request for vacation ID: ' . $vacation_id
+            ]);
+            if (!$result) {
+                throw new Exception(__("failed_to_create_approval_chain"));
+            }
+        } else {
+            // If no supervisor, still create approval chain entry with HR as approver
+            // Get HR senior BP as fallback approver
+            $stmt_hr = $pdo->prepare("
+                SELECT e.emp_id FROM employees e 
+                JOIN admin_login al ON e.emp_id = al.emp_id
+                WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 
+                LIMIT 1
+            ");
+            $stmt_hr->execute();
+            $hr_approver = $stmt_hr->fetch(PDO::FETCH_ASSOC);
+            
+            if ($hr_approver && !empty($hr_approver['emp_id'])) {
+                $stmt = $pdo->prepare("
+                    INSERT INTO request_approvers 
+                    (request_inv_no, request_type_id, approver_id, approval_level, status, note)
+                    VALUES (:inv_no, 5, :approver_id, 1, 'pending', :note)
+                ");
+                $result = $stmt->execute([
+                    ':inv_no' => $request_inv_no,
+                    ':approver_id' => $hr_approver['emp_id'],
+                    ':note' => 'Rejoin request for vacation ID: ' . $vacation_id . ' (No supervisor assigned, escalated to HR)'
+                ]);
+                if (!$result) {
+                    throw new Exception(__("failed_to_create_approval_chain"));
+                }
+            }
+        }
+
+        $pdo->commit();
+
+        // Send email notification to supervisor
+        if (!empty($supervisor_id)) {
+            // Get supervisor email from admin_login
+            $stmt = $pdo->prepare("
+                SELECT al.email, e.name as supervisor_name
+                FROM admin_login al
+                JOIN employees e ON al.emp_id = e.emp_id
+                WHERE al.emp_id = :supervisor_id
+                LIMIT 1
+            ");
+            $stmt->execute([':supervisor_id' => $supervisor_id]);
+            $supervisor = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($supervisor && !empty($supervisor['email'])) {
+                // Get employee details
+                $employee_name = $vacation['name'] ?? 'Employee';
+                
+                // Prepare email template data
+                $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+                
+                $template_data = [
+                    'EMPLOYEE_NAME' => $employee_name,
+                    'EMPLOYEE_ID' => $emp_id,
+                    'REQUESTED_DATE' => $rejoin_date,
+                    'REASON' => $rejoin_reason,
+                    'APPROVAL_URL' => $base_url . '/rejoin_approvals.php',
+                    'APPROVER_NAME' => $supervisor['supervisor_name']
+                ];
+
+                // Send email if function exists
+                if (function_exists('send_approval_email')) {
+                    $email_subject = "New Rejoin Request from " . $employee_name . " (ID: " . $emp_id . ")";
+                    send_approval_email(
+                        $conDB, 
+                        $supervisor['email'], 
+                        $supervisor['supervisor_name'], 
+                        $email_subject, 
+                        'rejoin_request', 
+                        $template_data
+                    );
+                }
+            }
+        }
+
+        send_json_response(
+            __("success"),
+            __("rejoin_request_submitted_text", "Your rejoin request has been submitted to your supervisor for approval"),
+            "success",
+            200,
+            ['rejoin_request_id' => (int)$rejoin_request_id]
+        );
+
+    } catch (Exception $e) {
+        if (isset($pdo)) {
+            $pdo->rollBack();
+        }
+        send_json_response(
+            __("error"),
+            $e->getMessage(),
+            "error",
+            400
+        );
+    }
+}
+
+// ============================================================================
+// REJOIN APPROVAL HANDLER
+// ============================================================================
+elseif ($ajaxType == 'processRejoinApproval') {
+    try {
+        $rejoin_request_id = (int)($_POST['rejoin_request_id'] ?? 0);
+        $action = escape_string($_POST['action'] ?? '');
+        $approval_note = escape_string($_POST['approval_note'] ?? '');
+        $adjustment_date = escape_string($_POST['adjustment_date'] ?? '');
+        $adjustment_note = escape_string($_POST['adjustment_note'] ?? '');
+        $rejection_reason = escape_string($_POST['rejection_reason'] ?? '');
+
+        if (empty($rejoin_request_id) || empty($action)) {
+            throw new Exception(__("required_fields_missing"));
+        }
+
+        if (!in_array($action, ['approve', 'adjust', 'reject'])) {
+            throw new Exception(__("invalid_action_specified"));
+        }
+
+        $pdo = getDbConnection();
+        $pdo->beginTransaction();
+
+        // Get rejoin request
+        $stmt = $pdo->prepare("
+            SELECT rr.*, v.return_date, v.vacdays, e.supervisor_id
+            FROM rejoin_requests rr
+            JOIN emp_vacation v ON rr.vacation_id = v.id
+            JOIN employees e ON rr.emp_id = e.emp_id
+            WHERE rr.id = :id
+        ");
+        $stmt->execute([':id' => $rejoin_request_id]);
+        $request = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$request) {
+            throw new Exception(__("rejoin_request_not_found"));
+        }
+
+        // Get emp_id from rejoin_requests table
+        $employee_id = $request['emp_id'];
+
+        // Verify supervisor is the one approving
+        if ($request['supervisor_id'] != $current_user_id && $_SESSION['user_type'] !== 'admin') {
+            throw new Exception(__("unauthorized_to_approve_request"));
+        }
+        
+        if ($action === 'approve') {
+            // Approve the request immediately
+            $stmt = $pdo->prepare("
+                UPDATE rejoin_requests 
+                SET 
+                    status = 'approved',
+                    approved_by_emp_id = :supervisor_id,
+                    approved_at = NOW(),
+                    approval_note = :note,
+                    final_approved_date = :rejoin_date
+                WHERE id = :id
+            ");
+            $stmt->execute([
+                ':supervisor_id' => $current_user_id,
+                ':note' => $approval_note,
+                ':rejoin_date' => $request['requested_rejoin_date'],
+                ':id' => $rejoin_request_id
+            ]);
+
+            // Update request_approvers table
+            $stmt = $pdo->prepare("
+                UPDATE request_approvers 
+                SET status = 'approved', note = :note, action_date = NOW()
+                WHERE request_inv_no = :inv_no AND request_type_id = 5
+            ");
+            $stmt->execute([
+                ':note' => $approval_note,
+                ':inv_no' => $request['request_inv_no']
+            ]);
+
+            // Set employee fly status to 0 (employee has rejoined)
+            $stmt = $pdo->prepare("
+                UPDATE employees 
+                SET fly = 0
+                WHERE emp_id = :emp_id
+            ");
+            $stmt->execute([':emp_id' => $employee_id]);
+
+            // Mark vacation as reviewed/completed
+            $stmt = $pdo->prepare("
+                UPDATE emp_vacation 
+                SET review = 'C'
+                WHERE id = :vacation_id
+            ");
+            $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+            $message = __("rejoin_request_approved_text", "Rejoin request has been approved");
+
+        } elseif ($action === 'adjust') {
+            // Allow employee to adjust date within 3-day window
+            $from_date = new DateTime($request['requested_rejoin_date']);
+            $from_date->modify('-3 days');
+            $to_date = new DateTime($request['requested_rejoin_date']);
+            $to_date->modify('+3 days');
+
+            // If supervisor selected an adjustment date, use it directly and mark as approved
+            if (!empty($adjustment_date)) {
+                $adjustDate = new DateTime($adjustment_date);
+                // Validate the date is within range
+                if ($adjustDate < $from_date || $adjustDate > $to_date) {
+                    throw new Exception(__("adjustment_date_out_of_range", "Adjustment date is outside the allowed range"));
+                }
+
+                // Adjust with supervisor-selected date
+                $stmt = $pdo->prepare("
+                    UPDATE rejoin_requests 
+                    SET 
+                        status = 'approved',
+                        approved_by_emp_id = :supervisor_id,
+                        approved_at = NOW(),
+                        adjustment_allowed = 1,
+                        adjustment_from_date = :from_date,
+                        adjustment_to_date = :to_date,
+                        adjustment_reason_text = :reason,
+                        adjustment_submitted_date = :adj_date_submitted,
+                        adjustment_submitted_at = NOW(),
+                        final_approved_date = :adj_date_final,
+                        final_approved_at = NOW(),
+                        approval_note = :approval_note
+                    WHERE id = :id
+                ");
+                $stmt->execute([
+                    ':supervisor_id' => $current_user_id,
+                    ':from_date' => $from_date->format('Y-m-d'),
+                    ':to_date' => $to_date->format('Y-m-d'),
+                    ':reason' => $adjustment_note,
+                    ':adj_date_submitted' => $adjustment_date,
+                    ':adj_date_final' => $adjustment_date,
+                    ':approval_note' => $adjustment_note,
+                    ':id' => $rejoin_request_id
+                ]);
+
+                // If supervisor selected a later rejoin date, deduct extra days from balance
+                $extra_days = 0;
+                if (!empty($request['return_date'])) {
+                    $origReturn = new DateTime($request['return_date']);
+                    if ($adjustDate > $origReturn) {
+                        $extra_days = $origReturn->diff($adjustDate)->days;
+                    }
+                }
+
+                if ($extra_days > 0) {
+                    // Extend vacation record and total days
+                    $stmtUpdVac = $pdo->prepare("UPDATE emp_vacation SET return_date = :new_date, vacdays = vacdays + :extra WHERE id = :vac_id");
+                    $stmtUpdVac->execute([
+                        ':new_date' => $adjustment_date,
+                        ':extra' => $extra_days,
+                        ':vac_id' => $request['vacation_id']
+                    ]);
+
+                    // Deduct from linked balance row if available
+                    $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
+                    $stmtBal->execute([':vac_id' => $request['vacation_id']]);
+                    if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
+                        $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
+                        $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
+                        $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+                    }
+                }
+
+                // Update request_approvers table with approval
+                $stmt = $pdo->prepare("
+                    UPDATE request_approvers 
+                    SET status = 'approved', note = :note, action_date = NOW()
+                    WHERE request_inv_no = :inv_no AND request_type_id = 5
+                ");
+                $stmt->execute([
+                    ':note' => 'Approved with adjustment to: ' . $adjustment_date . '. Reason: ' . $adjustment_note,
+                    ':inv_no' => $request['request_inv_no']
+                ]);
+
+                // Set employee fly status to 0 (employee has rejoined)
+                $stmt = $pdo->prepare("
+                    UPDATE employees 
+                    SET fly = 0
+                    WHERE emp_id = :emp_id
+                ");
+                $stmt->execute([':emp_id' => $employee_id]);
+
+                // Mark vacation as reviewed/completed
+                $stmt = $pdo->prepare("
+                    UPDATE emp_vacation 
+                    SET review = 'C'
+                    WHERE id = :vacation_id
+                ");
+                $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+                $message = __("rejoin_request_adjusted_and_approved_text", "Rejoin request has been adjusted and approved");
+            } else {
+                // Allow employee to adjust date themselves
+                $stmt = $pdo->prepare("
+                    UPDATE rejoin_requests 
+                    SET 
+                        status = 'adjusted',
+                        approved_by_emp_id = :supervisor_id,
+                        approved_at = NOW(),
+                        adjustment_allowed = 1,
+                        adjustment_from_date = :from_date,
+                        adjustment_to_date = :to_date,
+                        adjustment_reason_text = :reason
+                    WHERE id = :id
+                ");
+                $stmt->execute([
+                    ':supervisor_id' => $current_user_id,
+                    ':from_date' => $from_date->format('Y-m-d'),
+                    ':to_date' => $to_date->format('Y-m-d'),
+                    ':reason' => $adjustment_note,
+                    ':id' => $rejoin_request_id
+                ]);
+
+                // Update request_approvers table (status pending until employee submits adjusted date)
+                $stmt = $pdo->prepare("
+                    UPDATE request_approvers 
+                    SET status = 'pending', note = :note, action_date = NOW()
+                    WHERE request_inv_no = :inv_no AND request_type_id = 5
+                ");
+                $stmt->execute([
+                    ':note' => 'Adjustment allowed: ' . $adjustment_note,
+                    ':inv_no' => $request['request_inv_no']
+                ]);
+
+                $message = __("rejoin_adjustment_allowed_text", "Employee has been allowed to adjust rejoin date within 3 days");
+            }
+
+        } else { // reject
+            if (empty($rejection_reason)) {
+                throw new Exception(__("rejection_reason_required"));
+            }
+
+            $stmt = $pdo->prepare("
+                UPDATE rejoin_requests 
+                SET 
+                    status = 'rejected',
+                    approved_by_emp_id = :supervisor_id,
+                    approved_at = NOW(),
+                    rejection_reason = :reason
+                WHERE id = :id
+            ");
+            $stmt->execute([
+                ':supervisor_id' => $current_user_id,
+                ':reason' => $rejection_reason,
+                ':id' => $rejoin_request_id
+            ]);
+
+            // Update request_approvers table
+            $stmt = $pdo->prepare("
+                UPDATE request_approvers 
+                SET status = 'rejected', note = :note, action_date = NOW()
+                WHERE request_inv_no = :inv_no AND request_type_id = 5
+            ");
+            $stmt->execute([
+                ':note' => 'Rejected: ' . $rejection_reason,
+                ':inv_no' => $request['request_inv_no']
+            ]);
+
+            $message = __("rejoin_request_rejected_text", "Rejoin request has been rejected");
+            
+            $pdo->commit();
+
+            send_json_response(
+                __("rejected"),
+                $message,
+                "error",
+                200
+            );
+            exit;
+        }
+
+        $pdo->commit();
+
+        send_json_response(
+            __("success"),
+            $message,
+            "success",
+            200
+        );
+
+    } catch (Exception $e) {
+        if (isset($pdo)) {
+            $pdo->rollBack();
+        }
+        send_json_response(
+            __("error"),
+            $e->getMessage(),
+            "error",
+            400
+        );
+    }
+}
+
+// ============================================================================
+// SUBMIT ADJUSTED REJOIN DATE
+// ============================================================================
+elseif ($ajaxType == 'submitAdjustedRejoinDate') {
+    try {
+        $rejoin_request_id = (int)($_POST['rejoin_request_id'] ?? 0);
+        $adjusted_date = escape_string($_POST['adjusted_date'] ?? '');
+        $emp_id = (int)($current_user_id);
+
+        if (empty($rejoin_request_id) || empty($adjusted_date)) {
+            throw new Exception(__("required_fields_missing"));
+        }
+
+        $pdo = getDbConnection();
+        $pdo->beginTransaction();
+
+        // Get rejoin request
+        $stmt = $pdo->prepare("
+            SELECT rr.*, v.return_date, v.vacdays
+            FROM rejoin_requests rr
+            JOIN emp_vacation v ON rr.vacation_id = v.id
+            WHERE rr.id = :id AND rr.emp_id = :emp_id
+        ");
+        $stmt->execute([':id' => $rejoin_request_id, ':emp_id' => $emp_id]);
+        $request = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$request) {
+            throw new Exception(__("rejoin_request_not_found"));
+        }
+
+        if ($request['status'] !== 'adjusted' || !$request['adjustment_allowed']) {
+            throw new Exception(__("rejoin_adjustment_not_allowed"));
+        }
+
+        // Verify adjusted date is within allowed range
+        $adjusted = new DateTime($adjusted_date);
+        $from = new DateTime($request['adjustment_from_date']);
+        $to = new DateTime($request['adjustment_to_date']);
+
+        if ($adjusted < $from || $adjusted > $to) {
+            throw new Exception(
+                __("adjusted_date_out_of_range", 
+                    "Adjusted date must be between " . 
+                    $from->format('Y-m-d') . " and " . 
+                    $to->format('Y-m-d')
+                )
+            );
+        }
+
+        // Update rejoin request with adjusted date
+        $stmt = $pdo->prepare("
+            UPDATE rejoin_requests 
+            SET 
+                adjustment_submitted_date = :submitted_date,
+                adjustment_submitted_at = NOW(),
+                final_approved_date = :final_date,
+                final_approved_at = NOW(),
+                status = 'approved'
+            WHERE id = :id
+        ");
+        $stmt->execute([
+            ':submitted_date' => $adjusted_date,
+            ':final_date' => $adjusted_date,
+            ':id' => $rejoin_request_id
+        ]);
+
+        // If employee chose a later rejoin date, deduct extra days and extend vacation
+        $extra_days = 0;
+        if (!empty($request['return_date'])) {
+            $origReturn = new DateTime($request['return_date']);
+            if ($adjusted > $origReturn) {
+                $extra_days = $origReturn->diff($adjusted)->days;
+            }
+        }
+
+        if ($extra_days > 0) {
+            $stmtUpdVac = $pdo->prepare("UPDATE emp_vacation SET return_date = :new_date, vacdays = vacdays + :extra WHERE id = :vac_id");
+            $stmtUpdVac->execute([
+                ':new_date' => $adjusted_date,
+                ':extra' => $extra_days,
+                ':vac_id' => $request['vacation_id']
+            ]);
+
+            $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
+            $stmtBal->execute([':vac_id' => $request['vacation_id']]);
+            if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
+                $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
+                $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
+                $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+            }
+        }
+
+        // Update request_approvers table to approved
+        $stmt = $pdo->prepare("
+            UPDATE request_approvers 
+            SET status = 'approved', note = CONCAT(COALESCE(note, ''), ' - Employee adjusted date to: ', :date), action_date = NOW()
+            WHERE request_inv_no = :inv_no AND request_type_id = 5
+        ");
+        $stmt->execute([
+            ':date' => $adjusted_date,
+            ':inv_no' => $request['request_inv_no']
+        ]);
+
+        // Set employee fly status to 0 (employee has rejoined)
+        $stmt = $pdo->prepare("
+            UPDATE employees 
+            SET fly = 0
+            WHERE emp_id = :emp_id
+        ");
+        $stmt->execute([':emp_id' => $emp_id]);
+
+        // Mark vacation as reviewed/completed
+        $stmt = $pdo->prepare("
+            UPDATE emp_vacation 
+            SET review = 'C'
+            WHERE id = :vacation_id
+        ");
+        $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+        $pdo->commit();
+
+        send_json_response(
+            __("success"),
+            __("adjusted_date_confirmed_text", "Your adjusted rejoin date has been confirmed"),
+            "success",
+            200
+        );
+
+    } catch (Exception $e) {
+        if (isset($pdo)) {
+            $pdo->rollBack();
+        }
+        send_json_response(
+            __("error"),
+            $e->getMessage(),
+            "error",
+            400
+        );
+    }
 }
 
 // Fallback for unknown ajaxType

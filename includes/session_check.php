@@ -234,6 +234,7 @@ function update_employee_fly_status_on_session($conDB) {
                 AND v.return_date >= ?
                 AND v.request_inv_no LIKE 'VAC-%'
                 AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
+                AND v.review = 'A'
         ";
         
         $stmt_find = mysqli_prepare($conDB, $sql_find_employees);

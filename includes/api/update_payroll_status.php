@@ -18,7 +18,8 @@
 header('Content-Type: application/json');
 
 // Include the database connection file. Adjust the path as needed for your project structure.
-require_once(__DIR__ . "/../../includes/db.php"); 
+require_once(__DIR__ . "/../../includes/db.php");
+
 
 // Get the raw POST data from the request body
 $input = json_decode(file_get_contents('php://input'), true);
@@ -77,7 +78,8 @@ try {
     // Send a success response back to the client with a descriptive message.
     echo json_encode([
         'status' => 'success',
-        'message' => "Successfully updated $updatedCount payroll record(s) to '$status'.",
+        // 'message' => "Successfully updated $updatedCount payroll record(s) to '$status'.",
+        'message' => sprintf(__("successfully_updated_updatedcount_payroll_records_to_status"), $updatedCount, __(strtolower($status))),
         'updated_count' => $updatedCount
     ]);
 

@@ -1772,6 +1772,348 @@ if (mysqli_num_rows($query) == 1) {
 		<script src="assets/js/resignationWizard.js"></script>
 
 		<script type="text/javascript">
+			// ============================================================================
+			// REJOIN APPROVAL SYSTEM
+			// ============================================================================
+			// Handles employee rejoin requests after vacation with supervisor approval
+			// Allows 3-day adjustment window if employee selected wrong date
+			// ============================================================================
+
+			function submitRejoinRequest(vacationId, returndate, empId, empName) {
+				// First, check if there's an active rejoin request
+				$.ajax({
+					url: './includes/ajaxFile/ajaxVacation.php',
+					type: 'POST',
+					dataType: 'JSON',
+					data: {
+						ajaxType: 'checkActiveRejoinRequest',
+						vacation_id: vacationId,
+						emp_id: empId
+					},
+					success: function(checkResponse) {
+						// If there's an active request, show warning immediately
+						if(checkResponse.type === 'warning' && checkResponse.active_request) {
+							Swal.fire({
+								icon: 'warning',
+								title: checkResponse.title || __('active_rejoin_request_exists', 'Active Request Exists'),
+								html: `
+									<div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
+										<div style="margin-bottom: 10px;">
+											<strong>${__('request_number', 'Request Number')}:</strong> 
+											<span style="color: #d32f2f;">${checkResponse.active_request.request_inv_no}</span>
+										</div>
+										<div style="margin-bottom: 10px;">
+											<strong>${__('status', 'Status')}:</strong> 
+											<span style="color: #d32f2f; font-weight: bold;">${checkResponse.active_request.status.toUpperCase()}</span>
+										</div>
+										<div style="margin-bottom: 10px;">
+											<strong>${__('requested_rejoin_date', 'Requested Rejoin Date')}:</strong> 
+											<span>${checkResponse.active_request.requested_rejoin_date}</span>
+										</div>
+										<div style="margin-bottom: 10px;">
+											<strong>${__('submitted_at', 'Submitted At')}:</strong> 
+											<span>${checkResponse.active_request.requested_at}</span>
+										</div>
+										<hr style="margin: 10px 0;">
+										<div style="margin-bottom: 10px;">
+											<strong>${__('associated_vacation', 'Associated Vacation')}:</strong> 
+											<span>${checkResponse.active_request.vacation_inv_no}</span>
+										</div>
+										<div>
+											<strong>${__('vacation_type', 'Vacation Type')}:</strong> 
+											<span>${checkResponse.active_request.vac_type}</span>
+										</div>
+									</div>
+								`,
+								allowOutsideClick: false,
+								confirmButtonColor: '#3085d6',
+								confirmButtonText: __('ok', 'OK')
+							});
+							return;
+						}
+						
+						// No active request - show the submission form
+						showRejoinRequestForm(vacationId, returndate, empId, empName);
+					},
+					error: function(jqXHR, textStatus) {
+						Swal.fire({
+							icon: 'error',
+							title: __('error', 'Error'),
+							text: __('request_failed_status', 'Request failed') + ' - ' + textStatus,
+							confirmButtonColor: '#d32f2f',
+							confirmButtonText: __('ok', 'OK')
+						});
+					}
+				});
+			}
+			
+			function showRejoinRequestForm(vacationId, returndate, empId, empName) {
+				// Parse the return date to ensure it's in the correct format (YYYY-MM-DD)
+				const parsedDate = new Date(returndate);
+				const formattedDate = parsedDate.toISOString().split('T')[0];
+				const displayDate = parsedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+				
+				Swal.fire({
+					title: __('rejoin_request_title', 'Submit Rejoin Request'),
+					html: `
+						<div class="text-left">
+							<p class="text-muted mb-3">${__('rejoin_request_subtitle', 'Your rejoin request will be sent to your direct supervisor for approval')}</p>
+							<div class="form-group">
+								<label for="rejoinDate" class="form-label font-weight-bold">${__('rejoin_date_label', 'Actual Rejoin Date')} <span class="text-danger">*</span></label>
+								<input type="text" id="rejoinDate" class="form-control" placeholder="Select date" value="${formattedDate}">
+								<small class="text-muted d-block mt-2">
+									<i class="fa fa-info-circle"></i> ${__('planned_return_text', 'Planned Return')}:<br>
+									<strong>${displayDate}</strong>
+								</small>
+							</div>
+							<div class="form-group">
+								<label for="rejoinReason" class="form-label font-weight-bold">${__('rejoin_reason_label', 'Reason for Date Change (if applicable)')}</label>
+								<textarea id="rejoinReason" class="form-control" rows="3" placeholder="${__('optional_text', 'Optional')}"></textarea>
+							</div>
+						</div>
+					`,
+					width: '500px',
+					showCancelButton: true,
+					confirmButtonText: __('submit_request_button', 'Submit Request'),
+					cancelButtonText: __('cancel', 'Cancel'),
+					confirmButtonColor: '#6366f1',
+					cancelButtonColor: '#dc3545',
+					allowOutsideClick: false,
+					willOpen: () => {
+						jQuery('#rejoinDate').datepicker({
+							format: "yyyy-mm-dd",
+							todayHighlight: true,
+							autoclose: true,
+							startDate: parsedDate // Can't select before planned date
+						}).datepicker('setDate', parsedDate);
+					},
+					preConfirm: () => {
+						const rejoinDate = document.getElementById('rejoinDate').value;
+						const rejoinReason = document.getElementById('rejoinReason').value;
+
+						if (!rejoinDate) {
+							Swal.showValidationMessage(__('rejoin_date_required_validation', 'Please select a rejoin date'));
+							return false;
+						}
+
+						// Verify date is within valid range (not more than 3 days after planned return)
+						const planned = new Date(returndate);
+						const rejoin = new Date(rejoinDate);
+						const maxDate = new Date(planned);
+						maxDate.setDate(maxDate.getDate() + 3);
+
+						if (rejoin > maxDate) {
+							Swal.showValidationMessage(
+								__('rejoin_date_range_validation', 
+									'Rejoin date cannot be more than 3 days after the planned return date. ' +
+									'Please contact HR for special cases.')
+							);
+							return false;
+						}
+
+						return { rejoinDate, rejoinReason };
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						const { rejoinDate, rejoinReason } = result.value;
+						submitRejoinAjax(vacationId, rejoinDate, rejoinReason, empId, empName);
+					}
+				});
+			}
+
+			function submitRejoinAjax(vacationId, rejoinDate, rejoinReason, empId, empName) {
+				Swal.fire({
+					title: __('processing_title', 'Processing...'),
+					html: __('please_wait_text', 'Please wait while we process your request'),
+					didOpen: () => Swal.showLoading(),
+					allowOutsideClick: false,
+					allowEscapeKey: false
+				});
+
+				$.ajax({
+					url: './includes/ajaxFile/ajaxVacation.php',
+					type: 'POST',
+					dataType: 'JSON',
+					data: {
+						ajaxType: 'submitRejoinRequest',
+						vacation_id: vacationId,
+						rejoin_date: rejoinDate,
+						rejoin_reason: rejoinReason,
+						emp_id: empId
+					},
+					success: function(response) {
+						if (response.type === 'success') {
+							Swal.fire({
+								title: response.title || __('success_title', 'Success'),
+								text: response.message || __('rejoin_request_submitted_text', 'Your rejoin request has been submitted for approval'),
+								icon: 'success',
+								confirmButtonText: __('ok', 'OK'),
+								allowOutsideClick: false
+							}).then(() => {
+								location.reload();
+							});
+						} else {
+							Swal.fire({
+								title: response.title || __('error_title', 'Error'),
+								text: response.message || __('unexpected_error_text', 'An unexpected error occurred'),
+								icon: 'error',
+								confirmButtonText: __('ok', 'OK')
+							});
+						}
+					},
+					error: function(jqXHR, textStatus, errorThrown) {
+						Swal.fire({
+							title: __('error_title', 'Error'),
+							text: __('request_failed_text', 'Request failed') + ': ' + textStatus,
+							icon: 'error',
+							confirmButtonText: __('ok', 'OK')
+						});
+					}
+				});
+			}
+
+			function approveRejoinRequest(rejoinRequestId, empId, rejoinDate, showAdjustmentOption = true) {
+				let html = `
+					<div class="text-left">
+						<p class="mb-3"><strong>${__('rejoin_date_label', 'Rejoin Date')}:</strong><br>
+						${new Date(rejoinDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+						
+						<div class="form-group">
+							<label class="form-label font-weight-bold">${__('approval_action_label', 'Action')} <span class="text-danger">*</span></label>
+							<div class="custom-control custom-radio mb-2">
+								<input type="radio" class="custom-control-input" id="action_approve" name="action" value="approve" checked>
+								<label class="custom-control-label" for="action_approve">
+									${__('approve_button', 'Approve')} - ${__('approve_text', 'Accept the rejoin date as submitted')}
+								</label>
+							</div>
+				`;
+
+				if (showAdjustmentOption) {
+					html += `
+							<div class="custom-control custom-radio mb-2">
+								<input type="radio" class="custom-control-input" id="action_adjust" name="action" value="adjust">
+								<label class="custom-control-label" for="action_adjust">
+									${__('adjust_button', 'Adjust')} - ${__('adjust_3days_text', 'Allow employee to adjust date (±3 days from submitted date)')}
+								</label>
+							</div>
+							<div id="adjustmentDetails" style="display:none; background: #f0f0f0; padding: 10px; border-radius: 4px; margin-left: 30px; margin-top: 10px;">
+								<small class="text-muted">
+									<i class="fa fa-info-circle"></i> ${__('adjustment_explanation', 'Employee can modify the date within 3 days before or after the submitted date')}
+								</small>
+							</div>
+					`;
+				}
+
+				html += `
+						<div class="custom-control custom-radio mb-2">
+							<input type="radio" class="custom-control-input" id="action_reject" name="action" value="reject">
+							<label class="custom-control-label" for="action_reject">
+								${__('reject_button', 'Reject')} - ${__('reject_text', 'Request changes or requires HR review')}
+							</label>
+						</div>
+						<div id="rejectionReason" style="display:none; margin-left: 30px; margin-top: 10px;">
+							<textarea id="rejectReason" class="form-control" rows="3" placeholder="${__('explain_rejection', 'Explain why you are rejecting this request')}"></textarea>
+						</div>
+
+						<div class="form-group mt-3">
+							<label for="approvalNote" class="form-label font-weight-bold">${__('approval_note_label', 'Approval Note (Optional)')}</label>
+							<textarea id="approvalNote" class="form-control" rows="2" placeholder="${__('optional_text', 'Optional')}"></textarea>
+						</div>
+					</div>
+				`;
+
+				Swal.fire({
+					title: __('review_rejoin_request_title', 'Review Rejoin Request'),
+					html: html,
+					width: '550px',
+					showCancelButton: true,
+					confirmButtonText: __('submit_button', 'Submit'),
+					cancelButtonText: __('cancel', 'Cancel'),
+					confirmButtonColor: '#28a745',
+					cancelButtonColor: '#dc3545',
+					allowOutsideClick: false,
+					didOpen: () => {
+						// Toggle adjustment details and rejection reason visibility
+						$('input[name="action"]').on('change', function() {
+							const action = $(this).val();
+							$('#adjustmentDetails').toggle(action === 'adjust');
+							$('#rejectionReason').toggle(action === 'reject');
+						});
+					},
+					preConfirm: () => {
+						const action = document.querySelector('input[name="action"]:checked').value;
+						const approvalNote = document.getElementById('approvalNote').value;
+
+						let rejectReason = '';
+						if (action === 'reject') {
+							rejectReason = document.getElementById('rejectReason').value;
+							if (!rejectReason.trim()) {
+								Swal.showValidationMessage(__('rejection_reason_required', 'Please provide a reason for rejection'));
+								return false;
+							}
+						}
+
+						return { action, approvalNote, rejectReason };
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						const { action, approvalNote, rejectReason } = result.value;
+						processRejoinApproval(rejoinRequestId, action, approvalNote, rejectReason);
+					}
+				});
+			}
+
+			function processRejoinApproval(rejoinRequestId, action, approvalNote, rejectReason) {
+				Swal.fire({
+					title: __('processing_title', 'Processing...'),
+					html: __('please_wait_text', 'Please wait'),
+					didOpen: () => Swal.showLoading(),
+					allowOutsideClick: false,
+					allowEscapeKey: false
+				});
+
+				$.ajax({
+					url: './includes/ajaxFile/ajaxVacation.php',
+					type: 'POST',
+					dataType: 'JSON',
+					data: {
+						ajaxType: 'processRejoinApproval',
+						rejoin_request_id: rejoinRequestId,
+						action: action,
+						approval_note: approvalNote,
+						rejection_reason: rejectReason
+					},
+					success: function(response) {
+						if (response.status === 'success') {
+							Swal.fire({
+								title: __('success_title', 'Success'),
+								text: response.message || __('request_processed_text', 'Request has been processed'),
+								icon: 'success',
+								confirmButtonText: __('ok', 'OK'),
+								allowOutsideClick: false
+							}).then(() => {
+								location.reload();
+							});
+						} else {
+							Swal.fire({
+								title: __('error_title', 'Error'),
+								text: response.message || __('processing_failed_text', 'Failed to process request'),
+								icon: 'error',
+								confirmButtonText: __('ok', 'OK')
+							});
+						}
+					},
+					error: function(jqXHR, textStatus, errorThrown) {
+						Swal.fire({
+							title: __('error_title', 'Error'),
+							text: textStatus,
+							icon: 'error',
+							confirmButtonText: __('ok', 'OK')
+						});
+					}
+				});
+			}
+
 			$(function() {
 				var currentDocPath = '';
 
@@ -2429,58 +2771,9 @@ if (mysqli_num_rows($query) == 1) {
 				}
 			}
 
-			function returnVacationRequest(vacationId, returndate) {
-				Swal.fire({
-					title: 'Confirm Employee Return',
-					html: '<p>Please select the actual date the employee returned to work:</p>' +
-						'<input type="text" id="returndate" class="form-control">',
-					showCancelButton: true,
-					confirmButtonColor: '#3085d6',
-					cancelButtonColor: '#d33',
-					confirmButtonText: 'Yes, Update!',
-					showLoaderOnConfirm: true,
-					allowOutsideClick: false,
-					willOpen: () => {
-						jQuery('#returndate').datepicker({
-							format: "yyyy-mm-dd",
-							todayHighlight: true,
-							autoclose: true,
-							startDate: returndate // Set startDate to your database date
-						}).datepicker('setDate', returndate);
-					},
-					preConfirm: () => {
-						const returnDate = document.getElementById('returndate').value;
-						if (!returnDate) {
-							Swal.showValidationMessage('You must select a return date!');
-							return false;
-						}
-						// Return the AJAX promise
-						return $.ajax({
-								url: './includes/ajaxFile/ajaxVacation.php',
-								type: 'POST',
-								dataType: 'JSON',
-								data: {
-									ajaxType: 'returnVacation',
-									vacation_id: vacationId,
-									returnDate: returnDate
-								}
-							})
-							.done(function(response) {
-								Swal.fire({
-									title: response.title,
-									text: response.message,
-									icon: response.type,
-									allowOutsideClick: false
-								}).then(function(isConfirm) {
-									(isConfirm) ? location.reload(): ""
-								});
-							})
-							.fail(function(jqXHR, textStatus, errorThrown) {
-								Swal.showValidationMessage('Request failed: ' + textStatus);
-								return false;
-							});
-					}
-				})
+			function returnVacationRequest(vacationId, returndate, empId, empName) {
+				// Changed to use new rejoin approval system
+				submitRejoinRequest(vacationId, returndate, empId, empName);
 			}
 		</script>
 

@@ -161,7 +161,7 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) { ?>
                         <a href='javascript:void(0);' class='dropdown-item text-danger deleteAjax' data-id='<?=$rec['id']?>' data-tbl='employee_temp_contants' data-file='0' ><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>Delete</a>
                         <?php } ?>
                     </div>
-            </div>
+                </div>
             </td>
         </tr>
 
@@ -251,10 +251,6 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) { ?>
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js"></script>
-
-<script type="text/javascript">
-
-</script>
 
 <script type="text/javascript">
 

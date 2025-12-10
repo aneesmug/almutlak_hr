@@ -69,7 +69,8 @@ if ($emprow['status'] == 1) {
 			if ($emprow["fly"] == 1) {
 				if ($isHR || $is_system_admin || $isDeptHr) {
 					$lastVac = lastVacIdGet($emprow['empid']);
-					$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"returnVacationRequest(" . htmlspecialchars($lastVac['vacid']) . ", '" . htmlspecialchars($lastVac['returndate']) . "')\" role=\"button\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('arrived') . "</span></div>";
+					// Updated rejoin function to use new approval system with emp_id and emp_name parameters
+					$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"returnVacationRequest(" . htmlspecialchars($lastVac['vacid']) . ", '" . htmlspecialchars($lastVac['returndate']) . "', '" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['name']) . "')\" role=\"button\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoining') . "</span></div>";
 				}
 			} else {
 				if ($emprow['apd_status'] == 'approve' && $user_type != "dept_user") {

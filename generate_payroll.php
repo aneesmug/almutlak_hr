@@ -503,6 +503,12 @@ function initializeDataTable() {
                 orderable: false,
                 className: 'text-center',
                 render: function(data, type, row) {
+                    // Check if payroll is on hold (payment_type = 3)
+                    const isPayrollOnHold = row.payment_type === 3 || row.payment_type === '3';
+                    if (isPayrollOnHold) {
+                        return `<span class="badge badge-warning" style="background-color: #ff9800;"><i class="mdi mdi-pause-circle"></i> ${__('payroll_on_hold')}</span>`;
+                    }
+                    
                     // Check if payroll is generated for the current month
                     // The `payroll_status` comes from the get_employees.php API response
                     const isPayrollGenerated = row.payroll_status && (row.payroll_status === 'generated');
@@ -529,10 +535,21 @@ function initializeDataTable() {
                 orderable: false,
                 render: function(data, type, row) {
                     const isPayrollPaid = row.payroll_status && (row.payroll_status === 'paid');
-                    if (isPayrollPaid){
-                        return `<button class="btn btn-danger btn-sm btn-rounded" disabled ><i class="mdi mdi-account-edit"></i> ${__('edit')}</button>`;
+                    const isPayrollGenerated = row.payroll_status && (row.payroll_status === 'generated');
+                    
+                    // Locked for paid payrolls
+                    if (isPayrollPaid) {
+                        return `<button class="btn btn-danger btn-sm btn-rounded" disabled style="cursor: not-allowed; opacity: 0.6;" title="${__('payroll_is_locked')}">
+                                    <i class="mdi mdi-lock"></i> ${__('locked')}
+                                </button>`;
                     }
-                    return `<button class="btn btn-dark btn-sm view-edit-btn" data-emp-id="${row.emp_id}" data-emp-name="${row.name}"><i class="mdi mdi-account-edit"></i> ${__('edit')}</button>`;
+                    
+                    // Edit button for both pending and generated (warning color for generated)
+                    const buttonColor = isPayrollGenerated ? 'btn-warning' : 'btn-dark';
+                    const buttonTitle = isPayrollGenerated ? __('edit_generated_payroll_title') : __('create_edit_payroll_title');
+                    return `<button class="btn ${buttonColor} btn-sm view-edit-btn" data-emp-id="${row.emp_id}" data-emp-name="${row.name}" title="${buttonTitle}">
+                                <i class="mdi mdi-account-edit"></i> ${__('edit')}
+                            </button>`;
                 }
             }
         ],
@@ -675,6 +692,17 @@ function addEventListeners() {
     currentEventListeners.push(() => $('#selectAllEmployees').off('change', selectAllHandler));
     // Individual employee checkbox (delegated using jQuery on)
     const employeeCheckboxHandler = function() {
+        // Check if this employee has payment_type = 3 (on hold)
+        const checkbox = $(this);
+        const isOnHold = checkbox.closest('tr').find('td:first').find('.badge-warning').length > 0;
+        
+        if (isOnHold && checkbox.prop('checked')) {
+            // Prevent selection and show warning
+            checkbox.prop('checked', false);
+            showWarning(__('payroll_on_hold'), __('cannot_select_employee_on_hold'));
+            return;
+        }
+        
         updateMainSelectAllCheckbox();
     };
     $('#employeeTable').off('change', '.employee-checkbox', employeeCheckboxHandler).on('change', '.employee-checkbox', employeeCheckboxHandler);
@@ -763,13 +791,26 @@ async function generatePayroll() {
         });
         const result = await response.json();
 
+        // If the server responds with 'warning', show a warning message (some employees skipped)
+        if (result.status === 'warning') {
+            Swal.fire({
+                icon: 'warning',
+                title: __('processing_completed_with_warnings') || 'Processing Completed with Warnings',
+                html: result.message.replace(/\n/g, '<br>'),
+                confirmButtonColor: '#ffc107',
+                confirmButtonText: __('ok'),
+                allowOutsideClick: false,
+            });
+            fetchEmployees(); // Refresh employee list to update status
+        }
         // If the server responds with 'success', show a success message
-        if (result.status === 'success') {
+        else if (result.status === 'success') {
             Swal.fire({
                 icon: 'success',
                 title: __('payroll_generated_success_title'),
                 text: result.message,
                 confirmButtonColor: '#6366f1',
+                confirmButtonText: __('ok'),
                 allowOutsideClick: false,
             });
             fetchEmployees(); // Refresh employee list to update status
@@ -961,6 +1002,7 @@ async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductio
                 title: __('changes_saved_success_title'),
                 text: result.message,
                 confirmButtonColor: '#6366f1',
+                confirmButtonText: __('ok'),
                 allowOutsideClick: false,
             });
             fetchEmployees(); // Refresh employee list to ensure payroll status is updated
@@ -1759,7 +1801,24 @@ async function showPayrollDetails(empId, empName, month) {
                             ],
                             pageLength: 10,
                             lengthMenu: [10, 25, 50, -1],
-                            order: [[1, 'asc']]
+                            order: [[1, 'asc']],
+                            language: {
+                                search: `<span>${__('search')}:</span> _INPUT_`,
+                                searchPlaceholder: `${__('search')}...`,
+                                lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+                                info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                                infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                                infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                                paginate: {
+                                    first: __('first'),
+                                    last: __('last'),
+                                    next: __('next'),
+                                    previous: __('previous')
+                                },
+                                emptyTable: __('no_data_available_in_table'),
+                                zeroRecords: __('no_matching_records_found'),
+                                processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                            }
                         });
 
                         $('#markAsPaidBtn').on('click', async () => {
@@ -2217,13 +2276,15 @@ async function showPayrollDetails(empId, empName, month) {
                 return;
             }
             const confirmation = await Swal.fire({
-                title: __('mark_records_as_status_q_title').replace('{0}', payrollIds.length).replace('{1}', status),
+                title: __('mark_records_as_status_q_title').replace('{0}', payrollIds.length).replace('{1}', __(status)),
                 text: __('action_cannot_be_undone'),
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#28a745',
-                confirmButtonText: __('yes_mark_as_status_button').replace('{0}', status),
+                confirmButtonText: __('yes_mark_as_status_button').replace('{0}', __(status)),
                 allowOutsideClick: false,
+                cancelButtonColor: '#d33',
+                cancelButtonText: __('cancel')
             });
 
             if (!confirmation.isConfirmed) return;
@@ -2238,8 +2299,13 @@ async function showPayrollDetails(empId, empName, month) {
                 });
                 const result = await response.json();
                 if (result.status === 'success') {
-                    Swal.fire({ icon: 'success', title: __('status_updated_success_title'), text: result.message })
-                    .then(() => successCallback && successCallback());
+                    Swal.fire({ 
+                        icon: 'success', 
+                        title: __('status_updated_success_title'), 
+                        text: result.message, 
+                        allowOutsideClick: false, 
+                        confirmButtonText: __('ok') 
+                    }).then(() => successCallback && successCallback());
                 } else {
                     throw new Error(result.message);
                 }

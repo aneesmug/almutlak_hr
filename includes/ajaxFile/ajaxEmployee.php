@@ -1037,16 +1037,6 @@ elseif($ajaxType == 'unassign_asset') {
                 'cashier', 'fuel', 'tel', 'other', 'guard'
             ];
 
-            // Check if employee already has a salary record in emp_salary
-            $checkExistingStmt = $pdo->prepare("SELECT id FROM emp_salary WHERE emp_id = :emp_id");
-            $checkExistingStmt->execute([':emp_id' => $emp_id]);
-            $existingSalaryRecord = $checkExistingStmt->fetch();
-
-            if ($existingSalaryRecord) {
-                send_json_response(__("error"), __("this_employee_already_has_a_salary_record_please_update_the_existing_record_instead"), "error");
-                exit;
-            }
-
             // Calculate sum of submitted components for verification
             $componentsSum = 0;
             foreach ($allowedFields as $field) {
@@ -1727,7 +1717,7 @@ elseif($ajaxType == 'unassign_asset') {
         // Get all HR users to notify
         $hr_query = "SELECT al.email, al.fullname 
                      FROM admin_login al 
-                     WHERE al.user_type = 'hr' 
+                     WHERE al.user_type IN ('hr_payroll', 'hr_operations', 'hr_recruitment')
                      AND al.status = 1 
                      AND al.email IS NOT NULL 
                      AND al.email != ''";
@@ -1741,6 +1731,7 @@ elseif($ajaxType == 'unassign_asset') {
             $template_data = [
                 'EMP_ID' => $employee['emp_id'] ?? $empId,
                 'EMP_NAME' => $employee['name'] ?? 'Unknown Employee',
+                'DEPARTMENT' => $employee['department'] ?? 'N/A',
                 'UPDATE_TYPE' => $type,
                 'CURRENT_VALUE' => $current_value,
                 'NEW_VALUE' => $newValue ? $newValue : 'See attachment',
