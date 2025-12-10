@@ -50,7 +50,7 @@ if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
     }
 }
 
-$lastVacationId = !empty($emprow['lastvacid']) ? (int)$emprow['lastvacid'] : null;
+$lastVac = lastVacIdGet($emprow['empid']);
 
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
@@ -59,8 +59,8 @@ if ($emprow['status'] == 1) {
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
-    if (!empty($lastVacationId)) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitRejoinRequest text-warning\" data-vacation-id=\"{$lastVacationId}\" data-emp-id=\"{$emprow['empid']}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "</span></a>";
+    if (!empty($lastVac['vacid'])) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitRejoinRequest text-warning\" data-vacation-id=\"{$lastVac['vacid']}\" data-emp-id=\"{$emprow['empid']}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "</span></a>";
     }
     // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
 } else {
@@ -214,6 +214,187 @@ $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout t
         .qr-code {
             width: 130px;
             height: 130px;
+        }
+
+        /* ===== EMPLOYEE TENURE CARD ===== */
+        .employee-tenure-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            padding: 28px 36px;
+            margin: 0 auto 24px;
+            max-width: 1400px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.25);
+            position: relative;
+            overflow: hidden;
+            border: none;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .employee-tenure-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.35);
+        }
+
+        .employee-tenure-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .employee-tenure-card::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -5%;
+            width: 200px;
+            height: 200px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .tenure-content {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .tenure-icon-wrapper {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .employee-tenure-card:hover .tenure-icon-wrapper {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .tenure-icon-wrapper i {
+            font-size: 38px;
+            color: #ffffff;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .tenure-text-wrapper {
+            flex: 1;
+        }
+
+        .tenure-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tenure-title i {
+            font-size: 14px;
+        }
+
+        .tenure-message {
+            font-size: 26px;
+            font-weight: 700;
+            color: #ffffff;
+            line-height: 1.4;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            margin: 0;
+        }
+
+        .tenure-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.25);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-top: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .tenure-badge i {
+            font-size: 16px;
+        }
+
+        .tenure-close-btn {
+            position: absolute;
+            top: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 3;
+            backdrop-filter: blur(10px);
+            direction: ltr !important;
+            right: 20px !important;
+            left: auto !important;
+        }
+
+        [dir="rtl"] .tenure-close-btn {
+            right: 20px !important;
+            left: auto !important;
+        }
+
+        .tenure-close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
+        }
+
+        .tenure-close-btn i {
+            color: #ffffff;
+            font-size: 18px;
+        }
+
+        @media (max-width: 768px) {
+            .employee-tenure-card {
+                padding: 24px 20px;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .tenure-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .tenure-message {
+                font-size: 20px;
+            }
+        }
+
+        [dir="rtl"] .employee-tenure-card {
+            direction: rtl;
         }
 
         /* ===== MAIN CONTENT ===== */
@@ -1767,7 +1948,7 @@ RTL Support
                     </div>
                     <div class="stat-item">
                         <div class="stat-number"><?= number_format($emprow['salary'], 0) ?></div>
-                        <div class="stat-label"><?= __('salary') ?> (SAR)</div>
+                        <div class="stat-label"><?= __('salary') ?> (<i class="icon-saudi_riyal"></i>)</div>
                     </div>
                 </div>
 
@@ -1802,6 +1983,34 @@ RTL Support
         </div>
 
         <!-- More Actions handled by SweetAlert2 -->
+
+        <?php if ($emprow["status"] == 1 && $emprow["fly"] == 0) : ?>
+            <div class="employee-tenure-card">
+                <button type="button" class="tenure-close-btn" onclick="this.closest('.employee-tenure-card').style.display='none'">
+                    <i class="fa fa-times"></i>
+                </button>
+
+                <div class="tenure-content">
+                    <div class="tenure-icon-wrapper">
+                        <i class="fa fa-award"></i>
+                    </div>
+
+                    <div class="tenure-text-wrapper">
+                        <div class="tenure-title">
+                            <i class="fa fa-sparkles"></i>
+                            <?= __('employee_milestone', 'Employee Milestone') ?>
+                        </div>
+                        <div class="tenure-message">
+                            <?= __('happy_life_with_us') . " " . ageDOB($emprow['joining_date']) ?>
+                        </div>
+                        <div class="tenure-badge">
+                            <i class="fa fa-calendar-check"></i>
+                            <?= __('active_status', 'Active Member') ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <!-- PERSONAL INFORMATION -->
         <div style="margin-bottom: 40px;">
@@ -1912,8 +2121,24 @@ RTL Support
                         <span class="info-value"><?= translate_name($emprow['sectin_nme'] ?? null, $current_lang ?? 'en') ?></span>
                     </div>
                     <div class="info-row">
+                        <span class="info-label"><?= __('sponsorship_label') ?></span>
+                        <span class="info-value"><?= htmlspecialchars($emprow['sponsor']) ?></span>
+                    </div>
+                    <div class="info-row">
                         <span class="info-label"><?= __('contract_period_label') ?></span>
                         <span class="info-value"><?= formatPeriod($emprow["period"]) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('direct_supervisor', 'Direct Supervisor') ?></span>
+                        <span class="info-value">
+                            <?php
+                            if (!empty($emprow['supervisor_id']) && !empty($emprow['supervisor_name'])) {
+                                echo translate_name($emprow['supervisor_name'], $current_lang ?? 'en') . ' (' . htmlspecialchars($emprow['supervisor_id']) . ')';
+                            } else {
+                                echo __('not_assigned', 'Not Assigned');
+                            }
+                            ?>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -1930,11 +2155,11 @@ RTL Support
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('total_salary') ?></span>
-                        <span class="info-value"><?= number_format($emprow['salary'], 2) ?> SAR</span>
+                        <span class="info-value"><?= number_format($emprow['salary'], 2) ?> <i class="icon-saudi_riyal"></i></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('basic') ?></span>
-                        <span class="info-value"><?= number_format($emprow['basic'], 2) ?> SAR</span>
+                        <span class="info-value"><?= number_format($emprow['basic'], 2) ?> <i class="icon-saudi_riyal"></i></span>
                     </div>
                     <?php
                     // Dynamically list all additional salary components (allowances/benefits)
@@ -1954,7 +2179,7 @@ RTL Support
                         if (isset($emprow[$field]) && floatval($emprow[$field]) > 0) {
                             echo '<div class="info-row">'
                                 . '<span class="info-label">' . htmlspecialchars($label) . '</span>'
-                                . '<span class="info-value">' . number_format((float)$emprow[$field], 2) . ' SAR</span>'
+                                . '<span class="info-value">' . number_format((float)$emprow[$field], 2) . ' <i class="icon-saudi_riyal"></i></span>'
                                 . '</div>';
                         }
                     }
@@ -1963,8 +2188,8 @@ RTL Support
 
                 <div class="info-card">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: var(--danger);"><i class="fa fa-shield"></i></div>
-                        <div class="info-card-title"><?= __('gosi_label') ?></div>
+                        <div class="info-card-icon" style="background: var(--danger);"><i class="fa fa-university"></i></div>
+                        <div class="info-card-title"><?= __('banking_insurance', 'Banking & Insurance') ?></div>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('status') ?></span>
@@ -1998,16 +2223,8 @@ RTL Support
 
                 <div class="info-card">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: #6f42c1;"><i class="fa fa-car"></i></div>
-                        <div class="info-card-title"><?= __('assets') ?></div>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label"><?= __('salary_payment_type_label') ?></span>
-                        <span class="info-value"><?= ($emprow['payment_type'] == 1 ? __('bank_option') : __('cash_option')) ?></span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label"><?= __('sponsorship_label') ?></span>
-                        <span class="info-value"><?= htmlspecialchars($emprow['sponsor']) ?></span>
+                        <div class="info-card-icon" style="background: #6f42c1;"><i class="fa fa-boxes"></i></div>
+                        <div class="info-card-title"><?= __('status_assets', 'Status & Assets') ?></div>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('status') ?></span>
@@ -2018,6 +2235,10 @@ RTL Support
                                 <span style="color: var(--danger); font-weight: 600;"><?= __('inactive') ?></span>
                             <?php endif; ?>
                         </span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><?= __('salary_payment_type_label') ?></span>
+                        <span class="info-value"><?= ($emprow['payment_type'] == 1 ? __('bank_option') : __('cash_option')) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('fly_trips', 'Fly Trips') ?></span>

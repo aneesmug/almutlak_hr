@@ -321,11 +321,31 @@ if ($isEmployee !== true) {
 
 <!-- /*************************************************/ -->
 <?php if ($emprow["status"] == 1 && $emprow["fly"] == 0) : ?>
-	<div class="alert alert-info alert-dismissible bg-info text-white border-0 fade show" role="alert">
-		<button type="button" class="close" data-dismiss="alert" aria-label="Close">
-			<span aria-hidden="true">×</span>
+	<div class="employee-tenure-card">
+		
+		<button type="button" class="tenure-close-btn" onclick="this.closest('.employee-tenure-card').style.display='none'">
+			<i class="fa fa-times"></i>
 		</button>
-		<div style="color: #fff; font-size: 23px;"> <?= __('happy_life_with_us') . " " . ageDOB($emprow['joining_date']) ?></div>
+		
+		<div class="tenure-content">
+			<div class="tenure-icon-wrapper">
+				<i class="fa fa-award"></i>
+			</div>
+			
+			<div class="tenure-text-wrapper">
+				<div class="tenure-title">
+					<i class="fa fa-sparkles"></i>
+					<?= __('employee_milestone', 'Employee Milestone') ?>
+				</div>
+				<div class="tenure-message">
+					<?= __('happy_life_with_us') . " " . ageDOB($emprow['joining_date']) ?>
+				</div>
+				<div class="tenure-badge">
+					<i class="fa fa-calendar-check"></i>
+					<?= __('active_status', 'Active Member') ?>
+				</div>
+			</div>
+		</div>
 	</div>
 <?php endif; ?>
 <!-- /*************************************************/ -->

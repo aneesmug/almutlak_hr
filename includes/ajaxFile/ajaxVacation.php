@@ -3158,7 +3158,8 @@ elseif ($ajaxType == 'submitRejoinRequest') {
         $rejoin_reason = escape_string($_POST['rejoin_reason'] ?? '');
         $emp_id = (int)($_POST['emp_id'] ?? $current_user_id);
 
-        if (empty($vacation_id) || empty($rejoin_date) || empty($emp_id)) {
+        // Validation: vacation_id and emp_id are required
+        if (empty($vacation_id) || empty($emp_id)) {
             throw new Exception(__("required_fields_missing"));
         }
 
@@ -3218,6 +3219,14 @@ elseif ($ajaxType == 'submitRejoinRequest') {
 
         if (!$vacation) {
             throw new Exception(__("vacation_record_not_found"));
+        }
+
+        // Use vacation return_date if rejoin_date not provided
+        if (empty($rejoin_date)) {
+            $rejoin_date = $vacation['return_date'] ?? null;
+            if (empty($rejoin_date)) {
+                throw new Exception(__("vacation_return_date_not_found"));
+            }
         }
 
         // Create rejoin request
@@ -3381,7 +3390,8 @@ elseif ($ajaxType == 'submitRejoinRequest') {
         );
 
     } catch (Exception $e) {
-        if (isset($pdo)) {
+        // Only rollback if a transaction is active
+        if (isset($pdo) && $pdo->inTransaction()) {
             $pdo->rollBack();
         }
         send_json_response(

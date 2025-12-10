@@ -1897,93 +1897,112 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                 return;
             }
             
-            // No active request - show the submission form
+            // No active request - show the confirmation dialog
             Swal.fire({
-                title: '<i class="fa fa-redo-alt"></i> ' + __('submit_rejoin_request'),
+                icon: 'question',
+                title: '<i class="fa fa-redo-alt"></i> ' + __('rejoin_request'),
                 html: `
-                    <form id="rejoinRequestForm" class="text-left">
-                        <div class="form-group">
-                            <label for="rejoin_date">${__('requested_rejoin_date')}<span class="text-danger"> *</span></label>
-                            <input type="text" id="rejoin_date" name="rejoin_date" class="form-control datepicker" required>
+                    <div style="text-align: left; padding: 20px 0;">
+                        <p style="font-size: 16px; margin-bottom: 15px;">
+                            ${__('are_you_sure_rejoin')}
+                        </p>
+                        <div style="background-color: #e8f4f8; border-left: 4px solid #17a2b8; padding: 12px; border-radius: 4px;">
+                            <p style="margin: 0; color: #555;">
+                                <strong>${__('this_action_will_submit_rejoin_request')}</strong>
+                            </p>
                         </div>
-                        <div class="form-group">
-                            <label for="rejoin_reason">${__('reason')}</label>
-                            <textarea id="rejoin_reason" name="rejoin_reason" class="form-control" rows="3" placeholder="${__('enter_reason_placeholder')}"></textarea>
-                        </div>
-                    </form>
+                    </div>
                 `,
-                width: '500px',
+                width: '450px',
                 showCancelButton: true,
-                confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit'),
+                confirmButtonText: '<i class="fa fa-check"></i> ' + __('confirm'),
                 cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
                 allowOutsideClick: false,
                 showLoaderOnConfirm: true,
-                willOpen: () => {
-                    // Initialize date picker
-                    $('#rejoin_date').datepicker({
-                        format: "yyyy-mm-dd",
-                        todayHighlight: true,
-                        autoclose: true,
-                        startDate: '+0d'
-                    });
-                },
                 preConfirm: () => {
-                    const rejoinDate = $('#rejoin_date').val();
-                    const rejoinReason = $('#rejoin_reason').val();
-                    
-                    if (!rejoinDate) {
-                        Swal.showValidationMessage(__('rejoin_date_required'));
-                        return false;
-                    }
-                    
-                    return { rejoinDate, rejoinReason };
+                    return { rejoinDate: null, rejoinReason: '' };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Submit rejoin request via AJAX
-                    $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
-                        type: 'POST',
-                        dataType: 'json',
-                        data: {
-                            ajaxType: 'submitRejoinRequest',
-                            vacation_id: vacationId,
-                            emp_id: empId,
-                            rejoin_date: result.value.rejoinDate,
-                            rejoin_reason: result.value.rejoinReason
-                        },
-                        success: function(response) {
-                            if (response.type === 'success') {
-                                // Success response
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: response.title || __('success'),
-                                    text: response.message,
-                                    confirmButtonText: __('ok'),
-                                    allowOutsideClick: false
-                                }).then(() => {
-                                    location.reload();
-                                });
-                            } else {
-                                // Error response
-                                Swal.fire({
-                                    icon: response.type || 'error',
-                                    title: response.title || __('error'),
-                                    text: response.message,
-                                    confirmButtonText: __('ok'),
-                                    allowOutsideClick: false
-                                });
-                            }
-                        },
-                        error: function(jqXHR, textStatus, errorThrown) {
-                            Swal.fire({
-                                icon: 'error',
-                                title: __('error'),
-                                text: __('request_failed_please_try_again'),
-                                confirmButtonText: __('ok'),
-                                allowOutsideClick: false
+                    // Show loading dialog while sending email
+                    Swal.fire({
+                        title: __('sending_request'),
+                        html: `
+                            <div style="text-align: center; padding: 30px 0;">
+                                <div style="margin-bottom: 20px;">
+                                    <i class="fa fa-envelope" style="font-size: 48px; color: #4e73df; animation: pulse 1.5s infinite;"></i>
+                                </div>
+                                <p style="font-size: 16px; color: #555; margin-bottom: 10px;">
+                                    ${__('sending_email_to_supervisor')}
+                                </p>
+                                <div style="position: relative; width: 200px; height: 4px; background: #e9ecef; border-radius: 2px; margin: 20px auto; overflow: hidden;">
+                                    <div style="position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: linear-gradient(90deg, #4e73df, #224abe); animation: slideLoader 1.5s infinite;"></div>
+                                </div>
+                                <small style="color: #858796; display: block; margin-top: 15px;">
+                                    ${__('please_wait')}
+                                </small>
+                            </div>
+                            <style>
+                                @keyframes pulse {
+                                    0%, 100% { opacity: 1; }
+                                    50% { opacity: 0.5; }
+                                }
+                                @keyframes slideLoader {
+                                    0% { transform: translateX(-100%); }
+                                    100% { transform: translateX(100%); }
+                                }
+                            </style>
+                        `,
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                        didOpen: () => {
+                            // Submit rejoin request via AJAX (without date field)
+                            $.ajax({
+                                url: './includes/ajaxFile/ajaxVacation.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: {
+                                    ajaxType: 'submitRejoinRequest',
+                                    vacation_id: vacationId,
+                                    emp_id: empId,
+                                    rejoin_date: null,
+                                    rejoin_reason: ''
+                                },
+                                success: function(response) {
+                                    if (response.type === 'success') {
+                                        // Success response
+                                        Swal.fire({
+                                            icon: 'success',
+                                            title: response.title || __('success'),
+                                            text: response.message,
+                                            confirmButtonText: __('ok'),
+                                            allowOutsideClick: false
+                                        }).then(() => {
+                                            location.reload();
+                                        });
+                                    } else {
+                                        // Error response
+                                        Swal.fire({
+                                            icon: response.type || 'error',
+                                            title: response.title || __('error'),
+                                            text: response.message,
+                                            confirmButtonText: __('ok'),
+                                            allowOutsideClick: false
+                                        });
+                                    }
+                                },
+                                error: function(jqXHR, textStatus, errorThrown) {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: __('error'),
+                                        text: __('request_failed_please_try_again'),
+                                        confirmButtonText: __('ok'),
+                                        allowOutsideClick: false
+                                    });
+                                }
                             });
                         }
                     });

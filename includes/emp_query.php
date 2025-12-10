@@ -2,11 +2,13 @@
 /*******************************************************************************************************************
  * MODIFICATION SUMMARY (015-emp_query.php):
  *
- * 1. ENHANCED `lastVacIdGet` FUNCTION: Modified the `lastVacIdGet` function to also select the `start_date` of the last completed vacation. This provides the necessary data to the front-end to correctly configure the date picker for recording an employee's return, allowing for early returns to be processed.
+ * 1. ENHANCED `lastVacIdGet` FUNCTION: Modified the `lastVacIdGet` function to fetch the last approved vacation (review='A') 
+ *    regardless of current_status. This ensures consistency with the main query logic and allows the rejoin system to work 
+ *    with vacations in 'approved' status, not just 'completed' status.
  * 2. CHAIN APPROVAL UPDATE:
  * - Changed `approved_vacations`.`approval_status` to `approved_vacations`.`current_status` to match new DB schema.
  * - Changed `approved_vacations` subquery from `SELECT *` to explicitly select columns (`id`, `emp_id`, `review`, `current_status`) to avoid errors from deleted columns.
- *******************************************************************************************************************/
+ ********************************************************************************************************************/
 
 	$empidget = (isset($_GET['emp_id'])? $_GET['emp_id'] : $_SESSION['empid']);
 
@@ -76,6 +78,10 @@
 		`emp_eos`.`leaving_reason`,
 		`emp_eos`.`leaving_reason_ar`,
 		`emp_eos`.`end_date`,
+		`employees`.`supervisor_id`,
+		`supervisor`.`name` AS `supervisor_name`,
+		`supervisor`.`emp_id` AS `supervisor_emp_id`,
+		`supervisor`.`emptype` AS `supervisor_emptype`,
         (SELECT 1 FROM emp_loan WHERE emp_id = `employees`.`emp_id` AND loan_type = 'regular' AND status IN ('dept_manager_pending', 'hr_manager_pending', 'finance_manager_pending', 'gm_pending', 'finance_assistant_pending', 'approved') LIMIT 1) AS has_active_regular_loan,
         (SELECT 1 FROM emp_loan WHERE emp_id = `employees`.`emp_id` AND loan_type = 'emergency' AND status IN ('dept_manager_pending', 'hr_manager_pending', 'finance_manager_pending', 'gm_pending', 'finance_assistant_pending', 'approved') LIMIT 1) AS has_active_emergency_loan,
 		`vacation_balance`.`total_days`,
@@ -101,6 +107,7 @@
 	LEFT JOIN `admin_login` ON `admin_login`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `employees`.`emp_sup_type`
 	LEFT JOIN `emp_eos` ON `emp_eos`.`emp_id` = `employees`.`emp_id`
+	LEFT JOIN `employees` AS `supervisor` ON `supervisor`.`emp_id` = `employees`.`supervisor_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `flystus` FROM `emp_vacation` WHERE `note`='Fly' GROUP BY `emp_id`) AS `fly_status` ON `fly_status`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `encashstus` FROM `emp_vacation` WHERE `note`='Encashed' GROUP BY `emp_id`) AS `encashed_status` ON `encashed_status`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `docu` FROM `emp_docu` GROUP BY `emp_id`) AS `doc_count` ON `doc_count`.`emp_id` = `employees`.`emp_id`
@@ -159,7 +166,7 @@
 			`id` AS `vacid`,
 			`return_date` AS `returndate`
 			FROM `emp_vacation`
-			WHERE `emp_id` = {$empidget} AND `current_status` = 'completed' AND `review` = 'A'
+			WHERE `emp_id` = {$empidget} AND `current_status` IN  ('approved','completed') AND `review` = 'A'
 			ORDER BY `id` DESC 
 			LIMIT 1";
 		$result = mysqli_query($conDB, $query);

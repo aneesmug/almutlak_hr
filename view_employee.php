@@ -242,6 +242,39 @@ if (mysqli_num_rows($query) == 1) {
 				transform: scale(1.005);
 				cursor: pointer;
 			}
+			
+			/* Tilebox styling with colored left border */
+			.card-box.tilebox-one {
+				position: relative;
+				border-left: 4px solid #e9ecef;
+				transition: all 0.3s ease-in-out;
+			}
+			
+			.card-box.tilebox-one:hover {
+				box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+				transform: translateY(-2px);
+			}
+			
+			/* Border colors matching icon colors */
+			.card-box.tilebox-one:has(.duotone-success) {
+				border-left-color: var(--success);
+			}
+			
+			.card-box.tilebox-one:has(.duotone-info) {
+				border-left-color: var(--primary);
+			}
+			
+			.card-box.tilebox-one:has(.duotone-danger) {
+				border-left-color: var(--danger);
+			}
+			
+			.card-box.tilebox-one:has(.duotone-dark) {
+				border-left-color: var(--dark);
+			}
+			
+			.card-box.tilebox-one:has(.duotone-secondary) {
+				border-left-color: var(--secondary);
+			}
 			/* More Actions Modal - Professional Tab Design */
 			.more-actions-modal .swal2-popup {
 				border-radius: 10px;

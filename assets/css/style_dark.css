@@ -5894,7 +5894,7 @@ File Manager
     height: 400px;
     margin-top: 20px;
   }
-  
+
   .documents-list-container {
     max-height: 300px;
   }
@@ -6154,15 +6154,16 @@ File Manager
     grid-template-columns: 1fr;
     gap: 12px;
   }
-  
+
   .document-card {
     padding: 12px;
   }
-  
+
   .document-actions {
     flex-direction: column;
   }
 }
+
 .file-man-box {
   padding: 20px;
   border: 1px solid #e3eaef;
@@ -7214,52 +7215,60 @@ input[name^="idiscount"]:read-only {
 
 /* Custom styles for the SweetAlert modal to ensure it looks clean */
 .swal2-html-container {
-    text-align: left !important;
-    margin: 1em 1em 0 !important;
+  text-align: left !important;
+  margin: 1em 1em 0 !important;
 }
+
 .swal-form-group {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
+
 .swal-form-group label {
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  display: block;
 }
+
 .swal-form-group input,
 .swal-form-group textarea,
 .swal-form-group select {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.375rem;
-    transition: border-color 0.2s;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  transition: border-color 0.2s;
 }
+
 .swal-form-group input:focus,
 .swal-form-group textarea:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
 }
+
 .swal-radio-group {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
 }
+
 .swal-radio-group label {
-    display: block;
-    padding: 0.75rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s;
+  display: block;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
 }
+
 .swal-radio-group input[type="radio"] {
-    display: none;
+  display: none;
 }
-.swal-radio-group input[type="radio"]:checked + label {
-    background-color: #dbeafe;
-    border-color: #3b82f6;
-    color: #1e40af;
+
+.swal-radio-group input[type="radio"]:checked+label {
+  background-color: #dbeafe;
+  border-color: #3b82f6;
+  color: #1e40af;
 }
 
 .card-employee {
@@ -7267,31 +7276,44 @@ input[name^="idiscount"]:read-only {
   transition: all 0.3s ease-in-out;
   border-radius: .25rem;
 }
+
 .card-employee:hover {
   transform: translateY(-5px);
-  box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15)!important;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, .15) !important;
 }
-.card-employee.status-active { border-top-color: #28a745; }
-.card-employee.status-fly { border-top-color: #ffc107; }
-.card-employee.status-inactive { border-top-color: #dc3545; }
+
+.card-employee.status-active {
+  border-top-color: #28a745;
+}
+
+.card-employee.status-fly {
+  border-top-color: #ffc107;
+}
+
+.card-employee.status-inactive {
+  border-top-color: #dc3545;
+}
 
 .card-employee.status-inactive .card-body {
   opacity: 0.75;
 }
+
 .card-employee.status-inactive .emp-avatar {
   filter: grayscale(100%);
 }
+
 .card-actions {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
   z-index: 10;
 }
+
 .emp-avatar {
-    width: 90px;
-    height: 90px;
-    object-fit: cover;
-    border: 4px solid #e9ecef;
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border: 4px solid #e9ecef;
 }
 
 /* .card-employee {
@@ -7370,3 +7392,173 @@ input[name^="idiscount"]:read-only {
 .card-actions .btn.btn-danger:hover {
   background-color: #dc3545;
 } */
+/* Employee Tenure Card Styles */
+.employee-tenure-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 28px 36px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.25);
+  position: relative;
+  overflow: hidden;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.employee-tenure-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 15px 40px rgba(102, 126, 234, 0.35);
+}
+
+.employee-tenure-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 300px;
+  height: 300px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.employee-tenure-card::after {
+  content: '';
+  position: absolute;
+  bottom: -30%;
+  left: -5%;
+  width: 200px;
+  height: 200px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.tenure-content {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  position: relative;
+  z-index: 2;
+}
+
+.tenure-icon-wrapper {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.employee-tenure-card:hover .tenure-icon-wrapper {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.tenure-icon-wrapper i {
+  font-size: 38px;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.tenure-text-wrapper {
+  flex: 1;
+}
+
+.tenure-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tenure-title i {
+  font-size: 14px;
+}
+
+.tenure-message {
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.4;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  margin: 0;
+}
+
+.tenure-close-btn {
+  position: absolute;
+  top: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 3;
+  backdrop-filter: blur(10px);
+  direction: ltr !important;
+  right: 20px !important;
+  left: auto !important;
+}
+
+[dir="rtl"] .tenure-close-btn {
+  right: 20px !important;
+  left: auto !important;
+}
+
+.tenure-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
+}
+
+.tenure-close-btn i {
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.tenure-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.tenure-badge i {
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .tenure-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .tenure-message {
+    font-size: 20px;
+  }
+
+  .employee-tenure-card {
+    padding: 24px 20px;
+  }
+}
