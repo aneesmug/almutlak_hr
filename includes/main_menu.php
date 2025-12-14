@@ -571,5 +571,6 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             </ul>
         </li>
         <?php endif; ?>
+        <li><a href="javascript:void(0);" onclick="window.location.href='./downloadFile.php?file=MTLK-ITEC-EQPR-FORM-001 IT Equipment Request Form.pdf'"><i class="fa fa-book-open-lines"></i><span><?=__('system_guide') ?></span></a></li>
     </ul>
 </div>

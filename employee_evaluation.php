@@ -153,7 +153,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
         
         $pdo->commit();
         
-        $success_message = 'Evaluation submitted successfully! Total Score: ' . $total_score . '/100';
+        // $success_message = 'Evaluation submitted successfully! Total Score: ' . $total_score . '/100';
+        // salert(__('added_successfully'), sprintf(__('evaluation_submitted_successfully_total_score'), $total_score), $type = 'success', $redirectUrl = "", $btn = 'OK');
+
+        $_SESSION['swal_alert'] = [
+            'title' => __("success"),
+            'message' => sprintf(__('evaluation_submitted_successfully_total_score'), $total_score),
+            'type' => 'success'
+        ];
         
         // Clear form by redirecting to avoid resubmission
         header("Location: employee_evaluation.php?success=1&score=" . $total_score);
@@ -209,6 +216,7 @@ try {
 }
 
 ?>
+
 <!DOCTYPE html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
@@ -286,11 +294,7 @@ try {
                     <div class="row">
                         <div class="col-12">
                             <div class="page-title-box">
-                                <h4 class="page-title">Employee Performance Evaluation</h4>
-                                <ol class="breadcrumb p-0 m-0">
-                                    <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
-                                    <li class="breadcrumb-item active">Employee Evaluation</li>
-                                </ol>
+                                <h4 class="page-title"><?=__('employee_performance_evaluation') ?></h4>
                             </div>
                         </div>
                     </div>
@@ -303,7 +307,7 @@ try {
                                 <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                                     <span aria-hidden="true">&times;</span>
                                 </button>
-                                <strong>Success!</strong> <?php echo htmlspecialchars($success_message); ?>
+                                <strong><?=__('success') ?>!</strong> <?=htmlspecialchars($success_message); ?>
                             </div>
                         </div>
                     </div>
@@ -316,7 +320,7 @@ try {
                                 <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                                     <span aria-hidden="true">&times;</span>
                                 </button>
-                                <strong>Error!</strong> <?php echo htmlspecialchars($error_message); ?>
+                                <strong><?=__('error') ?>!</strong> <?=htmlspecialchars($error_message); ?>
                             </div>
                         </div>
                     </div>
@@ -327,7 +331,7 @@ try {
                         <div class="col-12">
                             <div class="card">
                                 <div class="card-body">
-                                    <h4 class="header-title mb-4">New Employee Evaluation</h4>
+                                    <h4 class="header-title mb-4"><?=__('new_employee_evaluation') ?></h4>
                                     
                                     <form method="POST" action="" id="evaluationForm">
                                         
@@ -335,21 +339,21 @@ try {
                                         <div class="row mb-4">
                                             <div class="col-md-3">
                                                 <div class="form-group">
-                                                    <label for="dept_name">Department <span class="text-danger">*</span></label>
-                                                    <input type="text" class="form-control" id="dept_name" value="<?php echo htmlspecialchars($dept_name); ?>" readonly>
+                                                    <label for="dept_name"><?=__('department') ?> <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control" id="dept_name" value="<?=($dept_name); ?>" readonly>
                                                 </div>
                                             </div>
                                             
                                             <div class="col-md-3">
                                                 <div class="form-group">
-                                                    <label for="employee_emp_id">Select Employee <span class="text-danger">*</span></label>
+                                                    <label for="employee_emp_id"><?=__('select_employee') ?> <span class="text-danger">*</span></label>
                                                     <select class="form-control select2" id="employee_emp_id" name="employee_emp_id" required>
-                                                        <option value="">-- Select Employee --</option>
+                                                        <option value="">-- <?=__('select_employee') ?> --</option>
                                                         <?php foreach ($dept_employees as $emp): ?>
-                                                            <option value="<?php echo htmlspecialchars($emp['emp_id']); ?>" 
-                                                                    data-position="<?php echo htmlspecialchars($emp['job'] ?? 'N/A'); ?>"
-                                                                    data-name="<?php echo htmlspecialchars($emp['name']); ?>">
-                                                                <?php echo htmlspecialchars($emp['name']); ?>
+                                                            <option value="<?=($emp['emp_id']); ?>" 
+                                                                    data-position="<?=($emp['job'] ?? 'N/A'); ?>"
+                                                                    data-name="<?=($emp['name']); ?>">
+                                                                <?=translate_name($emp['name']); ?>
                                                             </option>
                                                         <?php endforeach; ?>
                                                     </select>
@@ -358,14 +362,14 @@ try {
                                             
                                             <div class="col-md-3">
                                                 <div class="form-group">
-                                                    <label for="employee_name">Employee Name</label>
+                                                    <label for="employee_name"><?=__('employee_name') ?></label>
                                                     <input type="text" class="form-control" id="employee_name" readonly>
                                                 </div>
                                             </div>
 
                                             <div class="col-md-3">
                                                 <div class="form-group">
-                                                    <label for="employee_position">Current Position</label>
+                                                    <label for="employee_position"><?=__('employee_position') ?></label>
                                                     <input type="text" class="form-control" id="employee_position" readonly>
                                                 </div>
                                             </div>
@@ -375,15 +379,15 @@ try {
                                         <hr>
 
                                         <!-- Evaluation Criteria -->
-                                        <h5 class="mb-3">Evaluation Criteria (1-10 Scale)</h5>
+                                        <h5 class="mb-3"><?=__('evaluation_criteria_scale') ?></h5>
                                         <div class="table-responsive">
                                             <table class="table table-bordered table-striped">
                                                 <thead class="thead-light">
                                                     <tr>
                                                         <th width="5%">#</th>
-                                                        <th width="50%">Criteria (English / Arabic)</th>
-                                                        <th width="30%">Score (1-10)</th>
-                                                        <th width="15%">Default</th>
+                                                        <th width="50%"><?=__('criteria_english_arabic') ?></th>
+                                                        <th width="30%"><?=__('score_1_10') ?></th>
+                                                        <th width="15%"><?=__('default') ?></th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -554,8 +558,8 @@ try {
                                         <div class="row mt-4">
                                             <div class="col-md-12">
                                                 <div class="form-group">
-                                                    <label for="observation">Remarks / Observations (ملاحظات)</label>
-                                                    <textarea class="form-control" id="observation" name="observation" rows="4" placeholder="Enter any additional remarks or observations about the employee's performance..."></textarea>
+                                                    <label for="observation"><?=__('remarks_observations') ?></label>
+                                                    <textarea class="form-control" id="observation" name="observation" rows="4" placeholder="<?=__('enter_any_additional_remarks_or_observations_about_the_employees_performance') ?>"></textarea>
                                                 </div>
                                             </div>
                                         </div>
@@ -577,10 +581,10 @@ try {
                                         <div class="row mt-4">
                                             <div class="col-md-12">
                                                 <button type="submit" name="submit_evaluation" class="btn btn-primary btn-lg">
-                                                    <i class="fa fa-check"></i> Submit Evaluation
+                                                    <i class="fa fa-check"></i> <?=__('submit_evaluation') ?>
                                                 </button>
                                                 <a href="dashboard.php" class="btn btn-secondary btn-lg ml-2">
-                                                    <i class="fa fa-times"></i> Cancel
+                                                    <i class="fa fa-times"></i> <?=__('cancel') ?>
                                                 </a>
                                             </div>
                                         </div>
@@ -754,7 +758,29 @@ try {
 
         // Initial calculation
         calculateTotalScore();
+        
+        // Check for SweetAlert message from session (after page load)
+        <?php if (isset($_SESSION['swal_alert'])): ?>
+        // Wait for SweetAlert2 to be loaded
+        setTimeout(function() {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: '<?= addslashes($_SESSION['swal_alert']['title']) ?>',
+                    text: '<?= addslashes($_SESSION['swal_alert']['message']) ?>',
+                    icon: '<?= $_SESSION['swal_alert']['type'] ?>',
+                    confirmButtonText: '<?= __("ok") ?>',
+                    customClass: {
+                        confirmButton: 'btn btn-primary'
+                    },
+                    buttonsStyling: false,
+                    allowOutsideClick: false
+                });
+            }
+        }, 500);
+        <?php unset($_SESSION['swal_alert']); ?>
+        <?php endif; ?>
     });
+
     </script>
 
 </body>

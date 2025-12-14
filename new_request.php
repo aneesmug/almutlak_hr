@@ -8,13 +8,18 @@ MODIFICATION SUMMARY:
     require_once __DIR__ . '/includes/db.php';
     require_once __DIR__ . '/includes/session_check.php';
     include("./includes/convertNumbersToWords.php");
+    require_once __DIR__ . '/includes/validate_supervisor.php';
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
         if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
     }
 if(isset($_POST['submit'])){
 
-    if(
+    // Validate supervisor is assigned before processing request
+    $supervisor_validation = validate_employee_supervisor($conDB, $empid);
+    if (!$supervisor_validation['valid']) {
+        $msg = '<div class="alert alert-danger bg-danger text-white border-0" role="alert">' . $supervisor_validation['message'] . '</div>';
+    } else if(
        !empty($_POST['item_name']) && !empty($_POST['quantity']) && !empty($_POST['product_price']) 
     ){
             $inv_no_po = $_POST['inv_no'];

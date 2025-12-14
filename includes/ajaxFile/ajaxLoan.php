@@ -23,6 +23,7 @@
 
 require_once __DIR__ . '/../../includes/db.php';
 include("./../../includes/helper_functions.php"); // --- Helper Function (REQUIRED for notifications) ---
+include("./../../includes/validate_supervisor.php"); // --- Supervisor Validation ---
 
 header('Content-Type: application/json');
 // Ensure session and capture current submitter id
@@ -597,6 +598,13 @@ function apply_for_loan() {
 
     // Sanitize and validate inputs
     $emp_id = mysqli_real_escape_string($conDB, $_POST['emp_id']);
+    
+    // Validate supervisor assignment FIRST
+    $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
+    if (!$supervisor_check['valid']) {
+        send_supervisor_validation_error($supervisor_check['message']);
+    }
+    
     $loan_amount = filter_var($_POST['loan_amount'], FILTER_VALIDATE_FLOAT);
     $loan_type = mysqli_real_escape_string($conDB, $_POST['loan_type']); // end_of_service, housing, advance_salary
 
@@ -878,6 +886,46 @@ function apply_for_loan() {
             }
             // --- [END NEW] ---
         }
+
+        // --- [NEW] Notify direct supervisor immediately on submission ---
+        // We already validated supervisor at the top; reuse or re-fetch to be safe
+        try {
+            $sup_check = validate_employee_supervisor($conDB, $emp_id);
+            if ($sup_check['valid'] && !empty($sup_check['supervisor_id'])) {
+                $supervisor_id = $sup_check['supervisor_id'];
+                if (function_exists('getEmployeeDetailsForApproval')) {
+                    $sup_details = getEmployeeDetailsForApproval($conDB, $supervisor_id);
+                    if ($sup_details && !empty($sup_details['email'])) {
+                        // Build email template data
+                        $employee_name = 'Employee';
+                        $emp_result2 = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$emp_id' LIMIT 1");
+                        if ($emp_result2 && $emp_row2 = mysqli_fetch_assoc($emp_result2)) {
+                            $employee_name = $emp_row2['name'];
+                        }
+                        if ($emp_result2) mysqli_free_result($emp_result2);
+
+                        $base_url = (function_exists('get_base_url') ? get_base_url() : (((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST']));
+                        $template_data_sup = [
+                            'APPROVER_NAME' => $sup_details['name'],
+                            'REQUEST_ID' => $inv_no,
+                            'EMPLOYEE_NAME' => $employee_name,
+                            'LOAN_TYPE' => str_replace('_', ' ', $loan_type),
+                            'LOAN_AMOUNT' => number_format($loan_amount, 2),
+                            'INSTALLMENTS' => $installments,
+                            'REQUEST_URL' => $base_url . '/all_applied_loan.php?status=my_pending',
+                            'EMAIL_MESSAGE' => 'A new loan request from your direct report is submitted and pending in the approval chain.'
+                        ];
+                        $email_subject_sup = 'New Loan Request by Your Direct Report - ' . ucfirst(str_replace('_', ' ', $loan_type)) . ' (' . $inv_no . ')';
+                        // Use the same templating function; request_type 'loan_request'
+                        send_approval_email($conDB, $sup_details['email'], $sup_details['name'], $email_subject_sup, 'loan_request', $template_data_sup);
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            // Don't fail the submission if email fails; just log
+            error_log('Supervisor email notify error for loan ' . $inv_no . ': ' . $e->getMessage());
+        }
+        // --- [END NEW] ---
         
         echo json_encode(['status' => 'success', 'title' => 'Success', 'message' => 'Your loan application has been submitted successfully.', 'type' => 'success']);
     } else {
@@ -2366,6 +2414,120 @@ function add_monthly_installment_deduction($conDB, $emp_id, $inv_no, $monthly_am
     } catch (Exception $e) {
         return ['success' => false, 'message' => 'Exception in installments: ' . $e->getMessage()];
     }
+}
+
+/**
+ * Record payroll-applied loan deductions as payments in emp_loan_payments for a given month.
+ * Call this during payroll generation after deductions are applied.
+ *
+ * @param mysqli $conDB Database connection
+ * @param string $month Month string in 'Y-m' format (e.g., '2025-12')
+ * @return array ['success' => bool, 'message' => string, 'count' => int]
+ */
+function record_monthly_loan_payments($conDB, $month) {
+    try {
+        // Find all payroll deductions for the given month that correspond to loans
+        // Expected deduction formats:
+        //  - "End of Service Loan - <INV_NO>"
+        //  - "Housing Loan - <INV_NO>"
+        //  - "Advance Salary Deduction - <INV_NO>"
+        $like_loan = '%LN-%';
+        $like_adv  = 'Advance Salary Deduction - %';
+
+        $stmt = $conDB->prepare(
+            "SELECT id, emp_id, deduction, note FROM payroll_deductions 
+             WHERE month = ? AND status = 1 AND (deduction LIKE ? OR deduction LIKE ?)"
+        );
+        $stmt->bind_param("sss", $month, $like_loan, $like_adv);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $count = 0;
+        $payment_date = $month . '-01';
+
+        while ($row = $result->fetch_assoc()) {
+            $emp_id = $row['emp_id'];
+            $deduction = $row['deduction'];
+            $amount_str = $row['note'];
+            $amount = floatval($amount_str);
+
+            // Extract inv_no: split by ' - ' and take last segment
+            $parts = explode(' - ', $deduction);
+            $inv_no = trim(end($parts));
+            if (empty($inv_no)) {
+                // Could not parse an LN- invoice number; skip
+                continue;
+            }
+
+            // Resolve loan_id by inv_no
+            $stmt_loan = $conDB->prepare("SELECT id FROM emp_loan WHERE inv_no = ? AND emp_id = ? LIMIT 1");
+            $stmt_loan->bind_param("ss", $inv_no, $emp_id);
+            $stmt_loan->execute();
+            $loan_row = $stmt_loan->get_result()->fetch_assoc();
+            $stmt_loan->close();
+
+            if (!$loan_row) {
+                // No matching loan; skip
+                continue;
+            }
+
+            $loan_id = intval($loan_row['id']);
+
+            // Check if a payroll payment for this loan and month already exists to avoid duplicates
+            $stmt_exists = $conDB->prepare(
+                "SELECT id FROM emp_loan_payments WHERE loan_id = ? AND payment_method = 'payroll' AND DATE_FORMAT(payment_date, '%Y-%m') = ? LIMIT 1"
+            );
+            $stmt_exists->bind_param("is", $loan_id, $month);
+            $stmt_exists->execute();
+            $exists = $stmt_exists->get_result()->fetch_assoc();
+            $stmt_exists->close();
+
+            if ($exists) {
+                continue; // Already recorded
+            }
+
+            // Insert payment record
+            $stmt_pay = $conDB->prepare(
+                "INSERT INTO emp_loan_payments (loan_id, payment_date, amount, receipt_id, attachment, payment_method) 
+                 VALUES (?, ?, ?, NULL, NULL, 'payroll')"
+            );
+            $stmt_pay->bind_param("isd", $loan_id, $payment_date, $amount);
+            if ($stmt_pay->execute()) {
+                $count++;
+            }
+            $stmt_pay->close();
+        }
+
+        $stmt->close();
+
+        return [
+            'success' => true,
+            'message' => "Recorded {$count} payroll loan payments for {$month}",
+            'count' => $count
+        ];
+    } catch (Exception $e) {
+        return [
+            'success' => false,
+            'message' => 'Exception while recording payroll loan payments: ' . $e->getMessage(),
+            'count' => 0
+        ];
+    }
+}
+
+// Lightweight AJAX handler to record payroll loan payments for a given month
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'recordPayrollLoanPayments') {
+    $month = $_POST['month'] ?? date('Y-m');
+    $month = preg_match('/^\d{4}-\d{2}$/', $month) ? $month : date('Y-m');
+    $result = record_monthly_loan_payments($conDB, $month);
+    echo json_encode([
+        'status' => $result['success'] ? 'success' : 'error',
+        'title' => $result['success'] ? 'Recorded' : 'Error',
+        'message' => $result['message'],
+        'count' => $result['count']
+    ]);
+    // Prevent falling through to other handlers in this file
+    if (isset($conDB)) { $conDB->close(); }
+    return;
 }
 
 if (isset($conDB)) {

@@ -74,26 +74,40 @@ if (!function_exists('timeAgo')) {
         $months     = round($time_elapsed / 2600640);
         $years      = round($time_elapsed / 31207680);
         // Seconds
-        if ($seconds <= 60) { return "just now"; }
+        if ($seconds <= 60) {
+            return "just now";
+        }
         //Minutes
-        else if ($minutes <= 60) { return ($minutes == 1) ? "one minute ago" : "$minutes minutes ago"; }
+        else if ($minutes <= 60) {
+            return ($minutes == 1) ? "one minute ago" : "$minutes minutes ago";
+        }
         //Hours
-        else if ($hours <= 24) { return ($hours == 1) ? "an hour ago" : "$hours hrs ago"; }
+        else if ($hours <= 24) {
+            return ($hours == 1) ? "an hour ago" : "$hours hrs ago";
+        }
         //Days
-        else if ($days <= 7) { return ($days == 1) ? "yesterday" : "$days days ago"; }
+        else if ($days <= 7) {
+            return ($days == 1) ? "yesterday" : "$days days ago";
+        }
         //Weeks
-        else if ($weeks <= 4.3) { return ($weeks == 1) ? "a week ago" : "$weeks weeks ago"; }
+        else if ($weeks <= 4.3) {
+            return ($weeks == 1) ? "a week ago" : "$weeks weeks ago";
+        }
         //Months
-        else if ($months <= 12) { return ($months == 1) ? "a month ago" : "$months months ago"; }
+        else if ($months <= 12) {
+            return ($months == 1) ? "a month ago" : "$months months ago";
+        }
         //Years
-        else { return ($years == 1) ? "one year ago" : "$years years ago"; }
+        else {
+            return ($years == 1) ? "one year ago" : "$years years ago";
+        }
     }
 }
 if (!function_exists('timeAgoAr')) {
     function timeAgoAr($time_ago)
     {
         $time_ago = strtotime($time_ago);
-         if ($time_ago === false) return "تاريخ غير صالح"; // Handle invalid date input
+        if ($time_ago === false) return "تاريخ غير صالح"; // Handle invalid date input
         $cur_time   = time();
         $time_elapsed   = $cur_time - $time_ago;
         $seconds    = $time_elapsed;
@@ -104,19 +118,33 @@ if (!function_exists('timeAgoAr')) {
         $months     = round($time_elapsed / 2600640);
         $years      = round($time_elapsed / 31207680);
         // Seconds
-        if ($seconds <= 60) { return "الآن"; }
+        if ($seconds <= 60) {
+            return "الآن";
+        }
         //Minutes
-        else if ($minutes <= 60) { return ($minutes == 1) ? "قبل دقيقة واحدة" : "$minutes دقائق مضت"; }
+        else if ($minutes <= 60) {
+            return ($minutes == 1) ? "قبل دقيقة واحدة" : "$minutes دقائق مضت";
+        }
         //Hours
-        else if ($hours <= 24) { return ($hours == 1) ? "قبل ساعة" : "$hours قبل ساعات"; }
+        else if ($hours <= 24) {
+            return ($hours == 1) ? "قبل ساعة" : "$hours قبل ساعات";
+        }
         //Days
-        else if ($days <= 7) { return ($days == 1) ? "أمس" : "$days قبل أيام"; }
+        else if ($days <= 7) {
+            return ($days == 1) ? "أمس" : "$days قبل أيام";
+        }
         //Weeks
-        else if ($weeks <= 4.3) { return ($weeks == 1) ? "قبل أسبوع" : "$weeks قبل أسابيع"; }
+        else if ($weeks <= 4.3) {
+            return ($weeks == 1) ? "قبل أسبوع" : "$weeks قبل أسابيع";
+        }
         //Months
-        else if ($months <= 12) { return ($months == 1) ? "قبل شهر" : "$months قبل شهور"; }
+        else if ($months <= 12) {
+            return ($months == 1) ? "قبل شهر" : "$months قبل شهور";
+        }
         //Years
-        else { return ($years == 1) ? "قبل عام" : "$years منذ سنوات"; }
+        else {
+            return ($years == 1) ? "قبل عام" : "$years منذ سنوات";
+        }
     }
 }
 
@@ -156,18 +184,18 @@ if (!function_exists('number_pad')) {
 // --- Date & Time Utilities ---
 if (!function_exists('dateDiffDays')) {
     function dateDiffDays($startDate, $endDate)
-{
-    try {
-        $date1 = new DateTime($startDate);
-        $date2 = new DateTime($endDate);
-        $diff = $date1->diff($date2);
-        // Return a formatted string or the DateInterval object
-        // return $diff->format('%y years, %m months, %d days'); // Example format
-        return $diff->days; // Just total days
-    } catch (Exception $e) {
-        return "Error calculating difference";
+    {
+        try {
+            $date1 = new DateTime($startDate);
+            $date2 = new DateTime($endDate);
+            $diff = $date1->diff($date2);
+            // Return a formatted string or the DateInterval object
+            // return $diff->format('%y years, %m months, %d days'); // Example format
+            return $diff->days; // Just total days
+        } catch (Exception $e) {
+            return "Error calculating difference";
+        }
     }
-}
 }
 
 if (!function_exists('getTotalDays')) {
@@ -183,49 +211,49 @@ if (!function_exists('getTotalDays')) {
 // --- Financial Calculations ---
 if (!function_exists('endOfService')) {
     function endOfService($joinDate, $endDate, $salary)
-{
-    try {
-        $date1 = new DateTime($joinDate);
-        $date2 = new DateTime($endDate);
-    } catch (Exception $e) {
-         return 0; // Or throw exception
+    {
+        try {
+            $date1 = new DateTime($joinDate);
+            $date2 = new DateTime($endDate);
+        } catch (Exception $e) {
+            return 0; // Or throw exception
+        }
+
+        if ($date1 > $date2) {
+            // Swap dates if join date is after end date (unlikely but possible input error)
+            list($date1, $date2) = [$date2, $date1];
+        }
+
+        $diff = $date1->diff($date2);
+        // Use precise day count for calculation
+        $totalDaysService = $diff->days;
+
+        // Convert salary to float, handle potential errors
+        $salaryFloat = filter_var($salary, FILTER_VALIDATE_FLOAT);
+        if ($salaryFloat === false || $salaryFloat <= 0) {
+            return 0; // Return 0 or throw an exception
+        }
+
+        // --- Revised Calculation Logic based on Saudi Labor Law Interpretation ---
+        // Note: This is a common interpretation. Consult legal advice for definitive calculations.
+        // Assumes a year has 365 days for EOS calculation.
+        $daysInYear = 365;
+        $result = 0;
+
+        // First 5 years (up to 1825 days): Half month salary per year
+        $firstPeriodDays = min($totalDaysService, 5 * $daysInYear);
+        if ($firstPeriodDays > 0) {
+            $result += ($salaryFloat / 2) * ($firstPeriodDays / $daysInYear);
+        }
+
+        // Years after 5 (days exceeding 1825): Full month salary per year
+        $secondPeriodDays = max(0, $totalDaysService - (5 * $daysInYear));
+        if ($secondPeriodDays > 0) {
+            $result += $salaryFloat * ($secondPeriodDays / $daysInYear);
+        }
+
+        return round($result, 2); // Return final amount rounded
     }
-
-    if ($date1 > $date2) {
-        // Swap dates if join date is after end date (unlikely but possible input error)
-        list($date1, $date2) = [$date2, $date1];
-    }
-
-    $diff = $date1->diff($date2);
-    // Use precise day count for calculation
-    $totalDaysService = $diff->days;
-
-    // Convert salary to float, handle potential errors
-    $salaryFloat = filter_var($salary, FILTER_VALIDATE_FLOAT);
-    if ($salaryFloat === false || $salaryFloat <= 0) {
-        return 0; // Return 0 or throw an exception
-    }
-
-    // --- Revised Calculation Logic based on Saudi Labor Law Interpretation ---
-    // Note: This is a common interpretation. Consult legal advice for definitive calculations.
-    // Assumes a year has 365 days for EOS calculation.
-    $daysInYear = 365;
-    $result = 0;
-
-    // First 5 years (up to 1825 days): Half month salary per year
-    $firstPeriodDays = min($totalDaysService, 5 * $daysInYear);
-    if ($firstPeriodDays > 0) {
-        $result += ($salaryFloat / 2) * ($firstPeriodDays / $daysInYear);
-    }
-
-    // Years after 5 (days exceeding 1825): Full month salary per year
-    $secondPeriodDays = max(0, $totalDaysService - (5 * $daysInYear));
-    if ($secondPeriodDays > 0) {
-        $result += $salaryFloat * ($secondPeriodDays / $daysInYear);
-    }
-
-    return round($result, 2); // Return final amount rounded
-}
 }
 
 // --- Debugging Utilities ---
@@ -233,21 +261,21 @@ if (!function_exists('debug')) {
     function debug($data, $die = true)
     {
         echo '<pre style="background: #1e1e1e; color: #f0f0f0; padding: 10px; border-radius: 4px; text-align: left; font-family: monospace; font-size: 12px; z-index: 9999; position: relative;">';
-    echo "<strong>DEBUG OUTPUT:</strong>\n";
-    if (is_bool($data) || is_null($data)) {
-        var_dump($data); // Better for booleans & NULL
-    } else {
-        print_r($data); // Cleaner for arrays/objects
+        echo "<strong>DEBUG OUTPUT:</strong>\n";
+        if (is_bool($data) || is_null($data)) {
+            var_dump($data); // Better for booleans & NULL
+        } else {
+            print_r($data); // Cleaner for arrays/objects
+        }
+        echo "\n\n<strong>BACKTRACE (Limited):</strong>\n";
+        // Limit backtrace for brevity, showing file and line
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 5);
+        foreach ($trace as $item) {
+            echo basename($item['file'] ?? '?') . ':' . ($item['line'] ?? '?') . ' - ' . ($item['function'] ?? '?') . "()\n";
+        }
+        echo '</pre>';
+        if ($die) die(); // Optional: Stop execution
     }
-    echo "\n\n<strong>BACKTRACE (Limited):</strong>\n";
-    // Limit backtrace for brevity, showing file and line
-    $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 5);
-    foreach($trace as $item) {
-        echo basename($item['file'] ?? '?') . ':' . ($item['line'] ?? '?') . ' - ' . ($item['function'] ?? '?') . "()\n";
-    }
-    echo '</pre>';
-    if ($die) die(); // Optional: Stop execution
-}
 }
 
 if (!function_exists('dd')) {
@@ -284,32 +312,32 @@ if (!function_exists('console_log')) {
  */
 if (!function_exists('redirect')) {
     function redirect($path = "", $delay = 0, $exit = true, $message = "")
-{
-    // Prevent header modification errors if output already started
-    if (headers_sent($file, $line)) {
-        // Force meta refresh if headers are sent
-        $delay = max($delay, 0); // Ensure delay is not negative
-    }
+    {
+        // Prevent header modification errors if output already started
+        if (headers_sent($file, $line)) {
+            // Force meta refresh if headers are sent
+            $delay = max($delay, 0); // Ensure delay is not negative
+        }
 
-    $url = ($path !== "") ? $path : $_SERVER['REQUEST_URI'];
-    // Basic validation/sanitization for URL
-    $url = filter_var($url, FILTER_SANITIZE_URL);
+        $url = ($path !== "") ? $path : $_SERVER['REQUEST_URI'];
+        // Basic validation/sanitization for URL
+        $url = filter_var($url, FILTER_SANITIZE_URL);
 
-    // Immediate redirect (if headers not sent)
-    if (!headers_sent() && $delay === 0) {
-        header("Location: " . $url);
-        if ($exit) exit();
-        return;
-    }
+        // Immediate redirect (if headers not sent)
+        if (!headers_sent() && $delay === 0) {
+            header("Location: " . $url);
+            if ($exit) exit();
+            return;
+        }
 
-    // Delayed redirect or fallback (HTML + meta refresh)
-    $delay = (int)$delay; // Ensure delay is an integer
-    $defaultMessage = ($delay > 0)
-        ? "Redirecting in <span id='countdown'>$delay</span> seconds..."
-        : "Redirecting...";
-    $finalMessage = ($message !== "") ? htmlspecialchars($message) : $defaultMessage; // Sanitize message
+        // Delayed redirect or fallback (HTML + meta refresh)
+        $delay = (int)$delay; // Ensure delay is an integer
+        $defaultMessage = ($delay > 0)
+            ? "Redirecting in <span id='countdown'>$delay</span> seconds..."
+            : "Redirecting...";
+        $finalMessage = ($message !== "") ? htmlspecialchars($message) : $defaultMessage; // Sanitize message
 
-    echo <<<HTML
+        echo <<<HTML
     <!DOCTYPE html>
     <html>
     <head>
@@ -341,28 +369,28 @@ if (!function_exists('redirect')) {
     </html>
 HTML;
 
-    if ($exit) exit();
+        if ($exit) exit();
     }
 }
 
 
 if (!function_exists('salert')) {
     function salert($title, $message, $type = 'success', $redirectUrl = "", $btn = 'OK')
-{
-    // Sanitize output for security
-    $title = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
-    $message = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-    $type = htmlspecialchars($type, ENT_QUOTES, 'UTF-8');
-    $redirectUrl = filter_var($redirectUrl, FILTER_SANITIZE_URL);
-    $btn = htmlspecialchars($btn, ENT_QUOTES, 'UTF-8');
+    {
+        // Sanitize output for security
+        $title = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
+        $message = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
+        $type = htmlspecialchars($type, ENT_QUOTES, 'UTF-8');
+        $redirectUrl = filter_var($redirectUrl, FILTER_SANITIZE_URL);
+        $btn = htmlspecialchars($btn, ENT_QUOTES, 'UTF-8');
 
-    // Basic validation for type
-    $validTypes = ['success', 'error', 'warning', 'info', 'question'];
-    if (!in_array($type, $validTypes)) {
-        $type = 'info'; // Default to info if invalid type provided
-    }
+        // Basic validation for type
+        $validTypes = ['success', 'error', 'warning', 'info', 'question'];
+        if (!in_array($type, $validTypes)) {
+            $type = 'info'; // Default to info if invalid type provided
+        }
 
-    echo <<<HTML
+        echo <<<HTML
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -391,8 +419,8 @@ if (!function_exists('salert')) {
         </script>
         </body>
     HTML;
-    exit(); // Stop further script execution
-}
+        exit(); // Stop further script execution
+    }
 }
 
 // --- Input Sanitization ---
@@ -415,12 +443,12 @@ if (!function_exists('send_json_response')) {
     {
         // Prevent potential errors if headers already sent
         $response = ['title' => $title, 'message' => $message, 'type' => $type];
-        
+
         // Merge additional data
         if (!empty($additional_data) && is_array($additional_data)) {
             $response = array_merge($response, $additional_data);
         }
-        
+
         if (headers_sent($file, $line)) {
             // Still try to output JSON, but status code might be wrong
             echo json_encode($response);
@@ -442,37 +470,37 @@ if (!function_exists('debugPDO')) {
             return "Error: Invalid PDOStatement object provided.";
         }
 
-    $query = $stmt->queryString;
-    $interpolatedQuery = $query;
+        $query = $stmt->queryString;
+        $interpolatedQuery = $query;
 
-    // Use built-in debugDumpParams for more accurate representation
-    ob_start();
-    $stmt->debugDumpParams();
-    $debugInfo = ob_get_clean();
+        // Use built-in debugDumpParams for more accurate representation
+        ob_start();
+        $stmt->debugDumpParams();
+        $debugInfo = ob_get_clean();
 
-    // Crude interpolation for display (less accurate than debugDumpParams)
-    foreach ($params as $param => $value) {
-        if (is_string($value)) {
-            // Basic quoting, might need refinement for complex strings
-            $value = "'" . addslashes($value) . "'";
-        } elseif (is_null($value)) {
-            $value = 'NULL';
-        } elseif (is_bool($value)) {
-            $value = $value ? '1' : '0';
+        // Crude interpolation for display (less accurate than debugDumpParams)
+        foreach ($params as $param => $value) {
+            if (is_string($value)) {
+                // Basic quoting, might need refinement for complex strings
+                $value = "'" . addslashes($value) . "'";
+            } elseif (is_null($value)) {
+                $value = 'NULL';
+            } elseif (is_bool($value)) {
+                $value = $value ? '1' : '0';
+            }
+            // Replace named or positional placeholders
+            if (is_int($param)) { // Positional (?)
+                $interpolatedQuery = preg_replace('/\?/', $value, $interpolatedQuery, 1);
+            } else { // Named (:)
+                $interpolatedQuery = str_replace($param, $value, $interpolatedQuery);
+            }
         }
-        // Replace named or positional placeholders
-        if (is_int($param)) { // Positional (?)
-             $interpolatedQuery = preg_replace('/\?/', $value, $interpolatedQuery, 1);
-        } else { // Named (:)
-            $interpolatedQuery = str_replace($param, $value, $interpolatedQuery);
-        }
-    }
 
-    return "<pre style='background: #1e1e1e; color: #f0f0f0; padding: 10px; border-radius: 4px; font-family: monospace;'>"
-         . "<strong>Original Query:</strong>\n" . htmlspecialchars($query) . "\n\n"
-         . "<strong>Crude Interpolated Query (for display only):</strong>\n" . htmlspecialchars($interpolatedQuery) . "\n\n"
-         . "<strong>PDO debugDumpParams():</strong>\n" . htmlspecialchars($debugInfo)
-         . "</pre>";
+        return "<pre style='background: #1e1e1e; color: #f0f0f0; padding: 10px; border-radius: 4px; font-family: monospace;'>"
+            . "<strong>Original Query:</strong>\n" . htmlspecialchars($query) . "\n\n"
+            . "<strong>Crude Interpolated Query (for display only):</strong>\n" . htmlspecialchars($interpolatedQuery) . "\n\n"
+            . "<strong>PDO debugDumpParams():</strong>\n" . htmlspecialchars($debugInfo)
+            . "</pre>";
     }
 }
 
@@ -492,25 +520,25 @@ if (!function_exists('parseName')) {
             $middleName = implode(' ', array_slice($parts, 1, -1));
         }
 
-    // Determine components based on the available parts
-    $components = [
-        'FIRST' => $firstName,
-        'LAST' => $lastName,
-        'MIDDLE' => $middleName,
-        'SECOND' => $parts[1] ?? '', // Usually the second name part
-        // Grandfather name interpretation depends on structure, assuming it's the one before last if > 3 parts
-        'GRANDFATHER' => ($count > 3) ? $parts[$count - 2] : '',
-    ];
+        // Determine components based on the available parts
+        $components = [
+            'FIRST' => $firstName,
+            'LAST' => $lastName,
+            'MIDDLE' => $middleName,
+            'SECOND' => $parts[1] ?? '', // Usually the second name part
+            // Grandfather name interpretation depends on structure, assuming it's the one before last if > 3 parts
+            'GRANDFATHER' => ($count > 3) ? $parts[$count - 2] : '',
+        ];
 
 
-    $requested = explode('_', strtoupper($format)); // Ensure format is uppercase
-    $result = [];
+        $requested = explode('_', strtoupper($format)); // Ensure format is uppercase
+        $result = [];
 
-    foreach ($requested as $component) {
-        if (isset($components[$component]) && !empty($components[$component])) {
-            $result[] = $components[$component];
+        foreach ($requested as $component) {
+            if (isset($components[$component]) && !empty($components[$component])) {
+                $result[] = $components[$component];
+            }
         }
-    }
 
         // Avoid duplicate names if format requests overlapping parts (e.g., FIRST_SECOND_MIDDLE_LAST with 3 names)
         return implode(' ', array_unique(array_filter($result)));
@@ -523,21 +551,21 @@ if (!function_exists('highlightKeywords')) {
     {
         if (empty(trim($search)) || empty($text)) return $text; // No search term or text
 
-    // Escape special regex characters in search terms
-    $wordsAry = preg_split('/\s+/', trim($search)); // Split by any whitespace
-    $wordsCount = count($wordsAry);
+        // Escape special regex characters in search terms
+        $wordsAry = preg_split('/\s+/', trim($search)); // Split by any whitespace
+        $wordsCount = count($wordsAry);
 
-    for ($i = 0; $i < $wordsCount; $i++) {
-        $keyword = trim($wordsAry[$i]);
-        if (empty($keyword)) continue; // Skip empty strings after split
+        for ($i = 0; $i < $wordsCount; $i++) {
+            $keyword = trim($wordsAry[$i]);
+            if (empty($keyword)) continue; // Skip empty strings after split
 
-        $pattern = '/' . preg_quote($keyword, '/') . '/i'; // Case-insensitive search, properly escaped
-        $highlighted_text = "<span class='search-highlight'>$0</span>"; // Use $0 to replace with the exact match (preserves case)
+            $pattern = '/' . preg_quote($keyword, '/') . '/i'; // Case-insensitive search, properly escaped
+            $highlighted_text = "<span class='search-highlight'>$0</span>"; // Use $0 to replace with the exact match (preserves case)
 
-        // Use preg_replace for regex-based replacement
-        $text = preg_replace($pattern, $highlighted_text, $text);
-    }
-    return $text;
+            // Use preg_replace for regex-based replacement
+            $text = preg_replace($pattern, $highlighted_text, $text);
+        }
+        return $text;
     }
 }
 
@@ -589,9 +617,12 @@ if (!function_exists('ageDOB')) {
             // Format the output using translated terms
             return sprintf(
                 "%s <b>%d</b> %s <b>%d</b> %s <b>%d</b>",
-                __('years'), $age->y,
-                __('months'), $age->m,
-                __('days'), $age->d
+                __('years'),
+                $age->y,
+                __('months'),
+                $age->m,
+                __('days'),
+                $age->d
             );
         } catch (Exception $e) {
             return __('invalid_date_format');
@@ -606,127 +637,127 @@ if (!function_exists('ageDOB')) {
  */
 if (!function_exists('generate_pagination_controls')) {
     function generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $base_params = [], $unfiltered_total_items = null)
-{
-    // Basic validation
-    if (!is_numeric($current_page) || !is_numeric($total_pages) || !is_numeric($total_items) || !is_numeric($items_per_page) || !is_array($limit_options) || !is_bool($show_all)) {
-        return '<!-- Pagination Error: Invalid arguments. -->';
-    }
-
-    $current_page = max(1, (int)$current_page); // Ensure current page is at least 1
-    $total_pages = max(0, (int)$total_pages);   // Ensure non-negative
-    $total_items = max(0, (int)$total_items);   // Ensure non-negative
-    $items_per_page = max(1, (int)$items_per_page); // Ensure at least 1 item per page if not showing all
-    $unfiltered_total_items = ($unfiltered_total_items !== null) ? max(0, (int)$unfiltered_total_items) : null;
-
-    // No controls needed if only one page and not enough items to warrant dropdown
-    if ($total_pages <= 1 && $total_items <= min($limit_options)) {
-         // Optionally show item count even on single page
-         if ($total_items > 0) {
-              $single_page_text = __('showing') . " 1 " . __('to') . " {$total_items} " . __('of') . " {$total_items} " . __('entries');
-               if ($unfiltered_total_items !== null && $unfiltered_total_items > $total_items) {
-                   $single_page_text .= " (" . __('filtered_from') . " {$unfiltered_total_items} " . __('entries') . ")";
-               }
-             return "<div class='row mt-4' style=\"margin-top: 5rem !important;\"><div class='col-12 text-muted'>{$single_page_text}</div></div>";
-         }
-        return ''; // Return empty if no items
-    }
-
-    $html = '<div class="row mt-4"><div class="col-12 d-md-flex justify-content-between align-items-center">';
-
-    // --- Items per page dropdown ---
-    $html .= '<div class="mb-3 mb-md-0">';
-    $html .= '<div class="form-inline">';
-    $html .= '<label for="limitFilter" class="mr-2 font-weight-bold">'.__('show').':</label>';
-    $html .= '<select class="form-control form-control-sm" id="limitFilter" onchange="applyFilters()">';
-    foreach ($limit_options as $limit) {
-        $limit = (int)$limit;
-        if ($limit <= 0) continue; // Skip invalid limit options
-        $selected = (!$show_all && $items_per_page == $limit) ? 'selected' : '';
-        $html .= "<option value='{$limit}' {$selected}>{$limit}</option>";
-    }
-    $all_selected = $show_all ? 'selected' : '';
-    $html .= "<option value='all' {$all_selected}>".__('all_option')."</option>";
-    $html .= "</select><span class='ml-2 text-muted'>".__('items_per_page')."</span>";
-    $html .= "</div></div>";
-
-    // --- Page info and navigation ---
-    $html .= "<div class='d-flex align-items-center justify-content-center flex-wrap'>";
-
-    // Displaying start and end item numbers and total items
-    if ($total_items > 0) {
-        $showing_text = '';
-        if (!$show_all && $items_per_page > 0 && $total_pages > 0) {
-            $start_item = (($current_page - 1) * $items_per_page) + 1;
-            $end_item = min($start_item + $items_per_page - 1, $total_items);
-            $showing_text = "".__('showing')." {$start_item} ".__('to')." {$end_item} ".__('of')." {$total_items} ".__('entries')."";
-        } elseif ($show_all || $total_pages == 1) { // Also show for single page result
-             $showing_text = "".__('showing')." 1 ".__('to')." {$total_items} ".__('of')." {$total_items} ".__('entries')."";
-             if($show_all) $showing_text = "".__('showing_all')." {$total_items} ".__('entries')."";
+    {
+        // Basic validation
+        if (!is_numeric($current_page) || !is_numeric($total_pages) || !is_numeric($total_items) || !is_numeric($items_per_page) || !is_array($limit_options) || !is_bool($show_all)) {
+            return '<!-- Pagination Error: Invalid arguments. -->';
         }
 
-        if (!empty($showing_text) && $unfiltered_total_items !== null && $unfiltered_total_items > $total_items) {
-             $showing_text .= " (".__('filtered_from')." {$unfiltered_total_items} ".__('entries').")";
-        }
+        $current_page = max(1, (int)$current_page); // Ensure current page is at least 1
+        $total_pages = max(0, (int)$total_pages);   // Ensure non-negative
+        $total_items = max(0, (int)$total_items);   // Ensure non-negative
+        $items_per_page = max(1, (int)$items_per_page); // Ensure at least 1 item per page if not showing all
+        $unfiltered_total_items = ($unfiltered_total_items !== null) ? max(0, (int)$unfiltered_total_items) : null;
 
-        if (!empty($showing_text)) {
-            $html .= "<span class='text-muted mr-3'>{$showing_text}</span>";
-        }
-    } elseif ($unfiltered_total_items !== null && $unfiltered_total_items > 0) {
-        // Show only the filtered message if total_items is 0 but unfiltered_total_items > 0
-        $html .= "<span class='text-muted mr-3'>".__('showing')." 0 ".__('entries')." (".__('filtered_from')." {$unfiltered_total_items} ".__('entries').")</span>";
-    }
-
-
-    // Build page links only if there are multiple pages and not showing all
-    if ($total_pages > 1 && !$show_all) {
-        $html .= '<nav aria-label="Page navigation"><ul class="pagination mb-0">';
-
-        // Helper function to build query string safely
-        $build_query = function($page) use ($base_params) {
-            return "?" . http_build_query(array_merge($base_params, ['page' => $page]));
-        };
-
-        $first_disabled = ($current_page <= 1) ? 'disabled' : '';
-        $html .= "<li class='page-item {$first_disabled}'><a class='page-link' href='{$build_query(1)}'>".__('first')."</a></li>";
-
-        $prev_disabled = ($current_page <= 1) ? 'disabled' : '';
-        $html .= "<li class='page-item {$prev_disabled}'><a class='page-link' href='{$build_query($current_page - 1)}'>".__('previous')."</a></li>";
-
-        $range = 2; // Number of links around the current page
-        $start_range = max(1, $current_page - $range);
-        $end_range = min($total_pages, $current_page + $range);
-
-        if ($start_range > 1) {
-            $html .= "<li class='page-item'><a class='page-link' href='{$build_query(1)}'>1</a></li>";
-            if ($start_range > 2) {
-                $html .= "<li class='page-item disabled'><span class='page-link'>...</span></li>";
+        // No controls needed if only one page and not enough items to warrant dropdown
+        if ($total_pages <= 1 && $total_items <= min($limit_options)) {
+            // Optionally show item count even on single page
+            if ($total_items > 0) {
+                $single_page_text = __('showing') . " 1 " . __('to') . " {$total_items} " . __('of') . " {$total_items} " . __('entries');
+                if ($unfiltered_total_items !== null && $unfiltered_total_items > $total_items) {
+                    $single_page_text .= " (" . __('filtered_from') . " {$unfiltered_total_items} " . __('entries') . ")";
+                }
+                return "<div class='row mt-4' style=\"margin-top: 5rem !important;\"><div class='col-12 text-muted'>{$single_page_text}</div></div>";
             }
+            return ''; // Return empty if no items
         }
 
-        for ($i = $start_range; $i <= $end_range; $i++) {
-            $active_class = ($current_page == $i) ? 'active' : '';
-            $html .= "<li class='page-item {$active_class}'><a class='page-link' href='{$build_query($i)}'>{$i}</a></li>";
-        }
+        $html = '<div class="row mt-4"><div class="col-12 d-md-flex justify-content-between align-items-center">';
 
-        if ($end_range < $total_pages) {
-            if ($end_range < $total_pages - 1) {
-                $html .= "<li class='page-item disabled'><span class='page-link'>...</span></li>";
+        // --- Items per page dropdown ---
+        $html .= '<div class="mb-3 mb-md-0">';
+        $html .= '<div class="form-inline">';
+        $html .= '<label for="limitFilter" class="mr-2 font-weight-bold">' . __('show') . ':</label>';
+        $html .= '<select class="form-control form-control-sm" id="limitFilter" onchange="applyFilters()">';
+        foreach ($limit_options as $limit) {
+            $limit = (int)$limit;
+            if ($limit <= 0) continue; // Skip invalid limit options
+            $selected = (!$show_all && $items_per_page == $limit) ? 'selected' : '';
+            $html .= "<option value='{$limit}' {$selected}>{$limit}</option>";
+        }
+        $all_selected = $show_all ? 'selected' : '';
+        $html .= "<option value='all' {$all_selected}>" . __('all_option') . "</option>";
+        $html .= "</select><span class='ml-2 text-muted'>" . __('items_per_page') . "</span>";
+        $html .= "</div></div>";
+
+        // --- Page info and navigation ---
+        $html .= "<div class='d-flex align-items-center justify-content-center flex-wrap'>";
+
+        // Displaying start and end item numbers and total items
+        if ($total_items > 0) {
+            $showing_text = '';
+            if (!$show_all && $items_per_page > 0 && $total_pages > 0) {
+                $start_item = (($current_page - 1) * $items_per_page) + 1;
+                $end_item = min($start_item + $items_per_page - 1, $total_items);
+                $showing_text = "" . __('showing') . " {$start_item} " . __('to') . " {$end_item} " . __('of') . " {$total_items} " . __('entries') . "";
+            } elseif ($show_all || $total_pages == 1) { // Also show for single page result
+                $showing_text = "" . __('showing') . " 1 " . __('to') . " {$total_items} " . __('of') . " {$total_items} " . __('entries') . "";
+                if ($show_all) $showing_text = "" . __('showing_all') . " {$total_items} " . __('entries') . "";
             }
-            $html .= "<li class='page-item'><a class='page-link' href='{$build_query($total_pages)}'>{$total_pages}</a></li>";
+
+            if (!empty($showing_text) && $unfiltered_total_items !== null && $unfiltered_total_items > $total_items) {
+                $showing_text .= " (" . __('filtered_from') . " {$unfiltered_total_items} " . __('entries') . ")";
+            }
+
+            if (!empty($showing_text)) {
+                $html .= "<span class='text-muted mr-3'>{$showing_text}</span>";
+            }
+        } elseif ($unfiltered_total_items !== null && $unfiltered_total_items > 0) {
+            // Show only the filtered message if total_items is 0 but unfiltered_total_items > 0
+            $html .= "<span class='text-muted mr-3'>" . __('showing') . " 0 " . __('entries') . " (" . __('filtered_from') . " {$unfiltered_total_items} " . __('entries') . ")</span>";
         }
 
-        $next_disabled = ($current_page >= $total_pages) ? 'disabled' : '';
-        $html .= "<li class='page-item {$next_disabled}'><a class='page-link' href='{$build_query($current_page + 1)}'>".__('next')."</a></li>";
 
-        $last_disabled = ($current_page >= $total_pages) ? 'disabled' : '';
-        $html .= "<li class='page-item {$last_disabled}'><a class='page-link' href='{$build_query($total_pages)}'>".__('last')."</a></li>";
+        // Build page links only if there are multiple pages and not showing all
+        if ($total_pages > 1 && !$show_all) {
+            $html .= '<nav aria-label="Page navigation"><ul class="pagination mb-0">';
 
-        $html .= '</ul></nav>';
-    }
+            // Helper function to build query string safely
+            $build_query = function ($page) use ($base_params) {
+                return "?" . http_build_query(array_merge($base_params, ['page' => $page]));
+            };
 
-    $html .= '</div>'; // End d-flex
-    $html .= '</div></div>'; // End row and outer div
-    return $html;
+            $first_disabled = ($current_page <= 1) ? 'disabled' : '';
+            $html .= "<li class='page-item {$first_disabled}'><a class='page-link' href='{$build_query(1)}'>" . __('first') . "</a></li>";
+
+            $prev_disabled = ($current_page <= 1) ? 'disabled' : '';
+            $html .= "<li class='page-item {$prev_disabled}'><a class='page-link' href='{$build_query($current_page - 1)}'>" . __('previous') . "</a></li>";
+
+            $range = 2; // Number of links around the current page
+            $start_range = max(1, $current_page - $range);
+            $end_range = min($total_pages, $current_page + $range);
+
+            if ($start_range > 1) {
+                $html .= "<li class='page-item'><a class='page-link' href='{$build_query(1)}'>1</a></li>";
+                if ($start_range > 2) {
+                    $html .= "<li class='page-item disabled'><span class='page-link'>...</span></li>";
+                }
+            }
+
+            for ($i = $start_range; $i <= $end_range; $i++) {
+                $active_class = ($current_page == $i) ? 'active' : '';
+                $html .= "<li class='page-item {$active_class}'><a class='page-link' href='{$build_query($i)}'>{$i}</a></li>";
+            }
+
+            if ($end_range < $total_pages) {
+                if ($end_range < $total_pages - 1) {
+                    $html .= "<li class='page-item disabled'><span class='page-link'>...</span></li>";
+                }
+                $html .= "<li class='page-item'><a class='page-link' href='{$build_query($total_pages)}'>{$total_pages}</a></li>";
+            }
+
+            $next_disabled = ($current_page >= $total_pages) ? 'disabled' : '';
+            $html .= "<li class='page-item {$next_disabled}'><a class='page-link' href='{$build_query($current_page + 1)}'>" . __('next') . "</a></li>";
+
+            $last_disabled = ($current_page >= $total_pages) ? 'disabled' : '';
+            $html .= "<li class='page-item {$last_disabled}'><a class='page-link' href='{$build_query($total_pages)}'>" . __('last') . "</a></li>";
+
+            $html .= '</ul></nav>';
+        }
+
+        $html .= '</div>'; // End d-flex
+        $html .= '</div></div>'; // End row and outer div
+        return $html;
     }
 }
 
@@ -742,7 +773,8 @@ if (!function_exists('generate_pagination_controls')) {
  * @return array List of potential approvers
  */
 if (!function_exists('get_potential_approvers')) {
-    function get_potential_approvers($conDB) {
+    function get_potential_approvers($conDB)
+    {
         $employees = [];
         // Ensure admin_login alias `al` is used correctly
         $sql = "SELECT e.`emp_id`, e.`name`, al.`user_type`, e.`dept`
@@ -772,7 +804,8 @@ if (!function_exists('get_potential_approvers')) {
  * @return int|null Department ID or null if not found
  */
 if (!function_exists('get_department_id_by_name')) {
-    function get_department_id_by_name($conDB, $dept_name) {
+    function get_department_id_by_name($conDB, $dept_name)
+    {
         if (!$conDB || empty($dept_name)) return null;
         $name = trim($dept_name);
         // 1) Try exact (case-insensitive)
@@ -827,7 +860,8 @@ if (!function_exists('get_department_id_by_name')) {
  * @return array List of potential approvers in that department
  */
 if (!function_exists('get_department_approvers')) {
-    function get_department_approvers($conDB, $dept_id) {
+    function get_department_approvers($conDB, $dept_id)
+    {
         $employees = [];
         if (!is_numeric($dept_id) || $dept_id <= 0) {
             return $employees;
@@ -842,7 +876,7 @@ if (!function_exists('get_department_approvers')) {
                   AND e.`dept` = ?
                   AND e.`status` = 1
                 ORDER BY e.`name`";
-        
+
         $stmt = mysqli_prepare($conDB, $sql);
         if ($stmt) {
             mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
@@ -854,7 +888,7 @@ if (!function_exists('get_department_approvers')) {
                 mysqli_free_result($result); // Free result
                 mysqli_stmt_close($stmt);
             } else {
-                 mysqli_stmt_close($stmt); // Close on fail
+                mysqli_stmt_close($stmt); // Close on fail
             }
         } else {
         }
@@ -871,7 +905,8 @@ if (!function_exists('get_department_approvers')) {
  * @return array List of HR Assistants
  */
 if (!function_exists('get_hr_assistants')) {
-    function get_hr_assistants($conDB) {
+    function get_hr_assistants($conDB)
+    {
         $employees = [];
         $hr_dept_id = 5; // Hard-coded HR Dept ID
 
@@ -882,7 +917,7 @@ if (!function_exists('get_hr_assistants')) {
                   AND e.`dept` = ?
                   AND e.`status` = 1
                 ORDER BY e.`name`";
-        
+
         $stmt = mysqli_prepare($conDB, $sql);
         if ($stmt) {
             mysqli_stmt_bind_param($stmt, "i", $hr_dept_id);
@@ -894,7 +929,7 @@ if (!function_exists('get_hr_assistants')) {
                 mysqli_free_result($result); // Free result
                 mysqli_stmt_close($stmt);
             } else {
-                 mysqli_stmt_close($stmt); // Close on fail
+                mysqli_stmt_close($stmt); // Close on fail
             }
         } else {
         }
@@ -912,18 +947,19 @@ if (!function_exists('get_hr_assistants')) {
  * @return bool True on success, false on failure
  */
 if (!function_exists('save_approval_chain')) {
-    function save_approval_chain($conDB, $inv_no, $request_type, $approver_ids) {
+    function save_approval_chain($conDB, $inv_no, $request_type, $approver_ids)
+    {
         if (!$conDB) {
-             return false;
+            return false;
         }
         if (empty($inv_no) || empty($request_type) || !is_array($approver_ids) || empty($approver_ids)) {
-             return false;
+            return false;
         }
 
         // 1. Get the request_type_id
         $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
         if (!$type_query) {
-             return false;
+            return false;
         }
         if (mysqli_num_rows($type_query) == 0) {
             mysqli_free_result($type_query); // Free result
@@ -955,7 +991,7 @@ if (!function_exists('save_approval_chain')) {
                             VALUES ('" . escape_string($inv_no) . "', $request_type_id, $approver_id_safe, $level, '$status')";
 
                     if (!mysqli_query($conDB, $sql)) {
-                         throw new Exception("Failed to insert approver level $level for InvNo $inv_no: " . mysqli_error($conDB));
+                        throw new Exception("Failed to insert approver level $level for InvNo $inv_no: " . mysqli_error($conDB));
                     }
                     $level++;
                 } else {
@@ -965,7 +1001,6 @@ if (!function_exists('save_approval_chain')) {
             // Commit transaction
             mysqli_commit($conDB);
             return true;
-
         } catch (Exception $e) {
             // Rollback transaction on error
             mysqli_rollback($conDB);
@@ -986,7 +1021,8 @@ if (!function_exists('save_approval_chain')) {
  * @throws Exception On database failure
  */
 if (!function_exists('append_approval_chain')) {
-    function append_approval_chain($conDB, $inv_no, $request_type_id, $current_level, $new_approver_ids) {
+    function append_approval_chain($conDB, $inv_no, $request_type_id, $current_level, $new_approver_ids)
+    {
         if (!$conDB || empty($inv_no) || empty($new_approver_ids) || !is_array($new_approver_ids)) {
             return false;
         }
@@ -1029,20 +1065,20 @@ if (!function_exists('append_approval_chain')) {
 
                 $sql = "INSERT INTO `request_approvers` (`request_inv_no`, `request_type_id`, `approver_id`, `approval_level`, `status`)
                         VALUES (?, ?, ?, ?, ?)";
-                
+
                 $stmt_append = mysqli_prepare($conDB, $sql);
                 if (!$stmt_append) {
                     throw new Exception("Prepare failed (append chain): " . mysqli_error($conDB));
                 }
                 mysqli_stmt_bind_param($stmt_append, "siiis", $inv_no_safe, $request_type_id, $approver_id_safe, $level, $status);
-                
+
                 if (!mysqli_stmt_execute($stmt_append)) {
                     $error_msg = mysqli_stmt_error($stmt_append);
                     mysqli_stmt_close($stmt_append);
                     throw new Exception("Failed to insert new approver level $level for InvNo $inv_no_safe: " . $error_msg);
                 }
                 mysqli_stmt_close($stmt_append);
-                
+
                 $first_new_approver_set = true;
                 $level++;
             }
@@ -1063,10 +1099,12 @@ if (!function_exists('append_approval_chain')) {
  * @param string $subject The email subject
  * @param string $request_type Type of request: 'smart_request', 'vacation_request', 'leave_request', 'loan_request'
  * @param array $template_data Array of data to populate the template
+ * @param array $cc_emails Optional array of CC email addresses ['email' => 'name'] - ONLY used for leave_request (excuse leave)
  * @return bool True on success, false on failure
  */
 if (!function_exists('send_approval_email')) {
-    function send_approval_email($conDB, $to_email, $to_name, $subject, $request_type = 'smart_request', $template_data = []) {
+    function send_approval_email($conDB, $to_email, $to_name, $subject, $request_type = 'smart_request', $template_data = [], $cc_emails = [])
+    {
         if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
             return false;
         }
@@ -1087,7 +1125,7 @@ if (!function_exists('send_approval_email')) {
             return false;
         }
         // --- End Fetch SMTP settings ---
-        
+
         // Load and populate email template
         $body_html = load_email_template($request_type, $template_data);
         if ($body_html === false) {
@@ -1117,7 +1155,7 @@ if (!function_exists('send_approval_email')) {
                     $mail->SMTPSecure = false;
                     break;
             }
-            
+
             $mail->Port       = $smtp_port;
             $mail->CharSet    = 'UTF-8';
 
@@ -1125,6 +1163,16 @@ if (!function_exists('send_approval_email')) {
             $mail->setFrom($smtp_from_email, $smtp_from_name);
             $mail->addAddress($to_email, $to_name);
             $mail->addReplyTo($smtp_from_email, $smtp_from_name);
+
+            // Add CC recipients ONLY for leave_request (excuse leave)
+            // CC is disabled for all other request types
+            if ($request_type === 'leave_request' && !empty($cc_emails) && is_array($cc_emails)) {
+                foreach ($cc_emails as $cc_email => $cc_name) {
+                    if (filter_var($cc_email, FILTER_VALIDATE_EMAIL)) {
+                        $mail->addCC($cc_email, $cc_name);
+                    }
+                }
+            }
 
             // Content
             $mail->isHTML(true);
@@ -1148,7 +1196,8 @@ if (!function_exists('send_approval_email')) {
  * @return string|false HTML content or false on failure
  */
 if (!function_exists('load_email_template')) {
-    function load_email_template($request_type, $data = []) {
+    function load_email_template($request_type, $data = [])
+    {
         // Map request types to template files
         $template_map = [
             'smart_request' => 'smart_request_email_template.html',
@@ -1159,19 +1208,19 @@ if (!function_exists('load_email_template')) {
             'modification_request' => 'modification_request_email_template.html',
             'rejoin_request' => 'rejoin_request_email_template.html'
         ];
-        
+
         $template_file = $template_map[$request_type] ?? 'smart_request_email_template.html';
         $template_path = __DIR__ . '/PHPMailerMaster/' . $template_file;
-        
+
         if (!file_exists($template_path)) {
             return false;
         }
-        
+
         $html = file_get_contents($template_path);
         if ($html === false) {
             return false;
         }
-        
+
         // Default logo URL - adjust to your actual logo path
         $base_url = get_base_url();
         $defaults = [
@@ -1196,10 +1245,10 @@ if (!function_exists('load_email_template')) {
             'CURRENT_VALUE' => 'N/A',
             'NEW_VALUE' => 'N/A'
         ];
-        
+
         // Merge so passed data overrides defaults
         $data = array_merge($defaults, $data);
-        
+
         // Handle rejection-specific placeholders for loan template
         if ($request_type === 'loan_request') {
             if (!empty($data['REJECTION_REASON'])) {
@@ -1213,7 +1262,7 @@ if (!function_exists('load_email_template')) {
                 $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'A new loan request has been submitted and requires your approval.';
             }
         }
-        
+
         // Replace template placeholders
         foreach ($data as $key => $value) {
             // Skip already processed rejection info and HTML content
@@ -1223,7 +1272,7 @@ if (!function_exists('load_email_template')) {
                 $html = str_replace('{{' . $key . '}}', htmlspecialchars($value, ENT_QUOTES, 'UTF-8'), $html);
             }
         }
-        
+
         return $html;
     }
 }
@@ -1234,16 +1283,17 @@ if (!function_exists('load_email_template')) {
  * @return string Base URL
  */
 if (!function_exists('get_base_url')) {
-    function get_base_url() {
+    function get_base_url()
+    {
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $script_path = dirname($_SERVER['SCRIPT_NAME'] ?? '');
-        
+
         // Clean up script path
         if ($script_path === '/' || $script_path === '\\') {
             $script_path = '';
         }
-        
+
         return $protocol . '://' . $host . $script_path;
     }
 }
@@ -1258,14 +1308,15 @@ if (!function_exists('get_base_url')) {
  * @return array|false Template data array or false on failure
  */
 if (!function_exists('get_request_details_for_email')) {
-    function get_request_details_for_email($conDB, $inv_no, $request_type, $approver_name) {
+    function get_request_details_for_email($conDB, $inv_no, $request_type, $approver_name)
+    {
         $base_url = get_base_url();
-        
+
         $template_data = [
             'APPROVER_NAME' => $approver_name,
             'REQUEST_ID' => $inv_no
         ];
-        
+
         if ($request_type === 'vacation_request') {
             // Fetch vacation details
             $sql = "SELECT v.*, e.name as employee_name 
@@ -1273,7 +1324,7 @@ if (!function_exists('get_request_details_for_email')) {
                     JOIN employees e ON v.emp_id = e.emp_id 
                     WHERE v.request_inv_no = ? 
                     LIMIT 1";
-            
+
             $stmt = mysqli_prepare($conDB, $sql);
             if ($stmt) {
                 mysqli_stmt_bind_param($stmt, 's', $inv_no);
@@ -1283,7 +1334,7 @@ if (!function_exists('get_request_details_for_email')) {
                         // Determine if it's vacation or leave
                         $vac_type = strtolower($row['vac_type'] ?? '');
                         $fly_type = $row['fly_type'] ?? '';
-                        
+
                         if (in_array($vac_type, ['sick', 'emergency', 'unpaid', 'maternity', 'paternity'])) {
                             // It's a leave request
                             $template_data['REQUEST_TYPE'] = ucfirst($vac_type) . ' Leave Request';
@@ -1293,13 +1344,13 @@ if (!function_exists('get_request_details_for_email')) {
                             $template_data['REQUEST_TYPE'] = 'Annual Vacation Request';
                             $template_data['REQUEST_TYPE_LOWER'] = 'annual vacation request';
                         }
-                        
+
                         $template_data['EMPLOYEE_NAME'] = $row['employee_name'];
                         $template_data['START_DATE'] = date('d M Y', strtotime($row['start_date']));
                         $template_data['END_DATE'] = date('d M Y', strtotime($row['return_date']));
                         $template_data['DURATION'] = $row['vacdays'];
                         $template_data['REQUEST_URL'] = $base_url . '/all_applied_vac.php?status=my_pending';
-                        
+
                         mysqli_free_result($result);
                         mysqli_stmt_close($stmt);
                         return $template_data;
@@ -1309,7 +1360,6 @@ if (!function_exists('get_request_details_for_email')) {
                 mysqli_stmt_close($stmt);
             }
             return false;
-            
         } elseif ($request_type === 'loan_request') {
             // Fetch loan details
             $sql = "SELECT l.*, e.name as employee_name 
@@ -1317,7 +1367,7 @@ if (!function_exists('get_request_details_for_email')) {
                     JOIN employees e ON l.emp_id = e.emp_id 
                     WHERE l.inv_no = ? 
                     LIMIT 1";
-            
+
             $stmt = mysqli_prepare($conDB, $sql);
             if ($stmt) {
                 mysqli_stmt_bind_param($stmt, 's', $inv_no);
@@ -1329,7 +1379,7 @@ if (!function_exists('get_request_details_for_email')) {
                         $template_data['LOAN_AMOUNT'] = number_format($row['loan_amount'], 2);
                         $template_data['INSTALLMENTS'] = $row['installments'];
                         $template_data['REQUEST_URL'] = $base_url . '/all_applied_loan.php?status=my_pending';
-                        
+
                         mysqli_free_result($result);
                         mysqli_stmt_close($stmt);
                         return $template_data;
@@ -1339,7 +1389,6 @@ if (!function_exists('get_request_details_for_email')) {
                 mysqli_stmt_close($stmt);
             }
             return false;
-            
         } elseif ($request_type === 'smart_request') {
             // Fetch smart request details
             $sql = "SELECT sr.*, e.name as employee_name, d.dep_nme as department_name
@@ -1348,7 +1397,7 @@ if (!function_exists('get_request_details_for_email')) {
                     LEFT JOIN department d ON sr.department = d.id
                     WHERE sr.inv_no = ? 
                     LIMIT 1";
-            
+
             $stmt = mysqli_prepare($conDB, $sql);
             if ($stmt) {
                 mysqli_stmt_bind_param($stmt, 's', $inv_no);
@@ -1359,7 +1408,7 @@ if (!function_exists('get_request_details_for_email')) {
                         $template_data['SUBMITTED_BY'] = $row['employee_name'] ?? $row['prep_by'] ?? 'Employee';
                         $template_data['DEPARTMENT'] = $row['department_name'] ?? 'N/A';
                         $template_data['REQUEST_URL'] = $base_url . '/open_request.php?id=' . urlencode($inv_no);
-                        
+
                         mysqli_free_result($result);
                         mysqli_stmt_close($stmt);
                         return $template_data;
@@ -1369,7 +1418,6 @@ if (!function_exists('get_request_details_for_email')) {
                 mysqli_stmt_close($stmt);
             }
             return false;
-            
         } elseif ($request_type === 'resignation_request') {
             // Fetch resignation details
             $sql = "SELECT r.*, e.emp_id, e.name as employee_name, e.iqama,
@@ -1380,7 +1428,7 @@ if (!function_exists('get_request_details_for_email')) {
                     LEFT JOIN ac_jobs j ON j.id = e.actual_job
                     WHERE r.request_inv_no = ? 
                     LIMIT 1";
-            
+
             $stmt = mysqli_prepare($conDB, $sql);
             if ($stmt) {
                 mysqli_stmt_bind_param($stmt, 's', $inv_no);
@@ -1396,7 +1444,7 @@ if (!function_exists('get_request_details_for_email')) {
                         $template_data['LAST_WORKING_DAY'] = isset($row['last_working_day']) ? date('d M Y', strtotime($row['last_working_day'])) : 'N/A';
                         $template_data['SUBMISSION_DATE'] = isset($row['created_at']) ? date('d M Y H:i', strtotime($row['created_at'])) : 'N/A';
                         $template_data['REQUEST_URL'] = $base_url . '/all_resignations.php';
-                        
+
                         mysqli_free_result($result);
                         mysqli_stmt_close($stmt);
                         return $template_data;
@@ -1407,7 +1455,7 @@ if (!function_exists('get_request_details_for_email')) {
             }
             return false;
         }
-        
+
         // Unknown request type
         return false;
     }
@@ -1423,16 +1471,17 @@ if (!function_exists('get_request_details_for_email')) {
  * @return array Exit interview Q&A array or empty array if not found
  */
 if (!function_exists('get_exit_interview_data')) {
-    function get_exit_interview_data($conDB, $resignation_id) {
+    function get_exit_interview_data($conDB, $resignation_id)
+    {
         $exit_interviews = [];
-        
+
         if (!is_numeric($resignation_id) || $resignation_id <= 0) {
             return $exit_interviews;
         }
-        
+
         $resignation_id_safe = (int)$resignation_id;
         $sql = "SELECT * FROM `emp_exit_interviews` WHERE `resignation_id` = ? ORDER BY `id` ASC";
-        
+
         $stmt = mysqli_prepare($conDB, $sql);
         if ($stmt) {
             mysqli_stmt_bind_param($stmt, 'i', $resignation_id_safe);
@@ -1445,7 +1494,7 @@ if (!function_exists('get_exit_interview_data')) {
             }
             mysqli_stmt_close($stmt);
         }
-        
+
         return $exit_interviews;
     }
 }
@@ -1457,17 +1506,18 @@ if (!function_exists('get_exit_interview_data')) {
  * @return string HTML formatted exit interview Q&A display
  */
 if (!function_exists('format_exit_interview_html')) {
-    function format_exit_interview_html($exit_interviews) {
+    function format_exit_interview_html($exit_interviews)
+    {
         if (empty($exit_interviews)) {
             return '';
         }
-        
+
         $html = '<h2 style="margin: 0 0 20px; color: #ffffff; font-size: 18px; font-weight: 600; border-bottom: 2px solid #dc3545; padding-bottom: 10px;">
                     📋 Exit Interview Responses
                  </h2>';
-        
+
         $html .= '<div style="background-color: #151515; padding: 15px; border-radius: 4px;">';
-        
+
         // Define question labels
         $questions = [
             'What are the main reasons behind your decision to leave the company?',
@@ -1480,32 +1530,32 @@ if (!function_exists('format_exit_interview_html')) {
             'Would you recommend the company as a workplace to others? Why or why not?',
             'Is there anything else you would like to share before you leave?'
         ];
-        
+
         $answerKeys = ['q1_reasons', 'q2_support', 'q3_resources', 'q4_manager', 'q5_growth', 'q6_compensation', 'q7_different', 'q8_recommend', 'q9_additional'];
-        
+
         foreach ($exit_interviews as $record) {
             foreach ($answerKeys as $index => $key) {
                 if (!empty($record[$key])) {
                     $question_num = $index + 1;
                     $html .= '<div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #2a2a2a;">';
-                    
+
                     // Question
                     $html .= '<p style="margin: 0 0 8px; color: #ffc107; font-size: 14px; font-weight: 600;">
                                 Q' . $question_num . ': ' . htmlspecialchars($questions[$index], ENT_QUOTES, 'UTF-8') . '
                               </p>';
-                    
+
                     // Answer
                     $html .= '<p style="margin: 0; color: #c0c0c0; font-size: 14px; line-height: 1.6; padding: 10px; background-color: #1a1a1a; border-left: 3px solid #28a745; border-radius: 3px;">
                                 ' . nl2br(htmlspecialchars($record[$key], ENT_QUOTES, 'UTF-8')) . '
                               </p>';
-                    
+
                     $html .= '</div>';
                 }
             }
         }
-        
+
         $html .= '</div>';
-        
+
         return $html;
     }
 }
@@ -1524,12 +1574,14 @@ if (!function_exists('format_exit_interview_html')) {
  * @return array Status of the operation ['status' => 'success'|'error', 'message' => string, 'next_approver' => array|null, 'next_approver_id' => int|null]
  */
 if (!function_exists('handle_approval_action')) {
-    function handle_approval_action($conDB, $inv_no, $request_type, $current_user_id, $action, $note, $next_approver_chain = []) {
+    function handle_approval_action($conDB, $inv_no, $request_type, $current_user_id, $action, $note, $next_approver_chain = [])
+    {
         global $userwel; // Assumes $userwel contains the current user's name
 
         // Helper: Get a friendly human-readable label for the request type (once per call)
         if (!function_exists('get_friendly_request_label')) {
-            function get_friendly_request_label($type) {
+            function get_friendly_request_label($type)
+            {
                 $map = [
                     'vacation_request' => 'Vacation Request',
                     'smart_request' => 'Smart Request',
@@ -1553,7 +1605,7 @@ if (!function_exists('handle_approval_action')) {
         // ** Get Request Type Info **
         $type_query = mysqli_query($conDB, "SELECT `id`, `main_table_name` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
         if (!$type_query || mysqli_num_rows($type_query) == 0) {
-            if($type_query) mysqli_free_result($type_query); // Free result
+            if ($type_query) mysqli_free_result($type_query); // Free result
             return ['status' => 'error', 'message' => 'Invalid request type specified.'];
         }
         $type_row = mysqli_fetch_assoc($type_query);
@@ -1588,25 +1640,25 @@ if (!function_exists('handle_approval_action')) {
             $find_result = mysqli_stmt_get_result($stmt_find);
 
             if (!$find_result || mysqli_num_rows($find_result) == 0) {
-                if($find_result) mysqli_free_result($find_result); // Free result
+                if ($find_result) mysqli_free_result($find_result); // Free result
                 mysqli_stmt_close($stmt_find);
                 // Check if already actioned (without locking)
                 $check_actioned_sql = "SELECT `status` FROM `request_approvers`
                                        WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approver_id` = ?
                                        ORDER BY `action_date` DESC LIMIT 1";
                 $stmt_check = mysqli_prepare($conDB, $check_actioned_sql);
-                if(!$stmt_check) throw new Exception("Prepare failed (check actioned): " . mysqli_error($conDB));
+                if (!$stmt_check) throw new Exception("Prepare failed (check actioned): " . mysqli_error($conDB));
                 mysqli_stmt_bind_param($stmt_check, "sii", $inv_no_safe, $request_type_id, $current_user_id_safe);
-                if(!mysqli_stmt_execute($stmt_check)) throw new Exception("Execute failed (check actioned): " . mysqli_stmt_error($stmt_check));
+                if (!mysqli_stmt_execute($stmt_check)) throw new Exception("Execute failed (check actioned): " . mysqli_stmt_error($stmt_check));
                 $check_result = mysqli_stmt_get_result($stmt_check);
-                 if($check_result && $row = mysqli_fetch_assoc($check_result)) {
-                     mysqli_free_result($check_result); // Free result
-                     mysqli_rollback($conDB); // Release transaction
-                     mysqli_stmt_close($stmt_check);
-                     return ['status' => 'error', 'message' => 'You have already actioned this request (' . $row['status'] . ').'];
-                 }
-                 if($check_result) mysqli_free_result($check_result); // Free result
-                 mysqli_stmt_close($stmt_check);
+                if ($check_result && $row = mysqli_fetch_assoc($check_result)) {
+                    mysqli_free_result($check_result); // Free result
+                    mysqli_rollback($conDB); // Release transaction
+                    mysqli_stmt_close($stmt_check);
+                    return ['status' => 'error', 'message' => 'You have already actioned this request (' . $row['status'] . ').'];
+                }
+                if ($check_result) mysqli_free_result($check_result); // Free result
+                mysqli_stmt_close($stmt_check);
                 mysqli_rollback($conDB); // Release transaction
                 return ['status' => 'error', 'message' => 'No pending approval found for you on this request, or it has been modified.'];
             }
@@ -1627,24 +1679,24 @@ if (!function_exists('handle_approval_action')) {
             mysqli_stmt_close($stmt_update);
 
             // ** Log Action in smt_request_status (If this table is used for vacations) **
-             $log_status = ($action == 'approve') ? "approved_level_$current_level" : 'rejected';
-             $log_user_name = escape_string($userwel ?? 'System');
-             $log_sql = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES (?, ?, ?, ?, ?)";
-             $stmt_log = mysqli_prepare($conDB, $log_sql);
-             if ($stmt_log) {
+            $log_status = ($action == 'approve') ? "approved_level_$current_level" : 'rejected';
+            $log_user_name = escape_string($userwel ?? 'System');
+            $log_sql = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`) VALUES (?, ?, ?, ?, ?)";
+            $stmt_log = mysqli_prepare($conDB, $log_sql);
+            if ($stmt_log) {
                 mysqli_stmt_bind_param($stmt_log, "issss", $current_user_id_safe, $inv_no_safe, $log_user_name, $log_status, $note_safe);
                 if (!mysqli_stmt_execute($stmt_log)) {
-                     // Continue processing even if logging fails
+                    // Continue processing even if logging fails
                 }
                 mysqli_stmt_close($stmt_log);
-             }
+            }
 
 
             // ** Handle Next Step **
             $result_payload = ['status' => 'success', 'next_approver' => null, 'next_approver_id' => null]; // Initialize result payload
 
             if ($action == 'approve') {
-                
+
                 // *** NEW LOGIC: Check for manually provided next approvers ***
                 // This logic is now triggered *only if* the current approver adds a new chain
                 $valid_next_approvers = [];
@@ -1658,7 +1710,7 @@ if (!function_exists('handle_approval_action')) {
 
                 if (!empty($valid_next_approvers)) {
                     // --- Case 1: Manager IS adding a new chain ---
-                    
+
                     // 1. Append them to the chain
                     append_approval_chain($conDB, $inv_no_safe, $request_type_id, $current_level, $valid_next_approvers);
 
@@ -1666,7 +1718,7 @@ if (!function_exists('handle_approval_action')) {
                     $next_level = $current_level + 1;
                     $update_main_pending_sql = "UPDATE `$main_table_name` SET `current_status` = 'pending_approval', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
                     $stmt_main_pending = mysqli_prepare($conDB, $update_main_pending_sql);
-                     if (!$stmt_main_pending) throw new Exception("Prepare failed (update main pending): " . mysqli_error($conDB));
+                    if (!$stmt_main_pending) throw new Exception("Prepare failed (update main pending): " . mysqli_error($conDB));
                     mysqli_stmt_bind_param($stmt_main_pending, "is", $next_level, $inv_no_safe);
                     if (!mysqli_stmt_execute($stmt_main_pending)) throw new Exception("Execute failed (update main pending): " . mysqli_stmt_error($stmt_main_pending));
                     mysqli_stmt_close($stmt_main_pending);
@@ -1675,9 +1727,9 @@ if (!function_exists('handle_approval_action')) {
                     $next_approver_id = $valid_next_approvers[0]; // The first one in the new chain
                     $next_approver_details = getEmployeeDetailsForApproval($conDB, $next_approver_id);
                     if ($next_approver_details) {
-                         $result_payload['next_approver'] = $next_approver_details;
-                         $result_payload['next_approver_id'] = $next_approver_id;
-                        
+                        $result_payload['next_approver'] = $next_approver_details;
+                        $result_payload['next_approver_id'] = $next_approver_id;
+
                         // --- [FIX] SEND NOTIFICATION TO NEXT APPROVER ---
                         $notification_title = "New $friendly_label";
                         $notification_message = "A new $friendly_label ($inv_no_safe) is pending your approval.";
@@ -1692,11 +1744,11 @@ if (!function_exists('handle_approval_action')) {
                             $notification_url = "all_requests.php"; // Fallback
                         }
                         create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
-                        
+
                         if ($next_approver_details['email']) {
                             // Fetch request details for email template
                             $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $next_approver_details['name']);
-                            
+
                             if ($template_data) {
                                 send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $request_type, $template_data);
                             } else {
@@ -1747,7 +1799,7 @@ if (!function_exists('handle_approval_action')) {
                         if ($next_approver_details) {
                             $result_payload['next_approver'] = $next_approver_details;
                             $result_payload['next_approver_id'] = $next_approver_id;
-                            
+
                             // --- [FIX] SEND NOTIFICATION TO NEXT APPROVER ---
                             $notification_title = "New $friendly_label";
                             $notification_message = "A $friendly_label ($inv_no_safe) is now pending your approval.";
@@ -1766,7 +1818,7 @@ if (!function_exists('handle_approval_action')) {
                             if ($next_approver_details['email']) {
                                 // Fetch request details for email template
                                 $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $next_approver_details['name']);
-                                
+
                                 if ($template_data) {
                                     send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $notification_title, $request_type, $template_data);
                                 } else {
@@ -1779,13 +1831,15 @@ if (!function_exists('handle_approval_action')) {
 
                         } else {
                         }
-
                     } else {
                         // --- 2b: Try to AUTO-APPEND dynamic approvers for vacation_request (assets/payroll/GR) before finalizing ---
                         // ONLY if no approver chain was explicitly provided (to avoid duplicates)
                         if ($request_type === 'vacation_request' && empty($next_approver_chain)) {
                             // Fetch vacation info
-                            $vac_emp_id = null; $vac_type_val = null; $fly_type_val = null; $vac_salary_type_val = null;
+                            $vac_emp_id = null;
+                            $vac_type_val = null;
+                            $fly_type_val = null;
+                            $vac_salary_type_val = null;
                             $sql_vinfo = "SELECT emp_id, vac_type, fly_type, vacation_salary_type FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
                             $stmt_vinfo = mysqli_prepare($conDB, $sql_vinfo);
                             if ($stmt_vinfo) {
@@ -1814,13 +1868,15 @@ if (!function_exists('handle_approval_action')) {
                                     mysqli_stmt_bind_param($stmt_exist, "si", $inv_no_safe, $request_type_id);
                                     if (mysqli_stmt_execute($stmt_exist)) {
                                         $res_exist = mysqli_stmt_get_result($stmt_exist);
-                                        while ($res_exist && ($row_ex = mysqli_fetch_assoc($res_exist))) { $existing_ids[] = (int)$row_ex['approver_id']; }
+                                        while ($res_exist && ($row_ex = mysqli_fetch_assoc($res_exist))) {
+                                            $existing_ids[] = (int)$row_ex['approver_id'];
+                                        }
                                         if ($res_exist) mysqli_free_result($res_exist);
                                     }
                                     mysqli_stmt_close($stmt_exist);
                                 }
 
-                                $pushDyn = function($empId) use (&$dynamic_next, &$existing_ids, $current_user_id_safe) {
+                                $pushDyn = function ($empId) use (&$dynamic_next, &$existing_ids, $current_user_id_safe) {
                                     $eid = (int)$empId;
                                     if ($eid > 0 && $eid !== $current_user_id_safe && !in_array($eid, $dynamic_next, true) && !in_array($eid, $existing_ids, true)) {
                                         $dynamic_next[] = $eid;
@@ -1829,7 +1885,9 @@ if (!function_exists('handle_approval_action')) {
 
                                 // HR Senior BP (ALWAYS the next approver after Direct Manager)
                                 $res_hr_bp = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_senior_bp' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-                                if ($res_hr_bp && ($rhr_bp = mysqli_fetch_assoc($res_hr_bp))) { $pushDyn($rhr_bp['emp_id']); }
+                                if ($res_hr_bp && ($rhr_bp = mysqli_fetch_assoc($res_hr_bp))) {
+                                    $pushDyn($rhr_bp['emp_id']);
+                                }
                                 if ($res_hr_bp) mysqli_free_result($res_hr_bp);
 
                                 // Assets → IT / Administration / Transportation
@@ -1846,29 +1904,57 @@ if (!function_exists('handle_approval_action')) {
                                         mysqli_stmt_bind_param($stmt_assets, "s", $vac_emp_id);
                                         mysqli_stmt_execute($stmt_assets);
                                         $res_assets = mysqli_stmt_get_result($stmt_assets);
-                                        $needs_it = false; $needs_admin = false; $needs_transport = false;
+                                        $needs_it = false;
+                                        $needs_admin = false;
+                                        $needs_transport = false;
                                         while ($res_assets && ($ar = mysqli_fetch_assoc($res_assets))) {
                                             $nm = strtolower(trim($ar['asset_name']));
-                                            if (strpos($nm, 'laptop') !== false || strpos($nm, 'computer') !== false) { $needs_it = true; }
-                                            if (strpos($nm, 'mobile') !== false || strpos($nm, 'phone') !== false || strpos($nm, 'sim') !== false) { $needs_admin = true; }
-                                            if (strpos($nm, 'car') !== false || strpos($nm, 'vehicle') !== false) { $needs_transport = true; }
+                                            if (strpos($nm, 'laptop') !== false || strpos($nm, 'computer') !== false) {
+                                                $needs_it = true;
+                                            }
+                                            if (strpos($nm, 'mobile') !== false || strpos($nm, 'phone') !== false || strpos($nm, 'sim') !== false) {
+                                                $needs_admin = true;
+                                            }
+                                            if (strpos($nm, 'car') !== false || strpos($nm, 'vehicle') !== false) {
+                                                $needs_transport = true;
+                                            }
                                         }
                                         if ($res_assets) mysqli_free_result($res_assets);
                                         mysqli_stmt_close($stmt_assets);
 
                                         if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
-                                            $deptLookup = [ 'IT' => 'Information Technology', 'Administration' => 'Administration', 'Transportation' => 'Transportation' ];
-                                            if ($needs_it) { $it = get_department_id_by_name($conDB, $deptLookup['IT']); if ($it) { $mgr = getDeptManager($conDB, $it); if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']); } }
-                                            if ($needs_admin) { $ad = get_department_id_by_name($conDB, $deptLookup['Administration']); if ($ad) { $mgr = getDeptManager($conDB, $ad); if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']); } }
-                                            if ($needs_transport) { $tr = get_department_id_by_name($conDB, $deptLookup['Transportation']); if ($tr) { $mgr = getDeptManager($conDB, $tr); if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']); } }
+                                            $deptLookup = ['IT' => 'Information Technology', 'Administration' => 'Administration', 'Transportation' => 'Transportation'];
+                                            if ($needs_it) {
+                                                $it = get_department_id_by_name($conDB, $deptLookup['IT']);
+                                                if ($it) {
+                                                    $mgr = getDeptManager($conDB, $it);
+                                                    if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']);
+                                                }
+                                            }
+                                            if ($needs_admin) {
+                                                $ad = get_department_id_by_name($conDB, $deptLookup['Administration']);
+                                                if ($ad) {
+                                                    $mgr = getDeptManager($conDB, $ad);
+                                                    if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']);
+                                                }
+                                            }
+                                            if ($needs_transport) {
+                                                $tr = get_department_id_by_name($conDB, $deptLookup['Transportation']);
+                                                if ($tr) {
+                                                    $mgr = getDeptManager($conDB, $tr);
+                                                    if ($mgr && !empty($mgr['emp_id'])) $pushDyn($mgr['emp_id']);
+                                                }
+                                            }
                                         }
                                     }
                                 }
 
-                                // HR Payroll (for ALL annual vacations to process overtime/deductions)
-                                if (strtolower($fly_type_val) === 'annual') {
+                                // HR Payroll (for ALL annual and emergency vacations to process overtime/deductions)
+                                if (strtolower($fly_type_val) === 'annual' || strtolower($fly_type_val) === 'emergency') {
                                     $res_pay = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-                                    if ($res_pay && ($rpay = mysqli_fetch_assoc($res_pay))) { $pushDyn($rpay['emp_id']); }
+                                    if ($res_pay && ($rpay = mysqli_fetch_assoc($res_pay))) {
+                                        $pushDyn($rpay['emp_id']);
+                                    }
                                     if ($res_pay) mysqli_free_result($res_pay);
                                 }
 
@@ -1876,7 +1962,9 @@ if (!function_exists('handle_approval_action')) {
                                 if (strtolower($vac_type_val) === 'fly' && strtolower($fly_type_val) === 'annual') {
                                     $res_gr = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
                                     // $res_gr = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='gr_officer' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-                                    if ($res_gr && ($rgr = mysqli_fetch_assoc($res_gr))) { $pushDyn($rgr['emp_id']); }
+                                    if ($res_gr && ($rgr = mysqli_fetch_assoc($res_gr))) {
+                                        $pushDyn($rgr['emp_id']);
+                                    }
                                     if ($res_gr) mysqli_free_result($res_gr);
                                 }
                             }
@@ -1895,10 +1983,10 @@ if (!function_exists('handle_approval_action')) {
 
                                 // Notify first of the newly added approvers
                                 $next_approver_id = $dynamic_next[0];
-                                
+
                                 $next_details = getEmployeeDetailsForApproval($conDB, $next_approver_id);
                                 if ($next_details) {
-                                    
+
                                     $result_payload['next_approver'] = $next_details;
                                     $result_payload['next_approver_id'] = $next_approver_id;
                                     $notification_title = "New $friendly_label";
@@ -1911,18 +1999,18 @@ if (!function_exists('handle_approval_action')) {
                                     } else {
                                         $notification_url = "all_requests.php"; // Fallback
                                     }
-                                    
+
                                     // Send browser notification
                                     if (function_exists('create_browser_notification')) {
                                         create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
                                     }
-                                    
+
                                     // Send email notification
                                     if (!empty($next_details['email'])) {
-                                        
+
                                         // Get request details for proper email template
                                         $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $next_details['name']);
-                                        
+
                                         if ($template_data) {
                                             // Send email with full request details
                                             if (function_exists('send_approval_email')) {
@@ -1951,13 +2039,15 @@ if (!function_exists('handle_approval_action')) {
                         // For vacation requests, check if it's annual fly vacation that needs travel email
                         // If so, set status to 'approved' (not 'completed') so GR Officer can send travel email
                         $final_status = 'approved'; // Default to 'approved' for all requests
-                        
+                        $is_leave_request = false;   // Flag for LV- requests stored in emp_vacation
+                        $leave_final_email_sent = false; // Prevent duplicate creator email for LV-
+
                         if ($request_type === 'vacation_request') {
                             // Check if this is an annual fly vacation
                             $sql_vac_check = "SELECT `vac_type`, `fly_type` FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
                             $stmt_vac_check = mysqli_prepare($conDB, $sql_vac_check);
                             $is_annual_fly = false;
-                            
+
                             if ($stmt_vac_check) {
                                 mysqli_stmt_bind_param($stmt_vac_check, "s", $inv_no_safe);
                                 if (mysqli_stmt_execute($stmt_vac_check)) {
@@ -1969,14 +2059,14 @@ if (!function_exists('handle_approval_action')) {
                                 }
                                 mysqli_stmt_close($stmt_vac_check);
                             }
-                            
+
                             // Only set to 'completed' for non-annual-fly vacations
                             // Annual fly vacations stay at 'approved' until travel email is sent
                             if (!$is_annual_fly) {
                                 $final_status = 'completed';
                             }
                         }
-                        
+
                         $update_main_approved_sql = "UPDATE `$main_table_name` SET `current_status` = ?, `current_approval_level` = ? WHERE `$inv_column_name` = ?";
                         $stmt_main_approved = mysqli_prepare($conDB, $update_main_approved_sql);
                         if (!$stmt_main_approved) throw new Exception("Prepare failed (update main approved): " . mysqli_error($conDB));
@@ -1992,11 +2082,11 @@ if (!function_exists('handle_approval_action')) {
                             $vacation_emp_id = null; // Employee who created the request
                             $vacation_type = null;   // Vacation type to decide fly flag
                             $vacation_start_date = null; // Start date to check if vacation is active
-                            $request_inv_no = null;  // To check if it's a Leave Request (VAC-*)
+                            $request_inv_no = null;  // To check if it's a Leave Request (LV-*)
                             // Use the dynamic main_table_name which we know is 'emp_vacation' for this request type
                             $sql_get_id = "SELECT `id`, `emp_id`, `vac_type`, `start_date`, `request_inv_no` FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
                             $stmt_get_id = mysqli_prepare($conDB, $sql_get_id);
-                            
+
                             if ($stmt_get_id) {
                                 mysqli_stmt_bind_param($stmt_get_id, "s", $inv_no_safe);
                                 if (mysqli_stmt_execute($stmt_get_id)) {
@@ -2008,7 +2098,7 @@ if (!function_exists('handle_approval_action')) {
                                         $vacation_start_date = isset($row_id['start_date']) ? $row_id['start_date'] : null;
                                         $request_inv_no = isset($row_id['request_inv_no']) ? $row_id['request_inv_no'] : null;
                                     }
-                                    if($res_id) mysqli_free_result($res_id); // Free result
+                                    if ($res_id) mysqli_free_result($res_id); // Free result
                                 } else {
                                 }
                                 mysqli_stmt_close($stmt_get_id);
@@ -2029,12 +2119,51 @@ if (!function_exists('handle_approval_action')) {
                                 // 1. Sets fly=1 when vacation start_date arrives (not at approval)
                                 // 2. Resets fly=0 when vacation return_date passes
                                 // 3. Only affects regular vacation (VAC-*) with is_deductible=1
-                                
+
                                 $is_leave_request = !empty($request_inv_no) && strpos($request_inv_no, 'LV-') === 0;
-                                
-                                if (!$is_leave_request) {
-                                } else {
+
+                                if ($is_leave_request && $vacation_emp_id) {
+                                    $creator_details = getEmployeeDetailsForApproval($conDB, $vacation_emp_id);
+                                    if ($creator_details && !empty($creator_details['email'])) {
+                                        $final_subject = "Excuse Leave Approved - " . $inv_no_safe;
+
+                                        // Build CC list with HR Payroll
+                                        $cc_emails = [];
+                                        $hr_cc_label = '';
+                                        $hr_payroll_result = mysqli_query($conDB, "SELECT e.name, al.email FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 AND al.email IS NOT NULL AND al.email != '' ORDER BY e.emp_id ASC LIMIT 1");
+                                        if ($hr_payroll_result && ($hrp = mysqli_fetch_assoc($hr_payroll_result))) {
+                                            if (!empty($hrp['email'])) {
+                                                $cc_emails[$hrp['email']] = $hrp['name'];
+                                                $hr_cc_label = $hrp['name'] . " (" . $hrp['email'] . ")";
+                                            }
+                                        }
+                                        if ($hr_payroll_result) mysqli_free_result($hr_payroll_result);
+
+                                        // Build rich template data explicitly for leave_request (avoid empty template)
+                                        $base_url = get_base_url();
+                                        $request_url = $base_url . '/all_applied_vac.php?status=my_approved';
+                                        $leave_label = !empty($vacation_type) ? ucfirst($vacation_type) . ' Leave' : 'Excuse Leave';
+                                        $template_data_lr = [
+                                            'APPROVER_NAME' => $creator_details['name'],
+                                            'REQUEST_TYPE' => $leave_label . ' - Approved',
+                                            'REQUEST_TYPE_LOWER' => strtolower($leave_label) . ' approved',
+                                            'REQUEST_ID' => $inv_no_safe,
+                                            'EMPLOYEE_NAME' => $creator_details['name'],
+                                            'START_DATE' => !empty($vacation_start_date) ? date('d M Y', strtotime($vacation_start_date)) : '',
+                                            'END_DATE' => '',
+                                            'DURATION' => isset($row_id['vacdays']) ? (int)$row_id['vacdays'] : '',
+                                            'REQUEST_URL' => $request_url,
+                                            'EMAIL_MESSAGE' => 'Your excuse leave has been fully approved.' . ($hr_cc_label ? ' CC: ' . $hr_cc_label : '')
+                                        ];
+
+                                        // Send email using leave_request type so CC applies
+                                        if (function_exists('send_approval_email')) {
+                                            $leave_final_email_sent = send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $final_subject, 'leave_request', $template_data_lr, $cc_emails);
+                                        }
+                                    }
                                 }
+
+                                // Leave requests handled above for email; no fly status change here
                             } else {
                             }
                         }
@@ -2043,10 +2172,10 @@ if (!function_exists('handle_approval_action')) {
                         // --- [FIX] NOTIFY CREATOR OF FINAL APPROVAL ---
                         $creator_id = null;
                         $creator_id_query = mysqli_query($conDB, "SELECT emp_id FROM `$main_table_name` WHERE `$inv_column_name` = '$inv_no_safe' LIMIT 1");
-                        if($creator_id_query && $creator_row = mysqli_fetch_assoc($creator_id_query)){
+                        if ($creator_id_query && $creator_row = mysqli_fetch_assoc($creator_id_query)) {
                             $creator_id = (int)$creator_row['emp_id'];
                         }
-                        if($creator_id_query) mysqli_free_result($creator_id_query);
+                        if ($creator_id_query) mysqli_free_result($creator_id_query);
 
                         if ($creator_id > 0) {
                             $creator_details = getEmployeeDetailsForApproval($conDB, $creator_id);
@@ -2061,7 +2190,7 @@ if (!function_exists('handle_approval_action')) {
                                 } else {
                                     $notification_title = "$friendly_label Approved";
                                 }
-                                
+
                                 $notification_message = "Your $friendly_label ($inv_no_safe) has been fully approved.";
                                 // Dynamic URL based on request type
                                 if ($request_type === 'smart_request') {
@@ -2074,18 +2203,22 @@ if (!function_exists('handle_approval_action')) {
                                 create_browser_notification($conDB, $creator_id, $notification_title, $notification_message, $notification_url);
 
                                 if ($creator_details['email']) {
-                                    // Fetch request details for email template
-                                    $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $creator_details['name']);
-                                    
-                                    if ($template_data) {
-                                        // Modify the template to indicate it's approved
-                                        if (isset($template_data['REQUEST_TYPE'])) {
-                                            $template_data['REQUEST_TYPE'] = $template_data['REQUEST_TYPE'] . ' - Approved';
-                                        }
-                                        send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, $template_data);
+                                    // Avoid duplicate email for leave requests when already sent with CC
+                                    if ($is_leave_request && $leave_final_email_sent) {
                                     } else {
-                                        // Fallback if details not found
-                                        send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $creator_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                                        // Fetch request details for email template
+                                        $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $creator_details['name']);
+
+                                        if ($template_data) {
+                                            // Modify the template to indicate it's approved
+                                            if (isset($template_data['REQUEST_TYPE'])) {
+                                                $template_data['REQUEST_TYPE'] = $template_data['REQUEST_TYPE'] . ' - Approved';
+                                            }
+                                            send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, $template_data);
+                                        } else {
+                                            // Fallback if details not found
+                                            send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $creator_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                                        }
                                     }
                                 }
                             }
@@ -2098,7 +2231,7 @@ if (!function_exists('handle_approval_action')) {
                         if ($request_type === 'smart_request') {
                             // Get Finance Manager (Department 2)
                             $finance_manager_details = getDeptManager($conDB, 2);
-                            
+
                             if ($finance_manager_details && !empty($finance_manager_details['email'])) {
                                 // Check if Finance Manager was already in the approval chain (to avoid duplicate notification)
                                 $fm_in_chain = false;
@@ -2118,16 +2251,16 @@ if (!function_exists('handle_approval_action')) {
                                     }
                                     mysqli_stmt_close($stmt_check_fm);
                                 }
-                                
+
                                 // Only send notification if Finance Manager was NOT already notified as an approver
                                 if (!$fm_in_chain) {
                                     $fm_notification_title = "Smart Request Requires Payer Assignment - $inv_no_safe";
                                     $fm_notification_message = "Smart Request $inv_no_safe has been approved and requires you to assign a payer.";
                                     $fm_notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
-                                    
+
                                     // Send browser notification
                                     create_browser_notification($conDB, $finance_manager_details['emp_id'], $fm_notification_title, $fm_notification_message, $fm_notification_url);
-                                    
+
                                     // Send email notification
                                     $fm_template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $finance_manager_details['name']);
                                     if ($fm_template_data) {
@@ -2150,7 +2283,7 @@ if (!function_exists('handle_approval_action')) {
                         // --- Finance Manager Payer Assignment (if smart_request) ---
                         // [This logic is specific to smart_request, but safe to keep]
                         if ($request_type == 'smart_request') {
-                           // ... (Finance manager notification logic as before) ...
+                            // ... (Finance manager notification logic as before) ...
                         }
                     }
                     if ($find_next_result) mysqli_free_result($find_next_result);
@@ -2159,94 +2292,94 @@ if (!function_exists('handle_approval_action')) {
             } // End if ($action == 'approve')
             else {
                 // --- Action was 'reject' ---
-                 $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
-                 $stmt_main_rejected = mysqli_prepare($conDB, $update_main_rejected_sql);
-                 if (!$stmt_main_rejected) throw new Exception("Prepare failed (update main rejected): " . mysqli_error($conDB));
-                 mysqli_stmt_bind_param($stmt_main_rejected, "is", $current_level, $inv_no_safe);
-                 if (!mysqli_stmt_execute($stmt_main_rejected)) throw new Exception("Execute failed (update main rejected): " . mysqli_stmt_error($stmt_main_rejected));
-                 mysqli_stmt_close($stmt_main_rejected);
+                $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                $stmt_main_rejected = mysqli_prepare($conDB, $update_main_rejected_sql);
+                if (!$stmt_main_rejected) throw new Exception("Prepare failed (update main rejected): " . mysqli_error($conDB));
+                mysqli_stmt_bind_param($stmt_main_rejected, "is", $current_level, $inv_no_safe);
+                if (!mysqli_stmt_execute($stmt_main_rejected)) throw new Exception("Execute failed (update main rejected): " . mysqli_stmt_error($stmt_main_rejected));
+                mysqli_stmt_close($stmt_main_rejected);
 
 
-                 // --- Rejection Notification Logic ---
-                 // Create a more specific subject line for rejection
-                 if ($request_type === 'vacation_request') {
-                     $notification_title = "Vacation Request Rejected - $inv_no_safe";
-                 } elseif ($request_type === 'loan_request') {
-                     $notification_title = "Loan Request Rejected - $inv_no_safe";
-                 } elseif ($request_type === 'smart_request') {
-                     $notification_title = "Smart Request Rejected - $inv_no_safe";
-                 } else {
-                     $notification_title = "Request Rejected";
-                 }
-                 
-                 $notification_message = "Request " . htmlspecialchars($inv_no_safe) . " was rejected by " . htmlspecialchars($userwel ?? 'Approver') . ". Reason: " . htmlspecialchars($note_safe);
-                 // MODIFICATION: Make URL dynamic based on request type
-                 $notification_url = "my_vacations.php"; // Default for creator
-                 if ($request_type == 'smart_request') {
-                     $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
-                 } elseif ($request_type == 'vacation_request') {
-                     $notification_url = "my_vacations.php"; // <-- Adjust this URL
-                 }
-                 
-                 $approver_notification_url = "all_applied_vac.php"; // Default for approvers
-                 if ($request_type == 'smart_request') {
-                     $approver_notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
-                 } elseif ($request_type == 'vacation_request') {
-                     $approver_notification_url = "all_applied_vac.php"; // <-- Adjust this URL
-                 }
+                // --- Rejection Notification Logic ---
+                // Create a more specific subject line for rejection
+                if ($request_type === 'vacation_request') {
+                    $notification_title = "Vacation Request Rejected - $inv_no_safe";
+                } elseif ($request_type === 'loan_request') {
+                    $notification_title = "Loan Request Rejected - $inv_no_safe";
+                } elseif ($request_type === 'smart_request') {
+                    $notification_title = "Smart Request Rejected - $inv_no_safe";
+                } else {
+                    $notification_title = "Request Rejected";
+                }
+
+                $notification_message = "Request " . htmlspecialchars($inv_no_safe) . " was rejected by " . htmlspecialchars($userwel ?? 'Approver') . ". Reason: " . htmlspecialchars($note_safe);
+                // MODIFICATION: Make URL dynamic based on request type
+                $notification_url = "my_vacations.php"; // Default for creator
+                if ($request_type == 'smart_request') {
+                    $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
+                } elseif ($request_type == 'vacation_request') {
+                    $notification_url = "my_vacations.php"; // <-- Adjust this URL
+                }
+
+                $approver_notification_url = "all_applied_vac.php"; // Default for approvers
+                if ($request_type == 'smart_request') {
+                    $approver_notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
+                } elseif ($request_type == 'vacation_request') {
+                    $approver_notification_url = "all_applied_vac.php"; // <-- Adjust this URL
+                }
 
 
-                 // 1. Notify the Creator
-                 $creator_id = null;
-                 $creator_id_query = mysqli_query($conDB, "SELECT emp_id FROM `$main_table_name` WHERE `$inv_column_name` = '$inv_no_safe' LIMIT 1");
-                 if($creator_id_query && $creator_row = mysqli_fetch_assoc($creator_id_query)){
-                     $creator_id = (int)$creator_row['emp_id'];
-                 }
-                 if($creator_id_query) mysqli_free_result($creator_id_query); // Free result
- 
-                  if ($creator_id > 0 && $creator_id != $current_user_id_safe) {
-                     $creator_details = getEmployeeDetailsForApproval($conDB, $creator_id); // Get details for email
-                     if (function_exists('create_browser_notification')) {
+                // 1. Notify the Creator
+                $creator_id = null;
+                $creator_id_query = mysqli_query($conDB, "SELECT emp_id FROM `$main_table_name` WHERE `$inv_column_name` = '$inv_no_safe' LIMIT 1");
+                if ($creator_id_query && $creator_row = mysqli_fetch_assoc($creator_id_query)) {
+                    $creator_id = (int)$creator_row['emp_id'];
+                }
+                if ($creator_id_query) mysqli_free_result($creator_id_query); // Free result
+
+                if ($creator_id > 0 && $creator_id != $current_user_id_safe) {
+                    $creator_details = getEmployeeDetailsForApproval($conDB, $creator_id); // Get details for email
+                    if (function_exists('create_browser_notification')) {
                         create_browser_notification($conDB, $creator_id, $notification_title, $notification_message, $notification_url);
-                     }
-                     // --- [FIX] SEND REJECTION EMAIL TO CREATOR ---
-                     if ($creator_details && $creator_details['email']) {
-                         // Fetch request details for email template
-                         $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $creator_details['name']);
-                         
-                         if ($template_data) {
-                             // Modify the template to indicate it's rejected
-                             if (isset($template_data['REQUEST_TYPE'])) {
-                                 $template_data['REQUEST_TYPE'] = $template_data['REQUEST_TYPE'] . ' - Rejected';
-                             }
-                             send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, $template_data);
-                         } else {
-                             // Fallback if details not found
-                             send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $creator_details['name'], 'REQUEST_ID' => $inv_no_safe]);
-                         }
-                     }
-                     // --- [END FIX] ---
-                  }
+                    }
+                    // --- [FIX] SEND REJECTION EMAIL TO CREATOR ---
+                    if ($creator_details && $creator_details['email']) {
+                        // Fetch request details for email template
+                        $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $creator_details['name']);
 
-                 // 2. Notify Previous Approvers
-                 $prev_approvers_sql = "SELECT `approver_id` FROM `request_approvers` WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `status` = 'approved'";
-                 $stmt_prev = mysqli_prepare($conDB, $prev_approvers_sql);
-                 if ($stmt_prev) {
-                     mysqli_stmt_bind_param($stmt_prev, "si", $inv_no_safe, $request_type_id);
-                     if (mysqli_stmt_execute($stmt_prev)) {
-                         $prev_result = mysqli_stmt_get_result($stmt_prev);
-                         while ($prev_row = mysqli_fetch_assoc($prev_result)) {
-                             $prev_approver_id = (int)$prev_row['approver_id'];
-                             if ($prev_approver_id > 0 && $prev_approver_id != $current_user_id_safe) {
-                                 $prev_approver_details = getEmployeeDetailsForApproval($conDB, $prev_approver_id); // Get details for email
-                                 if (function_exists('create_browser_notification')) {
-                                     create_browser_notification($conDB, $prev_approver_id, $notification_title, $notification_message, $approver_notification_url);
-                                 }
-                                 // --- [FIX] SEND REJECTION EMAIL TO PREVIOUS APPROVERS ---
-                                 if ($prev_approver_details && $prev_approver_details['email']) {
+                        if ($template_data) {
+                            // Modify the template to indicate it's rejected
+                            if (isset($template_data['REQUEST_TYPE'])) {
+                                $template_data['REQUEST_TYPE'] = $template_data['REQUEST_TYPE'] . ' - Rejected';
+                            }
+                            send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, $template_data);
+                        } else {
+                            // Fallback if details not found
+                            send_approval_email($conDB, $creator_details['email'], $creator_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $creator_details['name'], 'REQUEST_ID' => $inv_no_safe]);
+                        }
+                    }
+                    // --- [END FIX] ---
+                }
+
+                // 2. Notify Previous Approvers
+                $prev_approvers_sql = "SELECT `approver_id` FROM `request_approvers` WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `status` = 'approved'";
+                $stmt_prev = mysqli_prepare($conDB, $prev_approvers_sql);
+                if ($stmt_prev) {
+                    mysqli_stmt_bind_param($stmt_prev, "si", $inv_no_safe, $request_type_id);
+                    if (mysqli_stmt_execute($stmt_prev)) {
+                        $prev_result = mysqli_stmt_get_result($stmt_prev);
+                        while ($prev_row = mysqli_fetch_assoc($prev_result)) {
+                            $prev_approver_id = (int)$prev_row['approver_id'];
+                            if ($prev_approver_id > 0 && $prev_approver_id != $current_user_id_safe) {
+                                $prev_approver_details = getEmployeeDetailsForApproval($conDB, $prev_approver_id); // Get details for email
+                                if (function_exists('create_browser_notification')) {
+                                    create_browser_notification($conDB, $prev_approver_id, $notification_title, $notification_message, $approver_notification_url);
+                                }
+                                // --- [FIX] SEND REJECTION EMAIL TO PREVIOUS APPROVERS ---
+                                if ($prev_approver_details && $prev_approver_details['email']) {
                                     // Fetch request details for email template
                                     $template_data = get_request_details_for_email($conDB, $inv_no_safe, $request_type, $prev_approver_details['name']);
-                                    
+
                                     if ($template_data) {
                                         // Modify the template to indicate it's rejected
                                         if (isset($template_data['REQUEST_TYPE'])) {
@@ -2257,15 +2390,15 @@ if (!function_exists('handle_approval_action')) {
                                         // Fallback if details not found
                                         send_approval_email($conDB, $prev_approver_details['email'], $prev_approver_details['name'], $notification_title, $request_type, ['APPROVER_NAME' => $prev_approver_details['name'], 'REQUEST_ID' => $inv_no_safe]);
                                     }
-                                 }
-                                 // --- [END FIX] ---
-                             }
-                         }
-                         mysqli_free_result($prev_result); // Free result
-                     }
-                     mysqli_stmt_close($stmt_prev);
-                 }
-                 // --- End Rejection Notification Logic ---
+                                }
+                                // --- [END FIX] ---
+                            }
+                        }
+                        mysqli_free_result($prev_result); // Free result
+                    }
+                    mysqli_stmt_close($stmt_prev);
+                }
+                // --- End Rejection Notification Logic ---
 
             } // End if/else (approve vs reject)
 
@@ -2293,13 +2426,14 @@ if (!function_exists('handle_approval_action')) {
  * @return array List of approval chain steps with status and details
  */
 if (!function_exists('get_approval_chain_status')) {
-    function get_approval_chain_status($conDB, $inv_no, $request_type) {
+    function get_approval_chain_status($conDB, $inv_no, $request_type)
+    {
         $chain = [];
         if (!$conDB) return $chain;
 
         $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
         if (!$type_query || mysqli_num_rows($type_query) == 0) {
-             if($type_query) mysqli_free_result($type_query); // Free result
+            if ($type_query) mysqli_free_result($type_query); // Free result
             return $chain; // Return empty array if type is invalid
         }
         $type_row = mysqli_fetch_assoc($type_query);
@@ -2336,12 +2470,13 @@ if (!function_exists('get_approval_chain_status')) {
  * @return int|null The emp_id of the current approver, or null if none pending or error
  */
 if (!function_exists('get_current_approver')) {
-    function get_current_approver($conDB, $inv_no, $request_type) {
+    function get_current_approver($conDB, $inv_no, $request_type)
+    {
         if (!$conDB) return null;
 
         $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = '" . escape_string($request_type) . "' LIMIT 1");
         if (!$type_query || mysqli_num_rows($type_query) == 0) {
-            if($type_query) mysqli_free_result($type_query); // Free result
+            if ($type_query) mysqli_free_result($type_query); // Free result
             return null;
         }
         $type_row = mysqli_fetch_assoc($type_query);
@@ -2362,7 +2497,7 @@ if (!function_exists('get_current_approver')) {
             return (int)$row['approver_id'];
         } elseif (!$query) {
         }
-        if($query) mysqli_free_result($query); // Free result if no rows
+        if ($query) mysqli_free_result($query); // Free result if no rows
         // No pending approver found or query failed
         return null;
     }
@@ -2375,7 +2510,8 @@ if (!function_exists('get_current_approver')) {
  * @return int The number of pending approvals
  */
 if (!function_exists('get_pending_approval_count')) {
-    function get_pending_approval_count($conDB, $emp_id) {
+    function get_pending_approval_count($conDB, $emp_id)
+    {
         if (!$conDB || !is_numeric($emp_id) || $emp_id <= 0) return 0;
 
         $emp_id_safe = (int)$emp_id;
@@ -2390,7 +2526,7 @@ if (!function_exists('get_pending_approval_count')) {
             return (int)$row['pending_count'];
         } elseif (!$query) {
         }
-        if($query) mysqli_free_result($query); // Free result if no rows
+        if ($query) mysqli_free_result($query); // Free result if no rows
         return 0;
     }
 }
@@ -2404,17 +2540,18 @@ if (!function_exists('get_pending_approval_count')) {
  * @return array|null Associative array with 'name' and 'email', or null if not found/error
  */
 if (!function_exists('getEmployeeDetailsForApproval')) {
-    function getEmployeeDetailsForApproval($conDB, $emp_id) {
+    function getEmployeeDetailsForApproval($conDB, $emp_id)
+    {
         if (!$conDB || !is_numeric($emp_id) || $emp_id <= 0) return null;
         $emp_id_safe = (int)$emp_id;
-        $sql = "SELECT e.name, al.email
-                FROM `employees` e
-                LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id
-                WHERE e.`emp_id` = ? AND e.`status` = 1
-                LIMIT 1"; // Added status check
+        $sql = "SELECT e.name, COALESCE(al.email, e.email) AS email
+            FROM `employees` e
+            LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id
+            WHERE e.`emp_id` = ? AND e.`status` = 1
+            LIMIT 1"; // Added status check
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
-             return null;
+            return null;
         }
         mysqli_stmt_bind_param($stmt, "i", $emp_id_safe);
         if (mysqli_stmt_execute($stmt)) {
@@ -2428,7 +2565,7 @@ if (!function_exists('getEmployeeDetailsForApproval')) {
                 $details['name'] = $details['name'] ?? 'Unknown Employee'; // Default name
                 return $details;
             } else {
-                 if($result) mysqli_free_result($result); // Free result
+                if ($result) mysqli_free_result($result); // Free result
             }
         } else {
         }
@@ -2441,7 +2578,8 @@ if (!function_exists('getEmployeeDetailsForApproval')) {
 // --- Department/Role Specific Employee Fetching ---
 
 if (!function_exists('getDeptManager')) {
-    function getDeptManager($conDB, $dept_id) {
+    function getDeptManager($conDB, $dept_id)
+    {
         if (!$conDB || !is_numeric($dept_id) || $dept_id <= 0) return null;
         $dept_id_safe = (int)$dept_id;
         // Prioritize 'Manager' emptype, then 'dept_user' user_type
@@ -2453,30 +2591,31 @@ if (!function_exists('getDeptManager')) {
                 ORDER BY FIELD(e.emptype, 'Manager') DESC, FIELD(al.user_type, 'dept_user') DESC
                 LIMIT 1";
         $stmt = mysqli_prepare($conDB, $sql);
-         if (!$stmt) {
-             return null;
-         }
-         mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
-         if (mysqli_stmt_execute($stmt)) {
-             $result = mysqli_stmt_get_result($stmt);
-             if ($result && mysqli_num_rows($result) > 0) {
-                 $details = mysqli_fetch_assoc($result);
-                 mysqli_free_result($result);
-                 mysqli_stmt_close($stmt);
-                 $details['email'] = (!empty($details['email']) && filter_var($details['email'], FILTER_VALIDATE_EMAIL)) ? $details['email'] : null;
-                 return $details;
-             } else {
-                  if($result) mysqli_free_result($result); // Free result
-             }
-         } else {
-         }
-         mysqli_stmt_close($stmt);
-         return null;
+        if (!$stmt) {
+            return null;
+        }
+        mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result && mysqli_num_rows($result) > 0) {
+                $details = mysqli_fetch_assoc($result);
+                mysqli_free_result($result);
+                mysqli_stmt_close($stmt);
+                $details['email'] = (!empty($details['email']) && filter_var($details['email'], FILTER_VALIDATE_EMAIL)) ? $details['email'] : null;
+                return $details;
+            } else {
+                if ($result) mysqli_free_result($result); // Free result
+            }
+        } else {
+        }
+        mysqli_stmt_close($stmt);
+        return null;
     }
 }
 
 if (!function_exists('getFinancePersonnel')) {
-    function getFinancePersonnel($conDB, $dept_id = 2) { // Default Finance Dept ID = 2
+    function getFinancePersonnel($conDB, $dept_id = 2)
+    { // Default Finance Dept ID = 2
         if (!$conDB) return [];
         $dept_id_safe = (int)$dept_id;
         $sql = "SELECT e.emp_id, e.name, al.email
@@ -2486,28 +2625,29 @@ if (!function_exists('getFinancePersonnel')) {
                 ORDER BY FIELD(e.emptype, 'Manager', 'Assistant', 'Supporter'), e.name";
         $stmt = mysqli_prepare($conDB, $sql);
         $personnel = [];
-         if (!$stmt) {
-             return $personnel;
-         }
-         mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
-         if (mysqli_stmt_execute($stmt)) {
-             $result = mysqli_stmt_get_result($stmt);
-             if($result) {
-                 while ($row = mysqli_fetch_assoc($result)) {
-                     $row['email'] = (!empty($row['email']) && filter_var($row['email'], FILTER_VALIDATE_EMAIL)) ? $row['email'] : null;
-                     $personnel[] = $row;
-                 }
-                 mysqli_free_result($result);
-             }
-         } else {
-         }
-         mysqli_stmt_close($stmt);
+        if (!$stmt) {
+            return $personnel;
+        }
+        mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $row['email'] = (!empty($row['email']) && filter_var($row['email'], FILTER_VALIDATE_EMAIL)) ? $row['email'] : null;
+                    $personnel[] = $row;
+                }
+                mysqli_free_result($result);
+            }
+        } else {
+        }
+        mysqli_stmt_close($stmt);
         return $personnel;
     }
 }
 
 if (!function_exists('getHRPersonnel')) {
-    function getHRPersonnel($conDB, $dept_id = 5) { // Default HR Dept ID = 5
+    function getHRPersonnel($conDB, $dept_id = 5)
+    { // Default HR Dept ID = 5
         if (!$conDB) return [];
         $dept_id_safe = (int)$dept_id;
         $sql = "SELECT e.emp_id, e.name, al.email
@@ -2515,79 +2655,81 @@ if (!function_exists('getHRPersonnel')) {
                 LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id
                 WHERE e.`dept`= ? AND e.`status`= 1
                 ORDER BY FIELD(e.emptype, 'Manager', 'Assistant', 'Supporter'), e.name";
-         $stmt = mysqli_prepare($conDB, $sql);
+        $stmt = mysqli_prepare($conDB, $sql);
         $personnel = [];
-         if (!$stmt) {
-             return $personnel;
-         }
-         mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
-         if (mysqli_stmt_execute($stmt)) {
-             $result = mysqli_stmt_get_result($stmt);
-             if($result) {
-                 while ($row = mysqli_fetch_assoc($result)) {
-                      $row['email'] = (!empty($row['email']) && filter_var($row['email'], FILTER_VALIDATE_EMAIL)) ? $row['email'] : null;
-                     $personnel[] = $row;
-                 }
-                  mysqli_free_result($result);
-             }
-         } else {
-         }
-         mysqli_stmt_close($stmt);
+        if (!$stmt) {
+            return $personnel;
+        }
+        mysqli_stmt_bind_param($stmt, "i", $dept_id_safe);
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $row['email'] = (!empty($row['email']) && filter_var($row['email'], FILTER_VALIDATE_EMAIL)) ? $row['email'] : null;
+                    $personnel[] = $row;
+                }
+                mysqli_free_result($result);
+            }
+        } else {
+        }
+        mysqli_stmt_close($stmt);
         return $personnel;
     }
 }
 
 
 if (!function_exists('getGeneralManager')) {
-    function getGeneralManager($conDB) {
-         if (!$conDB) return null;
-         // Find user with 'gm' user_type in admin_login, ensure active in employees
-         $sql = "SELECT e.emp_id, e.name, al.email
+    function getGeneralManager($conDB)
+    {
+        if (!$conDB) return null;
+        // Find user with 'gm' user_type in admin_login, ensure active in employees
+        $sql = "SELECT e.emp_id, e.name, al.email
                  FROM `admin_login` al
                  JOIN `employees` e ON al.emp_id = e.emp_id
                  WHERE al.`user_type`= 'gm' AND e.`status`= 1
                  LIMIT 1";
-         $stmt = mysqli_prepare($conDB, $sql);
-          if (!$stmt) {
-             return null;
-         }
-         // No parameters to bind
-         if (mysqli_stmt_execute($stmt)) {
-             $result = mysqli_stmt_get_result($stmt);
-              if ($result && mysqli_num_rows($result) > 0) {
-                 $details = mysqli_fetch_assoc($result);
-                 mysqli_free_result($result);
-                 mysqli_stmt_close($stmt);
-                 $details['email'] = (!empty($details['email']) && filter_var($details['email'], FILTER_VALIDATE_EMAIL)) ? $details['email'] : null;
-                 return $details;
-             } else {
-                 if($result) mysqli_free_result($result); // Free result
-             }
-         } else {
-         }
-         mysqli_stmt_close($stmt);
-         return null;
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            return null;
+        }
+        // No parameters to bind
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result && mysqli_num_rows($result) > 0) {
+                $details = mysqli_fetch_assoc($result);
+                mysqli_free_result($result);
+                mysqli_stmt_close($stmt);
+                $details['email'] = (!empty($details['email']) && filter_var($details['email'], FILTER_VALIDATE_EMAIL)) ? $details['email'] : null;
+                return $details;
+            } else {
+                if ($result) mysqli_free_result($result); // Free result
+            }
+        } else {
+        }
+        mysqli_stmt_close($stmt);
+        return null;
     }
 }
 
 if (!function_exists('getEmployeeDetails')) {
-    function getEmployeeDetails($conDB, $emp_id) {
+    function getEmployeeDetails($conDB, $emp_id)
+    {
         $default_return = ['name' => 'N/A', 'email' => null]; // Consistent return type
         if (!$conDB || !is_numeric($emp_id) || $emp_id <= 0) return $default_return;
         $emp_id_clean = (int)$emp_id;
-        $sql = "SELECT e.name, al.email
-                FROM `employees` e
-                LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id
-                WHERE e.`emp_id`= ?
-                LIMIT 1";
+        $sql = "SELECT e.name, COALESCE(al.email, e.email) AS email
+            FROM `employees` e
+            LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id
+            WHERE e.`emp_id`= ?
+            LIMIT 1";
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
-             return $default_return;
+            return $default_return;
         }
-         mysqli_stmt_bind_param($stmt, "i", $emp_id_clean);
+        mysqli_stmt_bind_param($stmt, "i", $emp_id_clean);
         if (mysqli_stmt_execute($stmt)) {
             $result = mysqli_stmt_get_result($stmt);
-             if ($result && mysqli_num_rows($result) > 0) {
+            if ($result && mysqli_num_rows($result) > 0) {
                 $details = mysqli_fetch_assoc($result);
                 mysqli_free_result($result);
                 mysqli_stmt_close($stmt);
@@ -2595,7 +2737,7 @@ if (!function_exists('getEmployeeDetails')) {
                 $details['name'] = $details['name'] ?? 'Unknown';
                 return $details;
             } else {
-                 if($result) mysqli_free_result($result); // Free result
+                if ($result) mysqli_free_result($result); // Free result
             }
         } else {
         }
@@ -2624,25 +2766,26 @@ if (!function_exists('getEmployeeDetails')) {
  * @return bool True on success, false on failure
  */
 if (!function_exists('create_browser_notification')) {
-    function create_browser_notification($conDB, $emp_id, $title, $message, $url) {
-         // ** Input Validation and Sanitization **
+    function create_browser_notification($conDB, $emp_id, $title, $message, $url)
+    {
+        // ** Input Validation and Sanitization **
         if (!$conDB) {
-             return false;
+            return false;
         }
         if (!is_numeric($emp_id) || $emp_id <= 0) {
-             return false;
+            return false;
         }
         $title_trimmed = trim($title);
         if (empty($title_trimmed)) {
-             return false;
+            return false;
         }
         $message_trimmed = trim($message);
-         if (empty($message_trimmed)) {
-             return false;
+        if (empty($message_trimmed)) {
+            return false;
         }
         $url_trimmed = trim($url);
-         if (empty($url_trimmed)) {
-             return false;
+        if (empty($url_trimmed)) {
+            return false;
         }
 
         $emp_id_safe = (int)$emp_id;
@@ -2657,7 +2800,7 @@ if (!function_exists('create_browser_notification')) {
 
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
-             return false;
+            return false;
         }
 
         // Bind parameters: i=integer, s=string
@@ -2666,12 +2809,12 @@ if (!function_exists('create_browser_notification')) {
         // ** Execute and Check **
         if (mysqli_stmt_execute($stmt)) {
             $affected_rows = mysqli_stmt_affected_rows($stmt);
-             mysqli_stmt_close($stmt);
-             if ($affected_rows === 1) {
-                 return true;
-             } else {
-                  return false; // Or handle as needed
-             }
+            mysqli_stmt_close($stmt);
+            if ($affected_rows === 1) {
+                return true;
+            } else {
+                return false; // Or handle as needed
+            }
         } else {
             // Log specific error
             mysqli_stmt_close($stmt);
@@ -2690,13 +2833,14 @@ if (!function_exists('create_browser_notification')) {
  * @return array List of unread notifications, ordered by creation date descending
  */
 if (!function_exists('get_unread_notifications')) {
-    function get_unread_notifications($conDB, $emp_id) {
+    function get_unread_notifications($conDB, $emp_id)
+    {
         $notifications = [];
         if (!$conDB) {
-             return $notifications;
+            return $notifications;
         }
         if (!is_numeric($emp_id) || $emp_id <= 0) {
-             return $notifications;
+            return $notifications;
         }
 
         $emp_id_safe = (int)$emp_id;
@@ -2706,31 +2850,31 @@ if (!function_exists('get_unread_notifications')) {
                 WHERE `emp_id` = ? AND `is_read` = 0
                 ORDER BY `created_at` DESC";
 
-         $stmt = mysqli_prepare($conDB, $sql);
-         if (!$stmt) {
-             return $notifications;
-         }
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            return $notifications;
+        }
 
-         mysqli_stmt_bind_param($stmt, "i", $emp_id_safe);
+        mysqli_stmt_bind_param($stmt, "i", $emp_id_safe);
 
-         if (mysqli_stmt_execute($stmt)) {
-             $result = mysqli_stmt_get_result($stmt);
-             if ($result) {
-                 while ($row = mysqli_fetch_assoc($result)) {
-                     // Sanitize output just in case (though should be safe from DB)
-                     $row['title'] = htmlspecialchars($row['title']);
-                     $row['message'] = htmlspecialchars($row['message']);
-                     $row['url'] = htmlspecialchars($row['url']);
-                     $notifications[] = $row;
-                 }
-                 mysqli_free_result($result);
-             } else {
-                 // Log error getting result
-             }
-         } else {
-             // Log execution error
-         }
-         mysqli_stmt_close($stmt);
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    // Sanitize output just in case (though should be safe from DB)
+                    $row['title'] = htmlspecialchars($row['title']);
+                    $row['message'] = htmlspecialchars($row['message']);
+                    $row['url'] = htmlspecialchars($row['url']);
+                    $notifications[] = $row;
+                }
+                mysqli_free_result($result);
+            } else {
+                // Log error getting result
+            }
+        } else {
+            // Log execution error
+        }
+        mysqli_stmt_close($stmt);
 
         return $notifications;
     }
@@ -2747,10 +2891,11 @@ if (!function_exists('get_unread_notifications')) {
  * @return bool True if the query executed successfully (even if 0 rows affected), false on failure.
  */
 if (!function_exists('mark_notifications_as_read')) {
-    function mark_notifications_as_read($conDB, $emp_id, $notification_ids) {
-         // Validate inputs
+    function mark_notifications_as_read($conDB, $emp_id, $notification_ids)
+    {
+        // Validate inputs
         if (!$conDB) {
-             return false;
+            return false;
         }
         if (!is_numeric($emp_id) || $emp_id <= 0 || empty($notification_ids) || !is_array($notification_ids)) {
             return false;
@@ -2758,7 +2903,9 @@ if (!function_exists('mark_notifications_as_read')) {
 
         // Sanitize all IDs to integers and filter out invalid ones
         $ids_safe = array_map('intval', $notification_ids);
-        $ids_safe = array_filter($ids_safe, function($id) { return $id > 0; });
+        $ids_safe = array_filter($ids_safe, function ($id) {
+            return $id > 0;
+        });
 
         if (empty($ids_safe)) {
             return false; // No valid IDs to process
@@ -2776,7 +2923,7 @@ if (!function_exists('mark_notifications_as_read')) {
 
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
-             return false;
+            return false;
         }
 
         // Bind parameters: first the emp_id (integer), then all notification IDs (integers)
@@ -2786,25 +2933,25 @@ if (!function_exists('mark_notifications_as_read')) {
         // Use call_user_func_array or argument unpacking (...) for dynamic binding
         // Note: Argument unpacking (...) requires PHP 5.6+
         if (!mysqli_stmt_bind_param($stmt, $types, ...$bind_params)) {
-             mysqli_stmt_close($stmt);
-             return false;
+            mysqli_stmt_close($stmt);
+            return false;
         }
 
 
         // Execute and Check
         if (mysqli_stmt_execute($stmt)) {
-             $affected_rows = mysqli_stmt_affected_rows($stmt);
-             mysqli_stmt_close($stmt);
-             if ($affected_rows >= 0) { // Even 0 affected rows is a success if the query ran and no error occurred
-                 // Log success, including how many rows were actually updated
-                 return true; // Indicate success (query executed without error)
-             } else {
-                  // Should not happen with MySQLi, but good practice
-                  return false; // Error indicated by negative affected rows
-             }
+            $affected_rows = mysqli_stmt_affected_rows($stmt);
+            mysqli_stmt_close($stmt);
+            if ($affected_rows >= 0) { // Even 0 affected rows is a success if the query ran and no error occurred
+                // Log success, including how many rows were actually updated
+                return true; // Indicate success (query executed without error)
+            } else {
+                // Should not happen with MySQLi, but good practice
+                return false; // Error indicated by negative affected rows
+            }
         } else {
             // Log execution error
-             mysqli_stmt_close($stmt);
+            mysqli_stmt_close($stmt);
             return false;
         }
     }
@@ -2823,18 +2970,19 @@ if (!function_exists('mark_notifications_as_read')) {
  * @return string|null The setting value or null if not found/error
  */
 if (!function_exists('get_setting')) {
-     // Simple static cache to reduce DB queries for the same setting within a single request
+    // Simple static cache to reduce DB queries for the same setting within a single request
     $settings_cache = [];
 
-    function get_setting($conDB, $setting_name, $default = null) {
-         global $settings_cache; // Access the cache
+    function get_setting($conDB, $setting_name, $default = null)
+    {
+        global $settings_cache; // Access the cache
 
         if (!$conDB) {
             return $default;
         }
         $setting_name_trimmed = trim($setting_name);
         if (empty($setting_name_trimmed)) {
-             return $default;
+            return $default;
         }
 
         // Check cache first
@@ -2846,7 +2994,7 @@ if (!function_exists('get_setting')) {
         $sql = "SELECT `setting_value` FROM `app_settings` WHERE `setting_name` = ? LIMIT 1";
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
-             return null;
+            return null;
         }
 
         mysqli_stmt_bind_param($stmt, "s", $setting_name_trimmed);
@@ -2858,15 +3006,15 @@ if (!function_exists('get_setting')) {
                 $value = $row['setting_value'];
                 $settings_cache[$setting_name_trimmed] = $value; // Store in cache
                 mysqli_free_result($result);
-                 mysqli_stmt_close($stmt);
+                mysqli_stmt_close($stmt);
                 return $value;
             } else {
-                 // Setting not found, return default value
-                 $settings_cache[$setting_name_trimmed] = $default;
-                 if ($default !== null) {
-                 } else {
-                 }
-                 if($result) mysqli_free_result($result); // Free result even if no rows
+                // Setting not found, return default value
+                $settings_cache[$setting_name_trimmed] = $default;
+                if ($default !== null) {
+                } else {
+                }
+                if ($result) mysqli_free_result($result); // Free result even if no rows
             }
         } else {
         }
@@ -2888,7 +3036,8 @@ if (!function_exists('get_setting')) {
  * @return bool True on success, false on failure.
  */
 if (!function_exists('update_vacation_balance_on_approval')) {
-    function update_vacation_balance_on_approval($conDB, $vacation_id) {
+    function update_vacation_balance_on_approval($conDB, $vacation_id)
+    {
         if (!$conDB || !is_numeric($vacation_id) || $vacation_id <= 0) {
             return false;
         }
@@ -2896,7 +3045,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $vac_id_safe = (int)$vacation_id;
 
         // 1. Get the approved vacation details
-            $sql_vac = "SELECT `emp_id`, `vacdays`, `is_deductible`, `vac_type`, `fly_type`, `remarks` FROM `emp_vacation` WHERE `id` = ?";
+        $sql_vac = "SELECT `emp_id`, `vacdays`, `is_deductible`, `vac_type`, `fly_type`, `remarks` FROM `emp_vacation` WHERE `id` = ?";
         $stmt_vac = mysqli_prepare($conDB, $sql_vac);
         if (!$stmt_vac) {
             return false;
@@ -2920,7 +3069,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $days_to_deduct = (float)$vac_details['vacdays'];
         $remarks = trim(strtolower($vac_details['remarks'] ?? ''));
         $vac_type_lower = trim(strtolower($vac_details['vac_type'] ?? ''));
-        
+
         // [NEW] Check if this is an ENCASHMENT request
         $is_encashment = ($remarks === 'encashment') || ($vac_type_lower === 'encashed');        // 2. CHECK IF THIS VACATION TYPE SHOULD BE DEDUCTED FROM BALANCE
         // We only deduct 'Fly' (annual/emergency) and 'Local Vacation'.
@@ -2929,19 +3078,19 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         // Your logic seems to be: 'Fly' and 'Local Vacation' *should* be deducted from balance.
         // Your old `is_deductible` flag seems to be for *salary* deduction, not balance deduction.
         // Let's rely on `vac_type` and `fly_type`.
-        
+
         $is_balance_deductible = false;
         if ($vac_details['vac_type'] == 'Fly' && ($vac_details['fly_type'] == 'annual' || $vac_details['fly_type'] == 'emergency')) {
             $is_balance_deductible = true;
         }
         if ($vac_details['vac_type'] == 'Local Vacation') {
-             $is_balance_deductible = true;
+            $is_balance_deductible = true;
         }
-        
-            // [NEW] Encashment is ALWAYS balance deductible
-            if ($is_encashment) {
-                $is_balance_deductible = true;
-            }
+
+        // [NEW] Encashment is ALWAYS balance deductible
+        if ($is_encashment) {
+            $is_balance_deductible = true;
+        }
 
         if (!$is_balance_deductible) {
             return true; // Not an error, just no action needed.
@@ -2980,7 +3129,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $sql_latest_balance = "SELECT * FROM `emp_vacation_balance` WHERE `emp_id` = ? ORDER BY `id` DESC LIMIT 1";
         $stmt_latest = mysqli_prepare($conDB, $sql_latest_balance);
         if (!$stmt_latest) {
-             return false;
+            return false;
         }
         mysqli_stmt_bind_param($stmt_latest, "i", $emp_id);
         if (!mysqli_stmt_execute($stmt_latest)) {
@@ -2998,7 +3147,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $carryover_days = 0.0;
         $period_start = date('Y-m-d'); // Default
         $period_end = date('Y-m-d', strtotime('+1 year')); // Default
-        
+
         if ($latest_balance) {
             // Found a previous record, use it as the baseline
             $old_used_days = (float)$latest_balance['used_days'];
@@ -3023,22 +3172,22 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             // $period_end = $latest_balance['period_end'] ?? date('Y-m-d', strtotime('+1 year'));
         }
 
-            // [NEW] Encashment logic: Set all balance to 0
-            if ($is_encashment) {
-                $new_used_days = $total_contract_days + $carryover_days; // Use ALL available days
-                $new_remaining_balance = 0.0;
-                $new_available_balance = 0.0;
-            } else {
-                // Normal vacation deduction logic
-                $new_used_days = $old_used_days + $days_to_deduct;
-                $max_allowable = ($total_contract_days + $carryover_days);
-                if ($new_used_days > $max_allowable) {
-                    // Prevent negative balances: cap used_days at total available
-                    $new_used_days = $max_allowable;
-                }
-                $new_remaining_balance = $max_allowable - $new_used_days;
-                // Available balance should probably be the same as remaining
-                $new_available_balance = $new_remaining_balance; 
+        // [NEW] Encashment logic: Set all balance to 0
+        if ($is_encashment) {
+            $new_used_days = $total_contract_days + $carryover_days; // Use ALL available days
+            $new_remaining_balance = 0.0;
+            $new_available_balance = 0.0;
+        } else {
+            // Normal vacation deduction logic
+            $new_used_days = $old_used_days + $days_to_deduct;
+            $max_allowable = ($total_contract_days + $carryover_days);
+            if ($new_used_days > $max_allowable) {
+                // Prevent negative balances: cap used_days at total available
+                $new_used_days = $max_allowable;
+            }
+            $new_remaining_balance = $max_allowable - $new_used_days;
+            // Available balance should probably be the same as remaining
+            $new_available_balance = $new_remaining_balance;
         }
 
         // 6. Check if a balance record already exists for this emp_id, contract_id, period_start
@@ -3072,7 +3221,9 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             }
             // Debug: log types and values
             $id_int = (int)$row_check['id'];
-            mysqli_stmt_bind_param($stmt_update, "isdddddi",
+            mysqli_stmt_bind_param(
+                $stmt_update,
+                "isdddddi",
                 $vac_id_safe,
                 $period_end,
                 $total_contract_days,
@@ -3099,11 +3250,13 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             if (!$stmt_insert) {
                 return false;
             }
-            mysqli_stmt_bind_param($stmt_insert, "iiisssdddd", 
-                $emp_id, 
-                $vac_id_safe, 
-                $contract_id, 
-                $period_start, 
+            mysqli_stmt_bind_param(
+                $stmt_insert,
+                "iiisssdddd",
+                $emp_id,
+                $vac_id_safe,
+                $contract_id,
+                $period_start,
                 $period_end,
                 $total_contract_days,
                 $new_used_days,
@@ -3141,7 +3294,8 @@ if (!function_exists('update_vacation_balance_on_approval')) {
  * @return bool True if email sent successfully, false otherwise
  */
 if (!function_exists('send_travel_company_email')) {
-    function send_travel_company_email($conDB, $employee_name, $passport_no, $passport_expiry, $country_name, $departure_date, $arrival_date, $request_inv_no = '', $cc_email = '', $passport_file_path = '', $passport_file_name = '') {
+    function send_travel_company_email($conDB, $employee_name, $passport_no, $passport_expiry, $country_name, $departure_date, $arrival_date, $request_inv_no = '', $cc_email = '', $passport_file_path = '', $passport_file_name = '')
+    {
         if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
             return false;
         }
@@ -3158,7 +3312,7 @@ if (!function_exists('send_travel_company_email')) {
         // Get traveling company email (you should add this to app_settings table)
         // For now, using a default value - you should create this setting in your database
         $traveling_company_email = get_setting($conDB, 'traveling_company_email');
-        
+
         if (empty($traveling_company_email)) {
             return false;
         }
@@ -3179,7 +3333,7 @@ if (!function_exists('send_travel_company_email')) {
         // Build email body
         $site_title = get_setting($conDB, 'site_title', 'Al-Mutlak');
         $logo_url = get_setting($conDB, 'logo', 'assets/images/logo.png');
-        
+
         $body_html = '
 <!DOCTYPE html>
 <html lang="en">
@@ -3279,7 +3433,7 @@ if (!function_exists('send_travel_company_email')) {
                     $mail->SMTPSecure = false;
                     break;
             }
-            
+
             $mail->Port       = $smtp_port;
             $mail->CharSet    = 'UTF-8';
 
@@ -3287,7 +3441,7 @@ if (!function_exists('send_travel_company_email')) {
             $mail->setFrom($smtp_from_email, $smtp_from_name);
             $mail->addAddress($traveling_company_email, 'Travel Company');
             $mail->addReplyTo($smtp_from_email, $smtp_from_name);
-            
+
             // Add CC if provided (e.g., gr_officer)
             if (!empty($cc_email) && filter_var($cc_email, FILTER_VALIDATE_EMAIL)) {
                 $mail->addCC($cc_email, 'GR Officer');
@@ -3321,20 +3475,21 @@ if (!function_exists('send_travel_company_email')) {
  * @return float Current available balance (returns 0 if not found)
  */
 if (!function_exists('get_employee_vacation_balance_from_db')) {
-    function get_employee_vacation_balance_from_db($conDB, $emp_id) {
+    function get_employee_vacation_balance_from_db($conDB, $emp_id)
+    {
         if (empty($emp_id)) {
             return 0.0;
         }
-        
+
         $stmt = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $emp_id) . "' ORDER BY `last_updated` DESC LIMIT 1");
-        
+
         if ($stmt && mysqli_num_rows($stmt) > 0) {
             $row = mysqli_fetch_assoc($stmt);
             $balance = (float)$row['available_balance'];
             mysqli_free_result($stmt);
             return $balance;
         }
-        
+
         return 0.0;
     }
 }
@@ -3349,31 +3504,32 @@ if (!function_exists('get_employee_vacation_balance_from_db')) {
  * @return float|null Current calculated available balance or null on error
  */
 if (!function_exists('get_live_vacation_balance')) {
-    function get_live_vacation_balance($conDB, $emp_id) {
+    function get_live_vacation_balance($conDB, $emp_id)
+    {
         if (empty($emp_id)) {
             return null;
         }
-        
+
         // Load VacationCalculator
         $calcFile = __DIR__ . '/vacation_calculator.php';
         if (!file_exists($calcFile)) {
             return null;
         }
-        
+
         require_once $calcFile;
-        
+
         if (!class_exists('VacationCalculator')) {
             return null;
         }
-        
+
         try {
             $vc = new VacationCalculator($conDB);
             $result = $vc->getCalculatedBalance($emp_id);
-            
+
             if ($result && isset($result['available_balance'])) {
                 return (float)$result['available_balance'];
             }
-            
+
             return null;
         } catch (Throwable $e) {
             return null;
@@ -3384,7 +3540,8 @@ if (!function_exists('get_live_vacation_balance')) {
 
 // Helper: safely display values or show translated not_available
 if (!function_exists('display_or_na')) {
-    function display_or_na($val) {
+    function display_or_na($val)
+    {
         if (is_null($val) || $val === '' || $val === false) {
             return __('not_available');
         }
@@ -3402,14 +3559,15 @@ if (!function_exists('display_or_na')) {
  * @return bool True if employee is on active vacation with cleared/kept assets, false otherwise
  */
 if (!function_exists('is_employee_on_active_vacation_with_cleared_assets')) {
-    function is_employee_on_active_vacation_with_cleared_assets($conDB, $emp_id) {
+    function is_employee_on_active_vacation_with_cleared_assets($conDB, $emp_id)
+    {
         if (!$conDB || !is_numeric($emp_id) || $emp_id <= 0) {
             return false;
         }
-        
+
         $emp_id_safe = (int)$emp_id;
         $today = date('Y-m-d');
-        
+
         // Check for active vacation (approved, complete, or completed) with return_date in the future
         $sql_active_vac = "SELECT `id`, `emp_id` FROM `emp_vacation` 
                           WHERE `emp_id` = ? 
@@ -3417,49 +3575,49 @@ if (!function_exists('is_employee_on_active_vacation_with_cleared_assets')) {
                           AND `return_date` > ?
                           ORDER BY `start_date` DESC 
                           LIMIT 1";
-        
+
         $stmt = mysqli_prepare($conDB, $sql_active_vac);
         if (!$stmt) {
             return false;
         }
-        
+
         mysqli_stmt_bind_param($stmt, "is", $emp_id_safe, $today);
         if (!mysqli_stmt_execute($stmt)) {
             mysqli_stmt_close($stmt);
             return false;
         }
-        
+
         $result = mysqli_stmt_get_result($stmt);
         $has_active_vac = (mysqli_num_rows($result) > 0);
         mysqli_free_result($result);
         mysqli_stmt_close($stmt);
-        
+
         if (!$has_active_vac) {
             return false;
         }
-        
+
         // Check if employee's assets are cleared or kept (status column, not return_status)
         $sql_assets = "SELECT `id` FROM `employee_assets` 
                       WHERE `emp_id` = ? 
                       AND `status` IN ('Assets Received', 'Employee Keep Assets')
                       LIMIT 1";
-        
+
         $stmt = mysqli_prepare($conDB, $sql_assets);
         if (!$stmt) {
             return false;
         }
-        
+
         mysqli_stmt_bind_param($stmt, "i", $emp_id_safe);
         if (!mysqli_stmt_execute($stmt)) {
             mysqli_stmt_close($stmt);
             return false;
         }
-        
+
         $result = mysqli_stmt_get_result($stmt);
         $has_cleared_assets = (mysqli_num_rows($result) > 0);
         mysqli_free_result($result);
         mysqli_stmt_close($stmt);
-        
+
         return $has_cleared_assets;
     }
 }

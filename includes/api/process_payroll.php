@@ -161,6 +161,53 @@ try {
         // --- (NEW) LOAN DEDUCTION LOGIC ---
         addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
 
+        // --- (NEW) RECORD LOAN PAYMENTS IN emp_loan_payments FOR THIS MONTH ---
+        // Scan payroll_deductions for this employee/month and persist to loan payments
+        try {
+            $likeLoan = '%LN-%';
+            $likeAdv  = 'Advance Salary Deduction - %';
+            $stmtPd = $pdo->prepare("SELECT id, emp_id, deduction, note FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month AND status = 1 AND (deduction LIKE :likeLoan OR deduction LIKE :likeAdv)");
+            $stmtPd->execute([':emp_id' => $empId, ':month' => $monthYear, ':likeLoan' => $likeLoan, ':likeAdv' => $likeAdv]);
+            $rows = $stmtPd->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $pd) {
+                $deduction = $pd['deduction'];
+                $amount = floatval($pd['note']);
+                // Parse inv_no (prefer regex)
+                $inv_no = null;
+                if (preg_match('/\\b(LN-[A-Za-z0-9\\-]+)/', $deduction, $m)) {
+                    $inv_no = $m[1];
+                } else {
+                    $parts = explode(' - ', $deduction);
+                    $candidate = trim(end($parts));
+                    if (strpos($candidate, 'LN-') === 0) {
+                        $inv_no = $candidate;
+                    }
+                }
+                if (!$inv_no) { continue; }
+                // Resolve loan_id (prefer matching emp_id)
+                $stmtLoan = $pdo->prepare('SELECT id FROM emp_loan WHERE inv_no = :inv AND emp_id = :emp LIMIT 1');
+                $stmtLoan->execute([':inv' => $inv_no, ':emp' => $empId]);
+                $loanRow = $stmtLoan->fetch(PDO::FETCH_ASSOC);
+                if (!$loanRow) {
+                    $stmtLoan2 = $pdo->prepare('SELECT id FROM emp_loan WHERE inv_no = :inv LIMIT 1');
+                    $stmtLoan2->execute([':inv' => $inv_no]);
+                    $loanRow = $stmtLoan2->fetch(PDO::FETCH_ASSOC);
+                }
+                if (!$loanRow) { continue; }
+                $loan_id = intval($loanRow['id']);
+                // Avoid duplicates for month
+                $stmtExists = $pdo->prepare("SELECT id FROM emp_loan_payments WHERE loan_id = :loan AND payment_method = 'payroll' AND DATE_FORMAT(payment_date, '%Y-%m') = :month LIMIT 1");
+                $stmtExists->execute([':loan' => $loan_id, ':month' => $monthYear]);
+                $exists = $stmtExists->fetch(PDO::FETCH_ASSOC);
+                if ($exists) { continue; }
+                // Insert payment (use first day of month)
+                $stmtPay = $pdo->prepare("INSERT INTO emp_loan_payments (loan_id, payment_date, amount, receipt_id, attachment, payment_method) VALUES (:loan, :date, :amount, NULL, NULL, 'payroll')");
+                $stmtPay->execute([':loan' => $loan_id, ':date' => $monthYear . '-01', ':amount' => $amount]);
+            }
+        } catch (Exception $e) {
+            // Continue processing even if loan payment recording fails
+        }
+
         // Cleanup: ensure no loan deductions persist for loans set to manual mode for this employee/month
         // This handles cases where mode was switched after scheduling or legacy rows exist
         $stmtCleanup = $pdo->prepare("DELETE pd FROM payroll_deductions pd

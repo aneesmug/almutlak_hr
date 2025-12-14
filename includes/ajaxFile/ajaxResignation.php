@@ -15,6 +15,11 @@ try {
     if (file_exists($helperFile)) {
         include($helperFile);
     }
+    // Supervisor validation
+    $supervisorFile = __DIR__ . '/../../includes/validate_supervisor.php';
+    if (file_exists($supervisorFile)) {
+        include($supervisorFile);
+    }
 } catch (Exception $e) {
     echo json_encode([
         'type' => 'error',
@@ -211,6 +216,24 @@ if ($ajaxType == 'apply_resignation') {
     try {
         // Get POST data
         $empId = isset($_POST['emp_id']) ? mysqli_real_escape_string($conDB, $_POST['emp_id']) : '';
+        
+        // Validate supervisor assignment FIRST
+        if (function_exists('validate_employee_supervisor')) {
+            $supervisor_check = validate_employee_supervisor($conDB, $empId);
+            if (!$supervisor_check['valid']) {
+                if (function_exists('send_supervisor_validation_error')) {
+                    send_supervisor_validation_error($supervisor_check['message']);
+                } else {
+                    echo json_encode([
+                        'type' => 'error',
+                        'title' => 'Supervisor Required',
+                        'message' => $supervisor_check['message']
+                    ]);
+                    exit;
+                }
+            }
+        }
+        
         $lastWorkingDay = isset($_POST['last_working_day']) ? mysqli_real_escape_string($conDB, $_POST['last_working_day']) : '';
         $exitInterviewJson = isset($_POST['exit_interview']) ? $_POST['exit_interview'] : '';
         

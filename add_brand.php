@@ -7,6 +7,7 @@
 		include("./includes/avatar_select.php");
 	}
 
+    
 if(isset($_POST['submit'])){
 	$name = ucwords($_POST['name']);
 	$desc = ucwords($_POST['desc']);

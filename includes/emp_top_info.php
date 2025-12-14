@@ -41,7 +41,7 @@ if ($emprow['status'] == 1) {
 	}
 	
 	// Apply Loan (HR/Admin only, if no active loan)
-	if (empty($emprow['has_active_regular_loan']) && ($is_system_admin || $isDeptHr || $isHR)) {
+	if (empty($emprow['has_active_regular_loan']) /*&& ($is_system_admin || $isDeptHr || $isHR)*/) {
 		$hr_actions .= "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
 	}
 	
@@ -106,11 +106,9 @@ if ($emprow['status'] == 1) {
 		if ($is_system_admin || $isDeptHr || $isHR) {
 			$moreActionsHtml .= "<div class=\"menu-item text-secondary\" onclick=\"window.open('emp_end_of_service.php?emp_id=" . htmlspecialchars($emprow['empid']) . "', '_blank')\" role=\"button\"><i class=\"fa fa-solid fa-user-slash\"></i><span>" . __('create_end_of_service') . "</span></div>";
 		}
-
-		// Apply Resignation
-		$moreActionsHtml .= "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
-
 	}
+	// Apply Resignation
+	$moreActionsHtml .= "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
 } else {
 	$moreActionsHtml = '<div style="padding:24px; text-align:center; color: #6c757d;"><p>' . __('employee_is_inactive') . '</p></div>';
 }

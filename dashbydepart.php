@@ -402,7 +402,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     $deptCount = (int)$rec["empcountgrp"];
                                                     $percentage = round(($deptCount / $totalEmployees) * 100, 1);
                                             ?>
-                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='filter_employee_by_dept.php?page=1&status=1&dept=<?= $rec["dept"] ?>'" style="cursor: pointer;">
+                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='filter_employee_by_dept.php?page=1&status=1&status=active&dept=<?= $rec["dept"] ?>'" style="cursor: pointer;">
                                                     <div class="stats-card" data-color="<?= $cardColor ?>">
                                                         <div class="stats-card-icon" data-color="<?= $cardColor ?>">
                                                             <div class="stats-card-count-circle"><?= $deptCount ?></div>

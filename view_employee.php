@@ -16,6 +16,11 @@ if (mysqli_num_rows($query) == 1) {
 	$format = "YYYY-MM-DD";
 	require("./includes/emp_query.php");
 
+
+	
+	
+
+
 	// DEPARTMENT-BASED ACCESS CONTROL
 	// Check if user has permission to view this department's employees
 	// Allow: System admin, administrator, HR department users, HR roles, IT team, and same department managers
@@ -153,10 +158,6 @@ if (mysqli_num_rows($query) == 1) {
 		'gm_approved' => __('gm_approved'),
 		'rejected' => __('rejected'),
 	];
-
-
-	// debug($emprow);
-
 
 ?>
 	<!doctype html>

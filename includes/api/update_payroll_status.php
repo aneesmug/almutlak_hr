@@ -70,6 +70,35 @@ try {
     // Get the number of rows that were actually affected by the UPDATE query.
     $updatedCount = $stmt->rowCount();
 
+    // --- NEW: When payroll status is marked as 'paid', update payroll_deductions status to 0 ---
+    if ($status === 'paid' && $updatedCount > 0) {
+        try {
+            // Get all employee IDs and month_year from the updated payroll records
+            $selectStmt = $pdo->prepare("
+                SELECT DISTINCT emp_id, month_year FROM payrolls
+                WHERE id IN ($placeholders)
+            ");
+            $selectStmt->execute($payrollIds);
+            $payrollRecords = $selectStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // For each payroll record, mark all deductions as processed (status = 0)
+            foreach ($payrollRecords as $record) {
+                $stmtUpdateDed = $pdo->prepare("
+                    UPDATE payroll_deductions 
+                    SET status = 0 
+                    WHERE emp_id = :emp_id AND month = :month_year AND status = 1
+                ");
+                $stmtUpdateDed->execute([
+                    ':emp_id' => $record['emp_id'],
+                    ':month_year' => $record['month_year']
+                ]);
+            }
+        } catch (Exception $e) {
+            // Log deduction update error but don't fail the payroll status update
+            error_log('Error updating payroll_deductions status: ' . $e->getMessage());
+        }
+    }
+
     // If the transaction is successful, commit the changes to the database, making them permanent.
     $pdo->commit();
 

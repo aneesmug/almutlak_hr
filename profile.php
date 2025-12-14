@@ -62,7 +62,7 @@ if ($emprow['status'] == 1) {
     if (!empty($lastVac['vacid'])) {
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitRejoinRequest text-warning\" data-vacation-id=\"{$lastVac['vacid']}\" data-emp-id=\"{$emprow['empid']}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "</span></a>";
     }
-    // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
 } else {
     $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
 }
@@ -925,6 +925,12 @@ $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout t
         /* RTL Support */
         [dir="rtl"] .profile-header .container-custom {
             grid-template-columns: auto auto 1fr auto;
+        }
+
+        [dir="rtl"] .profile-actions-row {
+            flex-direction: row-reverse;
+            padding-left: 40px !important;
+            padding-right: 40px !important;
         }
 
         [dir="rtl"] .profile-quick-stats {
@@ -1955,30 +1961,34 @@ RTL Support
                 <?php if (file_exists("./assets/qrcodes/" . $emprow['eid'] . $emprow['empid'] . ".png")): ?>
                     <img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] . ".png" ?>" alt="QR Code" class="qr-code">
                 <?php endif; ?>
+            </div>
 
-                <!-- LANGUAGE SWITCHER -->
-                <?php
-                $switch_to_lang = ($current_lang == 'en') ? 'ar' : 'en';
-                $button_text = ($current_lang == 'en') ? 'العربية' : 'English';
-                $query_params = [];
-                if (!empty($_SERVER['QUERY_STRING'])) {
-                    parse_str($_SERVER['QUERY_STRING'], $query_params);
-                }
-                $query_params['change_lang'] = $switch_to_lang;
-                $base_path = strtok($_SERVER['REQUEST_URI'], '?');
-                $new_query_string = http_build_query($query_params);
-                $switch_url = htmlspecialchars($base_path . '?' . $new_query_string);
-                ?>
+            <!-- LANGUAGE SWITCHER & MORE ACTIONS - BELOW QR CODE -->
+            <?php
+            $switch_to_lang = ($current_lang == 'en') ? 'ar' : 'en';
+            $button_text = ($current_lang == 'en') ? 'العربية' : 'English';
+            $query_params = [];
+            if (!empty($_SERVER['QUERY_STRING'])) {
+                parse_str($_SERVER['QUERY_STRING'], $query_params);
+            }
+            $query_params['change_lang'] = $switch_to_lang;
+            $base_path = strtok($_SERVER['REQUEST_URI'], '?');
+            $new_query_string = http_build_query($query_params);
+            $switch_url = htmlspecialchars($base_path . '?' . $new_query_string);
+            ?>
+            <div class="profile-actions-row" style="display: flex; gap: 8px; align-items: center; padding-left: 40px; padding-right: 40px; padding-top: 16px; position: relative; z-index: 10;">
                 <a href="<?= $switch_url ?>" class="more-actions-btn" style="text-decoration: none;">
                     <i class="fa fa-language"></i> <?= $button_text ?>
                 </a>
+                <button class="more-actions-btn" id="moreActionsBtn">
+                    <i class="fa fa-ellipsis-v"></i> <?= __('more') ?>
+                </button>
+            <?php if ($emprow["user_type"] <> 'employee') : ?>
+                <a href="dashboard.php" class="more-actions-btn" style="text-decoration: none;">
+                    <i class="fa fa-airplay"></i> <?= __('dashboard') ?>
+                </a>
+            <?php endif; ?>
 
-                <!-- MORE ACTIONS BUTTON -->
-                <div class="more-actions-wrapper">
-                    <button class="more-actions-btn" id="moreActionsBtn">
-                        <i class="fa fa-ellipsis-v"></i> <?= __('more') ?>
-                    </button>
-                </div>
             </div>
         </div>
 

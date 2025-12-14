@@ -174,7 +174,7 @@
                         <table id="language" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
                             <thead>
                                 <tr>
-                                    <th><?= __('table_header_key', 'Language Key') ?></th>
+                                    <th><?= __('language_key', 'Language Key') ?></th>
                                     <th><?= __('table_header_english', 'English') ?></th>
                                     <th><?= __('table_header_arabic', 'Arabic') ?></th>
                                     <th width="80"><?= __('table_header_action', 'Action') ?></th>
@@ -386,6 +386,23 @@ $(document).ready(function(){
             { data: 'action', orderable: false, searchable: false }
         ],
         order: [[0, 'desc']],
+        language: {
+            search: `<span>${__('search')}:</span> _INPUT_`,
+            searchPlaceholder: `${__('search')}...`,
+            lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+            info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+            infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+            infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+            paginate: {
+                first: __('first'),
+                last: __('last'),
+                next: __('next'),
+                previous: __('previous')
+            },
+            emptyTable: __('no_data_available_in_table'),
+            zeroRecords: __('no_matching_records_found'),
+            processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+        }
     });
 
     // =================================================================
@@ -591,11 +608,11 @@ $(document).ready(function(){
                     data: { lang_key: langKey },
                     dataType: 'json',
                     success: function(response) {
-                        Swal.fire(
-                            __(response.title, response.title),
-                            __(response.message, response.message),
-                            response.type
-                        ).then(() => {
+                        Swal.fire({
+                            title: __(response.title, response.title),
+                            text: __(response.message, response.message),
+                            icon: response.type
+                        }).then(() => {
                             if (response.type === 'success') {
                                 languageTable.ajax.reload();
                             }

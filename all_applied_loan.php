@@ -370,7 +370,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                 <div class="col-lg-3 col-md-6 mb-3">
                                                     <div class="card request-card h-100">
                                                         <div class="card-header">
-                                                            <?=($loan['employee_name']); ?>
+                                                            <?=parseName($loan['employee_name']); ?>
                                                             <span class="float-right"><?=__('emp_id')?>: <?=htmlspecialchars($loan['emp_id']); ?></span>
                                                         </div>
                                                         <div class="card-body">

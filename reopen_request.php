@@ -2,6 +2,7 @@
     require_once __DIR__ . '/includes/db.php';
     require_once __DIR__ . '/includes/session_check.php';
     include("./includes/convertNumbersToWords.php");
+    require_once __DIR__ . '/includes/validate_supervisor.php';
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
         if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -54,7 +55,7 @@ if(isset($_POST['submit_edit'])){
         $total_cost_up = $_POST['total_cost'];
 
     if($item_name_up){
-        mysqli_query($conDB, "UPDATE `smart_request` SET `item_name`='".$item_name_up."', `location`='".$location_up."', `quantity`='".$quantity_up."', `product_price`='".$product_price_up."',`itmvalue`='".$itmvalue_up."', `vat_rate`='".$vat_rate_up."', `vat_val`='".$vat_val_up."', `amount`='".$amount_up."', `idiscount`='".$idiscount_up."', `total_cost`='".$total_cost_up."' WHERE `id`='".$_POST['itemid']."' ") or die (mysqli_error());
+        mysqli_query($conDB, "UPDATE `smart_request` SET `item_name`='".$item_name_up."', `location`='".$location_up."', `quantity`='".$quantity_up."', `product_price`='".$product_price_up."',`itmvalue`='".$itmvalue_up."', `vat_rate`='".$vat_rate_up."', `vat_val`='".$vat_val_up."', `amount`='".$amount_up."', `idiscount`='".$idiscount_up."', `total_cost`='".$total_cost_up."' WHERE `id`='".$_POST['itemid']."' ") or die ();
         $msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Item Modified Seccssfully!</div>
         ";      
         header( "refresh:1 ; url=reopen_request.php?id=$_GET[id]&nid=$_GET[nid]" );
@@ -64,7 +65,11 @@ if(isset($_POST['submit_edit'])){
 }
 
 if(isset($_POST['submit'])){    
-    if(
+    // Validate supervisor is assigned before processing request
+    $supervisor_validation = validate_employee_supervisor($conDB, $empid);
+    if (!$supervisor_validation['valid']) {
+        $msg = '<div class="alert alert-danger bg-danger text-white border-0" role="alert">' . $supervisor_validation['message'] . '</div>';
+    } else if(
        !empty($_POST['item_name']) && !empty($_POST['quantity']) && !empty($_POST['product_price']) 
         // && is_array($_POST['inv_no']) && is_array($_POST['item_name']) && is_array($_POST['quantity']) && is_array($_POST['product_price']) 
         //&& count($inv_no) === count($item_name) === count($quantity) === count($product_price)

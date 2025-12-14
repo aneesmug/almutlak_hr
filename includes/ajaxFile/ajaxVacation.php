@@ -2,6 +2,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../../includes/db.php';
 include("./../../includes/helper_functions.php"); // --- Helper Function ---
+include("./../../includes/validate_supervisor.php"); // --- Supervisor Validation ---
 
 // Get the User's ID and Name from session if they exist
 // These are used by the handle_approval_action function
@@ -292,6 +293,12 @@ elseif ($ajaxType == 'applyVacation') {
     try {
         // 1. Sanitize all inputs
         $emp_id = (int)($_POST['emp_id'] ?? 0);
+        
+        // 1.1 Validate supervisor assignment FIRST
+        $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
+        if (!$supervisor_check['valid']) {
+            send_supervisor_validation_error($supervisor_check['message']);
+        }
         $first_approver_id = (int)($_POST['first_approver_id'] ?? 0);
         $vac_type = escape_string($_POST['vac_type'] ?? '');
         $fly_type = escape_string($_POST['fly_type'] ?? '');
@@ -2554,6 +2561,13 @@ elseif ($ajaxType == 'addManualHistory') {
 elseif ($ajaxType == 'applyLeave') {
     try {
         $empid = (int)($_POST['empid'] ?? 0);
+        
+        // Validate supervisor assignment FIRST
+        $supervisor_check = validate_employee_supervisor($conDB, $empid);
+        if (!$supervisor_check['valid']) {
+            send_supervisor_validation_error($supervisor_check['message']);
+        }
+        
         $leave_type = trim($_POST['leave_type'] ?? '');
         $start_date = trim($_POST['start_date'] ?? '');
         $end_date = trim($_POST['end_date'] ?? '');
@@ -2993,6 +3007,16 @@ elseif ($ajaxType == 'applyLeave') {
                     }
                     if ($emp_result) mysqli_free_result($emp_result);
 
+                    // Get HR Payroll email for CC (only for excuse leave requests)
+                    $cc_emails = [];
+                    $hr_payroll_result = mysqli_query($conDB, "SELECT e.name, al.email FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 AND al.email IS NOT NULL AND al.email != '' ORDER BY e.emp_id ASC LIMIT 1");
+                    if ($hr_payroll_result && $hr_payroll_row = mysqli_fetch_assoc($hr_payroll_result)) {
+                        if (!empty($hr_payroll_row['email'])) {
+                            $cc_emails[$hr_payroll_row['email']] = $hr_payroll_row['name'];
+                        }
+                    }
+                    if ($hr_payroll_result) mysqli_free_result($hr_payroll_result);
+
                     // Prepare template data
                     $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
                     $template_data = [
@@ -3008,7 +3032,7 @@ elseif ($ajaxType == 'applyLeave') {
                     ];
 
                     $email_subject = "New " . ucfirst($leave_type) . " Leave Request Pending Approval";
-                    $email_result = send_approval_email($conDB, $approver_details['email'], $approver_details['name'], $email_subject, 'leave_request', $template_data);
+                    $email_result = send_approval_email($conDB, $approver_details['email'], $approver_details['name'], $email_subject, 'leave_request', $template_data, $cc_emails);
                 } else {
                     if (empty($approver_details['email'])) {
                     }
@@ -3156,6 +3180,28 @@ elseif ($ajaxType == 'submitRejoinRequest') {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
         $rejoin_date = escape_string($_POST['rejoin_date'] ?? '');
         $rejoin_reason = escape_string($_POST['rejoin_reason'] ?? '');
+        
+        // Get employee ID from vacation record
+        $emp_id_query = "SELECT emp_id FROM emp_vacation WHERE id = ? LIMIT 1";
+        $emp_stmt = $conDB->prepare($emp_id_query);
+        $emp_stmt->bind_param('i', $vacation_id);
+        $emp_stmt->execute();
+        $emp_result = $emp_stmt->get_result();
+        $emp_row = $emp_result->fetch_assoc();
+        $emp_stmt->close();
+        
+        if (!$emp_row) {
+            send_json_response(__('error'), __('vacation_not_found'), 'error', 404);
+            exit;
+        }
+        
+        $emp_id = $emp_row['emp_id'];
+        
+        // Validate supervisor assignment FIRST
+        $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
+        if (!$supervisor_check['valid']) {
+            send_supervisor_validation_error($supervisor_check['message']);
+        }
         $emp_id = (int)($_POST['emp_id'] ?? $current_user_id);
 
         // Validation: vacation_id and emp_id are required
