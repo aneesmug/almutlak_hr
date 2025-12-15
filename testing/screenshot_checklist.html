@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Screenshot Upload Checklist</title>
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .checklist-card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .checklist-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #007bff;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+        .checklist-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+            cursor: pointer;
+        }
+        .checklist-item label {
+            cursor: pointer;
+            margin: 0;
+            flex-grow: 1;
+        }
+        .checklist-item input[type="checkbox"]:checked + label {
+            color: #6c757d;
+            text-decoration: line-through;
+        }
+        .step-count {
+            display: inline-block;
+            background: #e9ecef;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 10px;
+            color: #6c757d;
+        }
+        .progress-bar {
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+            width: 0%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+            transition: width 0.3s ease;
+        }
+        .status {
+            font-size: 13px;
+            color: #6c757d;
+            margin-top: 10px;
+        }
+        .btn-group {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .btn-group a {
+            display: inline-block;
+            margin: 0 10px;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn-upload {
+            background: #28a745;
+            color: white;
+        }
+        .btn-upload:hover {
+            background: #218838;
+            color: white;
+        }
+        .btn-guide {
+            background: #17a2b8;
+            color: white;
+        }
+        .btn-guide:hover {
+            background: #138496;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fa fa-list-check"></i> Screenshot Upload Checklist</h1>
+            <p style="margin: 10px 0 0 0; color: #666;">Track your progress uploading all required screenshots</p>
+        </div>
+
+        <!-- Overall Progress -->
+        <div class="checklist-card">
+            <h5 style="margin-bottom: 15px; color: #333;">Overall Progress</h5>
+            <div class="progress-bar">
+                <div class="progress-fill" id="overallProgress" style="width: 0%;">0%</div>
+            </div>
+            <div class="status">
+                <strong><span id="totalChecked">0</span> of <span id="totalItems">0</span> screenshots uploaded</strong>
+            </div>
+        </div>
+
+        <!-- VACATIONS Section -->
+        <div class="checklist-card">
+            <div class="checklist-title">
+                <i class="fa fa-plane"></i> VACATIONS & LEAVES
+            </div>
+            <div style="margin-bottom: 15px;">
+                <strong>Annual Leave</strong> <span class="step-count">7 steps needed</span>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac1_1" class="auto-count">
+                <label for="vac1_1">Step 1: Profile Page Navigation</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac1_2" class="auto-count">
+                <label for="vac1_2">Step 2: Click on "More" Button</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac1_3" class="auto-count">
+                <label for="vac1_3">Step 3: Select "Apply Annual Vacation"</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac1_4" class="auto-count">
+                <label for="vac1_4">Step 4: Fill Vacation Details Form</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac1_5" class="auto-count">
+                <label for="vac1_5">Step 5: Choose Vacation Dates</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac1_6" class="auto-count">
+                <label for="vac1_6">Step 6: Select Vacation Type</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac1_7" class="auto-count">
+                <label for="vac1_7">Step 7: Click Submit Button</label>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #f0f0f0;">
+                <strong>Emergency Leave</strong> <span class="step-count">Similar to Annual</span>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac2_1" class="auto-count">
+                <label for="vac2_1">Emergency Leave: All steps (6-7 images)</label>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <strong>Encashment</strong> <span class="step-count">Similar to Annual</span>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="vac3_1" class="auto-count">
+                <label for="vac3_1">Encashment: All steps (6-7 images)</label>
+            </div>
+
+            <div class="btn-group">
+                <a href="manage_guide_screenshots.php?section=vacations" class="btn-upload"><i class="fa fa-upload"></i> Upload Vacation Screenshots</a>
+            </div>
+        </div>
+
+        <!-- LOANS Section -->
+        <div class="checklist-card">
+            <div class="checklist-title">
+                <i class="fa fa-money-bill"></i> LOANS
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <strong>EOS Loan</strong> <span class="step-count">4 steps</span>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan1_1" class="auto-count">
+                <label for="loan1_1">Step 1: Select EOS Loan Type</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan1_2" class="auto-count">
+                <label for="loan1_2">Step 2: Enter Loan Amount</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan1_3" class="auto-count">
+                <label for="loan1_3">Step 3: Select Monthly Installment</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan1_4" class="auto-count">
+                <label for="loan1_4">Step 4: Review & Submit</label>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #f0f0f0;">
+                <strong>House Loan</strong> <span class="step-count">4 steps</span>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan2_1" class="auto-count">
+                <label for="loan2_1">Step 1: Select House Loan Type</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan2_2" class="auto-count">
+                <label for="loan2_2">Step 2: Enter Property Details</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan2_3" class="auto-count">
+                <label for="loan2_3">Step 3: Upload Real Estate Contract</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan2_4" class="auto-count">
+                <label for="loan2_4">Step 4: Loan Amount & Tenure</label>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #f0f0f0;">
+                <strong>Advance Salary</strong> <span class="step-count">4 steps</span>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan3_1" class="auto-count">
+                <label for="loan3_1">Step 1: Select Advance Salary</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan3_2" class="auto-count">
+                <label for="loan3_2">Step 2: Enter Advance Amount</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan3_3" class="auto-count">
+                <label for="loan3_3">Step 3: Select Repayment Period</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="loan3_4" class="auto-count">
+                <label for="loan3_4">Step 4: Submit & Confirm</label>
+            </div>
+
+            <div class="btn-group">
+                <a href="manage_guide_screenshots.php?section=loans" class="btn-upload"><i class="fa fa-upload"></i> Upload Loan Screenshots</a>
+            </div>
+        </div>
+
+        <!-- OTHER Sections -->
+        <div class="checklist-card">
+            <div class="checklist-title">
+                <i class="fa fa-calendar-times"></i> EXCUSE LEAVE
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="excuse1" class="auto-count">
+                <label for="excuse1">Step 1: Select Excuse Leave Option</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="excuse2" class="auto-count">
+                <label for="excuse2">Step 2: Choose Absence Date</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="excuse3" class="auto-count">
+                <label for="excuse3">Step 3: Provide Reason/Details</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="excuse4" class="auto-count">
+                <label for="excuse4">Step 4: Submit Request</label>
+            </div>
+            <div class="btn-group">
+                <a href="manage_guide_screenshots.php?section=excuse" class="btn-upload"><i class="fa fa-upload"></i> Upload Excuse Screenshots</a>
+            </div>
+        </div>
+
+        <div class="checklist-card">
+            <div class="checklist-title">
+                <i class="fa fa-sign-out"></i> RESIGNATION
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="resign1" class="auto-count">
+                <label for="resign1">Step 1: Select Apply Resignation</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="resign2" class="auto-count">
+                <label for="resign2">Step 2: Fill Resignation Form</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="resign3" class="auto-count">
+                <label for="resign3">Step 3: Confirm & Submit</label>
+            </div>
+            <div class="btn-group">
+                <a href="manage_guide_screenshots.php?section=resignation" class="btn-upload"><i class="fa fa-upload"></i> Upload Resignation Screenshots</a>
+            </div>
+        </div>
+
+        <div class="checklist-card">
+            <div class="checklist-title">
+                <i class="fa fa-plane-arrival"></i> REJOIN REQUEST
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="rejoin1" class="auto-count">
+                <label for="rejoin1">Step 1: Select Rejoin Request</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="rejoin2" class="auto-count">
+                <label for="rejoin2">Step 2: Confirm Return Date</label>
+            </div>
+            <div class="checklist-item">
+                <input type="checkbox" id="rejoin3" class="auto-count">
+                <label for="rejoin3">Step 3: Submit Rejoin</label>
+            </div>
+            <div class="btn-group">
+                <a href="manage_guide_screenshots.php?section=rejoin" class="btn-upload"><i class="fa fa-upload"></i> Upload Rejoin Screenshots</a>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="checklist-card">
+            <h4 style="color: #17a2b8; margin-bottom: 15px;"><i class="fa fa-info-circle"></i> Tips</h4>
+            <ul style="margin: 0; padding-left: 20px;">
+                <li>Use the same user account and browser for consistency</li>
+                <li>Screenshot resolution: 1280x720 or 1366x768 recommended</li>
+                <li>Keep images clear and readable</li>
+                <li>Hide sensitive information (names, IDs)</li>
+                <li>File size limit: 5MB per image</li>
+                <li>Supported formats: JPG, PNG, GIF, WebP</li>
+            </ul>
+        </div>
+
+        <div class="checklist-card" style="text-align: center; background: linear-gradient(135deg, #e7f3ff 0%, #e8f4f8 100%);">
+            <p style="margin: 0 0 15px 0; color: #004085; font-size: 16px;">
+                <strong>Total: 30-35 screenshots needed to complete the system guide</strong>
+            </p>
+            <div class="btn-group">
+                <a href="screenshot_requirements.php" class="btn-guide"><i class="fa fa-list"></i> View Requirements</a>
+                <a href="manage_guide_screenshots.php" class="btn-upload"><i class="fa fa-upload"></i> Upload Panel</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/jquery.min.js"></script>
+    <script>
+        function updateProgress() {
+            const checkboxes = document.querySelectorAll('.auto-count');
+            const checked = document.querySelectorAll('.auto-count:checked').length;
+            const total = checkboxes.length;
+            const percentage = Math.round((checked / total) * 100);
+            
+            document.getElementById('totalChecked').textContent = checked;
+            document.getElementById('totalItems').textContent = total;
+            document.getElementById('overallProgress').style.width = percentage + '%';
+            document.getElementById('overallProgress').textContent = percentage + '%';
+            
+            // Save to localStorage
+            localStorage.setItem('screenshot-progress', JSON.stringify({
+                checked: checked,
+                total: total,
+                percentage: percentage,
+                timestamp: new Date().toLocaleString()
+            }));
+        }
+
+        // Load saved progress
+        window.addEventListener('load', function() {
+            updateProgress();
+            
+            // Show saved timestamp
+            const saved = localStorage.getItem('screenshot-progress');
+            if (saved) {
+                const data = JSON.parse(saved);
+                console.log('Last updated: ' + data.timestamp);
+            }
+        });
+
+        // Update on checkbox change
+        document.querySelectorAll('.auto-count').forEach(checkbox => {
+            checkbox.addEventListener('change', updateProgress);
+        });
+    </script>
+</body>
+</html>

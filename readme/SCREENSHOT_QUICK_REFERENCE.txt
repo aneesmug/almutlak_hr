@@ -1,0 +1,151 @@
+📸 SCREENSHOT SYSTEM - QUICK REFERENCE CARD
+
+═══════════════════════════════════════════════════════════════════════
+
+🚀 THREE-STEP SETUP:
+
+1️⃣  CREATE TABLE
+    → http://localhost/almutlak/system/create_screenshots_table.php
+    ✅ Confirms table created
+
+2️⃣  UPLOAD SCREENSHOTS  
+    → http://localhost/almutlak/system/manage_guide_screenshots.php
+    📝 Login as ADMIN
+    🖼️  Upload images by section & step
+
+3️⃣  VIEW IN GUIDE
+    → http://localhost/almutlak/system/system_guide.php
+    👁️  Screenshots appear automatically!
+
+═══════════════════════════════════════════════════════════════════════
+
+📊 SECTIONS & STEPS:
+
+VACATIONS & LEAVES          LOANS                  EXCUSE LEAVE
+├─ Step 1: Annual           ├─ Step 1: EOS Loan    ├─ Step 1: What is
+├─ Step 2: Emergency        ├─ Step 2: House       ├─ Step 2: How to Apply
+└─ Step 3: Encashment       └─ Step 3: Advance     └─ Step 3: Approval
+
+RESIGNATION                 REJOIN
+├─ Step 1: Initiate          ├─ Step 1: What is
+├─ Step 2: Exit Interview    ├─ Step 2: How to
+└─ Step 3: Post-Process      └─ Step 3: After
+
+═══════════════════════════════════════════════════════════════════════
+
+📷 TAKING SCREENSHOTS:
+
+1. Login to system as EMPLOYEE
+2. Navigate to page (e.g., Profile → More → Apply Vacation)
+3. Take screenshot:
+   • Windows: Print Screen or Win+Shift+S
+   • Mac: Cmd+Shift+4
+   • Linux: Screenshot tool
+4. Save as PNG (preferred) or JPEG
+5. Optional: Edit/crop/annotate
+6. Upload via manage_guide_screenshots.php
+
+═══════════════════════════════════════════════════════════════════════
+
+✅ UPLOAD REQUIREMENTS:
+
+✓ Format: PNG, JPEG, GIF, WebP
+✓ Size: < 5MB
+✓ Resolution: 1024x768 or higher
+✓ Access: ADMIN ONLY
+✓ Organization: By section & step number
+
+═══════════════════════════════════════════════════════════════════════
+
+📁 FILE STRUCTURE:
+
+create_screenshots_table.php       ← Run once to create DB table
+manage_guide_screenshots.php       ← Upload/manage (ADMIN panel)
+system_guide.php                   ← View guide with screenshots
+screenshot_setup_info.php          ← Setup information
+includes/screenshot_helper.php     ← Helper functions
+assets/screenshots/
+├── vacations/
+├── loans/
+├── excuse/
+├── resignation/
+└── rejoin/
+
+═══════════════════════════════════════════════════════════════════════
+
+🎯 ADMIN WORKFLOW:
+
+1. Login as ADMIN user
+2. Go to manage_guide_screenshots.php
+3. Fill form:
+   - Section: vacations / loans / excuse / resignation / rejoin
+   - Step: 1 / 2 / 3
+   - Title: "Profile Page" (appears below image)
+   - Image: Choose PNG/JPEG file
+4. Click Upload
+5. Screenshots appear in system_guide.php automatically!
+
+═══════════════════════════════════════════════════════════════════════
+
+🔍 TROUBLESHOOTING:
+
+Problem                     Solution
+─────────────────────────────────────────────────────────────────────
+Upload fails               • Check file size (< 5MB)
+                          • Check format (PNG/JPEG)
+                          • Fill all fields
+
+Images not showing         • Clear browser cache
+                          • Check file permissions
+                          • Verify database has records
+
+Can't access upload        • Login as ADMIN
+                          • Check user_type in DB
+
+═══════════════════════════════════════════════════════════════════════
+
+📚 DOCUMENTATION:
+
+SCREENSHOT_SETUP_GUIDE.md       ← Detailed instructions
+SCREENSHOT_SYSTEM_README.md     ← Full documentation
+screenshot_setup_info.php       ← Browser-based info
+
+═══════════════════════════════════════════════════════════════════════
+
+💡 TIPS:
+
+✓ Use high-quality screenshots
+✓ Add descriptive titles
+✓ Include all form fields
+✓ Highlight important buttons/fields
+✓ Keep consistent dimensions
+✓ Take screenshots at same zoom level
+✓ Use clear, readable fonts
+
+═══════════════════════════════════════════════════════════════════════
+
+🆘 SUPPORT:
+
+For issues or questions:
+1. Check screenshot_setup_info.php
+2. Read SCREENSHOT_SETUP_GUIDE.md
+3. Review SCREENSHOT_SYSTEM_README.md
+4. Contact system administrator
+
+═══════════════════════════════════════════════════════════════════════
+
+✨ FEATURES:
+
+✅ Real image upload
+✅ Automatic organization by section/step
+✅ Beautiful gallery display
+✅ Fallback icon placeholders
+✅ Admin-only access
+✅ Image preview
+✅ Easy delete
+✅ Mobile responsive
+✅ Multiple formats supported
+
+═══════════════════════════════════════════════════════════════════════
+
+Version: 1.0 | Status: Ready ✅ | Updated: December 2025
