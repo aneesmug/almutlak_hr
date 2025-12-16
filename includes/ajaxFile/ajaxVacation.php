@@ -1,6 +1,7 @@
 <?php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
 include("./../../includes/helper_functions.php"); // --- Helper Function ---
 include("./../../includes/validate_supervisor.php"); // --- Supervisor Validation ---
 
@@ -693,7 +694,9 @@ elseif ($ajaxType == 'applyVacation') {
 
         // Get the inserted ID
         $inserted_id = mysqli_insert_id($conDB);
-
+        
+        // Log vacation request submission
+        ActivityLogger::logSubmit('Vacation', 'ajaxVacation.php', $inserted_id, "Submitted vacation request: {$request_inv_no}, Days: {$vacdays}", 'emp_vacation');
 
         // 9. Save the approval chain
         $approver_chain = [$first_approver_id];
@@ -941,8 +944,9 @@ elseif ($ajaxType == 'approveVacation') {
         $ticket_pay = (float)($_POST['ticket_pay'] ?? 0);
         $permit_fee = (float)($_POST['permit_fee'] ?? 0);
 
-
-
+        // Approval comment (optional)
+        $approval_comment = trim($_POST['approval_comment'] ?? '');
+        $approval_comment = mb_substr($approval_comment, 0, 5000); // Limit to 5000 chars
 
         // Payroll details (only sent by HR Payroll)
         $overtime_hours = (float)($_POST['overtime_hours'] ?? 0);
@@ -987,6 +991,45 @@ elseif ($ajaxType == 'approveVacation') {
         if ($result['status'] == 'error') {
             throw new Exception($result['message']);
         }
+        
+        // 2.1 Save approval comment if provided
+        if (!empty($approval_comment)) {
+            // Get approver name
+            $sql_approver = "SELECT name FROM employees WHERE emp_id = ?";
+            $stmt_approver = mysqli_prepare($conDB, $sql_approver);
+            if ($stmt_approver) {
+                mysqli_stmt_bind_param($stmt_approver, "i", $current_user_id);
+                mysqli_stmt_execute($stmt_approver);
+                $result_approver = mysqli_stmt_get_result($stmt_approver);
+                $approver_data = mysqli_fetch_assoc($result_approver);
+                $approver_name = $approver_data['name'] ?? 'Unknown';
+                mysqli_free_result($result_approver);
+                mysqli_stmt_close($stmt_approver);
+            } else {
+                $approver_name = 'Unknown';
+            }
+            
+            // Save to approval_comments table if the function exists
+            if (function_exists('save_approval_comment_db')) {
+                save_approval_comment_db(
+                    $conDB,
+                    $request_inv_no,
+                    'vacation_request',
+                    'approved',
+                    $current_user_id,
+                    $approver_name,
+                    $approval_comment
+                );
+            }
+        }
+        
+        // Log vacation approval
+        $vacation_details = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
+        $old_vacation = mysqli_fetch_assoc($vacation_details);
+        if ($old_vacation) {
+            ActivityLogger::logApproval('Vacation', 'ajaxVacation.php', $vacation_id, 'approved', "Approved vacation request: {$request_inv_no}", 'emp_vacation');
+        }
+        if ($vacation_details) mysqli_free_result($vacation_details);
 
         // 3. Always update travel dates if provided (by HR Assistant or GR Officer), regardless of payment amounts
         // This ensures arrival_date gets saved even if there are no payments
@@ -1204,6 +1247,14 @@ elseif ($ajaxType == 'rejectVacation') {
         if ($result['status'] == 'error') {
             throw new Exception($result['message']);
         }
+        
+        // Log vacation rejection
+        $vacation_details = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
+        $old_vacation = mysqli_fetch_assoc($vacation_details);
+        if ($old_vacation) {
+            ActivityLogger::logApproval('Vacation', 'ajaxVacation.php', $vacation_id, 'rejected', "Rejected vacation request: {$request_inv_no}, Reason: {$rejection_note}", 'emp_vacation');
+        }
+        if ($vacation_details) mysqli_free_result($vacation_details);
 
         // 3. Send success response
         send_json_response("Rejected!", __("the_vacation_request_has_been_rejected"), "success");

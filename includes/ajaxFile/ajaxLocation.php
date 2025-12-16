@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+	require_once __DIR__ . '/../../includes/session_check.php';
 
 $ajaxType = $_POST['ajaxType'];
 
@@ -21,6 +22,18 @@ if ($ajaxType == 'add_location') {
     $sub_municipality = mysqli_real_escape_string($conDB, $_POST['sub_municipality']);
     $sql="INSERT INTO `section` (`section_name`, `dept`, `camera_in`, `camera_out`, `b_license_exp`, `b_license_no`, `location_dist`, `bulding_base`, `bulding_size`, `t_bulding_size`, `latitude`, `longitude`, `location_name`, `municipality`, `sub_municipality`, `created_at`) VALUES ('".$section_name."', '".$dept."', '".$camera_in."','".$camera_out."','".$b_license_exp."','".$b_license_no."','".$location_dist."','".$bulding_base."','".$bulding_size."','".$t_bulding_size."','".$latitude."','".$longitude."','".$loc_address."','".$municipality."','".$sub_municipality."','".date('Y-m-d H:i:s')."')";
     if(mysqli_query($conDB, $sql)){
+        $location_id = mysqli_insert_id($conDB);
+        
+        // Log location creation
+        ActivityLogger::logCreate('Location', 'ajaxLocation.php', $location_id, [
+            'section_name' => $section_name,
+            'dept' => $dept,
+            'location_name' => $loc_address,
+            'municipality' => $municipality,
+            'b_license_no' => $b_license_no,
+            'b_license_exp' => $b_license_exp
+        ], "Added location: {$section_name}, Address: {$loc_address}", 'section');
+        
         $data = [
             'title'   => "Added!",
             'message' => "This location has been added successfully.",
@@ -52,10 +65,25 @@ if ($ajaxType == 'add_location') {
     $municipality = mysqli_real_escape_string($conDB, $_POST['municipality']);
     $sub_municipality = mysqli_real_escape_string($conDB, $_POST['sub_municipality']);
     $status = $_POST['status'];
+    $location_id = $_POST['smid'];
+    
+    // Fetch old location data for logging
+    $old_result = mysqli_query($conDB, "SELECT * FROM section WHERE id = '{$location_id}'");
+    $old_location = mysqli_fetch_assoc($old_result);
 
-    $sql="UPDATE `section` SET `section_name`='".$section_name."', `dept`='".$dept."',`camera_in`='".$camera_in."',`camera_out`='".$camera_out."',`b_license_exp`='".$b_license_exp."',`b_license_no`='".$b_license_no."',`location_dist`='".$location_dist."', `bulding_base`='".$bulding_base."', `bulding_size`='".$bulding_size."', `t_bulding_size`='".$t_bulding_size."', `latitude`='".$latitude."', `longitude`='".$longitude."', `location_name`='".$loc_address."', `municipality`='".$municipality."', `sub_municipality`='".$sub_municipality."', `status`='".$status."' WHERE `id`='".$_POST['smid']."'";
+    $sql="UPDATE `section` SET `section_name`='".$section_name."', `dept`='".$dept."',`camera_in`='".$camera_in."',`camera_out`='".$camera_out."',`b_license_exp`='".$b_license_exp."',`b_license_no`='".$b_license_no."',`location_dist`='".$location_dist."', `bulding_base`='".$bulding_base."', `bulding_size`='".$bulding_size."', `t_bulding_size`='".$t_bulding_size."', `latitude`='".$latitude."', `longitude`='".$longitude."', `location_name`='".$loc_address."', `municipality`='".$municipality."', `sub_municipality`='".$sub_municipality."', `status`='".$status."' WHERE `id`='".$location_id."'";
 
     if(mysqli_query($conDB, $sql)){
+        // Log location update
+        ActivityLogger::logUpdate('Location', 'ajaxLocation.php', $location_id, $old_location ?? [], [
+            'section_name' => $section_name,
+            'location_name' => $loc_address,
+            'dept' => $dept,
+            'municipality' => $municipality,
+            'status' => $status,
+            'b_license_no' => $b_license_no
+        ], "Updated location: {$section_name}, Address: {$loc_address}", 'section');
+        
         $data = [
             'title'   => "Updated!",
             'message' => "This location has been update successfully.",
@@ -108,6 +136,14 @@ if ($ajaxType == 'add_location') {
     } else {
         file_put_contents($filepath . $id."".$section_name."".$imageName , $data);
         mysqli_query($conDB, "UPDATE `location_img` SET `".$postion."` ='".$filepathup."".$imagenameu."' WHERE `location_id`='".$id."' ");
+        
+        // Log image upload
+        ActivityLogger::logUpload('Location', 'ajaxLocation.php', $id, 
+            $imagenameu, 
+            "Uploaded location image for {$section} ({$postion})", 
+            'location_img', 
+            'png');
+        
         $data = [
             'title'   => "Updated!",
             'message' => "Image Uploaded Successfully",
@@ -132,6 +168,20 @@ if ($ajaxType == 'add_location') {
         mysqli_query($conDB, $query);
         mysqli_query($conDB, "UPDATE `section` SET `location_owner`='".$owner_name."' WHERE `id`='".$_POST['locid']."' ");
     if(mysqli_query($conDB, $sql)){
+        $contract_id = mysqli_insert_id($conDB);
+        
+        // Log contract creation
+        ActivityLogger::logCreate('Location', 'ajaxLocation.php', $contract_id, [
+            'location_id' => $_POST['locid'],
+            'contract_no' => $contract_no,
+            'owner_name' => $owner_name,
+            'owner_email' => $owner_email,
+            'start_date' => $start_cont_date,
+            'end_date' => $end_cont_date,
+            'rent' => $rent,
+            'service' => $service
+        ], "Added location contract: {$contract_no}, Owner: {$owner_name}", 'location_contract');
+        
         $data = [
             'title'   => "Added!",
             'message' => "This record has been added successfully.",
@@ -164,6 +214,15 @@ if ($ajaxType == 'add_location') {
         // Insert file information in the database 
         $sql = "INSERT INTO `location_docu` (`location_id`, `file_name`, `docu_ext`, `created_at`) VALUES ('".$getlocationid."', '".$fileName."', '".$file_extension."', '".date('Y-m-d H:i:s')."')"; 
         mysqli_query($conDB, $sql);
+        $doc_id = mysqli_insert_id($conDB);
+        
+        // Log document upload
+        ActivityLogger::logUpload('Location', 'ajaxLocation.php', $getlocationid, 
+            $fileName, 
+            "Uploaded location document: {$fileName}", 
+            'location_docu', 
+            $file_extension);
+        
         $data = [
             'title'   => "Updated!",
             'message' => "File Uploaded Successfully",

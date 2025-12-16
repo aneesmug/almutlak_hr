@@ -4,6 +4,7 @@
 if(!empty($_FILES)){ 
     // Include the database configuration file 
     require_once __DIR__ . '/../../includes/db.php';
+    require_once __DIR__ . '/../../includes/session_check.php';
     // File path configuration 
     // $getlocationid = $_GET['location_id'];
     $uploadDir = "./../../file_manager/"; 
@@ -26,6 +27,13 @@ if(!empty($_FILES)){
         // Insert file information in the database 
         // $sql = "INSERT INTO `location_docu` (`location_id`, `file_name`, `docu_ext`, `date_reg`) VALUES ('".$getlocationid."', '".$fileName."', '".$file_extension."', '".date('c')."')"; 
         // mysql_query($sql);
+        
+        // Log file upload
+        ActivityLogger::logUpload('System', 'upload_files.php', 0, 
+            $fileName, 
+            "Uploaded file: {$fileName}", 
+            'file_manager', 
+            $file_extension);
     } 
 } 
 

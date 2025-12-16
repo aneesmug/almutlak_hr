@@ -30,9 +30,10 @@ if(isset($_POST['submit'])){
 	if($section_name){
 		$query = "INSERT INTO `section` (`section_name`, `dept`, `camera_in`, `camera_out`, `b_license_exp`, `b_license_no`, `location_dist`, `bulding_base`, `bulding_size`, `t_bulding_size`, `latitude`, `longitude`, `location_name`, `municipality`, `sub_municipality`, `status`) VALUES ('".$section_name."', '".$dept."', '".$camera_in."','".$camera_out."','".$b_license_exp."','".$b_license_no."','".$location_dist."','".$bulding_base."','".$bulding_size."','".$t_bulding_size."','".$latitude."','".$longitude."','".$loc_address."','".$municipality."','".$sub_municipality."', '".$status."')";
 		mysqli_query($conDB, $query);
-		/************log************/
-		//mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['maker_name']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		$location_id = mysqli_insert_id($conDB);
+		
+		ActivityLogger::logCreate('Location', 'add_location.php', $location_id, ['section_name' => $section_name, 'dept' => $dept, 'location_name' => $loc_address, 'municipality' => $municipality], "Created location: {$section_name}", 'section');
+		
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
 		";		
 		 header( "refresh:2 ; url=all_locations.php" );

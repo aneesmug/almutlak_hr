@@ -143,6 +143,17 @@ function handle_upload_employee_document($pdo, $username) {
             ':created_by' => $username ?? 'System'
         ]);
         
+        $doc_id = $pdo->lastInsertId();
+        
+        // Log document upload
+        require_once __DIR__ . '/../../includes/session_check.php';
+        ActivityLogger::logUpload('Employee', 'document_upload_handlers.php', $emp_id, 
+            $document_file['name'], 
+            "Uploaded employee document: {$docType['duc_type']}", 
+            'smt_attachment', 
+            strtoupper($fileExtension), 
+            $doc_id);
+        
         send_json_response("Success", "Document uploaded successfully for " . $docType['duc_type'] . ".", "success");
         
     } catch (Exception $e) {

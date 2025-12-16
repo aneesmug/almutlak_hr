@@ -62,12 +62,14 @@ if(isset($_POST['submit'])){
 
 $u = "UPDATE `machines` SET `name_mach`='".$name_mach_po."', `maker_name`='".$maker_name_po."', `location`='".$location_po."', `remarks`='".$remarks_po."', `m_id`='".$m_id_po."', `serial`='".$serial_po."', `made_year`='".$made_year_po."' WHERE `id`='".$_GET['id']."' ";
 
-
+		$old_result = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `id`='".$_GET['id']."'");
+		$old_machine = mysqli_fetch_assoc($old_result);
+		
 		// $query = "INSERT INTO `machines` (`name_mach`,`maker_name`, `location`, `remarks`,`serial`, `date_reg`, `m_id`, `made_year`) VALUES ('".$name_mach_po."','".$maker_name_po."', '".$location_po."', '".$remarks_po."', '".$serial_po."', '".$date_reg_po."', '".$m_id_get."', '".$made_year_po."')";
 		mysqli_query($conDB, $u);
-		/************log************/
-		// mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['maker_name']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		
+		ActivityLogger::logUpdate('Machine', 'edit_machine.php', $_GET['id'], $old_machine, ['name_mach' => $name_mach_po, 'maker_name' => $maker_name_po, 'location' => $location_po, 'serial' => $serial_po], "Updated machine: {$name_mach_po}", 'machines');
+		
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
 		";		
 		 header( "refresh:2 ; url=view_machine.php?id=".$_GET['id']." " );

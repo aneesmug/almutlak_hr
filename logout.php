@@ -10,6 +10,12 @@ if (isset($_SESSION['activity_log_id'])) {
     logUserLogout($conDB, 'logged_out');
 }
 
+// LOG LOGOUT ACTION (Enhanced Activity Logger)
+if (isset($_SESSION['auth_user'])) {
+    require_once __DIR__ . '/includes/init.php';
+    ActivityLogger::logLogout();
+}
+
 // Clear remember_me token from database if user is logged in
 if (isset($_SESSION['auth_user']) && isset($_SESSION['auth_user']['user_id'])) {
     $user_id = $_SESSION['auth_user']['user_id'];

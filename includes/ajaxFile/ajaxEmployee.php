@@ -1,6 +1,7 @@
 <?php
     header('Content-Type: application/json');
 	require_once __DIR__ . '/../../includes/db.php';
+	require_once __DIR__ . '/../../includes/session_check.php';
     include("./../../includes/helper_functions.php"); // --- Helper Function ---
 
 /****************************************************************
@@ -1011,6 +1012,14 @@ elseif($ajaxType == 'unassign_asset') {
             try {
                 $stmt = $pdo->prepare("INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES (:emp_id, 'Profile Picture', :filepath)");
                 $stmt->execute([':emp_id' => $emp_id, ':filepath' => $filepathup . $imagenameu]);
+                
+                // Log avatar upload
+                ActivityLogger::logUpload('Employee', 'ajaxEmployee.php', $emp_id, [
+                    'file_type' => 'Profile Picture',
+                    'file_path' => $filepathup . $imagenameu,
+                    'file_size' => strlen($data)
+                ], "Uploaded employee profile picture: {$emp_name}", 'employee_temp_contants');
+                
                 send_json_response(__("success"), __("image_uploaded_successfully"), "success");
             } catch(Exception $e) {
                 send_json_response(__("database_error"), __("the_catch_block_is_working_the_error_was") . ": " . $e->getMessage(), "error");
@@ -1018,8 +1027,19 @@ elseif($ajaxType == 'unassign_asset') {
         } else {
             // Direct update to employees table
             try {
+                // Fetch old avatar first
+                $old_stmt = $pdo->prepare("SELECT avatar FROM `employees` WHERE `id` = :id AND `emp_id` = :emp_id");
+                $old_stmt->execute([':id' => $id, ':emp_id' => $emp_id]);
+                $old_data = $old_stmt->fetch(PDO::FETCH_ASSOC);
+                
                 $stmt = $pdo->prepare("UPDATE `employees` SET `avatar` = :avatar WHERE `id` = :id AND `emp_id` = :emp_id");
                 $stmt->execute([':avatar' => $filepathup . $imagenameu, ':id' => $id, ':emp_id' => $emp_id]);
+                
+                // Log avatar update
+                ActivityLogger::logUpdate('Employee', 'ajaxEmployee.php', $id, $old_data ?? [], [
+                    'avatar' => $filepathup . $imagenameu
+                ], "Updated employee profile picture: {$emp_name}", 'employees');
+                
                 send_json_response(__("success"), __("image_uploaded_successfully"), "success");
             } catch(Exception $e) {
                 send_json_response(__("database_error"), __("the_catch_block_is_working_the_error_was") . ": " . $e->getMessage(), "error");
@@ -1074,12 +1094,14 @@ elseif($ajaxType == 'unassign_asset') {
             $salaryData = [':emp_id' => $emp_id];
             $columns = ['emp_id'];
             $placeholders = [':emp_id'];
+            $new_values = [];
             foreach ($allowedFields as $field) {
                 if (isset($_POST[$field])) {
                     $value = (float)$_POST[$field];
                     $salaryData[":$field"] = $value;
                     $columns[] = $field;
                     $placeholders[] = ":$field";
+                    $new_values[$field] = $value;
                 }
             }
 
@@ -1093,13 +1115,21 @@ elseif($ajaxType == 'unassign_asset') {
             $pdo->beginTransaction();
 
             // 1. Check if record exists and update status to 0 if it does
-            $checkStmt = $pdo->prepare("SELECT id FROM emp_salary WHERE emp_id = :emp_id AND status = 1");
+            $checkStmt = $pdo->prepare("SELECT * FROM emp_salary WHERE emp_id = :emp_id AND status = 1");
             $checkStmt->execute([':emp_id' => $emp_id]);
             $existingRecord = $checkStmt->fetch();
 
             if ($existingRecord) {
                 $updateStmt = $pdo->prepare("UPDATE emp_salary SET status = 0 WHERE id = :id");
                 $updateStmt->execute([':id' => $existingRecord['id']]);
+                
+                // Prepare old values for logging
+                $old_values = [];
+                foreach ($allowedFields as $field) {
+                    if (isset($existingRecord[$field])) {
+                        $old_values[$field] = $existingRecord[$field];
+                    }
+                }
             }
 
             // 2. Insert new record with status = 1
@@ -1111,9 +1141,16 @@ elseif($ajaxType == 'unassign_asset') {
                     VALUES (" . implode(', ', $placeholders) . ")";
             $stmt = $pdo->prepare($sql);
             $stmt->execute($salaryData);
+            
+            // Get new salary record ID
+            $new_salary_id = $pdo->lastInsertId();
 
             // Commit transaction
             $pdo->commit();
+            
+            // Log salary update
+            ActivityLogger::logUpdate('Employee Salary', 'ajaxEmployee.php', $new_salary_id, $old_values ?? [], $new_values, 
+                "Updated salary for employee ID: {$emp_id}, Total: {$postedTotal}", 'emp_salary');
 
             send_json_response(__("success"), __("salary_updated_successfully"), "success");
 
@@ -1285,6 +1322,14 @@ elseif($ajaxType == 'unassign_asset') {
                 ':ext'      => $file_ext,
                 ':pgid'     => $tempRequestId
             ]);
+            
+            // Log document upload with pending status
+            ActivityLogger::logUpload('Employee', 'ajaxEmployee.php', $emp_id_up, [
+                'document_type' => $docu_typ_up,
+                'file_name' => $filename_po,
+                'file_ext' => $file_ext,
+                'status' => 'Pending Approval'
+            ], "Employee uploaded document: {$docu_typ_up}", 'emp_docu');
         } else {
             // Admin/HR upload: direct approval
             $stmt = $pdo->prepare("INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `path`, `docu_ext`, `pgid`, `status`) VALUES (:emp_id, :docu_typ, :filename, :ext, :pgid, 'A')");
@@ -1295,6 +1340,14 @@ elseif($ajaxType == 'unassign_asset') {
                 ':ext'      => $file_ext,
                 ':pgid'     => $id // Use the posted id as pgid
             ]);
+            
+            // Log document upload
+            ActivityLogger::logUpload('Employee', 'ajaxEmployee.php', $emp_id_up, [
+                'document_type' => $docu_typ_up,
+                'file_name' => $filename_po,
+                'file_ext' => $file_ext,
+                'status' => 'Approved'
+            ], "Admin uploaded document for employee: {$docu_typ_up}", 'emp_docu');
         }
         
         // Commit transaction if all queries succeeded

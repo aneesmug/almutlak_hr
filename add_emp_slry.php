@@ -74,8 +74,20 @@
             $checkStmt->execute([':emp_id' => $emprow['empid']]);
             $existingRecord = $checkStmt->fetch();
             if ($existingRecord) {
+                // Fetch old salary data before update
+                $oldStmt = $pdo->prepare("SELECT * FROM emp_salary WHERE id = :id");
+                $oldStmt->execute([':id' => $existingRecord['id']]);
+                $oldSalary = $oldStmt->fetch(PDO::FETCH_ASSOC);
+                
                 $updateStmt = $pdo->prepare("UPDATE emp_salary SET status = 0 WHERE id = :id");
                 $updateStmt->execute([':id' => $existingRecord['id']]);
+                
+                // Log salary deactivation
+                if ($oldSalary) {
+                    ActivityLogger::logUpdate('Employee', 'add_emp_slry.php', $existingRecord['id'], $oldSalary, [
+                        'status' => 0
+                    ], "Deactivated previous salary for employee: {$emprow['name']}", 'emp_salary');
+                }
             }
             // 2. Insert new record with status = 1
             $columns[] = 'status'; // Add status column
@@ -85,6 +97,17 @@
                     VALUES (" . implode(', ', $placeholders) . ")";
             $stmt = $pdo->prepare($sql);
         $stmt->execute($salaryData);
+        $salary_id = $pdo->lastInsertId();
+        
+        // Log new salary creation
+        $new_salary_data = [];
+        foreach ($allowedFields as $field) {
+            if (isset($salaryData[":$field"])) {
+                $new_salary_data[$field] = $salaryData[":$field"];
+            }
+        }
+        ActivityLogger::logCreate('Employee', 'add_emp_slry.php', $salary_id, $new_salary_data, "Created new salary for employee: {$emprow['name']}, Total: {$postedTotal}", 'emp_salary');
+        
         // Commit transaction
         $pdo->commit();
         

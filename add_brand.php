@@ -17,9 +17,14 @@ if(isset($_POST['submit'])){
 
 		$query = "INSERT INTO `brand_name` (`name`,`descr`,`date_reg`) VALUES ('".$name."','".$desc."', '".$date_reg."')";
 		mysqli_query($conDB,$query);
-		/************log************/
-		// mysqli_query($conDB,"INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['maker_name']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		$brand_id = mysqli_insert_id($conDB);
+		
+		// Log brand creation
+		ActivityLogger::logCreate('Brand', 'add_brand.php', $brand_id, [
+			'name' => $name,
+			'descr' => $desc
+		], "Created brand: {$name}", 'brand_name');
+		
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
 		";		
 		 header( "refresh:2 ; url=add_machine.php" );

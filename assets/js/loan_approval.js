@@ -97,15 +97,54 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
         // Normal approval for other levels
     Swal.fire({
         title: __('confirm_approval_title'),
-        text: __('confirm_approve_loan_text'),
+        html: `
+            <div class="text-left">
+                <p>${__('confirm_approve_loan_text')}</p>
+                <hr>
+                <h6 class="text-primary mb-3">
+                    <i class="fa fa-comment"></i> ${__('approval_comment') || 'Approval Comment'}
+                    <span class="text-muted">(${__('optional')})</span>
+                </h6>
+                <div class="form-group">
+                    <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Write your comment or review for this approval (optional)...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;"></textarea>
+                    <small class="form-text text-muted">
+                        <span id="char-count">0</span>/5000 ${__('characters')}
+                    </small>
+                </div>
+            </div>
+        `,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#28a745',
         cancelButtonColor: '#dc3545',
         confirmButtonText: __('yes_approve_it_button'),
         allowOutsideClick: false,
+        willOpen: () => {
+            // Character counter for approval comment
+            $(document).on('input', '#swal_approval_comment', function() {
+                const currentLength = $(this).val().length;
+                const maxLength = 5000;
+                
+                $('#char-count').text(currentLength);
+                
+                // Change color if approaching limit
+                if (currentLength > maxLength * 0.9) {
+                    $('#char-count').css('color', '#dc3545'); // Red warning
+                } else if (currentLength > maxLength * 0.7) {
+                    $('#char-count').css('color', '#ffc107'); // Yellow warning
+                } else {
+                    $('#char-count').css('color', '#6c757d'); // Default gray
+                }
+            });
+        },
+        preConfirm: () => {
+            const approvalComment = $('#swal_approval_comment').val() || '';
+            return approvalComment.trim();
+        }
     }).then((result) => {
         if (result.isConfirmed) {
+            const approvalComment = result.value;
+            
             // Show loader while processing
             Swal.fire({
                 title: __('processing_approval'),
@@ -116,7 +155,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                 }
             });
             // Send the approval request
-            sendLoanUpdate(loanId, role, 'approve_loan').then((response) => {
+            sendLoanUpdate(loanId, role, 'approve_loan', { approval_comment: approvalComment }).then((response) => {
                 Swal.fire({
                     title: response.title,
                     text: response.message,

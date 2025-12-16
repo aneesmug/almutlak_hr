@@ -21,9 +21,10 @@ if(isset($_POST['submit'])){
 	if($maker_name){
 		$query = "INSERT INTO `cars` (`maker_name`, `model`, `made_year`, `plate_no`, `type`, `status`, `remarks`, `date_reg`) VALUES ('".$maker_name."', '".$model."', '".$made_year."', '".$plate_no."', '".$type."', '".$status."', '".$remarks."', '".$date_reg."')";
 		mysqli_query($conDB, $query);
-		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['maker_name']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		$car_id = mysqli_insert_id($conDB);
+		
+		ActivityLogger::logCreate('Vehicle', 'add_car.php', $car_id, ['maker_name' => $maker_name, 'model' => $model, 'made_year' => $made_year, 'plate_no' => $plate_no, 'type' => $type], "Added vehicle: {$maker_name} {$model}", 'cars');
+		
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
 		";		
 		 header( "refresh:2 ; url=add_car.php" );

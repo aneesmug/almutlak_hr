@@ -9,6 +9,7 @@ header('Content-Type: application/json');
 // $pdo = new PDO("mysql:host=localhost;dbname=your_db", "username", "password");
 // Using PDO is crucial for security.
 require_once __DIR__ . '/../../includes/db.php'; // This should provide the $pdo object.
+require_once __DIR__ . '/../../includes/session_check.php';
 include("./../../includes/helper_functions.php"); // --- Helper Function ---
 // 2. File Path Mapping:
 // Maps a table name to its corresponding file directory for tables WITH attachments.
@@ -59,6 +60,12 @@ try {
     }
     // B. Handle Database Record Deletion/Update
     $sql = '';
+    
+    // Fetch record before deletion for audit trail
+    $fetch_stmt = $pdo->prepare("SELECT * FROM `$table_name` WHERE `id` = :id");
+    $fetch_stmt->execute([':id' => $record_id]);
+    $deleted_record = $fetch_stmt->fetch(PDO::FETCH_ASSOC);
+    
     // Use a switch statement for cleaner logic.
     switch ($ajax_type) {
         case 'deleteInv':
@@ -79,6 +86,20 @@ try {
     $success = $stmt->execute([':id' => $record_id]);
 
     if ($success) {
+        // Log deletion action
+        if ($deleted_record) {
+            $module_map = [
+                'customer' => 'Customer',
+                'cars' => 'Vehicle',
+                'machines' => 'Machine',
+                'section' => 'Location',
+                'employees' => 'Employee',
+                'users' => 'User'
+            ];
+            $module = isset($module_map[$table_name]) ? $module_map[$table_name] : ucfirst($table_name);
+            ActivityLogger::logDelete($module, 'deleteAjax.php', $record_id, $deleted_record, "Deleted {$module} record via AJAX", $table_name);
+        }
+        
         // C. Physically Delete the File (only after the database query succeeds)
         if ($file_to_delete && file_exists($file_to_delete)) {
             // Use @unlink to suppress warnings if the file is somehow already gone.

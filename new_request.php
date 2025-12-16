@@ -5,7 +5,6 @@ MODIFICATION SUMMARY:
 - Removed: The "Finance Approver" and "Forward to GM?" dropdowns have been removed from this page. This logic is now handled in `open_request.php`.
 - Simplified: The main INSERT query has been simplified to no longer handle different statuses at creation time, streamlining the process.
 */
-    require_once __DIR__ . '/includes/db.php';
     require_once __DIR__ . '/includes/session_check.php';
     include("./includes/convertNumbersToWords.php");
     require_once __DIR__ . '/includes/validate_supervisor.php';
@@ -53,12 +52,25 @@ if(isset($_POST['submit'])){
             
             // Simplified SQL - All requests are now created as 'draft'
             $sql = "INSERT INTO `smart_request` 
-                        (`inv_no`,`location`, `sub_type`, `sub_title`, `item_name`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by`, `remarks`, `emp_id`, `current_status`) 
+                        (`inv_no`,`location`, `sub_type`, `sub_title`, `item_name`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by`, `remarks`, `emp_id`, `current_status`, `current_approval_level`) 
                     VALUES 
-                        ('".$inv_no_po."','".$location_po."','".$sub_type_po."','".$sub_title_po."','".$item_name_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."','".$remarks_po."','".$empid."', 'draft')";
+                        ('".$inv_no_po."','".$location_po."','".$sub_type_po."','".$sub_title_po."','".$item_name_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."','".$remarks_po."','".$empid."', 'draft', NULL)";
             mysqli_query($conDB, $sql);
+            $request_id = mysqli_insert_id($conDB);
+            
+            // Log request line item creation
+            ActivityLogger::logCreate('Request', 'new_request.php', $request_id, [
+                'inv_no' => $inv_no_po,
+                'item_name' => $item_name_po,
+                'quantity' => $quantity_po,
+                'total_cost' => $total_cost_po,
+                'location' => $location_po
+            ], "Created request line item: {$item_name_po}", 'smart_request');
         }
             mysqli_query($conDB, "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`) VALUES ('".$empid."', '".$inv_no_po."', '".$userwel."', 'draft' )");
+            
+            // Log request creation
+            ActivityLogger::logSubmit('Request', 'new_request.php', 0, "Submitted new request: {$inv_no_po}", 'smart_request');
         
         $msg = '<div class="alert alert-success bg-success text-white border-0" role="alert">'.__('added_successfully').'</div>';
          header( "refresh:0 ; url=open_request.php?id=$_GET[id]" );
@@ -159,7 +171,24 @@ if(isset($_POST['submit'])){
                                                     <div class="input-group mb-2">
                                                         <div class="input-group-prepend"><div class="input-group-text"><?=__('invoice_no')?>:</div></div>
                                                         <input class="form-control" type='text' name='inv_no' value="<?= $_GET['id'] ?>" readonly />
-                                                    </div>                                               
+                                                    </div>
+                                                    <?php
+                                                    // Get department name
+                                                    $dept_query = mysqli_query($conDB, "SELECT `dep_nme` FROM `department` WHERE `id` = '$user_dept'");
+                                                    $dept_name = 'N/A';
+                                                    if ($dept_query && mysqli_num_rows($dept_query) > 0) {
+                                                        $dept_row = mysqli_fetch_assoc($dept_query);
+                                                        $dept_name = $dept_row['dep_nme'];
+                                                    }
+                                                    ?>
+                                                    <div class="input-group mb-2">
+                                                        <div class="input-group-prepend"><div class="input-group-text"><?=__('department')?>:</div></div>
+                                                        <input class="form-control" type='text' value="<?= htmlspecialchars($dept_name) ?>" readonly />
+                                                    </div>
+                                                    <div class="input-group mb-2">
+                                                        <div class="input-group-prepend"><div class="input-group-text"><?=__('prepared_by')?>:</div></div>
+                                                        <input class="form-control" type='text' value="<?= htmlspecialchars($userwel) ?>" readonly />
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

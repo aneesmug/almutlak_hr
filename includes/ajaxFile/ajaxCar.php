@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
 include("./../../includes/helper_functions.php");
 
 $ajaxType = $_POST['ajaxType'];
@@ -14,6 +15,18 @@ if ($ajaxType == 'add_car') {
     $sql="INSERT INTO `cars` (`maker_name`, `model`, `made_year`, `plate_no`, `type`, `remarks`, `created_at`) VALUES ('".$maker_name."', '".$maker_model."', '".$made_year."', '".$plate_no."', '".$type."', '".$remarks."', '".date('Y-m-d H:i:s')."')";
 
     if(mysqli_query($conDB, $sql)){
+        $car_id = mysqli_insert_id($conDB);
+        
+        // Log vehicle creation
+        ActivityLogger::logCreate('Vehicle', 'ajaxCar.php', $car_id, [
+            'maker_name' => $maker_name,
+            'model' => $maker_model,
+            'made_year' => $made_year,
+            'plate_no' => $plate_no,
+            'type' => $type,
+            'remarks' => $remarks
+        ], "Added vehicle: {$maker_name} {$maker_model} ({$plate_no})", 'cars');
+        
         send_json_response(__('added_successfully'), __('success_record_submitted'), "success");
     } else {
         send_json_response(__('error_title'), __('error_record_submitted'), "error");
@@ -26,8 +39,25 @@ if ($ajaxType == 'add_car') {
     $type = $_POST['type'];
     $remarks = $_POST['remarks'];
     $status = $_POST['status'];
-    $sql = "UPDATE `cars` SET `maker_name`='".$maker_name."', `model`='".$maker_model."', `made_year`='".$made_year."', `plate_no`='".$plate_no."', `type`='".$type."', `remarks`='".$remarks."', `status`='".$status."' WHERE `id`='".$_POST['carid']."' ";
+    $car_id = $_POST['carid'];
+    
+    // Fetch old car data for logging
+    $old_result = mysqli_query($conDB, "SELECT * FROM cars WHERE id = '{$car_id}'");
+    $old_car = mysqli_fetch_assoc($old_result);
+    
+    $sql = "UPDATE `cars` SET `maker_name`='".$maker_name."', `model`='".$maker_model."', `made_year`='".$made_year."', `plate_no`='".$plate_no."', `type`='".$type."', `remarks`='".$remarks."', `status`='".$status."' WHERE `id`='".$car_id."' ";
     if(mysqli_query($conDB, $sql)){
+        // Log vehicle update
+        ActivityLogger::logUpdate('Vehicle', 'ajaxCar.php', $car_id, $old_car ?? [], [
+            'maker_name' => $maker_name,
+            'model' => $maker_model,
+            'made_year' => $made_year,
+            'plate_no' => $plate_no,
+            'type' => $type,
+            'status' => $status,
+            'remarks' => $remarks
+        ], "Updated vehicle: {$maker_name} {$maker_model} ({$plate_no})", 'cars');
+        
         send_json_response(__('update'), __('this_record_has_been_updated_successfully'), "success");
     } else {
         send_json_response(__('error_title'), __('error_record_submitted'), "error");

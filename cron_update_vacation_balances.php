@@ -124,8 +124,12 @@ try {
             $balance_changed = (abs($old_balance - $live_balance) > 0.001);
 
             // Update the record with new balance and track when it was last updated
+            // CRITICAL FIX: Also update total_days to keep it synchronized with available_balance
+            // total_days represents the opening balance, so when available_balance changes,
+            // total_days must also be updated to reflect the new opening balance for vacation deductions
             $update_sql = "UPDATE `emp_vacation_balance` 
                           SET `available_balance` = ?, 
+                              `total_days` = ?,
                               `last_updated` = NOW() 
                           WHERE `id` = ?";
 
@@ -136,7 +140,7 @@ try {
                 continue;
             }
 
-            mysqli_stmt_bind_param($stmt, 'di', $live_balance, $balance_record_id);
+            mysqli_stmt_bind_param($stmt, 'ddi', $live_balance, $live_balance, $balance_record_id);
 
             if (!mysqli_stmt_execute($stmt)) {
                 log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt));

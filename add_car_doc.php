@@ -37,9 +37,16 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']
 	if($doc_type_up){
 		$query = "INSERT INTO `cars_docu` (`car_id`, `doc_type`, `issue_date`, `exp_date`, `date_reg`) VALUES ('".$_GET['id']."', '".$doc_type_up."', '".$issue_date_up."', '".$exp_date_up."', '".$date_reg_up."')";
 		mysqli_query($conDB, $query);
-		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['doc_type']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		$doc_id = mysqli_insert_id($conDB);
+		
+		// Log vehicle document creation
+		ActivityLogger::logUpload('Vehicle', 'add_car_doc.php', $doc_id, [
+			'car_id' => $_GET['id'],
+			'doc_type' => $doc_type_up,
+			'issue_date' => $issue_date_up,
+			'exp_date' => $exp_date_up
+		], "Added vehicle document: {$doc_type_up}", 'cars_docu');
+		
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
 		";		
 		header( "refresh:1 ; url= ./view_car.php?id=".$_GET['id']." " );

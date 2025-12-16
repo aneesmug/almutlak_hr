@@ -52,7 +52,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `section` WHERE `id`='".$_GET['i
 
 if ($id_img_get !== $id_get) {
 	$defult_img = "./assets/location_content/default_in.jpg";
-	mysqli_query($conDB, "INSERT INTO `location_img` (`location_id`,`in_img`,`out_img`,`reg_date`) VALUES ('".$id_get."','".$defult_img."','".$defult_img."','".date("c")."')") or die (mysqli_error());
+	mysqli_query($conDB, "INSERT INTO `location_img` (`location_id`,`in_img`,`out_img`,`reg_date`) VALUES ('".$id_get."','".$defult_img."','".$defult_img."','".date("c")."')") or die ();
 }
 
 
@@ -81,16 +81,36 @@ if(isset($_POST['submit'])){
 
 	if ($id_img_get !== $id_get) {
 		$defult_img = "./assets/location_content/default_in.jpg";
-		mysqli_query($conDB, "INSERT INTO `location_img` (`location_id`,`in_img`,`out_img`,`reg_date`) VALUES ('".$id_get."','".$defult_img."','".$defult_img."','".date("c")."')") or die (mysqli_error());
+		mysqli_query($conDB, "INSERT INTO `location_img` (`location_id`,`in_img`,`out_img`,`reg_date`) VALUES ('".$id_get."','".$defult_img."','".$defult_img."','".date("c")."')") or die ();
 	}
 	
+	// Fetch old location data for audit trail
+	$old_result = mysqli_query($conDB, "SELECT * FROM `section` WHERE `id`='".$_GET['id']."'");
+	$old_location = mysqli_fetch_assoc($old_result);
 	
 $u = "UPDATE `section` SET `section_name`='".$section_name_po."', `dept`='".$dept_po."',`camera_in`='".$camera_in_po."',`camera_out`='".$camera_out_po."',`b_license_exp`='".$b_license_exp_po."',`b_license_no`='".$b_license_no_po."',`location_dist`='".$location_dist_po."', `bulding_base`='".$bulding_base_po."', `bulding_size`='".$bulding_size_po."', `t_bulding_size`='".$t_bulding_size_po."', `latitude`='".$latitude_po."', `longitude`='".$longitude_po."', `location_name`='".$loc_address_po."', `municipality`='".$municipality_po."', `sub_municipality`='".$sub_municipality_po."', `status`='".$status_po."' WHERE `id`='".$_GET['id']."' ";
-		mysqli_query($conDB, $u) or die (mysqli_error());
+		mysqli_query($conDB, $u) or die ();
 		
-		/************log************/
-		// mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		// Log location update with before/after values
+		ActivityLogger::logUpdate('Location', 'edit_location.php', $_GET['id'], $old_location, [
+			'section_name' => $section_name_po,
+			'dept' => $dept_po,
+			'camera_in' => $camera_in_po,
+			'camera_out' => $camera_out_po,
+			'b_license_exp' => $b_license_exp_po,
+			'b_license_no' => $b_license_no_po,
+			'location_dist' => $location_dist_po,
+			'bulding_base' => $bulding_base_po,
+			'bulding_size' => $bulding_size_po,
+			't_bulding_size' => $t_bulding_size_po,
+			'latitude' => $latitude_po,
+			'longitude' => $longitude_po,
+			'location_name' => $loc_address_po,
+			'municipality' => $municipality_po,
+			'sub_municipality' => $sub_municipality_po,
+			'status' => $status_po
+		], "Updated location: {$section_name_po}", 'section');
+		
 		$error_1 = "<div class='alert alert-success bg-success text-white border-0'><strong>Successfully!</strong> Your location details will be updated!</div>";
 		header( "refresh:1 ; url= ./view_location.php?id=".$_GET['id']." " );
 

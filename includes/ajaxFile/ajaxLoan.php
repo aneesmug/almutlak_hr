@@ -22,6 +22,7 @@
  *******************************************************************************************************************/
 
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
 include("./../../includes/helper_functions.php"); // --- Helper Function (REQUIRED for notifications) ---
 include("./../../includes/validate_supervisor.php"); // --- Supervisor Validation ---
 
@@ -247,6 +248,11 @@ function approve_loan() {
         }
         $loan_id = filter_var($_POST['loan_id'], FILTER_VALIDATE_INT);
         $approver_role = mysqli_real_escape_string($conDB, $_POST['approver_role']);
+        
+        // Get approval comment if provided
+        $approval_comment = trim($_POST['approval_comment'] ?? '');
+        $approval_comment = mb_substr($approval_comment, 0, 5000); // Limit to 5000 chars
+        
         if ($loan_id === false) {
             echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Invalid Loan ID.', 'type' => 'error']);
             return;
@@ -341,6 +347,49 @@ function approve_loan() {
         $upd->bind_param("i", $row['id']);
         $upd->execute();
         $upd->close();
+        
+        // Save approval comment if provided
+        if (!empty($approval_comment)) {
+            // Get approver name
+            $sql_approver = "SELECT name FROM employees WHERE emp_id = ?";
+            $stmt_approver = $conDB->prepare($sql_approver);
+            if ($stmt_approver) {
+                $stmt_approver->bind_param("i", $approver_emp_id);
+                $stmt_approver->execute();
+                $result_approver = $stmt_approver->get_result();
+                $approver_data = $result_approver->fetch_assoc();
+                $approver_name = $approver_data['name'] ?? 'Unknown';
+                $stmt_approver->close();
+            } else {
+                $approver_name = 'Unknown';
+            }
+            
+            // Save to approval_comments table if the function exists
+            if (function_exists('save_approval_comment_db')) {
+                save_approval_comment_db(
+                    $conDB,
+                    $inv_no,
+                    'loan',
+                    'approved',
+                    $approver_emp_id,
+                    $approver_name,
+                    $approval_comment,
+                    $row['approval_level'], // approval_level
+                    null // approver_admin_id
+                );
+            }
+        }
+        
+        // Log loan approval
+        $loan_details = $conDB->prepare("SELECT * FROM emp_loan WHERE id = ?");
+        $loan_details->bind_param("i", $loan_id);
+        $loan_details->execute();
+        $loan_result = $loan_details->get_result();
+        $old_loan = $loan_result->fetch_assoc();
+        if ($old_loan) {
+            ActivityLogger::logApproval('Loan', 'ajaxLoan.php', $loan_id, 'approved', "Approved loan: {$inv_no}, Level: {$row['approval_level']}, Role: {$approver_role}", 'emp_loan');
+        }
+        $loan_details->close();
         
         // Add status history to smt_request_status
         $status_label = 'approved_level_' . $row['approval_level'];
@@ -776,6 +825,10 @@ function apply_for_loan() {
     if ($stmt->execute()) {
         $loan_id = $stmt->insert_id;
         $stmt->close();
+        
+        // Log loan application submission
+        ActivityLogger::logSubmit('Loan', 'ajaxLoan.php', $loan_id, "Submitted loan application: {$inv_no}, Amount: {$loan_amount}, Type: {$loan_type}", 'emp_loan');
+        
         // Get loan_request type id
         $type_stmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE type_name = 'loan_request' LIMIT 1");
         $type_stmt->execute();

@@ -1,5 +1,17 @@
 <?php
 
+// Ensure PHP error logging is configured so we can capture exceptions from this module
+try {
+    $errorLogDir = __DIR__ . '/../../logs';
+    if (!is_dir($errorLogDir)) {
+        @mkdir($errorLogDir, 0755, true);
+    }
+    @ini_set('log_errors', '1');
+    @ini_set('error_log', $errorLogDir . '/php_error.log');
+} catch (\Throwable $e) {
+    // Non-fatal: continue without changing error_log if filesystem prevents it
+}
+
 // --- PHPMailer ---
 // Try loading PHPMailer from includes/vendor first, then system/vendor
 $mailerAutoloadPaths = [
@@ -3549,6 +3561,7 @@ if (!function_exists('display_or_na')) {
     }
 }
 
+
 /**
  * Check if an employee is on an active vacation with cleared/kept assets
  * Active = current_status is 'approved' or 'complete' or 'completed' AND return_date is in the future
@@ -3621,3 +3634,351 @@ if (!function_exists('is_employee_on_active_vacation_with_cleared_assets')) {
         return $has_cleared_assets;
     }
 }
+
+
+/*=============================================
+=      Approval Comments Helper Functions     =
+=============================================*/
+
+if (!function_exists('get_approval_comments')) {
+    /**
+     * Fetch all approval comments for a request
+     * 
+     * @param mysqli $conDB Database connection
+     * @param string $request_inv_no Request invoice number
+     * @param string $request_type Type of request
+     * @return array Array of comments or empty array
+     */
+    function get_approval_comments($conDB, $request_inv_no, $request_type) {
+        $comments = [];
+        
+        if (!$conDB) {
+            return [];
+        }
+        
+        $sql = "SELECT * FROM `approval_comments` 
+                WHERE request_inv_no = ? AND request_type = ?
+                ORDER BY comment_date ASC";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            error_log("Error preparing get_approval_comments: " . mysqli_error($conDB));
+            return [];
+        }
+        
+        mysqli_stmt_bind_param($stmt, 'ss', $request_inv_no, $request_type);
+        if (!mysqli_stmt_execute($stmt)) {
+            error_log("Error executing get_approval_comments: " . mysqli_stmt_error($stmt));
+            mysqli_stmt_close($stmt);
+            return [];
+        }
+        
+        $result = mysqli_stmt_get_result($stmt);
+        while ($row = mysqli_fetch_assoc($result)) {
+            $comments[] = $row;
+        }
+        mysqli_free_result($result);
+        mysqli_stmt_close($stmt);
+        
+        return $comments;
+    }
+}
+
+if (!function_exists('get_latest_approval_comment')) {
+    /**
+     * Get the most recent approval comment for a request
+     * 
+     * @param mysqli $conDB Database connection
+     * @param string $request_inv_no Request invoice number
+     * @param string $request_type Type of request
+     * @return array|null Latest comment or null if none found
+     */
+    function get_latest_approval_comment($conDB, $request_inv_no, $request_type) {
+        if (!$conDB) {
+            return null;
+        }
+        
+        $sql = "SELECT * FROM `approval_comments` 
+                WHERE request_inv_no = ? AND request_type = ?
+                ORDER BY comment_date DESC 
+                LIMIT 1";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            error_log("Error preparing get_latest_approval_comment: " . mysqli_error($conDB));
+            return null;
+        }
+        
+        mysqli_stmt_bind_param($stmt, 'ss', $request_inv_no, $request_type);
+        if (!mysqli_stmt_execute($stmt)) {
+            error_log("Error executing get_latest_approval_comment: " . mysqli_stmt_error($stmt));
+            mysqli_stmt_close($stmt);
+            return null;
+        }
+        
+        $result = mysqli_stmt_get_result($stmt);
+        $comment = mysqli_fetch_assoc($result);
+        mysqli_free_result($result);
+        mysqli_stmt_close($stmt);
+        
+        return $comment;
+    }
+}
+
+if (!function_exists('save_approval_comment_db')) {
+    /**
+     * Save approval comment directly to database
+     * 
+     * @param mysqli $conDB Database connection
+     * @param string $request_inv_no Request invoice number
+     * @param string $request_type Type of request
+     * @param string $approval_action Action (approved, rejected, hold, adjusted)
+     * @param int $approver_emp_id Employee ID of approver
+     * @param string $approver_name Name of approver
+     * @param string $comment_text The comment/review text
+     * @param int $approval_level Optional approval level
+     * @param int $approver_admin_id Optional admin ID of approver
+     * @return int|false Inserted ID or false on failure
+     */
+    function save_approval_comment_db($conDB, $request_inv_no, $request_type, $approval_action, 
+                                     $approver_emp_id, $approver_name, $comment_text, 
+                                     $approval_level = 0, $approver_admin_id = null) {
+        if (!$conDB) {
+            return false;
+        }
+        
+        $sql = "INSERT INTO `approval_comments` 
+                (request_inv_no, request_type, approval_action, approver_emp_id, 
+                 approver_admin_id, approver_name, approval_level, comment_text, comment_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            error_log("Error preparing save_approval_comment_db: " . mysqli_error($conDB));
+            return false;
+        }
+        
+        // Handle null approver_admin_id
+        if ($approver_admin_id === null) {
+            $approver_admin_id = 0;
+        }
+        
+        mysqli_stmt_bind_param($stmt, 'sssiisis', 
+            $request_inv_no, $request_type, $approval_action, $approver_emp_id,
+            $approver_admin_id, $approver_name, $approval_level, $comment_text);
+        
+        if (!mysqli_stmt_execute($stmt)) {
+            error_log("Error executing save_approval_comment_db: " . mysqli_stmt_error($stmt));
+            mysqli_stmt_close($stmt);
+            return false;
+        }
+        
+        $inserted_id = mysqli_insert_id($conDB);
+        mysqli_stmt_close($stmt);
+        
+        return $inserted_id;
+    }
+}
+
+if (!function_exists('display_approval_comments_html')) {
+    /**
+     * Generate HTML to display approval comments
+     * 
+     * @param array $comments Array of comments from get_approval_comments()
+     * @return string HTML markup
+     */
+    function display_approval_comments_html($comments) {
+        if (empty($comments)) {
+            return '<div class="alert alert-info"><i class="fa fa-info-circle"></i> No approval comments yet</div>';
+        }
+        
+        $html = '<div class="approval-comments-timeline">';
+        
+        foreach ($comments as $comment) {
+            $action = $comment['approval_action'] ?? 'reviewed';
+            $approver = htmlspecialchars($comment['approver_name'] ?? 'Unknown');
+            $text = htmlspecialchars($comment['comment_text'] ?? '');
+            $date = $comment['comment_date'] ?? date('Y-m-d H:i:s');
+            
+            // Determine icon and color based on action
+            $iconClass = 'fa-check text-success';
+            $badgeClass = 'badge-success';
+            
+            if ($action === 'rejected') {
+                $iconClass = 'fa-times text-danger';
+                $badgeClass = 'badge-danger';
+            } elseif ($action === 'hold') {
+                $iconClass = 'fa-pause text-warning';
+                $badgeClass = 'badge-warning';
+            } elseif ($action === 'adjusted') {
+                $iconClass = 'fa-cog text-info';
+                $badgeClass = 'badge-info';
+            }
+            
+            $html .= '
+                <div class="approval-comment-item" style="margin-bottom: 20px; padding: 15px; border-left: 4px solid #007bff; background-color: #f8f9fa; border-radius: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div>
+                            <i class="fa ' . $iconClass . '" style="margin-right: 8px;"></i>
+                            <strong>' . ucfirst($approver) . '</strong>
+                            <span class="badge ' . $badgeClass . '" style="margin-left: 8px;">' . strtoupper($action) . '</span>
+                        </div>
+                        <small style="color: #999;">' . date('Y-m-d H:i', strtotime($date)) . '</small>
+                    </div>
+                    <div style="margin-left: 24px; padding: 12px; background-color: white; border-radius: 4px; border-left: 2px solid #007bff;">
+                        ' . nl2br($text) . '
+                    </div>
+                </div>
+            ';
+        }
+        
+        $html .= '</div>';
+        return $html;
+    }
+}
+
+if (!function_exists('get_comments_count_by_action')) {
+    /**
+     * Get count of comments by approval action
+     * 
+     * @param mysqli $conDB Database connection
+     * @param string $request_inv_no Request invoice number
+     * @param string $request_type Type of request
+     * @return array Associative array with counts by action
+     */
+    function get_comments_count_by_action($conDB, $request_inv_no, $request_type) {
+        $counts = [
+            'approved' => 0,
+            'rejected' => 0,
+            'hold' => 0,
+            'adjusted' => 0
+        ];
+        
+        if (!$conDB) {
+            return $counts;
+        }
+        
+        foreach (array_keys($counts) as $action) {
+            $sql = "SELECT COUNT(*) as cnt FROM `approval_comments` 
+                    WHERE request_inv_no = ? AND request_type = ? AND approval_action = ?";
+            
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 'sss', $request_inv_no, $request_type, $action);
+                mysqli_stmt_execute($stmt);
+                $result = mysqli_stmt_get_result($stmt);
+                $row = mysqli_fetch_assoc($result);
+                $counts[$action] = (int)($row['cnt'] ?? 0);
+                mysqli_free_result($result);
+                mysqli_stmt_close($stmt);
+            }
+        }
+        
+        return $counts;
+    }
+}
+
+if (!function_exists('logApprovalComment')) {
+    /**
+     * Log approval comment to activity log (if ActivityLogger is available)
+     * 
+     * @param mysqli $conDB Database connection
+     * @param string $request_inv_no Request invoice number
+     * @param string $request_type Type of request
+     * @param string $approval_action Action taken
+     * @param string $comment_text The comment
+     * @return bool Success status
+     */
+    function logApprovalComment($conDB, $request_inv_no, $request_type, $approval_action, $comment_text) {
+        global $ActivityLogger;
+        
+        if (!isset($ActivityLogger) || !class_exists('ActivityLogger')) {
+            return false;
+        }
+        
+        try {
+            $action_details = [
+                'request_inv_no' => $request_inv_no,
+                'request_type' => $request_type,
+                'approval_action' => $approval_action,
+                'comment_length' => strlen($comment_text)
+            ];
+            
+            $ActivityLogger->logApprovalComment(
+                $request_type,
+                $request_inv_no,
+                $approval_action,
+                json_encode($action_details)
+            );
+            
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+}
+
+/*=====  End of Approval Comments Helper Functions ======*/
+
+/*===== Supervisor Validation Helper Functions =====*/
+
+/**
+ * Validates that an employee has a supervisor assigned and the supervisor is active
+ * Checks supervisor existence in employees table, with fallback to admin_login table
+ * 
+ * @param mysqli $conDB Database connection
+ * @param string|int $empId Employee ID to validate
+ * @return array ['valid' => bool, 'message' => string]
+ */
+if (!function_exists('validate_employee_supervisor')) {
+    function validate_employee_supervisor($conDB, $empId) {
+        // Check that the employee has a supervisor assigned and that supervisor exists as an active user
+        if (empty($empId)) {
+            return ['valid' => false, 'message' => 'Employee ID is required.'];
+        }
+
+        $empIdEsc = mysqli_real_escape_string($conDB, $empId);
+        $sql = "SELECT e.supervisor_id, e.status FROM employees e WHERE e.emp_id = '$empIdEsc' LIMIT 1";
+        $res = mysqli_query($conDB, $sql);
+        if (!$res || mysqli_num_rows($res) === 0) {
+            return ['valid' => false, 'message' => 'Employee not found or inactive.'];
+        }
+        $row = mysqli_fetch_assoc($res);
+        mysqli_free_result($res);
+
+        if ((int)$row['status'] !== 1) {
+            return ['valid' => false, 'message' => 'Employee is not active.'];
+        }
+
+        $supervisorId = $row['supervisor_id'] ?? '';
+        if (empty($supervisorId)) {
+            return ['valid' => false, 'message' => 'No supervisor assigned. Please assign a direct supervisor before submitting resignation.'];
+        }
+
+        // Verify supervisor exists in employees/admin_login and is active
+        $supervisorEsc = mysqli_real_escape_string($conDB, $supervisorId);
+        $supRes = mysqli_query($conDB, "SELECT e.emp_id, e.status FROM employees e WHERE e.emp_id = '$supervisorEsc' LIMIT 1");
+        if ($supRes && mysqli_num_rows($supRes) > 0) {
+            $supRow = mysqli_fetch_assoc($supRes);
+            mysqli_free_result($supRes);
+            if ((int)$supRow['status'] !== 1) {
+                return ['valid' => false, 'message' => 'Assigned supervisor is not active.'];
+            }
+        } else {
+            // Fallback: check admin_login table for active account
+            $adminRes = mysqli_query($conDB, "SELECT emp_id, status FROM admin_login WHERE emp_id = '$supervisorEsc' LIMIT 1");
+            if (!$adminRes || mysqli_num_rows($adminRes) === 0) {
+                return ['valid' => false, 'message' => 'Assigned supervisor account not found.'];
+            }
+            $adminRow = mysqli_fetch_assoc($adminRes);
+            mysqli_free_result($adminRes);
+            if ((int)$adminRow['status'] !== 1) {
+                return ['valid' => false, 'message' => 'Assigned supervisor account is inactive.'];
+            }
+        }
+
+        return ['valid' => true, 'message' => 'Supervisor validation passed.'];
+    }
+}
+
+/*=====  End of Supervisor Validation Helper Functions ======*/

@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+	require_once __DIR__ . '/../../includes/session_check.php';
 
 $ajaxType = $_POST['ajaxType'];
 
@@ -9,6 +10,10 @@ if ($ajaxType == 'add_customer') {
     $user_type_up = mysqli_real_escape_string($conDB, $_POST['user_type']);
     $email_up = mysqli_real_escape_string($conDB, $_POST['email']);
     $user_id = intval($_POST['id']);
+    
+    // Fetch old user data for logging
+    $old_user_result = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id`='".$user_id."'");
+    $old_user = mysqli_fetch_assoc($old_user_result);
     
     // Fetch employee name and emptype from employees table
     $emp_query = "SELECT e.name as emp_name, e.emptype as emp_type FROM admin_login al 
@@ -29,6 +34,13 @@ if ($ajaxType == 'add_customer') {
             WHERE `id` = '".$user_id."'";
     
     if(mysqli_query($conDB, $sql)){
+        // Log user update
+        ActivityLogger::logUpdate('User', 'ajaxUser.php', $user_id, $old_user, [
+            'user_type' => $user_type_up,
+            'email' => $email_up,
+            'emp_type' => $emp_type_up
+        ], "Updated user: {$fullname_up}, Role: {$user_type_up}", 'admin_login');
+        
         $data = [
             'title'   => "Updated!",
             'message' => "User has been updated successfully with role: " . $user_type_up,
@@ -45,9 +57,20 @@ if ($ajaxType == 'add_customer') {
     }  
 } elseif($ajaxType == 'password_update') {
     if(isset($_POST['ajax']) && isset($_POST['password'])){
-        $sqlpass = "UPDATE `admin_login` SET `password`='".sha1(md5($_POST['password']))."', `bk_password`='".$_POST['password']."', `updated_at`='".date('Y-m-d H:i:s')."' WHERE `id`='".$_POST['id']."' ";
+        $user_id = intval($_POST['id']);
+        
+        // Fetch old user data for logging
+        $old_user_result = mysqli_query($conDB, "SELECT id, email FROM `admin_login` WHERE `id`='".$user_id."'");
+        $old_user = mysqli_fetch_assoc($old_user_result);
+        
+        $sqlpass = "UPDATE `admin_login` SET `password`='".sha1(md5($_POST['password']))."', `bk_password`='".$_POST['password']."', `updated_at`='".date('Y-m-d H:i:s')."' WHERE `id`='".$user_id."' ";
         if(mysqli_query($conDB, $sqlpass)){
-          $data = [
+            // Log password update
+            ActivityLogger::logUpdate('User', 'ajaxUser.php', $user_id, $old_user, [
+                'password' => '[REDACTED]'
+            ], "Updated password for user", 'admin_login');
+            
+            $data = [
                 'title'     => "Updated!",
                 'message'   => "This user has been update successfully.",
                 'type'      => 'success',
@@ -123,6 +146,19 @@ if ($ajaxType == 'add_customer') {
     );
     
     if($stmt2->execute()){
+        // Get the new user ID
+        $new_user_id = $stmt2->insert_id;
+        
+        // Log user creation
+        ActivityLogger::logCreate('User', 'ajaxUser.php', $new_user_id, [
+            'emp_id' => $row['emp_id'],
+            'fullname' => $row['name'],
+            'user_type' => $user_type,
+            'emp_type' => $emp_type,
+            'email' => $email,
+            'dept' => $row['dept']
+        ], "Created user account for: {$row['name']}, Role: {$user_type}", 'admin_login');
+        
         $data = [
             'title'   => "Created!",
             'message' => "New user has been created successfully with role: " . $user_type,

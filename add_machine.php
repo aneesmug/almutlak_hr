@@ -66,9 +66,10 @@ if(isset($_POST['submit'])){
 
 		$query = "INSERT INTO `machines` (`name_mach`,`maker_name`, `location`, `remarks`,`serial`, `date_reg`, `m_id`, `made_year`) VALUES ('".$name_mach."','".$maker_name."', '".$location."', '".$remarks."', '".$serial."', '".$date_reg."', '".$m_idpo."', '".$made_year."')";
 		mysqli_query($conDB, $query);
-		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['maker_name']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		$machine_id = mysqli_insert_id($conDB);
+		
+		ActivityLogger::logCreate('Machine', 'add_machine.php', $machine_id, ['name_mach' => $name_mach, 'maker_name' => $maker_name, 'location' => $location, 'serial' => $serial, 'made_year' => $made_year], "Added machine: {$name_mach}", 'machines');
+		
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
 		";		
 		 // header( "refresh:2 ; url=all_machines.php" );

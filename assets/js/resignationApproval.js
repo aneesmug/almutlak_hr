@@ -1015,55 +1015,90 @@ function showFinalApprovalConfirmation(data, replacementData) {
  * Submit Approval to Backend
  */
 function submitApproval(resignationId, replacementData) {
+    // Ask for optional approval comment before submitting
     Swal.fire({
-        title: __('processing') || 'Processing...',
-        html: __('please_wait') || 'Please wait while we process your approval',
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-        }
-    });
-    
-    const formData = new FormData();
-    formData.append('ajaxType', 'approve_resignation');
-    formData.append('resignation_id', resignationId);
-    
-    if (replacementData) {
-        formData.append('needs_replacement', '1');
-        formData.append('replacement_data', JSON.stringify(replacementData));
-    } else {
-        formData.append('needs_replacement', '0');
-    }
-    
-    $.ajax({
-        url: './includes/ajaxFile/ajaxResignation.php',
-        type: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        dataType: 'json',
-        success: function(response) {
-            Swal.fire({
-                title: response.title || __('success') || 'Success',
-                text: response.message || __('resignation_approved') || 'Resignation has been approved successfully',
-                icon: response.type || 'success',
-                confirmButtonText: __('ok') || 'OK'
-            }).then(() => {
-                location.reload();
-                allowOutsideClick:false});
+        title: __('add_approval_comment') || 'Add Approval Comment (Optional)',
+        html: `
+            <div style="text-align: left;">
+                <p style="color: #555; margin-bottom: 15px;">${__('you_can_add_an_optional_comment_about_your_approval_decision') || 'Add Approval Comment (Optional)'}:</p>
+                <textarea id="approval_comment" class="form-control" rows="4" 
+                          placeholder="${__('enter_approval_comment') || 'Enter your approval comment here...'}" 
+                          style="font-size: 14px; resize: vertical; min-height: 100px;"></textarea>
+            </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: __('approve_submit') || 'Approve & Submit',
+        cancelButtonText: __('cancel') || 'Cancel',
+        customClass: {
+            confirmButton: 'btn btn-success',
+            cancelButton: 'btn btn-secondary'
         },
-        error: function(jqXHR, textStatus, errorThrown) {
-            let errorMessage = __('failed_to_approve') || 'Failed to approve resignation';
-            if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
-                errorMessage = jqXHR.responseJSON.message;
-            }
+        allowOutsideClick: false,
+        preConfirm: () => {
+            return {
+                comment: document.getElementById('approval_comment').value.trim()
+            };
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const approvalComment = result.value.comment;
             
             Swal.fire({
-                title: __('error') || 'Error',
-                text: errorMessage,
-                icon: 'error',
-                confirmButtonText: __('ok') || 'OK'
-            ,allowOutsideClick:false});
+                title: __('processing') || 'Processing...',
+                html: __('please_wait') || 'Please wait while we process your approval',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            const formData = new FormData();
+            formData.append('ajaxType', 'approve_resignation');
+            formData.append('resignation_id', resignationId);
+            
+            if (approvalComment) {
+                formData.append('approval_comment', approvalComment);
+            }
+            
+            if (replacementData) {
+                formData.append('needs_replacement', '1');
+                formData.append('replacement_data', JSON.stringify(replacementData));
+            } else {
+                formData.append('needs_replacement', '0');
+            }
+            
+            $.ajax({
+                url: './includes/ajaxFile/ajaxResignation.php',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: 'json',
+                success: function(response) {
+                    Swal.fire({
+                        title: response.title || __('success') || 'Success',
+                        text: response.message || __('resignation_approved') || 'Resignation has been approved successfully',
+                        icon: response.type || 'success',
+                        confirmButtonText: __('ok') || 'OK'
+                    }).then(() => {
+                        location.reload();
+                    });
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    let errorMessage = __('failed_to_approve') || 'Failed to approve resignation';
+                    if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
+                        errorMessage = jqXHR.responseJSON.message;
+                    }
+                    
+                    Swal.fire({
+                        title: __('error') || 'Error',
+                        text: errorMessage,
+                        icon: 'error',
+                        confirmButtonText: __('ok') || 'OK'
+                    });
+                }
+            });
         }
     });
 }

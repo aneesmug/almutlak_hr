@@ -81,6 +81,17 @@ if(isset($_POST['submit'])){
 		$sql = "INSERT INTO `employees` (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
 		$stmt = $pdo->prepare($sql);
 		$stmt->execute($values);
+		
+		// LOG EMPLOYEE CREATE ACTION
+		ActivityLogger::logCreate(
+			'Employee',
+			'new_comp_employee.php',
+			$newEmpId,
+			$values,
+			"Created new company employee: " . $values[':name'],
+			'employees'
+		);
+		
 		// Success response
 		salert(__('success_title'), __('employee_created_successfully'), "success" ,"view_employee.php?emp_id=".$newEmpId, __('ok'));
 	} catch (PDOException $e) {

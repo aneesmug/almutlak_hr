@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
+
 require_once __DIR__ . '/includes/session_check.php';
 // $user_type, $empid, $user_dept, $is_system_admin, $isHR, $isDeptManager are available from session_check.php
 
@@ -395,9 +395,9 @@ if ($can_see_all_depts) {
                                                 // Only show action buttons if current user has pending approval
                                                 $can_take_action = $user_has_pending_approval;
                                                 
-                                                // Prepare JS-safe variables
-                                                $employee_name_js = htmlspecialchars(addslashes($resignation['employee_name']), ENT_QUOTES);
-                                                $employee_id_js = htmlspecialchars($resignation['employee_id'], ENT_QUOTES);
+                                                // Prepare JS-safe variables - remove line breaks and escape quotes
+                                                $employee_name_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['employee_name'])), ENT_QUOTES);
+                                                $employee_id_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', $resignation['employee_id']), ENT_QUOTES);
                                             ?>
                                                 <div class="col-lg-4 col-md-6 mb-4">
                                                     <div class="card request-card h-100">
@@ -490,7 +490,13 @@ if ($can_see_all_depts) {
                                                                     <?=__('actions')?> <span class="caret"></span>
                                                                 </button>
                                                                 <div class="dropdown-menu dropdown-menu-right">
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveResignation(<?=$resignation['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=htmlspecialchars(addslashes($resignation['iqama']), ENT_QUOTES); ?>', '<?=htmlspecialchars(addslashes($resignation['designation'] ?? 'N/A'), ENT_QUOTES); ?>', '<?=htmlspecialchars(addslashes($resignation['department'] ?? 'N/A'), ENT_QUOTES); ?>', '<?=$resignation['last_working_day']; ?>')">
+                                                                    <?php
+                                                                    // Escape all parameters for JavaScript onclick - remove line breaks
+                                                                    $iqama_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['iqama'])), ENT_QUOTES);
+                                                                    $designation_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['designation'] ?? 'N/A')), ENT_QUOTES);
+                                                                    $department_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['department'] ?? 'N/A')), ENT_QUOTES);
+                                                                    ?>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveResignation(<?=$resignation['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$iqama_js; ?>', '<?=$designation_js; ?>', '<?=$department_js; ?>', '<?=$resignation['last_working_day']; ?>')">
                                                                         <i class="fa fa-check text-success"></i> <?=__('approve')?>
                                                                     </a>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="rejectResignation(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')">

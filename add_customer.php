@@ -28,6 +28,8 @@
                  $lastentryid = $rec['id'];
             }
             $id_cust = $lastentryid;
+            
+            ActivityLogger::logCreate('Customer', 'add_customer.php', $id_cust, ['full_name' => $full_name_up, 'injazat_no' => $injazat_no_up, 'exp_date' => $card_exp_up, 'mobile' => $mobile_up, 'acc_no' => $acc_no_up], "Created customer: {$full_name_up}", 'customer');
 
 		$query="INSERT INTO `cust_card_update` (`cust_no`,`injazat_no`, `exp_date`,`status`, `date_reg`, `sectin_nme`) VALUES ('".$id_cust."', '".$injazat_no_up."', '".$card_exp_up."', '".$status_up."', '".$date_reg_up."', '".$sectin_nme_up."')";
         mysqli_query($conDB, $query);

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/db.php';
     // Include the database configuration file 
 
     require_once __DIR__ . '/../../includes/db.php';
+    require_once __DIR__ . '/../../includes/session_check.php';
 
     // File path configuration 
 
@@ -59,6 +60,15 @@ require_once __DIR__ . '/../../includes/db.php';
         $sql = "INSERT INTO `smt_attachment` (`inv_no`, `attachment`, `docu_ext`) VALUES ('".$getinv_no."', '".$filename_po."', '".$file_extension."')"; 
 
         mysqli_query($conDB, $sql);
+        
+        $att_id = mysqli_insert_id($conDB);
+        
+        // Log attachment upload
+        ActivityLogger::logUpload('Request', 'upload_smt_attachments.php', $getinv_no, 
+            $filename_po, 
+            "Uploaded request attachment: {$filename_po}", 
+            'smt_attachment', 
+            $file_extension);
 
     } 
 

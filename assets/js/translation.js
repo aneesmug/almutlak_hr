@@ -12,7 +12,9 @@
  * Cache object for storing translations in the browser session
  * This reduces API calls significantly
  */
-const translationCache = {};
+// Use var and preserve existing cache to avoid redeclaration errors if script is injected twice
+var translationCache = window.translationCache || {};
+window.translationCache = translationCache;
 
 /**
  * Get current language from HTML or document

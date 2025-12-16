@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+	require_once __DIR__ . '/../../includes/session_check.php';
 	include("./../../includes/helper_functions.php");
 
 $ajaxType = $_POST['ajaxType'];
@@ -19,6 +20,12 @@ if($ajaxType == 'sub_type') {
         ini_set('display_errors', 1);
         ini_set('display_startup_errors', 1);
         error_reporting(E_ALL);
+        
+        // Fetch old values before update
+        $fetch_stmt = $pdo->prepare("SELECT * FROM `smart_request` WHERE `inv_no` = :reqid");
+        $fetch_stmt->execute([':reqid' => $_POST['reqid']]);
+        $old_request = $fetch_stmt->fetch(PDO::FETCH_ASSOC);
+        
         $stmt = $pdo->prepare("UPDATE `smart_request` SET `sub_type`=:sub_type_up, `sub_title`=:sub_title_up, `tally_id`=:tally_id_up, `injazat_id`=:injazat_id_up,`remarks`=:remarks_up WHERE `inv_no`=:reqid ");
         $stmt->execute([
             ':sub_type_up' => $_POST['sub_type'], 
@@ -29,6 +36,15 @@ if($ajaxType == 'sub_type') {
             ':reqid' => $_POST['reqid'],
         ]);
         if($stmt->rowCount() > 0){
+            // Log request update via AJAX
+            ActivityLogger::logUpdate('Request', 'ajaxSmartRequest.php', $old_request['id'], $old_request, [
+                'sub_type' => $_POST['sub_type'],
+                'sub_title' => $_POST['sub_title'],
+                'tally_id' => $_POST['tally_id'],
+                'injazat_id' => $_POST['injazat_id'],
+                'remarks' => $_POST['remarks']
+            ], "Updated request via AJAX: {$_POST['reqid']}", 'smart_request');
+            
             send_json_response("Updated!", "This request has been update successfully.", "success");
         } else {
             send_json_response("Error!", "Record not updated because there are some error.", "error");
@@ -41,6 +57,12 @@ if($ajaxType == 'sub_type') {
         ini_set('display_errors', 1);
         ini_set('display_startup_errors', 1);
         error_reporting(E_ALL);
+        
+        // Fetch old line values
+        $fetch_stmt = $pdo->prepare("SELECT * FROM `smart_request` WHERE `id` = :itemid");
+        $fetch_stmt->execute([':itemid' => $_POST['itemid']]);
+        $old_line = $fetch_stmt->fetch(PDO::FETCH_ASSOC);
+        
         $stmt = $pdo->prepare("UPDATE `smart_request` SET `item_name` = :item_name, `location` = :location, `quantity` = :quantity, `product_price` = :product_price, `itmvalue` = :itmvalue, `vat_rate` = :vat_rate, `vat_val` = :vat_val, `amount` = :amount, `idiscount` = :idiscount, `total_cost` = :total_cost 
                 WHERE `id` = :itemid");
         $stmt->execute([
@@ -57,6 +79,15 @@ if($ajaxType == 'sub_type') {
             ':itemid'        => $_POST['itemid']
         ]);
         if ($stmt->rowCount() > 0) {
+            // Log request line update
+            ActivityLogger::logUpdate('Request', 'ajaxSmartRequest.php', $_POST['itemid'], $old_line, [
+                'item_name' => $_POST['item_name'],
+                'location' => $_POST['location'],
+                'quantity' => $_POST['quantity'],
+                'product_price' => $_POST['product_price'],
+                'total_cost' => $_POST['total_cost']
+            ], "Updated request line item via AJAX", 'smart_request');
+            
             send_json_response("Updated!", "This line has been updated successfully.", "success");
         } else {
             send_json_response("No Changes", "The record was not found or the submitted data was identical.", "info");
@@ -67,21 +98,14 @@ if($ajaxType == 'sub_type') {
 } elseif($ajaxType == 'smt_attachments'){
     // File path configuration 
     $getinv_no = $_POST['id'];
-    // $getinv_no = $_GET['id'];
     $uploadDir = "./../../assets/smt_attachment/"; 
     $fileName = basename($_FILES['file']['name']);
     $tmp_name = $_FILES['file']['tmp_name'];
-    // $rand = rand(0000,9999).time();
-    // $rand = md5(microtime(true));
     $rand = md5($fileName);
     $file_ext = explode('.',$fileName);
-    //count taken (if more than one . exist; files like abc.fff.2013.pdf
     $file_ext_count=count($file_ext);
-    //minus 1 to make the offset correct
     $cnt=$file_ext_count-1;
-    // the variable will have a value pdf as per the sample file name mentioned above.
     $file_extension= $file_ext[$cnt];
-    /*$filename_po = $getinv_no."_".date('dmYHis')."_".$rand.".".$file_extension;*/
     $filename_po = $getinv_no."_".$rand.".".$file_extension;
     $uploadFilePath = $uploadDir.$filename_po;    
     // Upload file to server 
@@ -89,6 +113,14 @@ if($ajaxType == 'sub_type') {
         // Insert file information in the database 
         $sql = "INSERT INTO `smt_attachment` (`inv_no`, `attachment`, `docu_ext`) VALUES ('".$getinv_no."', '".$filename_po."', '".$file_extension."')"; 
         mysqli_query($conDB, $sql);
+        $att_id = mysqli_insert_id($conDB);
+        
+        // Log file upload for request
+        ActivityLogger::logUpload('Request', 'ajaxSmartRequest.php', $att_id, [
+            'inv_no' => $getinv_no,
+            'attachment' => $filename_po,
+            'file_ext' => $file_extension
+        ], "Uploaded attachment for request: {$getinv_no}", 'smt_attachment');
     }
 
 }

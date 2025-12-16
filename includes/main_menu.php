@@ -78,7 +78,6 @@ $usersLink = 'all_users.php';
 $fileManagerLink = 'file_manager.php';
 $galleryLink = 'gallery.php';
 $languageLink = 'language.php';
-$logActivityLink = 'log_activity.php';
 // $manualVacationLink = 'manual_vacation.php';
 $manualVacationLink = 'import_vacation_balance.php';
 $processIqamaImportLink = 'import_iqama_exp.php';
@@ -87,6 +86,7 @@ $employeeSalaryReportLink = 'employee_salary_report.php';
 $employeeEvaluationLink = 'employee_evaluation.php';
 $allEmployeeEvaluationsLink = 'all_employee_evaluations.php';
 $userActivityLink = 'user_activity.php';
+$activityLoggerLink = 'view_activity_logs.php';
 
 
 // =================================================================================
@@ -119,6 +119,7 @@ $page_roles = [
     'gallery.php' => ['Administrator'],
     'language.php' => ['Administrator'],
     'log_activity.php' => ['Administrator'],
+    'view_activity_logs.php' => ['Administrator'],
     'manual_vacation.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'import_iqama_exp.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager', 'IT_Team_Manager'],
@@ -567,6 +568,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             <ul class="nav-second-level" aria-expanded="false">
                 <li><a href="<?= $usersLink ?>"><i class="fa fa-users-gear"></i><span><?=__('users') ?></span></a></li>
                 <li><a href="<?= $userActivityLink ?>"><i class="fa fa-history"></i><span><?=__('user_activity') ?></span></a></li>
+                <li><a href="<?= $activityLoggerLink ?>"><i class="fa fa-list-check"></i><span><?=__('activity_logger') ?></span></a></li>
                 <li><a href="<?= $languageLink ?>"><i class="fa fa-language"></i><span><?=__('language') ?></span></a></li>
             </ul>
         </li>

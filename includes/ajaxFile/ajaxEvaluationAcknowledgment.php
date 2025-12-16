@@ -72,6 +72,9 @@ if ($ajaxType === 'acknowledge' || $ajaxType === 'object' || $ajaxType === 'subm
     $result = update_manager_acknowledgment($conDB, $eval_id, $empid, $acknowledgment_status, $objection_note);
     
     if ($result['status']) {
+        // Log evaluation acknowledgment
+        ActivityLogger::logApproval('Evaluation', 'ajaxEvaluationAcknowledgment.php', $eval_id, $acknowledgment_status, "Manager {$acknowledgment_status} evaluation (ID: {$eval_id})", 'emp_evaluations');
+        
         echo json_encode([
             'status' => 'success',
             'message' => $result['message'],

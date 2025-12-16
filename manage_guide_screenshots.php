@@ -91,6 +91,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && (isset($_FILES['screenshot_en']) || 
                             ':user_id' => $user_id
                         ]);
                         
+                        // Log activity
+                        $screenshot_id = $pdo->lastInsertId();
+                        ActivityLogger::logCreate(
+                            'System Guide',
+                            'manage_guide_screenshots.php',
+                            $screenshot_id,
+                            ['section' => $section, 'step' => $step_number, 'language' => 'en', 'filename' => $filename_en],
+                            "Uploaded English screenshot: $title (Section: $section, Step: $step_number)",
+                            'guide_screenshots'
+                        );
+                        
                         $uploaded_count++;
                     } catch (PDOException $e) {
                         $errors[] = 'English DB error: ' . $e->getMessage();
@@ -142,6 +153,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && (isset($_FILES['screenshot_en']) || 
                             ':user_id' => $user_id
                         ]);
                         
+                        // Log activity
+                        $screenshot_id = $pdo->lastInsertId();
+                        ActivityLogger::logCreate(
+                            'System Guide',
+                            'manage_guide_screenshots.php',
+                            $screenshot_id,
+                            ['section' => $section, 'step' => $step_number, 'language' => 'ar', 'filename' => $filename_ar],
+                            "Uploaded Arabic screenshot: $title_ar (Section: $section, Step: $step_number)",
+                            'guide_screenshots'
+                        );
+                        
                         $uploaded_count++;
                     } catch (PDOException $e) {
                         $errors[] = 'Arabic DB error: ' . $e->getMessage();
@@ -173,7 +195,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_id'])) {
     $delete_id = $_POST['delete_id'];
     
     try {
-        $stmt = $pdo->prepare("SELECT file_path FROM guide_screenshots WHERE id = :id");
+        // Get screenshot details before deleting
+        $stmt = $pdo->prepare("SELECT * FROM guide_screenshots WHERE id = :id");
         $stmt->execute([':id' => $delete_id]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -185,6 +208,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_id'])) {
             
             $delete_stmt = $pdo->prepare("DELETE FROM guide_screenshots WHERE id = :id");
             $delete_stmt->execute([':id' => $delete_id]);
+            
+            // Log deletion
+            ActivityLogger::logDelete(
+                'System Guide',
+                'manage_guide_screenshots.php',
+                $delete_id,
+                [
+                    'title' => $result['title'],
+                    'section' => $result['section'],
+                    'step_number' => $result['step_number'],
+                    'language' => $result['language'],
+                    'filename' => $result['filename']
+                ],
+                "Deleted screenshot: {$result['title']} (Section: {$result['section']}, Step: {$result['step_number']}, Lang: {$result['language']})",
+                'guide_screenshots'
+            );
             
             $message = 'Screenshot deleted successfully';
             $message_type = 'success';
@@ -207,6 +246,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_id'])) {
         $message_type = 'danger';
     } else {
         try {
+            // Get old values for logging
+            $old_stmt = $pdo->prepare("SELECT * FROM guide_screenshots WHERE id = :id");
+            $old_stmt->execute([':id' => $update_id]);
+            $old_data = $old_stmt->fetch(PDO::FETCH_ASSOC);
+            
             // Update basic fields
             $stmt = $pdo->prepare("
                 UPDATE guide_screenshots 
@@ -219,6 +263,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_id'])) {
                 ':title' => $title,
                 ':id' => $update_id
             ]);
+            
+            // Log basic field updates
+            $changes = [];
+            $old_values = [];
+            $new_values = [];
+            
+            if ($old_data['section'] != $section) {
+                $changes[] = "Section: {$old_data['section']} → $section";
+                $old_values['section'] = $old_data['section'];
+                $new_values['section'] = $section;
+            }
+            if ($old_data['step_number'] != $step_number) {
+                $changes[] = "Step: {$old_data['step_number']} → $step_number";
+                $old_values['step_number'] = $old_data['step_number'];
+                $new_values['step_number'] = $step_number;
+            }
+            if ($old_data['title'] != $title) {
+                $changes[] = "Title: {$old_data['title']} → $title";
+                $old_values['title'] = $old_data['title'];
+                $new_values['title'] = $title;
+            }
+            
+            if (!empty($changes)) {
+                ActivityLogger::logUpdate(
+                    'System Guide',
+                    'manage_guide_screenshots.php',
+                    $update_id,
+                    $old_values,
+                    $new_values,
+                    "Updated screenshot: " . implode(", ", $changes),
+                    'guide_screenshots'
+                );
+            }
             
             // Handle screenshot replacement if provided
             if (isset($_FILES['screenshot']) && $_FILES['screenshot']['error'] == 0) {
@@ -272,6 +349,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_id'])) {
                             ':file_path' => 'assets/screenshots/' . $section . '/' . $filename,
                             ':id' => $update_id
                         ]);
+                        
+                        // Log file replacement
+                        ActivityLogger::logUpdate(
+                            'System Guide',
+                            'manage_guide_screenshots.php',
+                            $update_id,
+                            ['filename' => $old_data['filename']],
+                            ['filename' => $filename],
+                            "Replaced screenshot file for: $title",
+                            'guide_screenshots'
+                        );
                     }
                 }
             }

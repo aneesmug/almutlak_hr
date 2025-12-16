@@ -37,13 +37,14 @@ if(isset($_POST['submit'])){
 	$type_up = mysqli_real_escape_string($conDB, $_POST['type']);
 	$remarks_up = htmlentities($_POST['remarks']);
 	
+	$old_result = mysqli_query($conDB, "SELECT * FROM `cars` WHERE `id`='".$_GET['id']."'");
+	$old_car = mysqli_fetch_assoc($old_result);
 	
 $u = "UPDATE `cars` SET `maker_name`='".$maker_name_up."', `model`='".$model_up."', `made_year`='".$made_year_up."', `plate_no`='".$plate_no_up."', `type`='".$type_up."', `remarks`='".$remarks_up."' WHERE `id`='".$_GET['id']."' ";
-		mysqli_query($conDB, $u) or die (mysqli_error());
+		mysqli_query($conDB, $u) or die ();
 		
-		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		ActivityLogger::logUpdate('Vehicle', 'edit_car.php', $_GET['id'], $old_car, ['maker_name' => $maker_name_up, 'model' => $model_up, 'made_year' => $made_year_up, 'plate_no' => $plate_no_up, 'type' => $type_up], "Updated vehicle: {$maker_name_up} {$model_up}", 'cars');
+		
 		$error_1 = "<div class='alert alert-success bg-success text-white border-0'><strong>Successfully!</strong> Your car details will be successfully edit!</div>";
 		header( "refresh:1 ; url= ./view_car.php?id=".$_GET['id']." " );
 }

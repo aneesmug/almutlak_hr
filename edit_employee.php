@@ -50,11 +50,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'probation',
 			'payment_type'
 		];
+		
+		// FETCH OLD VALUES BEFORE UPDATE
+		$employee_id_from_form = $formData['emp_id'];
+		$old_stmt = $pdo->prepare("SELECT * FROM employees WHERE emp_id = :emp_id");
+		$old_stmt->execute([':emp_id' => $employee_id_from_form]);
+		$old_employee = $old_stmt->fetch(PDO::FETCH_ASSOC);
+		$old_values = [];
+		
 		// Prepare the update data
 		$setParts = [];
 		$formData['dept'] = $formData['department'];
 		
-		$employee_id_from_form = $formData['emp_id'];
 		$params = [':emp_id' => $employee_id_from_form];
 
 		foreach ($formData as $field => $value) {
@@ -69,12 +76,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			}
 			$setParts[] = "`$field` = :$field";
 			$params[":$field"] = $value;
+			
+			// Collect old values for logging
+			if ($old_employee && isset($old_employee[$field])) {
+				$old_values[$field] = $old_employee[$field];
+			}
 		}
 		
 		// Build and execute the query
 		$sql = "UPDATE `employees` SET " . implode(', ', $setParts) . " WHERE `emp_id` = :emp_id";
 		$stmt = $pdo->prepare($sql);
 		$stmt->execute($params);
+		
+		// LOG EMPLOYEE UPDATE ACTION
+		if ($stmt->rowCount() > 0) {
+			$new_values = [];
+			foreach ($params as $key => $value) {
+				if ($key !== ':emp_id') {
+					$field = ltrim($key, ':');
+					$new_values[$field] = $value;
+				}
+			}
+			ActivityLogger::logUpdate(
+				'Employee',
+				'edit_employee.php',
+				$employee_id_from_form,
+				$old_values,
+				$new_values,
+				"Updated employee: " . ($old_employee['name'] ?? 'Unknown'),
+				'employees'
+			);
+		}
 		
 		// Store alert data in session for display on the view page
 		if ($stmt->rowCount() > 0) {

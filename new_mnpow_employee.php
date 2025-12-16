@@ -94,12 +94,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
             );
 
             if ($stmt_insert->execute()) {
-                // Log the activity
-                $pgname = "new_mnpow_employee.php"; // Assuming pgname
-                $log_stmt = $conDB->prepare("INSERT INTO `activity_log` (`user_editor`, `page`, `pg_id`, `reg_date`) VALUES (?, ?, ?, ?)");
-                $log_stmt->bind_param("ssss", $_COOKIE['user'], $pgname, $name_emp, $date_reg);
-                $log_stmt->execute();
-                $log_stmt->close();
+                // LOG EMPLOYEE CREATE ACTION (Enhanced Activity Logger)
+                ActivityLogger::logCreate(
+                    'Employee',
+                    'new_mnpow_employee.php',
+                    $emp_id,
+                    [
+                        'name' => $name_emp,
+                        'emp_id' => $emp_id,
+                        'iqama' => $iqama,
+                        'mobile' => $mobile,
+                        'salary' => $salary,
+                        'joining_date' => $joining_date,
+                        'department' => $department,
+                        'emp_sup_type' => $emp_sup_type,
+                        'country' => $country,
+                        'dob' => $dob
+                    ],
+                    "Created new manpower employee: $name_emp",
+                    'employees'
+                );
 
                 $msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Added Successfully!</div>";
             } else {

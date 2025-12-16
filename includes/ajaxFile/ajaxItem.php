@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+	require_once __DIR__ . '/../../includes/session_check.php';
 
 $ajaxType = $_POST['ajaxType'];
 
@@ -29,14 +30,33 @@ if ($ajaxType == 'add_item') {
     $sql="INSERT INTO `menu_item`(`category_id`, `price_level`, `name_eng`, `name_ar`, `big_price`, `small_price`, `big_cal`, `small_cal`, `created_at`) VALUES ('$category_id_up','$price_level_up','$name_eng_up','$name_ar_up','$big_price_up','$small_price_up','$big_cal_up','$small_cal_up', '".date('Y-m-d H:i:s')."')";
 
     if(mysqli_query($conDB, $sql)){
-    	$data = [
+    	$item_id = mysqli_insert_id($conDB);
+    	
+    	// Log item creation
+    	ActivityLogger::logCreate('Inventory', 'ajaxItem.php', $item_id, [
+    	    'name_eng' => $name_eng_up,
+    	    'name_ar' => $name_ar_up,
+    	    'big_price' => $big_price_up,
+    	    'small_price' => $small_price_up,
+    	    'category_id' => $category_id_up,
+    	    'price_level' => $price_level_up
+    	], "Added inventory item: {$name_eng_up} ({$name_ar_up})", 'menu_item');
+    	
+        $data = [
             'title'   => "Added!",
             'message' => "This item has been added successfully.",
             'type'    => 'success',
         ];
         if (file_exists($_FILES['file']['tmp_name']) || is_uploaded_file($_FILES['file']['tmp_name'])) {
-            $sqlImg="INSERT INTO `menu_item_img`(`itm_id`, `file`) VALUES ('".mysqli_insert_id($conDB)."','$newfilename')";
+            $sqlImg="INSERT INTO `menu_item_img`(`itm_id`, `file`) VALUES ('".$item_id."','$newfilename')";
             mysqli_query($conDB, $sqlImg);
+            
+            // Log image upload
+            ActivityLogger::logUpload('Inventory', 'ajaxItem.php', $item_id, 
+                $newfilename, 
+                "Uploaded item image for {$name_eng_up}", 
+                'menu_item_img', 
+                $fileType);
         }
         echo json_encode($data);
     } else {
@@ -59,6 +79,11 @@ if ($ajaxType == 'add_item') {
     $price_level_up = $_POST['price_level'];
     $status_up = $_POST['status'];
     $image_up = $_POST['iimage'];
+    $item_id = $_POST['itemid'];
+
+    // Fetch old item data for logging
+    $old_result = mysqli_query($conDB, "SELECT * FROM menu_item WHERE id = '{$item_id}'");
+    $old_item = mysqli_fetch_assoc($old_result);
 
     if(file_exists($_FILES['file']['tmp_name']) || is_uploaded_file($_FILES['file']['tmp_name'])) {
         $uploadDir = "./../../QR_MENU/images/item_img/";
@@ -74,13 +99,22 @@ if ($ajaxType == 'add_item') {
         $newfilename = $image_up;
     }
 
-    $sqlImg = "UPDATE `menu_item_img` SET `file`='".$newfilename."' WHERE `itm_id`='".$_POST['itemid']."' ";
+    $sqlImg = "UPDATE `menu_item_img` SET `file`='".$newfilename."' WHERE `itm_id`='".$item_id."' ";
     mysqli_query($conDB, $sqlImg);
 
-    $sql = "UPDATE `menu_item` SET `name_eng`='".$name_eng_up."', `name_ar`='".$name_ar_up."', `big_price`='".$big_price_up."', `small_price`='".$small_price_up."',`big_cal`='".$big_cal_up."',`small_cal`='".$small_cal_up."', `price_level`='".$price_level_up."', `category_id`='".$category_id_up."', `status`='".$status_up."' WHERE `id`='".$_POST['itemid']."' ";
-
+    $sql = "UPDATE `menu_item` SET `name_eng`='".$name_eng_up."', `name_ar`='".$name_ar_up."', `big_price`='".$big_price_up."', `small_price`='".$small_price_up."',`big_cal`='".$big_cal_up."',`small_cal`='".$small_cal_up."', `price_level`='".$price_level_up."', `category_id`='".$category_id_up."', `status`='".$status_up."' WHERE `id`='".$item_id."' ";
 
     if(mysqli_query($conDB, $sql)){
+        // Log item update
+        ActivityLogger::logUpdate('Inventory', 'ajaxItem.php', $item_id, $old_item ?? [], [
+            'name_eng' => $name_eng_up,
+            'name_ar' => $name_ar_up,
+            'big_price' => $big_price_up,
+            'small_price' => $small_price_up,
+            'status' => $status_up,
+            'category_id' => $category_id_up
+        ], "Updated item: {$name_eng_up} ({$name_ar_up})", 'menu_item');
+        
         $data = [
             'title'   => "Updated!",
             'message' => "This user has been update successfully.",
@@ -127,6 +161,15 @@ if ($ajaxType == 'add_item') {
     $cate_id = $_POST['category_type'];
     $sql = "INSERT INTO `menu_category` (`name_eng`, `name_ar`,`desc_eng`,`desc_ar`,`cate_id`) VALUES ('".$name_eng."','".$name_ar."','".$desc_eng."','".$desc_ar."','".$cate_id."')";
     if(mysqli_query($conDB, $sql)){
+        $cat_id = mysqli_insert_id($conDB);
+        
+        // Log category creation
+        ActivityLogger::logCreate('Inventory', 'ajaxItem.php', $cat_id, [
+            'name_eng' => $name_eng,
+            'name_ar' => $name_ar,
+            'cate_id' => $cate_id
+        ], "Added item category: {$name_eng} ({$name_ar})", 'menu_category');
+        
         $data = [
             'title'   => "Added!",
             'message' => "This category has been registered successfully.",
@@ -148,8 +191,22 @@ if ($ajaxType == 'add_item') {
     $desc_ar_up = mysqli_real_escape_string($conDB, $_POST['desc_ar']);
     $status_up = $_POST['status'];
     $category_type = $_POST['category_type'];
-    $sql = "UPDATE `menu_category` SET `name_eng`='".$name_eng_up."', `name_ar`='".$name_ar_up."', `desc_eng`='".$desc_eng_up."', `desc_ar`='".$desc_ar_up."', `status`='".$status_up."', `cate_id`='".$category_type."' WHERE `id`='".$_POST['smid']."' ";
+    $cat_id = $_POST['smid'];
+    
+    // Fetch old category data for logging
+    $old_result = mysqli_query($conDB, "SELECT * FROM menu_category WHERE id = '{$cat_id}'");
+    $old_category = mysqli_fetch_assoc($old_result);
+    
+    $sql = "UPDATE `menu_category` SET `name_eng`='".$name_eng_up."', `name_ar`='".$name_ar_up."', `desc_eng`='".$desc_eng_up."', `desc_ar`='".$desc_ar_up."', `status`='".$status_up."', `cate_id`='".$category_type."' WHERE `id`='".$cat_id."' ";
     if(mysqli_query($conDB, $sql)){
+        // Log category update
+        ActivityLogger::logUpdate('Inventory', 'ajaxItem.php', $cat_id, $old_category ?? [], [
+            'name_eng' => $name_eng_up,
+            'name_ar' => $name_ar_up,
+            'status' => $status_up,
+            'cate_id' => $category_type
+        ], "Updated category: {$name_eng_up} ({$name_ar_up})", 'menu_category');
+        
         $data = [
             'title'   => "Updated!",
             'message' => "This category has been update successfully.",

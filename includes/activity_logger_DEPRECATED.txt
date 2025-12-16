@@ -1,0 +1,69 @@
+# DEPRECATED: includes/activity_logger.php
+
+This file is **DEPRECATED** as of [current date] and should NOT be used.
+
+## Why It's Deprecated
+
+The original `activity_logger.php` was based on an older database schema with the following columns:
+- `user_editor` (instead of `user_id`)
+- `pg_id` (instead of `record_id`)
+- `old_value` (instead of `old_values` with JSON)
+- `new_value` (instead of `new_values` with JSON)
+
+## Migration to New System
+
+The new enhanced `ActivityLogger` class is now in `includes/init.php` and supports your complete 16-column schema:
+- user_id, user_name, module, page, record_id, table_name
+- old_values (JSON), new_values (JSON) with full change tracking
+- severity levels (INFO, WARNING, CRITICAL, ERROR)
+- status tracking (SUCCESS, FAILED, PENDING)
+- Complete metadata (ip_address, user_agent, created_at)
+
+## What to Do
+
+1. **DO NOT** use or import `includes/activity_logger.php`
+2. **DO** use `ActivityLogger` class from `includes/init.php` (auto-loaded on all pages)
+3. Reference the following documentation:
+   - `ACTIVITY_LOGGING_GUIDE.md` - Complete method reference
+   - `ACTIVITY_LOGGING_IMPLEMENTATION_GUIDE.md` - Implementation patterns
+   - `ACTIVITY_LOGGING_TEMPLATES.php` - Copy-paste code examples
+   - `LOGGING_ROLLOUT_CHECKLIST.md` - Systematic integration guide
+
+## New Method Signatures
+
+```php
+// All these methods are in includes/init.php and auto-loaded
+ActivityLogger::logCreate($module, $page, $record_id, $new_values, $description, $table_name)
+ActivityLogger::logUpdate($module, $page, $record_id, $old_values, $new_values, $description, $table_name)
+ActivityLogger::logDelete($module, $page, $record_id, $old_values, $description, $table_name)
+ActivityLogger::logLogin($user_id, $user_name)
+ActivityLogger::logLogout()
+ActivityLogger::logApproval($module, $page, $record_id, 'approved'|'rejected', $description, $table_name)
+ActivityLogger::logUpload($module, $page, $file_name, $file_size, $description)
+ActivityLogger::logDownload($module, $page, $file_name, $description)
+ActivityLogger::logExport($module, $page, $record_count, $description)
+ActivityLogger::logImport($module, $page, $record_count, $description)
+ActivityLogger::logSubmit($module, $page, $form_name, $description)
+ActivityLogger::logView($module, $page, $record_id, $description)
+```
+
+## File Location
+
+**OLD:** `includes/activity_logger.php` (DEPRECATED - DO NOT USE)
+**NEW:** `includes/init.php` (USE THIS - auto-loaded on all pages)
+
+## Admin Viewer
+
+Access the activity logs dashboard at: `view_activity_logs.php`
+- Filter by user, module, action, date range
+- View detailed change history (old vs new values)
+- Search and sort all logs
+- Statistics and charts
+
+## For Developers
+
+Follow the implementation guide: `LOGGING_ROLLOUT_CHECKLIST.md`
+
+Questions? See `ACTIVITY_LOGGING_GUIDE.md` FAQ section.
+
+**Last Updated:** [current date]

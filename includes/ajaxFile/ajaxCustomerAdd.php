@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+	require_once __DIR__ . '/../../includes/session_check.php';
     
     $injazat_no_up = $_POST['injazat_no'];
     $acc_no_up = strtoupper($_POST['acc_no']);
@@ -20,6 +21,15 @@
             $id_cust = $lastentryid;
         $query="INSERT INTO `cust_card_update` (`cust_no`,`injazat_no`, `exp_date`, `sectin_nme`) VALUES ('".$id_cust."', '".$injazat_no_up."', '".$card_exp_up."', '".$sectin_nme_up."')";
         mysqli_query($conDB, $query);
+        
+        // Log customer creation
+        ActivityLogger::logCreate('Customer', 'ajaxCustomerAdd.php', $id_cust, [
+            'full_name' => $full_name_up,
+            'injazat_no' => $injazat_no_up,
+            'mobile' => $mobile_up,
+            'acc_no' => $acc_no_up,
+            'location' => $sectin_nme_up
+        ], "Added customer: {$full_name_up} ({$injazat_no_up})", 'customer');
 
         $data = [
             'title'   => "Added!",

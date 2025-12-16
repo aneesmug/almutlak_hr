@@ -134,9 +134,16 @@ if(isset($_POST['submit'])){
 			
 		$query = "INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `attachment`, `date_reg`, `docu_ext`, `pgid`) VALUES ('".$emp_id_po."', '".$docu_typ_po."', '".$attachment_po."', '".date("c")."','".$file_extension."','".$docu_id_po."')";
 		mysqli_query($conDB, $query);
-		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_POST['docu_typ']."','".date("c")."')") or die (mysqli_error());
-		/************log************/
+		$doc_id = mysqli_insert_id($conDB);
+		
+		// Log employee document upload
+		ActivityLogger::logUpload('Employee', 'add_emp_docs.php', $doc_id, [
+			'emp_id' => $emp_id_po,
+			'docu_typ' => $docu_typ_po,
+			'attachment' => $attachment_po,
+			'docu_ext' => $file_extension
+		], "Uploaded employee document: {$docu_typ_po}", 'emp_docu');
+		
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Add Seccssfully!</div>
 		";
 		header( "refresh:2 ; url=view_employee.php?id=$_GET[id]" );

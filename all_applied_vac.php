@@ -835,6 +835,7 @@ if ($can_see_all_depts) {
             let hrTeamCCHtml = '';
             let assetHtml = '';
             let hrPayrollHtml = '';
+            let commentHtml = ''; // Comment textarea
             let confirmButtonText = __('yes_approve_it');
             let showDenyButton = false;
             
@@ -1051,10 +1052,28 @@ if ($can_see_all_depts) {
                     </div>
                 `;
             }
+            
+            // --- Comment/Review Textarea ---
+            // Add comment field for all approvals
+            commentHtml = `
+                <div class="swal-comment-section text-left mt-3">
+                    <hr>
+                    <h6 class="text-primary mb-3">
+                        <i class="fa fa-comment"></i> ${__('approval_comment') || 'Approval Comment'}
+                        <span class="text-muted">(${__('optional')})</span>
+                    </h6>
+                    <div class="form-group">
+                        <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Write your comment or review for this approval (optional)...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;"></textarea>
+                        <small class="form-text text-muted">
+                            <span id="char-count">0</span>/5000 ${__('characters')}
+                        </small>
+                    </div>
+                </div>
+            `;
 
             Swal.fire({
                 title: isAssetClearanceRole ? (__('asset_clearance_confirmation') || 'Asset Clearance Confirmation') : __('confirm_approval'),
-                html: infoHtml + assetHtml + paymentHtml + hrPayrollHtml + hrTeamCCHtml + chainHtml, // Combine all HTML parts
+                html: infoHtml + assetHtml + paymentHtml + hrPayrollHtml + hrTeamCCHtml + commentHtml + chainHtml, // Combine all HTML parts
                 icon: isAssetClearanceRole ? 'question' : 'warning',
                 // width: '40%', // Set modal width
                 showCancelButton: true,
@@ -1348,6 +1367,23 @@ if ($can_see_all_depts) {
                         });
                     } // --- End if (isHR_Assistant) ---
                     
+                    // --- APPROVAL COMMENT CHARACTER COUNTER ---
+                    $(swalModal).on('input', '#swal_approval_comment', function() {
+                        const currentLength = $(this).val().length;
+                        const maxLength = 5000;
+                        
+                        $('#char-count').text(currentLength);
+                        
+                        // Change color if approaching limit
+                        if (currentLength > maxLength * 0.9) {
+                            $('#char-count').css('color', '#dc3545'); // Red warning
+                        } else if (currentLength > maxLength * 0.7) {
+                            $('#char-count').css('color', '#ffc107'); // Yellow warning
+                        } else {
+                            $('#char-count').css('color', '#6c757d'); // Default gray
+                        }
+                    });
+                    
                     // --- HR PAYROLL CALCULATIONS ---
                     if (isHR_Payroll) {
                         console.log('HR Payroll calculations initialized');
@@ -1485,6 +1521,10 @@ if ($can_see_all_depts) {
                 preConfirm: () => {
                     const swalModal = Swal.getHtmlContainer();
                     let approver_chain = [];
+                    
+                    // Get approval comment (if provided)
+                    let approval_comment = $(swalModal).find('#swal_approval_comment').val() || '';
+                    approval_comment = approval_comment.trim().substring(0, 5000); // Limit to 5000 chars
                     
                     // A) Get payment details (if they exist)
                     let ticket_pay = $(swalModal).find('#swal_ticket_fares').val() || null;
@@ -1632,7 +1672,8 @@ if ($can_see_all_depts) {
                         overtime_hours: overtime_hours,
                         deduction_hours: deduction_hours,
                         deduction_days: deduction_days,
-                        payroll_note: payroll_note
+                        payroll_note: payroll_note,
+                        approval_comment: approval_comment
                     }
                 }
             }).then(function(result) {
@@ -1702,7 +1743,8 @@ if ($can_see_all_depts) {
                     overtime_hours: approveData.overtime_hours || null, // Send overtime hours
                     deduction_hours: approveData.deduction_hours || null, // Send deduction hours
                     deduction_days: approveData.deduction_days || null, // Send deduction days
-                    payroll_note: approveData.payroll_note || null    // Send payroll note
+                    payroll_note: approveData.payroll_note || null,    // Send payroll note
+                    approval_comment: approveData.approval_comment || ''  // Send approval comment
 				},
 			})
 			.done(function(response){

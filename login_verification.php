@@ -101,6 +101,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
             $_SESSION['auth_user'] = [
                 'user_id' => $user['id_iqama'], 'fullname' => $user['fullname'], 'email' => $user['email'], 'user_type' => $user['user_type'], 'dept' => $user['dept']
             ];
+            
+            // LOG LOGIN ACTION
+            require_once __DIR__ . '/includes/init.php';
+            ActivityLogger::logLogin(
+                $user['id_iqama'],
+                $user['fullname']
+            );
 
             if (isset($_SESSION['otp_verification']['remember_me']) && $_SESSION['otp_verification']['remember_me'] === true) {
                 $token = bin2hex(random_bytes(32));
