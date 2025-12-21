@@ -109,46 +109,59 @@ if (!class_exists('ActivityLogger')) {
 
 class ActivityLogger {
     
-    /**
-     * Main logging function
-     * 
-     * @param string $action_type CREATE|UPDATE|DELETE|LOGIN|LOGOUT|VIEW|DOWNLOAD|UPLOAD|APPROVE|REJECT|SUBMIT|EXPORT|IMPORT|OTHER
-     * @param string $module Module name (e.g., Employee, Vacation, Loan, Payroll)
-     * @param string $description Human-readable description
-     * @param array $options Additional options:
-     *   - user_id: Override user ID (auto-detected if not provided)
-     *   - user_name: User name for quick reference
-     *   - record_id: ID of affected record
-     *   - table_name: Database table name
-     *   - old_values: Array of old values (will be JSON encoded)
-     *   - new_values: Array of new values (will be JSON encoded)
-     *   - page: Override page name (auto-detected if not provided)
-     *   - severity: INFO|WARNING|CRITICAL|ERROR (default: INFO)
-     *   - status: SUCCESS|FAILED|PENDING (default: SUCCESS)
-     * @return bool Success status
-     */
-    public static function log($action_type, $module, $description, $options = []) {
-        global $conDB, $empid, $fname;
-        
-        // Don't log if database connection not available
-        if (!isset($conDB) || !$conDB) {
-            return false;
-        }
-        
-        // Get user information
-        $user_id = $options['user_id'] ?? $empid ?? $_SESSION['user_id'] ?? $_SESSION['auth_user']['user_id'] ?? 'SYSTEM';
-        $user_name = $options['user_name'] ?? $fname ?? $_SESSION['fname'] ?? '';
-        
-        // Get page information
-        $page = $options['page'] ?? basename($_SERVER['PHP_SELF'] ?? 'unknown');
-        
-        // Get record information
-        $record_id = $options['record_id'] ?? null;
-        $table_name = $options['table_name'] ?? null;
-        
+/**
+ * Main logging function
+ * 
+ * @param string $action_type CREATE|UPDATE|DELETE|LOGIN|LOGOUT|VIEW|DOWNLOAD|UPLOAD|APPROVE|REJECT|SUBMIT|EXPORT|IMPORT|OTHER
+ * @param string $module Module name (e.g., Employee, Vacation, Loan, Payroll)
+ * @param string $description Human-readable description
+ * @param array $options Additional options:
+ *   - user_id: Override user ID (auto-detected if not provided)
+ *   - user_name: User name for quick reference
+ *   - record_id: ID of affected record
+ *   - table_name: Database table name
+ *   - old_values: Array of old values (will be JSON encoded)
+ *   - new_values: Array of new values (will be JSON encoded)
+ *   - page: Override page name (auto-detected if not provided)
+ *   - severity: INFO|WARNING|CRITICAL|ERROR (default: INFO)
+ *   - status: SUCCESS|FAILED|PENDING (default: SUCCESS)
+ *   - allow_duplicates_after_minutes: Minutes before allowing same action again (default: 5)
+ * @return bool Success status
+ */
+public static function log($action_type, $module, $description, $options = []) {
+    global $conDB, $empid, $fname;
+    
+    // Don't log if database connection not available
+    if (!isset($conDB) || !$conDB) {
+        return false;
+    }
+    
+    // Get user information
+    $user_id = $options['user_id'] ?? $empid ?? $_SESSION['user_id'] ?? $_SESSION['auth_user']['user_id'] ?? 'SYSTEM';
+    $user_name = $options['user_name'] ?? $fname ?? $_SESSION['fname'] ?? '';
+    
+    // Get page information
+    $page = $options['page'] ?? basename($_SERVER['PHP_SELF'] ?? 'unknown');
+    
+    // Get record information
+    $record_id = $options['record_id'] ?? null;
+    $table_name = $options['table_name'] ?? null;
+    
+    // Get deduplication time window (in minutes)
+    $duplicate_check_minutes = $options['allow_duplicates_after_minutes'] ?? 5;
+    
         // Get values (encode as JSON if arrays)
         $old_values = isset($options['old_values']) ? json_encode($options['old_values'], JSON_UNESCAPED_UNICODE) : null;
         $new_values = isset($options['new_values']) ? json_encode($options['new_values'], JSON_UNESCAPED_UNICODE) : null;
+        
+        // --- DEDUPLICATION CHECK ---
+        // Check if this exact action was logged recently to prevent duplicate entries on page refresh
+        // BUT: If data has changed (old_values != new_values), log immediately
+        if (!self::shouldLogAction($action_type, $module, $record_id, $user_id, $old_values, $new_values, $duplicate_check_minutes)) {
+            // Same action with same data logged too recently, skip
+            return false;
+        }
+        // --- END DEDUPLICATION CHECK ---
         
         // Get request information
         $ip_address = self::getIpAddress();
@@ -176,6 +189,11 @@ class ActivityLogger {
             $result = mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
             
+            // Update session cache with this logged action
+            if ($result) {
+                self::updateLogCache($action_type, $module, $record_id, $user_id, $new_values);
+            }
+            
             return $result;
         }
         
@@ -186,7 +204,7 @@ class ActivityLogger {
      * Log CREATE action
      */
     public static function logCreate($module, $page, $record_id, $new_values = null, $description = null, $table_name = null) {
-        $desc = $description ?? "Created new {$module} record";
+        $desc = $description ?? "Created new {$module}";
         return self::log('CREATE', $module, $desc, [
             'page' => $page,
             'record_id' => $record_id,
@@ -198,25 +216,14 @@ class ActivityLogger {
     /**
      * Log UPDATE action
      */
-    public static function logUpdate($module, $page, $record_id, $old_values, $new_values, $description = null, $table_name = null) {
+    public static function logUpdate($module, $page, $record_id, $old_values = null, $new_values = null, $description = null, $table_name = null) {
         $desc = $description ?? "Updated {$module} record";
-        
-        // Only log changed fields if both are arrays
-        if (is_array($old_values) && is_array($new_values)) {
-            $changes = self::getChangedFields($old_values, $new_values);
-            $old_vals = $changes['old'];
-            $new_vals = $changes['new'];
-        } else {
-            $old_vals = $old_values;
-            $new_vals = $new_values;
-        }
-        
         return self::log('UPDATE', $module, $desc, [
             'page' => $page,
             'record_id' => $record_id,
             'table_name' => $table_name,
-            'old_values' => $old_vals,
-            'new_values' => $new_vals
+            'old_values' => $old_values,
+            'new_values' => $new_values
         ]);
     }
     
@@ -453,6 +460,76 @@ class ActivityLogger {
         }
         
         return $changes;
+    }
+    
+    /**
+     * Check if the same action was logged recently (deduplication)
+     * Returns false if the exact same action with same data was logged within the time window
+     * Returns true if data has changed (to allow immediate logging)
+     */
+    private static function shouldLogAction($action_type, $module, $record_id, $user_id, $old_values, $new_values, $minutes = 5) {
+        // Initialize session cache for activity logger if not exists
+        if (!isset($_SESSION['activity_log_cache'])) {
+            $_SESSION['activity_log_cache'] = [];
+        }
+        
+        // Create a unique cache key for this action
+        $cache_key = self::getCacheKey($action_type, $module, $record_id, $user_id);
+        
+        // Check session cache first (fastest check)
+        if (isset($_SESSION['activity_log_cache'][$cache_key])) {
+            $cached_data = $_SESSION['activity_log_cache'][$cache_key];
+            $last_logged_time = $cached_data['timestamp'];
+            $last_logged_data = $cached_data['new_values'] ?? null;
+            
+            $time_diff = time() - $last_logged_time;
+            
+            // If data has changed, log immediately (regardless of time window)
+            if ($new_values !== $last_logged_data) {
+                return true;
+            }
+            
+            // If less than the specified minutes have passed AND data is the same, skip logging
+            if ($time_diff < ($minutes * 60)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Update session cache after logging an action
+     */
+    private static function updateLogCache($action_type, $module, $record_id, $user_id, $new_values = null) {
+        // Initialize session cache for activity logger if not exists
+        if (!isset($_SESSION['activity_log_cache'])) {
+            $_SESSION['activity_log_cache'] = [];
+        }
+        
+        // Create cache key and store current timestamp along with the data
+        $cache_key = self::getCacheKey($action_type, $module, $record_id, $user_id);
+        $_SESSION['activity_log_cache'][$cache_key] = [
+            'timestamp' => time(),
+            'new_values' => $new_values
+        ];
+        
+        // Limit cache size to prevent memory issues (keep only last 100 entries)
+        if (count($_SESSION['activity_log_cache']) > 100) {
+            // Remove oldest entries by timestamp
+            usort($_SESSION['activity_log_cache'], function($a, $b) {
+                return $b['timestamp'] - $a['timestamp'];
+            });
+            $_SESSION['activity_log_cache'] = array_slice($_SESSION['activity_log_cache'], 0, 100, true);
+        }
+    }
+    
+    /**
+     * Generate a cache key for deduplication
+     */
+    private static function getCacheKey($action_type, $module, $record_id, $user_id) {
+        // Create a unique key based on the action details
+        return md5($action_type . '|' . $module . '|' . ($record_id ?? '') . '|' . $user_id);
     }
     
     /**

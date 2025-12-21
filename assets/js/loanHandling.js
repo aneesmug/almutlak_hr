@@ -257,6 +257,8 @@ $(document).on('click', '.applyLoan', async function(e) {
                             installmentsGroup.show();
                             setInstallmentOptions(maxInstallments || 12);
                             amountInput.closest('.vacation-card').show();
+                            amountInput.prop('readonly', false);
+                            amountInput.val(''); // Clear value when switching loan type
                         } else if (type === 'housing') {
                             // Hide entire loan amount block if housing not eligible (allowance = 0)
                             const amountBlock = amountInput.closest('.vacation-card');
@@ -269,10 +271,26 @@ $(document).on('click', '.applyLoan', async function(e) {
                                 installmentsGroup.show();
                                 setInstallmentOptions(maxInstallments || 6);
                             }
+                            amountInput.prop('readonly', false);
+                            amountInput.val(''); // Clear value when switching loan type
+                        } else if (type === 'advance_salary') {
+                            // For Advance Salary: calculate 50% of salary and make field readonly
+                            installmentsGroup.hide();
+                            installmentsSelect.html('<option value="1">1 '+(__('month')||'Month')+'</option>');
+                            amountInput.closest('.vacation-card').show();
+                            
+                            // Calculate 50% of total salary (max_amount from server is already calculated as 50%)
+                            const advanceSalary = Number(resp.max_amount) || 0;
+                            
+                            amountInput.val(advanceSalary.toFixed(2));
+                            amountInput.prop('readonly', true); // Make readonly
+                            amountInput.prop('disabled', false); // Still send the value with form
                         } else {
                             installmentsGroup.hide();
                             installmentsSelect.html('<option value="1">1 '+(__('month')||'Month')+'</option>');
                             amountInput.closest('.vacation-card').show();
+                            amountInput.prop('readonly', false);
+                            amountInput.val(''); // Clear value when switching loan type
                         }
                         validateAmount();
                     } else {

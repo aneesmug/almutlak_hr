@@ -184,8 +184,10 @@ $current_page = strtolower(basename($_SERVER['PHP_SELF']));
 const EMPLOYEE_ALLOWED_PAGES = ['profile.php', 'all_applied_loan.php','vacation_report_details.php', 'employee_vacation_history.php','employee_loan_history.php'];
 const ASSISTANT_RESTRICTED_PAGES = ['dashbydepart.php', 'filter_employee.php', 'reg_employee.php', 'search.php', 'manual_vacation.php'];
 
+// Skip access control for AJAX file requests - they return JSON and handle their own auth
+$is_ajax_file = (strpos($_SERVER['PHP_SELF'], '/ajaxFile/') !== false);
 
-if (($emprow['user_type'] ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true)) {
+if (!$is_ajax_file && ($emprow['user_type'] ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true)) {
     header("Location: ./profile.php");
     exit();
 }

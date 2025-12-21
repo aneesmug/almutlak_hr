@@ -1202,9 +1202,9 @@ elseif($ajaxType == 'unassign_asset') {
     ];
     echo json_encode($data);
 } elseif($ajaxType == 'add_portfolio'){
-    $emp_id = $_POST['emp_id'];
-    $title_up = $_POST['title'];
-    $description_up = mysqli_real_escape_string($conDB, $_POST['description']);
+    $emp_id = $_POST['emp_id'] ?? null;
+    $title_up = $_POST['title'] ?? null;
+    $description_up = isset($_POST['description']) ? mysqli_real_escape_string($conDB, (string)$_POST['description']) : '';
     $filename_po = null; // Initialize
     if (file_exists($_FILES['file']['tmp_name']) || is_uploaded_file($_FILES['file']['tmp_name'])) {
         $uploadDir = "./../../assets/emp_documents/";
@@ -1235,13 +1235,16 @@ elseif($ajaxType == 'unassign_asset') {
         include("./../../includes/Hijri_GregorianConvert.php");
         $DateConv = new Hijri_GregorianConvert;
         $format="YYYY-MM-DD";
-        if ($_POST['iqama_exp']) {
-            $iqama_exp = mysqli_real_escape_string($conDB, $_POST['iqama_exp']);
+        if (!empty($_POST['iqama_exp'])) {
+            $iqama_exp = mysqli_real_escape_string($conDB, (string)$_POST['iqama_exp']);
             $iqama_exp_gup = $DateConv->HijriToGregorian($iqama_exp, $format);
             $iqama_exp_g = date("Y-m-d", strtotime($iqama_exp_gup));
-        } else{
-            $iqama_exp_g = mysqli_real_escape_string($conDB, $_POST['iqama_exp_g']);
+        } else if (!empty($_POST['iqama_exp_g'])) {
+            $iqama_exp_g = mysqli_real_escape_string($conDB, (string)$_POST['iqama_exp_g']);
             $iqama_exp = $DateConv->GregorianToHijri($iqama_exp_g, $format);
+        } else {
+            $iqama_exp = null;
+            $iqama_exp_g = null;
         }
         $stmt = $pdo->prepare("UPDATE `employees` SET `iqama_exp` = :iqama_exp, `iqama_exp_g` = :iqama_exp_g WHERE `id` = :id");
         $stmt->execute([':iqama_exp' => $iqama_exp, ':iqama_exp_g' => $iqama_exp_g, ':id' => $_POST['id']]);

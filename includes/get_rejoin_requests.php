@@ -2,6 +2,7 @@
 /**
  * API: Get Rejoin Requests for Supervisor
  * Returns pending, approved, and rejected rejoin requests for the logged-in supervisor
+ * System admin sees all requests, others see only their supervised employees
  */
 
 header('Content-Type: application/json');
@@ -18,7 +19,15 @@ try {
 
     $supervisor_id = $_SESSION['empid'];
     $pdo = getDbConnection();
-
+    
+    // Check if user is system admin (case-insensitive role check)
+    $normalized_role = strtolower($user_type ?? '');
+    $is_admin = ($is_system_admin === true) || ($normalized_role === 'administrator');
+    
+    // Build WHERE clause based on user role
+    $supervisor_where = $is_admin ? "1 = 1" : "e.supervisor_id = :supervisor_id";
+    $params = $is_admin ? [] : [':supervisor_id' => $supervisor_id];
+    
     // Get pending rejoin requests
     $pending = $pdo->prepare("
         SELECT 
@@ -38,12 +47,12 @@ try {
         JOIN employees e ON rr.emp_id = e.emp_id
         JOIN emp_vacation v ON rr.vacation_id = v.id
         LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
-        WHERE e.supervisor_id = :supervisor_id 
+        WHERE $supervisor_where 
         AND rr.status = 'pending'
         AND (ra.status = 'pending' OR ra.status IS NULL)
         ORDER BY rr.requested_at DESC
     ");
-    $pending->execute([':supervisor_id' => $supervisor_id]);
+    $pending->execute($params);
     $pending_requests = $pending->fetchAll(PDO::FETCH_ASSOC);
 
     // Get approved rejoin requests
@@ -65,13 +74,13 @@ try {
         JOIN employees e ON rr.emp_id = e.emp_id
         JOIN emp_vacation v ON rr.vacation_id = v.id
         LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
-        WHERE e.supervisor_id = :supervisor_id 
+        WHERE $supervisor_where 
         AND rr.status IN ('approved', 'adjusted')
         AND (ra.status = 'approved' OR rr.status = 'approved')
         ORDER BY rr.final_approved_at DESC
         LIMIT 50
     ");
-    $approved->execute([':supervisor_id' => $supervisor_id]);
+    $approved->execute($params);
     $approved_requests = $approved->fetchAll(PDO::FETCH_ASSOC);
 
     // Get rejected rejoin requests
@@ -92,13 +101,13 @@ try {
         JOIN employees e ON rr.emp_id = e.emp_id
         JOIN emp_vacation v ON rr.vacation_id = v.id
         LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
-        WHERE e.supervisor_id = :supervisor_id 
+        WHERE $supervisor_where 
         AND rr.status = 'rejected'
         AND (ra.status = 'rejected' OR rr.status = 'rejected')
         ORDER BY rr.approved_at DESC
         LIMIT 50
     ");
-    $rejected->execute([':supervisor_id' => $supervisor_id]);
+    $rejected->execute($params);
     $rejected_requests = $rejected->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode([

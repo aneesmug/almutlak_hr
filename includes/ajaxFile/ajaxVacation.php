@@ -558,9 +558,14 @@ elseif ($ajaxType == 'applyVacation') {
             $effective_remaining = 0.0;
         }
 
-        // [NEW] If this is an Encashment request, use the user-entered encash_days
+        // [NEW] If this is an Encashment request, force today's dates and use the user-entered encash_days
         $is_encashment_request = (trim(strtolower($notes)) === 'encashment') || (trim(strtolower($vac_type)) === 'encashed');
         if ($is_encashment_request) {
+            // Force start/return dates to today for encashment
+            $today = date('Y-m-d');
+            $start_date = $today;
+            $end_date = $today;
+
             // Use user-entered days from the form
             if ($encash_days > 0) {
                 $vacdays = $encash_days;
@@ -656,8 +661,9 @@ elseif ($ajaxType == 'applyVacation') {
         $submitted_by_val = ($current_user_id && (int)$current_user_id > 0) ? (int)$current_user_id : 'NULL';
 
         // Prepare date values - use NULL keyword for empty dates
-        $departure_date_sql = (!empty($departure_date) && $departure_date !== '0000-00-00') ? "'" . mysqli_real_escape_string($conDB, $departure_date) . "'" : 'NULL';
-        $arrival_date_sql = (!empty($arrival_date) && $arrival_date !== '0000-00-00') ? "'" . mysqli_real_escape_string($conDB, $arrival_date) . "'" : 'NULL';
+        // Use null-safe approach: only escape non-empty strings
+        $departure_date_sql = (!empty($departure_date) && $departure_date !== '0000-00-00') ? "'" . mysqli_real_escape_string($conDB, (string)$departure_date) . "'" : 'NULL';
+        $arrival_date_sql = (!empty($arrival_date) && $arrival_date !== '0000-00-00') ? "'" . mysqli_real_escape_string($conDB, (string)$arrival_date) . "'" : 'NULL';
 
         // Escape other string values
         $emp_id_esc = mysqli_real_escape_string($conDB, $emp_id);
@@ -681,11 +687,9 @@ elseif ($ajaxType == 'applyVacation') {
 
 
         $sql = "INSERT INTO `emp_vacation` 
-                    (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`) 
+                    (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`,`review`) 
                 VALUES 
-                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1)";
-
-
+                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
 
         if (!mysqli_query($conDB, $sql)) {
 
@@ -697,6 +701,83 @@ elseif ($ajaxType == 'applyVacation') {
         
         // Log vacation request submission
         ActivityLogger::logSubmit('Vacation', 'ajaxVacation.php', $inserted_id, "Submitted vacation request: {$request_inv_no}, Days: {$vacdays}", 'emp_vacation');
+
+        // 8.5 DEDUCT FROM VACATION BALANCE for annual vacation and encashment
+        // Deduct immediately upon submission to reserve the days
+        $should_deduct_balance = false;
+        
+        // Annual vacation should deduct from balance
+        if (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual') {
+            $should_deduct_balance = true;
+        }
+        
+        // Encashment should also deduct from balance
+        if ($is_encashment_request) {
+            $should_deduct_balance = true;
+        }
+        
+        // Emergency vacation does NOT deduct (it's unpaid)
+        if ($is_emergency_vacation) {
+            $should_deduct_balance = false;
+        }
+        
+        if ($should_deduct_balance && $vacdays > 0) {
+            // Get the current balance record for this employee
+            $sql_get_balance = "SELECT `id`, `total_days`, `used_days`, `remaining_balance`, `available_balance` 
+                                FROM `emp_vacation_balance` 
+                                WHERE `emp_id` = ? 
+                                ORDER BY `last_updated` DESC 
+                                LIMIT 1";
+            $stmt_get_balance = mysqli_prepare($conDB, $sql_get_balance);
+            
+            if ($stmt_get_balance) {
+                mysqli_stmt_bind_param($stmt_get_balance, "s", $emp_id);
+                mysqli_stmt_execute($stmt_get_balance);
+                $res_balance = mysqli_stmt_get_result($stmt_get_balance);
+                
+                if ($res_balance && ($row_balance = mysqli_fetch_assoc($res_balance))) {
+                    $balance_id = (int)$row_balance['id'];
+                    $current_used_days = (float)$row_balance['used_days'];
+                    $current_remaining = (float)$row_balance['remaining_balance'];
+                    $current_available = (float)$row_balance['available_balance'];
+                    
+                    // Calculate new values after deduction
+                    $new_used_days = $current_used_days + $vacdays;
+                    $new_remaining = max(0, $current_remaining - $vacdays);
+                    $new_available = max(0, $current_available - $vacdays);
+                    
+                    // Update the balance record
+                    $sql_update_balance = "UPDATE `emp_vacation_balance` 
+                                          SET `used_days` = ?, 
+                                              `remaining_balance` = ?, 
+                                              `available_balance` = ?,
+                                              `last_updated` = NOW() 
+                                          WHERE `id` = ?";
+                    $stmt_update_balance = mysqli_prepare($conDB, $sql_update_balance);
+                    
+                    if ($stmt_update_balance) {
+                        mysqli_stmt_bind_param($stmt_update_balance, "dddi", $new_used_days, $new_remaining, $new_available, $balance_id);
+                        if (mysqli_stmt_execute($stmt_update_balance)) {
+                            // Balance successfully deducted
+                            // Log the deduction
+                            ActivityLogger::logUpdate('VacationBalance', 'ajaxVacation.php', $balance_id, 
+                                "Deducted {$vacdays} days for request {$request_inv_no}. New remaining: {$new_remaining}", 
+                                'emp_vacation_balance');
+                        } else {
+                            // Failed to update balance, but don't fail the whole request
+                            error_log("Failed to deduct vacation balance for emp_id {$emp_id}: " . mysqli_stmt_error($stmt_update_balance));
+                        }
+                        mysqli_stmt_close($stmt_update_balance);
+                    }
+                } else {
+                    // No balance record found - this shouldn't happen if validation was done correctly
+                    error_log("No vacation balance record found for emp_id {$emp_id} when trying to deduct {$vacdays} days");
+                }
+                
+                if ($res_balance) mysqli_free_result($res_balance);
+                mysqli_stmt_close($stmt_get_balance);
+            }
+        }
 
         // 9. Save the approval chain
         $approver_chain = [$first_approver_id];
@@ -784,15 +865,14 @@ elseif ($ajaxType == 'applyVacation') {
                 }
             }
 
-            // STEP D: HR Payroll (for ALL annual vacations to process overtime/deductions)
-            // All vacations must go to HR Payroll regardless of vacation_salary_type
-            if ($fly_type === 'annual') {
-                $res_hr_payroll = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-                if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
-                    $pushApprover($row_hr_payroll['emp_id']);
-                }
-                if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
+            // STEP D: HR Payroll (FINAL APPROVAL for ALL vacation types)
+            // ALL vacations (Local, Fly Annual, Fly Emergency, Encash) must have final approval from HR Payroll
+            // HR Payroll is ALWAYS the final step regardless of vacation type or salary type
+            $res_hr_payroll = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
+            if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
+                $pushApprover($row_hr_payroll['emp_id']);
             }
+            if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
 
             // STEP E: GR Officer (ONLY if fly_type = 'annual' AND vac_type = 'Fly')
             if ($fly_type === 'annual' && strtolower($vac_type) === 'fly') {
@@ -1137,62 +1217,86 @@ elseif ($ajaxType == 'approveVacation') {
 
         // 4. Send email notifications to HR Team CC recipients (if any)
         if (!empty($hr_team_cc) && is_array($hr_team_cc)) {
-            // Get vacation details for email
-            $sql_vac = "SELECT ev.*, e.name as emp_name, e.email as emp_email 
-                        FROM emp_vacation ev 
-                        JOIN employees e ON ev.emp_id = e.emp_id 
-                        WHERE ev.id = ?";
-            $stmt_vac = mysqli_prepare($conDB, $sql_vac);
+            // Filter out empty values and ensure we have valid employee IDs
+            $hr_team_cc = array_filter(array_map('intval', $hr_team_cc), function($id) {
+                return $id > 0;
+            });
+            
+            if (!empty($hr_team_cc)) {
+                // Get vacation details for email
+                $sql_vac = "SELECT ev.*, e.name as emp_name, e.email as emp_email 
+                            FROM emp_vacation ev 
+                            JOIN employees e ON ev.emp_id = e.emp_id 
+                            WHERE ev.id = ?";
+                $stmt_vac = mysqli_prepare($conDB, $sql_vac);
 
-            if ($stmt_vac) {
-                mysqli_stmt_bind_param($stmt_vac, "i", $vacation_id);
-                mysqli_stmt_execute($stmt_vac);
-                $result_vac = mysqli_stmt_get_result($stmt_vac);
+                if ($stmt_vac) {
+                    mysqli_stmt_bind_param($stmt_vac, "i", $vacation_id);
+                    mysqli_stmt_execute($stmt_vac);
+                    $result_vac = mysqli_stmt_get_result($stmt_vac);
 
-                if ($vac_data = mysqli_fetch_assoc($result_vac)) {
-                    // Get CC recipient details
-                    $cc_ids = implode(',', array_map('intval', $hr_team_cc));
-                    $sql_cc = "SELECT emp_id, name, email FROM employees WHERE emp_id IN ($cc_ids) AND status = 1";
-                    $result_cc = mysqli_query($conDB, $sql_cc);
+                    if ($vac_data = mysqli_fetch_assoc($result_vac)) {
+                        // Get CC recipient details - join with admin_login to get email
+                        $cc_ids = implode(',', $hr_team_cc);
+                        $sql_cc = "SELECT e.emp_id, e.name, al.email 
+                                   FROM employees e 
+                                   LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
+                                   WHERE e.emp_id IN ($cc_ids) AND e.status = 1";
+                        $result_cc = mysqli_query($conDB, $sql_cc);
 
-                    if ($result_cc && mysqli_num_rows($result_cc) > 0) {
-                        // Prepare email template data for CC notification
-                        $reqType = trim($vac_data['vacation_type'] ?? 'Vacation Request');
-                        $subject = "$reqType Approved (CC) - {$vac_data['emp_name']}";
-
-                        // Determine if it's vacation or leave
-                        $vac_type_lower = strtolower($vac_data['vacation_type'] ?? '');
-                        $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
-
-                        // Send email to each CC recipient using template system
-                        while ($cc_rec = mysqli_fetch_assoc($result_cc)) {
-                            if (!empty($cc_rec['email'])) {
-                                if (function_exists('send_approval_email')) {
-                                    // Prepare template data for this CC recipient
-                                    $cc_template_data = [
-                                        'APPROVER_NAME' => $cc_rec['name'],
-                                        'REQUEST_TYPE' => $reqType . ' (Approved - CC)',
-                                        'REQUEST_TYPE_LOWER' => strtolower($reqType) . ' (approved)',
-                                        'REQUEST_ID' => $vac_data['request_inv_no'],
-                                        'EMPLOYEE_NAME' => $vac_data['emp_name'],
-                                        'START_DATE' => date('d M Y', strtotime($vac_data['start_date'])),
-                                        'END_DATE' => date('d M Y', strtotime($vac_data['return_date'])),
-                                        'DURATION' => $vac_data['vacdays'],
-                                        'REQUEST_URL' => $base_url . '/all_applied_vac.php'
-                                    ];
-
-                                    send_approval_email($conDB, $cc_rec['email'], $cc_rec['name'], $subject, 'vacation_request', $cc_template_data);
-                                } else {
-                                    // Fallback log if helper not found
-
-                                }
-                            } else {
+                        if ($result_cc && mysqli_num_rows($result_cc) > 0) {
+                            // Prepare email template data for CC notification
+                            // Use vac_type (correct column name) instead of vacation_type
+                            $vac_type = trim($vac_data['vac_type'] ?? 'Vacation Request');
+                            $fly_type = trim($vac_data['fly_type'] ?? '');
+                            
+                            // Build request type description
+                            $reqType = $vac_type;
+                            if (!empty($fly_type)) {
+                                $reqType .= ' (' . ucfirst($fly_type) . ')';
                             }
+                            
+                            $subject = "$reqType Approved (CC) - {$vac_data['emp_name']}";
+                            $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+
+                            // Send email to each CC recipient using template system
+                            $cc_sent_count = 0;
+                            while ($cc_rec = mysqli_fetch_assoc($result_cc)) {
+                                if (!empty($cc_rec['email'])) {
+                                    if (function_exists('send_approval_email')) {
+                                        // Prepare template data for this CC recipient
+                                        $cc_template_data = [
+                                            'APPROVER_NAME' => $cc_rec['name'],
+                                            'REQUEST_TYPE' => $reqType . ' (Approved - CC)',
+                                            'REQUEST_TYPE_LOWER' => strtolower($reqType) . ' (approved)',
+                                            'REQUEST_ID' => $vac_data['request_inv_no'],
+                                            'EMPLOYEE_NAME' => $vac_data['emp_name'],
+                                            'START_DATE' => date('d M Y', strtotime($vac_data['start_date'])),
+                                            'END_DATE' => date('d M Y', strtotime($vac_data['return_date'])),
+                            'DURATION' => $vac_data['vacdays'],
+                                            'REQUEST_URL' => $base_url . '/all_applied_vac.php'
+                                        ];
+
+                                        $email_sent = send_approval_email($conDB, $cc_rec['email'], $cc_rec['name'], $subject, 'vacation_request', $cc_template_data);
+                                        if ($email_sent) {
+                                            $cc_sent_count++;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Log CC notification sent
+                            if ($cc_sent_count > 0) {
+                                ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+                                    "Sent CC notification to {$cc_sent_count} HR team members for request {$vac_data['request_inv_no']}", 
+                                    'emp_vacation');
+                            }
+                            
+                            mysqli_free_result($result_cc);
                         }
-                        mysqli_free_result($result_cc);
                     }
+                    mysqli_stmt_close($stmt_vac);
                 }
-                mysqli_stmt_close($stmt_vac);
             }
         }
 
@@ -1253,6 +1357,72 @@ elseif ($ajaxType == 'rejectVacation') {
         $old_vacation = mysqli_fetch_assoc($vacation_details);
         if ($old_vacation) {
             ActivityLogger::logApproval('Vacation', 'ajaxVacation.php', $vacation_id, 'rejected', "Rejected vacation request: {$request_inv_no}, Reason: {$rejection_note}", 'emp_vacation');
+            
+            // REFUND VACATION BALANCE - When a vacation request is rejected, restore the deducted days
+            // Only refund for annual vacation and encashment (not for emergency vacation)
+            $emp_id = $old_vacation['emp_id'];
+            $vac_type = $old_vacation['vac_type'];
+            $fly_type = $old_vacation['fly_type'];
+            $vacdays = (float)$old_vacation['vacdays'];
+            $remarks = strtolower(trim($old_vacation['remarks'] ?? ''));
+            
+            $is_annual = (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual');
+            $is_encashment = (strpos($remarks, 'encashment') !== false || strtolower($vac_type) === 'encashed');
+            $is_emergency = (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'emergency');
+            
+            // Refund balance if it was deducted (annual or encashment, but not emergency)
+            if (($is_annual || $is_encashment) && !$is_emergency && $vacdays > 0) {
+                // Get the current balance record for this employee
+                $sql_get_balance = "SELECT `id`, `used_days`, `remaining_balance`, `available_balance` 
+                                    FROM `emp_vacation_balance` 
+                                    WHERE `emp_id` = ? 
+                                    ORDER BY `last_updated` DESC 
+                                    LIMIT 1";
+                $stmt_get_balance = mysqli_prepare($conDB, $sql_get_balance);
+                
+                if ($stmt_get_balance) {
+                    mysqli_stmt_bind_param($stmt_get_balance, "s", $emp_id);
+                    mysqli_stmt_execute($stmt_get_balance);
+                    $res_balance = mysqli_stmt_get_result($stmt_get_balance);
+                    
+                    if ($res_balance && ($row_balance = mysqli_fetch_assoc($res_balance))) {
+                        $balance_id = (int)$row_balance['id'];
+                        $current_used_days = (float)$row_balance['used_days'];
+                        $current_remaining = (float)$row_balance['remaining_balance'];
+                        $current_available = (float)$row_balance['available_balance'];
+                        
+                        // Calculate new values after refund (restore the days)
+                        $new_used_days = max(0, $current_used_days - $vacdays);
+                        $new_remaining = $current_remaining + $vacdays;
+                        $new_available = $current_available + $vacdays;
+                        
+                        // Update the balance record
+                        $sql_update_balance = "UPDATE `emp_vacation_balance` 
+                                              SET `used_days` = ?, 
+                                                  `remaining_balance` = ?, 
+                                                  `available_balance` = ?,
+                                                  `last_updated` = NOW() 
+                                              WHERE `id` = ?";
+                        $stmt_update_balance = mysqli_prepare($conDB, $sql_update_balance);
+                        
+                        if ($stmt_update_balance) {
+                            mysqli_stmt_bind_param($stmt_update_balance, "dddi", $new_used_days, $new_remaining, $new_available, $balance_id);
+                            if (mysqli_stmt_execute($stmt_update_balance)) {
+                                // Balance successfully refunded
+                                ActivityLogger::logUpdate('VacationBalance', 'ajaxVacation.php', $balance_id, 
+                                    "Refunded {$vacdays} days for rejected request {$request_inv_no}. New remaining: {$new_remaining}", 
+                                    'emp_vacation_balance');
+                            } else {
+                                error_log("Failed to refund vacation balance for emp_id {$emp_id}: " . mysqli_stmt_error($stmt_update_balance));
+                            }
+                            mysqli_stmt_close($stmt_update_balance);
+                        }
+                    }
+                    
+                    if ($res_balance) mysqli_free_result($res_balance);
+                    mysqli_stmt_close($stmt_get_balance);
+                }
+            }
         }
         if ($vacation_details) mysqli_free_result($vacation_details);
 
@@ -3025,6 +3195,11 @@ elseif ($ajaxType == 'applyLeave') {
         }
 
         mysqli_stmt_close($stmt);
+        
+        // NOTE: Excuse leave types (Sick, Exam, Hajj, Maternity, Marriage, Newborn, Death, Business Trip) 
+        // do NOT deduct from annual vacation balance (emp_vacation_balance.total_days)
+        // They are tracked separately and don't consume the employee's annual vacation entitlement
+        // Only annual vacation (applied through applyVacation with fly_type='annual') and encashment deduct from balance
 
         // Save approval chain: [Direct Supervisor/Dept Manager, HR Senior BP]
         // Note: Using 'vacation_request' type since both vacation and leave use emp_vacation table

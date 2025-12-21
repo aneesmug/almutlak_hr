@@ -1,51 +1,4 @@
 <?php
-/*
-MODIFICATION SUMMARY (026-main_menu.php):
-- DEPARTMENT-BASED ROLE SYSTEM: Replaced all IT_Assistant, HR_Assistant, Finance_Assistant 
-  references with department-based team roles (IT_Team, IT_Team_Manager, HR_Team, HR_Team_Manager, 
-  Finance_Team, Finance_Team_Manager, Executive_Team, Executive_Team_Manager)
-- LEGACY ROLE SUPPORT: Maintained HR_Manager and Finance_Manager for backward compatibility
-- TEAM ROLE ACCESS: Updated all page_roles arrays and permission arrays to include new team roles
-- CONSISTENT PERMISSIONS: IT_Team, HR_Team, and Finance_Team members now have appropriate 
-  access based on their department assignment
-*/
-/*
-MODIFICATION SUMMARY (025-main_menu.php):
-- COMPREHENSIVE ROLE SYSTEM OVERHAUL: Updated all role-based permissions to use the new
-  employee ID-based role system with specific HR, Finance, and management positions.
-- NEW SPECIFIC ROLES: Added support for HR_Senior_BP, HR_Operations, HR_Supervisor, 
-  HR_Recruitment, HR_Payroll, Finance_Officer, Auditor, GR_Officer, and Administrator roles.
-- UPDATED PAGE ACCESS: All page_roles arrays updated to include new specific roles with
-  appropriate permissions for each page.
-- MENU VISIBILITY: Updated all can_see_* permission arrays to include new roles.
-- APPROVAL COUNTS: Modified loan and smart request count queries to support new role structure.
-- BACKWARD COMPATIBILITY: Maintains support for legacy HR_Manager, Finance_Manager roles.
-*/
-/*
-MODIFICATION SUMMARY (002-main_menu.php):
-- Providing the full and final code as requested.
-- REPLACED SMART REQUEST COUNT: The old, complex, role-based switch statement for counting smart requests has been removed.
-- ADDED GENERAL APPROVAL COUNT: Replaced with a new, simpler query that checks the `request_approvers` table. It now counts requests where the logged-in user (`$empid`) is the designated approver and the status is 'pending'.
-- ADMIN OVERRIDE: Kept the logic for the 'administrator' role to see a total count of all non-completed requests.
-*/
-/****************************************************************
- * MODIFICATION SUMMARY (005-main_menu.php):
- * 1. ADDED MANUAL LOAN LINK: A new menu item "Add Manual Loan" has been added to the "Employee's" group. This link provides direct access to the `add_manual_loan.php` page, making it easy to add historical loan records.
- ****************************************************************
- * MODIFICATION SUMMARY (024-main_menu.php):
- * 1. CREATED "APPROVALS" GROUP: A new dropdown menu group named "Approvals" has been created to centralize all approval-related tasks.
- * 2. MOVED MENU ITEMS: The following pages have been moved into this new group:
- * - "Applied Vacations" (`all_applied_vac.php`)
- * - "Loan Approvals" (`all_applied_loan.php`)
- * - "Content Approvals" (formerly "Contant List", `emp_temp_contant.php`)
- * 3. CONSOLIDATED PERMISSIONS: A new permission variable (`$show_approvals_menu`) has been created to control the visibility of the entire "Approvals" group, making the menu cleaner and more organized.
- ****************************************************************/
-/****************************************************************
- * MODIFICATION SUMMARY (003-main_menu.php):
- * 1. ADDED EMPLOYEE ROLE: The 'Employee' role has been added to the list of roles allowed to access `all_applied_loan.php`. This resolves the permission conflict that was causing employees to be redirected away from the page.
- ****************************************************************/
-
-// The $user_role, $user_type, and $is_system_admin variables are now available globally from session_check.php
 
 // =================================================================================
 // MENU LINKS DEFINITIONS
@@ -72,6 +25,7 @@ $quotationsLink = 'all_quotations.php';
 $allCustomersLink = 'all_customers.php';
 $customerSurveyLink = 'customers_survey.php';
 $smartRequestsLink = 'all_requests.php';
+$generalRequestsLink = 'all_general_requests.php';
 $vouchersLink = 'vouchers.php';
 $invoicesLink = 'all_user_invoices.php';
 $usersLink = 'all_users.php';
@@ -87,6 +41,7 @@ $employeeEvaluationLink = 'employee_evaluation.php';
 $allEmployeeEvaluationsLink = 'all_employee_evaluations.php';
 $userActivityLink = 'user_activity.php';
 $activityLoggerLink = 'view_activity_logs.php';
+$manageEmployeeSupervisorsLink = 'manage_employee_supervisors.php';
 
 
 // =================================================================================
@@ -112,6 +67,8 @@ $page_roles = [
     'all_machines.php' => ['Administrator', 'GR_Officer'],
     'all_menu_item.php' => ['Administrator'],
     'all_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    // 'all_general_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    'all_general_requests.php' => ['Administrator'],
     'vouchers.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_user_invoices.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_users.php' => ['Administrator'],
@@ -125,6 +82,7 @@ $page_roles = [
     'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager', 'IT_Team_Manager'],
     'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager','HR_Recruitment'],
+    'manage_employee_supervisors.php' => ['Administrator'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -201,6 +159,14 @@ $can_see_smart_requests_page = [
     'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
     'HR_Manager', 'Finance_Manager'
 ];
+
+$can_see_general_requests_page = ['Administrator'];
+// $can_see_general_requests_page = [
+//     'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+//     'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
+//     'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+//     'HR_Manager', 'Finance_Manager'
+// ];
 
 $can_see_vouchers_page = [
     'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
@@ -313,6 +279,38 @@ if ($user_role == 'Administrator') {
 }
 // --- END NEW SMART REQUEST COUNT ---
 
+// --- Fetch General Request Counts ---
+$general_request_count = 0;
+if ($user_role == 'Administrator') {
+    // Admin sees a count of ALL pending general requests (excluding completed)
+    $general_request_query_admin = "SELECT COUNT(*) as count FROM general_requests WHERE current_status NOT IN ('approved', 'rejected', 'draft', 'completed')";
+    $result_admin = mysqli_query($conDB, $general_request_query_admin);
+    if ($row_admin = mysqli_fetch_assoc($result_admin)) {
+        $general_request_count = $row_admin['count'];
+    }
+} else {
+    // All other users see a count of general requests pending *their* approval
+    $general_request_type_id = 0;
+    $gr_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE main_table_name = 'general_requests' LIMIT 1");
+    if ($row = mysqli_fetch_assoc($gr_type_query)) {
+        $general_request_type_id = (int)$row['id'];
+    }
+
+    if ($general_request_type_id > 0) {
+        $general_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
+                                FROM request_approvers ra
+                                WHERE ra.approver_id = " . (int)$empid . " 
+                                  AND ra.status = 'pending' 
+                                  AND ra.request_type_id = $general_request_type_id";
+        
+        $result = mysqli_query($conDB, $general_request_query);
+        if ($row = mysqli_fetch_assoc($result)) {
+            $general_request_count = $row['count'];
+        }
+    }
+}
+// --- END NEW GENERAL REQUEST COUNT ---
+
 // --- Fetch Vacation Pending Approval Count (NEW) ---
 $vacation_pending_count = 0;
 $vacation_type_id = 0;
@@ -355,20 +353,25 @@ if ($row = mysqli_fetch_assoc($rejoin_type_query)) {
 if ($rejoin_type_id > 0) {
     if ($user_role == 'Administrator') {
         // Admin: count all distinct rejoin requests still pending anywhere
-        $rejoin_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                                         FROM request_approvers ra
-                                         WHERE ra.status = 'pending' AND ra.request_type_id = $rejoin_type_id";
+                $rejoin_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                                 FROM request_approvers ra
+                                                                                 JOIN rejoin_requests rr ON rr.id = ra.request_inv_no
+                                                                                 WHERE ra.status = 'pending'
+                                                                                     AND rr.status = 'pending'
+                                                                                     AND ra.request_type_id = $rejoin_type_id";
         $res_rejoin_admin = mysqli_query($conDB, $rejoin_pending_query_admin);
         if ($res_rejoin_admin && ($rra = mysqli_fetch_assoc($res_rejoin_admin))) {
             $rejoin_pending_count = (int)$rra['count'];
         }
     } else {
         // Regular user: count requests awaiting THIS user's approval
-        $rejoin_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                                   FROM request_approvers ra
-                                   WHERE ra.approver_id = " . (int)$empid . "
-                                     AND ra.status = 'pending'
-                                     AND ra.request_type_id = $rejoin_type_id";
+                $rejoin_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                     FROM request_approvers ra
+                                                                     JOIN rejoin_requests rr ON rr.id = ra.request_inv_no
+                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                         AND ra.status = 'pending'
+                                                                         AND rr.status = 'pending'
+                                                                         AND ra.request_type_id = $rejoin_type_id";
         $res_rejoin = mysqli_query($conDB, $rejoin_pending_query);
         if ($res_rejoin && ($rr = mysqli_fetch_assoc($res_rejoin))) {
             $rejoin_pending_count = (int)$rr['count'];
@@ -409,7 +412,6 @@ if ($resignation_type_id > 0) {
 }
 // --- END NEW RESIGNATION PENDING COUNT ---
 
-
 // Initialize counts to 0
 $status_cont_vacapl = 0;
 $status_cont_vacaphr = 0;
@@ -440,8 +442,17 @@ if ($rec = mysqli_fetch_assoc($sql_count_aprl)) {
     $status_cont_contaprl = $rec["contaprl"];
 }
 
+// --- CALCULATE TOTAL COUNTS FOR PARENT MENUS ---
+// Total count for Approvals menu
+$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $status_cont_contaprl;
+
+// Total count for Requests menu
+$requests_total_count = $smart_request_count + $general_request_count;
+// --- END PARENT MENU TOTALS ---
+
 // Generate unique numbers for SR and QUO
 $newinvnr = "SMT" . ($empid ?? '') . date('ymdis');
+$newinvgr = "GR" . ($empid ?? '') . date('ymdis');
 $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 ?>
 
@@ -501,6 +512,10 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
                 <?php endif; ?>
 
+                <?php if ($is_system_admin): ?>
+                    <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa fa-users-gear"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
+                <?php endif; ?>
+
                 <?php /* 
                 if (
                     in_array($user_role, $can_see_evaluations_report_strict) ||
@@ -517,7 +532,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <!-- Approvals Group -->
         <?php if ($show_approvals_menu): ?>
         <li>
-            <a href="javascript:void(0);"><i class="fa fa-check-to-slot"></i><span><?=__('approvals')?></span><span class="float-right fa fa-arrow-right"></span></a>
+            <a href="javascript:void(0);"><i class="fa fa-check-to-slot"></i><span><?=__('approvals')?></span><?= ($approvals_total_count > 0) ? "<span class='badgez badge-danger'>$approvals_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="false">
                 <?php if (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)): ?>
                     <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
@@ -537,10 +552,22 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             </ul>
         </li>
         <?php endif; ?>
+        
+        
 
-        <!-- Smart Requests -->
-        <?php if (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)): ?>
-            <li><a href="<?= $smartRequestsLink ?>"><i class="fa fa-layer-group"></i> <span> <?=__('smart_requests') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
+        <!-- Requests Menu (Smart Request + General Request) -->
+        <?php if ((in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)) || (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page))): ?>
+        <li>
+            <a href="javascript:void(0);"><i class="fa fa-ticket"></i><span><?=__('requests', 'Requests')?></span><?= ($requests_total_count > 0) ? "<span class='badgez badge-danger'>$requests_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
+            <ul class="nav-second-level" aria-expanded="false">
+                <?php if (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)): ?>
+                <li><a href="<?= $smartRequestsLink ?>"><i class="fa fa-layer-group"></i> <span> <?=__('smart_requests', 'Smart Request') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page)): ?>
+                <li><a href="<?= $generalRequestsLink ?>"><i class="fa fa-file-alt"></i> <span><?=__('general_request', 'General Request')?></span> <?= ($general_request_count > 0) ? "<span class='badgez badge-danger'>$general_request_count</span>" : "" ?></a></li>
+                <?php endif; ?>
+            </ul>
+        </li>
         <?php endif; ?>
 
         <!-- Employee Evaluation -->

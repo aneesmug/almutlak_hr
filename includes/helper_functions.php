@@ -1141,6 +1141,7 @@ if (!function_exists('send_approval_email')) {
         // Load and populate email template
         $body_html = load_email_template($request_type, $template_data);
         if ($body_html === false) {
+            error_log('Failed to load email template for type: ' . $request_type);
             return false;
         }
 
@@ -1213,6 +1214,7 @@ if (!function_exists('load_email_template')) {
         // Map request types to template files
         $template_map = [
             'smart_request' => 'smart_request_email_template.html',
+            'general_request' => 'general_request_email_template.html',
             'vacation_request' => 'vacation_request_email_template.html',
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
             'loan_request' => 'loan_request_email_template.html',
@@ -1240,8 +1242,13 @@ if (!function_exists('load_email_template')) {
             'LOGO_URL' => 'https://hr.almutlaksystem.com/assets/logo/logo_color_sm.png',
             'APPROVER_NAME' => 'Approver',
             'REQUEST_ID' => 'N/A',
+            'REQUEST_TITLE' => 'N/A',
+            'REQUESTER_NAME' => 'N/A',
             'REQUEST_URL' => $base_url . '/dashboard.php',
             'EMAIL_MESSAGE' => 'A new request requires your attention.',
+            'CATEGORY' => 'N/A',
+            'PRIORITY' => 'N/A',
+            'DESCRIPTION' => 'No description provided.',
             'REJECTION_BORDER' => 'border-bottom: 1px solid #404040;',
             'REJECTION_BORDER_INST' => '',
             'REJECTION_INFO' => '',
@@ -1466,6 +1473,38 @@ if (!function_exists('get_request_details_for_email')) {
                 mysqli_stmt_close($stmt);
             }
             return false;
+        } elseif ($request_type === 'general_request') {
+            // Fetch general request details
+            $sql = "SELECT gr.*, d.dep_nme as department_name
+                    FROM general_requests gr 
+                    LEFT JOIN department d ON gr.user_dept = d.id
+                    WHERE gr.inv_no = ? 
+                    LIMIT 1";
+
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        $template_data['REQUEST_TITLE'] = $row['request_title'] ?? 'General Request';
+                        $template_data['REQUESTER_NAME'] = $row['emp_name'] ?? 'Employee';
+                        $template_data['DEPARTMENT'] = $row['department_name'] ?? 'N/A';
+                        $template_data['PRIORITY'] = ucfirst($row['priority'] ?? 'normal');
+                        $template_data['CATEGORY'] = $row['request_category'] ?? 'N/A';
+                        $template_data['DESCRIPTION'] = $row['description'] ?? 'No description provided';
+                        $template_data['EMAIL_MESSAGE'] = 'A General Request requires your approval.';
+                        $template_data['REQUEST_URL'] = $base_url . '/view_general_request.php?id=' . urlencode($inv_no);
+
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            return false;
         }
 
         // Unknown request type
@@ -1597,6 +1636,7 @@ if (!function_exists('handle_approval_action')) {
                 $map = [
                     'vacation_request' => 'Vacation Request',
                     'smart_request' => 'Smart Request',
+                    'general_request' => 'General Request',
                     // Extend here as new request types are added
                 ];
                 if (isset($map[$type])) return $map[$type];
@@ -1629,8 +1669,8 @@ if (!function_exists('handle_approval_action')) {
         }
 
         // ** Determine the invoice column name based on the table **
-        // smart_request uses 'inv_no', emp_vacation uses 'request_inv_no'
-        $inv_column_name = ($main_table_name === 'smart_request') ? 'inv_no' : 'request_inv_no';
+        // smart_request and general_requests use 'inv_no', emp_vacation uses 'request_inv_no'
+        $inv_column_name = (in_array($main_table_name, ['smart_request', 'general_requests'])) ? 'inv_no' : 'request_inv_no';
 
         // ** Sanitize Inputs **
         $inv_no_safe = escape_string($inv_no);
@@ -2048,9 +2088,8 @@ if (!function_exists('handle_approval_action')) {
                         }
 
                         // --- 2b: This is FINAL APPROVAL (no more approvers in chain) ---
-                        // For vacation requests, check if it's annual fly vacation that needs travel email
-                        // If so, set status to 'approved' (not 'completed') so GR Officer can send travel email
-                        $final_status = 'approved'; // Default to 'approved' for all requests
+                        // Set appropriate status based on request type
+                        $final_status = 'approved'; // Default to 'approved' for most requests
                         $is_leave_request = false;   // Flag for LV- requests stored in emp_vacation
                         $leave_final_email_sent = false; // Prevent duplicate creator email for LV-
 
@@ -2077,6 +2116,10 @@ if (!function_exists('handle_approval_action')) {
                             if (!$is_annual_fly) {
                                 $final_status = 'completed';
                             }
+                        } elseif ($request_type === 'general_request') {
+                            // General requests go to 'waiting_for_delivery' after approval
+                            // They will be marked 'completed' when all items are delivered
+                            $final_status = 'waiting_for_delivery';
                         }
 
                         $update_main_approved_sql = "UPDATE `$main_table_name` SET `current_status` = ?, `current_approval_level` = ? WHERE `$inv_column_name` = ?";
@@ -2835,6 +2878,69 @@ if (!function_exists('create_browser_notification')) {
     }
 }
 
+/**
+ * Displays a browser notification popup using the Web Notifications API.
+ * Returns JavaScript code that should be executed on client side.
+ *
+ * @param string $title Notification title
+ * @param string $message Notification message
+ * @param string $url URL to navigate to on click
+ * @param string $icon_url Optional icon URL
+ * @return string JavaScript code for browser notification
+ */
+if (!function_exists('trigger_browser_notification_popup')) {
+    function trigger_browser_notification_popup($title, $message, $url, $icon_url = '')
+    {
+        $title_js = addslashes(htmlspecialchars($title, ENT_QUOTES));
+        $message_js = addslashes(htmlspecialchars($message, ENT_QUOTES));
+        $url_js = addslashes(htmlspecialchars($url, ENT_QUOTES));
+        $icon_js = addslashes(htmlspecialchars($icon_url, ENT_QUOTES));
+        
+        $js_code = "<script>
+        (function() {
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    showNotification();
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(function(permission) {
+                        if (permission === 'granted') {
+                            showNotification();
+                        }
+                    });
+                }
+            }
+            function showNotification() {
+                var options = {body: '$message_js', icon: '$icon_js', badge: 'assets/images/logo-small.png', tag: 'notif-' + Date.now()};
+                var notif = new Notification('$title_js', options);
+                notif.onclick = function() {window.focus(); window.location.href = '$url_js'; notif.close();};
+                setTimeout(function() {notif.close();}, 6000);
+            }
+        })();
+        </script>";
+        return $js_code;
+    }
+}
+
+/**
+ * Combined function: Creates database notification AND shows browser popup.
+ * Best for immediate + persistent notifications.
+ *
+ * @param mysqli $conDB Database connection
+ * @param int $emp_id Employee ID
+ * @param string $title Notification title
+ * @param string $message Notification message
+ * @param string $url URL to navigate to
+ * @param string $icon_url Optional icon URL
+ * @return array ['db_saved' => bool, 'js_code' => string]
+ */
+if (!function_exists('create_and_show_notification')) {
+    function create_and_show_notification($conDB, $emp_id, $title, $message, $url, $icon_url = '')
+    {
+        $db_saved = create_browser_notification($conDB, $emp_id, $title, $message, $url);
+        $js_code = trigger_browser_notification_popup($title, $message, $url, $icon_url);
+        return ['db_saved' => $db_saved, 'js_code' => $js_code];
+    }
+}
 
 /**
  * Fetches all unread notifications for a specific user using prepared statements.
@@ -3382,41 +3488,41 @@ if (!function_exists('send_travel_company_email')) {
             <table class="info-table">
                 <tr>
                     <td>Traveler Name:</td>
-                    <td><strong>' . htmlspecialchars($employee_name) . '</strong></td>
+                    <td><strong>' . htmlspecialchars((string)($employee_name ?? 'N/A')) . '</strong></td>
                 </tr>
                 <tr>
                     <td>Passport No:</td>
-                    <td>' . htmlspecialchars($passport_no ?: 'N/A') . '</td>
+                    <td>' . htmlspecialchars((string)($passport_no ?: 'N/A')) . '</td>
                 </tr>
                 <tr>
                     <td>Passport Expiry:</td>
-                    <td>' . htmlspecialchars($passport_expiry_formatted) . '</td>
+                    <td>' . htmlspecialchars((string)($passport_expiry_formatted ?? 'N/A')) . '</td>
                 </tr>
                 <tr>
                     <td>Departure To:</td>
-                    <td><strong>' . htmlspecialchars($country_name ?: 'N/A') . '</strong></td>
+                    <td><strong>' . htmlspecialchars((string)($country_name ?: 'N/A')) . '</strong></td>
                 </tr>
                 <tr>
                     <td>Departure Date:</td>
-                    <td>' . htmlspecialchars($departure_formatted) . '</td>
+                    <td>' . htmlspecialchars((string)($departure_formatted ?? 'N/A')) . '</td>
                 </tr>
                 <tr>
                     <td>Arrival Date:</td>
-                    <td>' . htmlspecialchars($arrival_formatted) . '</td>
+                    <td>' . htmlspecialchars((string)($arrival_formatted ?? 'N/A')) . '</td>
                 </tr>
             </table>
             
             <div class="highlight">
-                <strong>📋 Reference Number:</strong> ' . htmlspecialchars($request_inv_no) . '
+                <strong>📋 Reference Number:</strong> ' . htmlspecialchars((string)($request_inv_no ?? 'N/A')) . '
             </div>
             
             <p>Please proceed with the necessary travel arrangements for the above employee.</p>
             <p>If you have any questions or require additional information, please contact our HR department.</p>
             
-            <p style="margin-top: 30px;">Best regards,<br><strong>' . htmlspecialchars($site_title) . ' HR Department</strong></p>
+            <p style="margin-top: 30px;">Best regards,<br><strong>' . htmlspecialchars((string)($site_title ?? 'HR')) . ' HR Department</strong></p>
         </div>
         <div class="footer">
-            <p>This is an automated email from ' . htmlspecialchars($site_title) . ' HR System.</p>
+            <p>This is an automated email from ' . htmlspecialchars((string)($site_title ?? 'HR')) . ' HR System.</p>
             <p>Please do not reply to this email.</p>
         </div>
     </div>

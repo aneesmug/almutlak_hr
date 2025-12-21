@@ -1,368 +1,287 @@
-# Employee Rejoin Approval System - Quick Reference Card
+# Quick Reference - Delivery Modal System
 
-## For Employees 👨‍💼
+## For Users
 
-### How to Request Rejoin After Vacation
+### Approving & Delivering Requests
 
+**Step 1: Request is Approved**
 ```
-1. Go to your Employee Profile page
-2. Click the "More Actions" (⋮) button
-3. Select "Rejoin" from the menu
-4. A modal will appear showing:
-   - Planned return date
-   - Date picker to select actual rejoin date
-   - Optional reason field
-
-5. Select your rejoin date:
-   ⚠️ Maximum 3 days after planned return date
-   (If you need more time, contact your supervisor)
-
-6. Add a reason if date is different from planned
-
-7. Click "Submit Request"
-
-✓ Your request is now sent to your supervisor for approval
+You see: "Ready for Delivery" section with "Deliver Items" button
+Action: Click the green button
 ```
 
-### What Happens Next?
-
+**Step 2: Modal Opens**
 ```
-Scenario 1: APPROVED ✓
-├─ Your date is accepted
-├─ You can rejoin on that date
-└─ Status shows "Approved"
-
-Scenario 2: ADJUSTMENT ALLOWED 🔧
-├─ You can change the date within a window
-│  (Usually ±3 days from what you selected)
-├─ You'll get a notification
-├─ Select your final date
-└─ It gets locked in
-
-Scenario 3: REJECTED ❌
-├─ Your supervisor rejected the request
-├─ A reason will be provided
-├─ Contact your supervisor or HR
-└─ You may need to resubmit
+What you'll see:
+- Employee selector (search dropdown)
+- Items list with delivery status options
+- Optional file attachment area
 ```
 
-### Status Tracking
-
-| Status | Meaning |
-|--------|---------|
-| **Pending** | Waiting for supervisor to review |
-| **Approved** | Your rejoin date is confirmed |
-| **Adjusted** | You can modify date (check window) |
-| **Rejected** | Contact supervisor for details |
-
----
-
-## For Supervisors 👔
-
-### How to Approve/Adjust/Reject Requests
-
+**Step 3: Complete the Form**
 ```
-1. Go to: /system/rejoin_approvals.php
-
-2. You'll see three tabs:
-   📋 Pending (needs action)
-   ✓ Approved (completed)
-   ❌ Rejected (declined)
-
-3. In the Pending tab, you'll see:
-   - Employee name
-   - Requested rejoin date
-   - Planned return date
-   - Reason given (if any)
-   - "Review" button
-
-4. Click "Review" on any request
-
-5. A modal appears with employee details:
-   ├─ Rejoin Date
-   └─ Three Action Options:
-      ├─ ✓ APPROVE
-      ├─ 🔧 ADJUST (Allow ±3 days)
-      └─ ❌ REJECT (Requires explanation)
-
-6. Choose your action and add optional notes
-
-7. Click "Submit"
-
-✓ Decision is saved and employee is notified
+1. Select employee who received items
+   → Click dropdown → Type to search → Click to select
+   
+2. For each item, choose status:
+   ✓ Delivered (item received)
+   ⏱ Pending (not received yet)
+   ✕ Canceled (item cancelled)
+   
+3. Optional: Upload attachment
+   → Drag file into box OR click to browse
 ```
 
-### Action Details
-
-#### APPROVE ✓
-- Employee can rejoin on selected date
-- No further action needed from employee
-- Status: Approved
-
-#### ADJUST 🔧
-- Employee can change date within a window
-- Window is ±3 days from their requested date
-- Reason for allowing adjustment is recorded
-- Employee will select final date
-- Then status becomes: Approved
-
-#### REJECT ❌
-- You must provide a reason
-- HR may need to get involved
-- Employee will contact you to resolve
-- They can resubmit after resolution
-- Status: Rejected
-
-### Dashboard Overview
-
+**Step 4: Submit**
 ```
-┌─────────────────────────────────────────┐
-│     Rejoin Approvals Dashboard          │
-├─────────────────────────────────────────┤
-│                                         │
-│ 📋 Pending (3)  ✓ Approved (12)  ❌ Rejected (1) │
-│                                         │
-│ Pending Requests:                       │
-│ ┌─────────────────────────────────────┐ │
-│ │ John Smith                          │ │
-│ │ ID: 001                             │ │
-│ │ Planned: Dec 13 | Requested: Dec 15 │ │
-│ │ Reason: Traffic delay               │ │
-│ │ [Review]                            │ │
-│ └─────────────────────────────────────┘ │
-│                                         │
-└─────────────────────────────────────────┘
-
-Dashboard auto-refreshes every 30 seconds
+Click "✓ Submit Delivery"
+→ System processes
+→ Page refreshes
+→ Shows "Delivery Completed"
 ```
 
-### Tips for Supervisors
+### Viewing Completed Delivery
 
-✅ **DO:**
-- Approve/adjust same day if possible
-- Provide reason for adjustments
-- Review before deadline
-- Check employee's attendance record
-
-❌ **DON'T:**
-- Keep requests pending too long
-- Approve without checking dates
-- Allow adjustment for more than ±3 days
-- Approve own requests (use admin if needed)
-
----
-
-## For HR/Admins 🔐
-
-### Access Levels
-
+**When request is completed:**
 ```
-Employees:
-├─ Can submit rejoin requests
-├─ Can see own request status
-└─ Cannot approve requests
-
-Supervisors:
-├─ Can review team's requests
-├─ Can approve/adjust/reject
-├─ Can see own reports' requests
-└─ Cannot approve own requests
-
-HR Staff:
-├─ Can view all requests
-├─ Can override any decision
-├─ Can generate reports
-└─ Can resolve disputes
-
-Admins:
-├─ Full access to everything
-├─ Can manage database directly
-├─ Can generate analytics
-└─ Can troubleshoot issues
-```
-
-### Database Tables
-
-```
-rejoin_requests
-├─ Primary tracking table
-├─ Stores all request details
-├─ Includes approval workflow
-└─ Linked to emp_vacation
-
-emp_vacation (updated)
-├─ Added rejoin columns
-├─ Tracks rejoin status
-├─ Stores final dates
-└─ Audit trail
-
-rejoin_notifications
-├─ Tracks supervisor notifications
-├─ Read status tracking
-└─ Notification history
-```
-
-### Useful Queries
-
-**Get all pending requests:**
-```sql
-SELECT * FROM rejoin_requests 
-WHERE status = 'pending' 
-ORDER BY requested_at ASC;
-```
-
-**Get requests by supervisor:**
-```sql
-SELECT rr.*, e.name 
-FROM rejoin_requests rr
-JOIN employees e ON rr.emp_id = e.emp_id
-WHERE e.reports_to = 'SUPERVISOR_ID'
-ORDER BY rr.requested_at DESC;
-```
-
-**Get adjustment statistics:**
-```sql
-SELECT 
-  COUNT(*) as total,
-  SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) as approved,
-  SUM(CASE WHEN status='adjusted' THEN 1 ELSE 0 END) as adjusted,
-  SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) as rejected
-FROM rejoin_requests;
-```
-
-### Common Admin Tasks
-
-#### Problem: Employee submitted wrong request
-```
-1. Find record in rejoin_requests table
-2. Check for status
-3. If pending: Ask supervisor to reject
-4. If approved: Contact employee to resubmit
-5. Delete notification if needed
-```
-
-#### Problem: Supervisor didn't approve
-```
-1. Check dashboard pending count
-2. Send reminder to supervisor
-3. Override if business critical
-4. Document override in notes
-```
-
-#### Problem: Date conflict with payroll
-```
-1. Check payroll cutoff
-2. Verify rejoin_final_date is set
-3. If error occurred: Fix emp_vacation record
-4. Regenerate payroll if needed
-```
-
-#### Problem: Employee wants to change after approval
-```
-1. Find rejoin_requests record
-2. Check if already approved
-3. Revert to pending if urgent
-4. Have supervisor re-review
-5. Update rejoin_final_date manually if needed
+You see: "Delivery Completed" section with "View Delivery Details" button
+Action: Click the button
+Result: Modal shows delivery summary
 ```
 
 ---
 
-## File Locations
+## For Developers
 
+### Adding the Modal to Another Page
+
+```javascript
+// Include at bottom of page:
+<script>
+function showDeliveryModal() {
+    // Copy entire function from view_general_request.php
+    // Lines 1489-1540
+}
+
+function displayFileName(fileInput) {
+    // Copy entire function from view_general_request.php
+    // Lines 1542-1558
+}
+
+function submitDelivery(inv_no) {
+    // Copy entire function from view_general_request.php
+    // Lines 1560-1620
+}
+</script>
+
+// Call from button:
+<button onclick="showDeliveryModal()">Deliver</button>
 ```
-Frontend:
-├─ view_employee.php (Employee/Supervisor interfaces)
-└─ rejoin_approvals.php (Supervisor dashboard)
 
-Backend:
-├─ includes/ajaxFile/ajaxVacation.php (AJAX handlers)
-└─ includes/api/get_rejoin_requests.php (API endpoint)
+### Customizing the Modal
 
-Database:
-├─ rejoin_requests (Main table)
-├─ rejoin_notifications (Notification tracking)
-└─ emp_vacation (Updated with rejoin columns)
+**Change button text:**
+```javascript
+confirmButtonText: '<i class="mdi mdi-check"></i> Custom Text',
+cancelButtonText: 'Custom Cancel',
+```
 
-Documentation:
-├─ REJOIN_SYSTEM_DOCUMENTATION.md (Full guide)
-├─ REJOIN_SETUP_GUIDE.php (Setup instructions)
-├─ IMPLEMENTATION_CHECKLIST.md (Checklist)
-├─ SYSTEM_DIAGRAMS.md (Visual diagrams)
-├─ IMPLEMENTATION_SUMMARY.md (Changes summary)
-└─ QUICK_REFERENCE.md (This file)
+**Change colors:**
+```javascript
+confirmButtonColor: '#your-color',
+```
+
+**Change width:**
+```javascript
+width: '800px',  // Change from 700px
+```
+
+**Add more fields:**
+```html
+// Add before closing form div in modalContent
+let customField = `
+    <div style="margin-bottom: 20px;">
+        <label>Your Label</label>
+        <input type="text" id="your_field">
+    </div>
+`;
+```
+
+### Modifying Submission Data
+
+**Add custom field to FormData:**
+```javascript
+formData.append('custom_field', $('#your_field').val());
+```
+
+**In backend (ajaxGeneralRequest.php):**
+```php
+$custom_value = $_POST['custom_field'] ?? null;
+// Process accordingly
+```
+
+### Styling Customization
+
+**Change item styling:**
+```javascript
+itemsHtml += `
+    <div style="your-custom-styles">
+        ${item.item_name}
+    </div>
+`;
+```
+
+**Change employee selector styling:**
+```javascript
+employeeHtml = `
+    <div style="your-custom-styles">
+        <select id="modal_receivedBySelect">
+        </select>
+    </div>
+`;
+```
+
+### JavaScript Events
+
+**After modal opens:**
+```javascript
+didOpen: function(modal) {
+    // Your code here
+    console.log('Modal opened');
+}
+```
+
+**On form submission:**
+```javascript
+.then((result) => {
+    if (result.isConfirmed) {
+        // Your code here
+    }
+})
 ```
 
 ---
 
-## Troubleshooting
+## For Designers
 
-### "Rejoin button not showing"
-```
-✓ Check employee has fly=1 in database
-✓ Verify user is HR/Admin/DeptHr role
-✓ Confirm vacation is approved status
-✓ Check page loaded correctly (refresh)
+### Modal Appearance Settings
+
+| Setting | Value | Location |
+|---------|-------|----------|
+| Modal Width | 700px | `width: '700px'` |
+| Modal Theme | Light | Uses Bootstrap styling |
+| Button Color (Submit) | Green (#28a745) | `confirmButtonColor` |
+| Button Color (Cancel) | Gray | Default |
+| Item Text Color | Dark (#2c3e50) | `color: '#2c3e50'` |
+| Success Color | Green (#28a745) | Badge `badge-success` |
+| Pending Color | Yellow (#ffc107) | Badge `badge-warning` |
+| Canceled Color | Red (#dc3545) | Badge `badge-danger` |
+| Background Color | Light (#f8f9fa) | Various divs |
+| Border Color | Light (#dee2e6) | Various divs |
+
+### Icon Changes
+
+```javascript
+// Change modal title icon:
+'<i class="mdi mdi-your-icon"></i> Delivery Details'
+
+// Change button icons:
+'<i class="mdi mdi-your-icon"></i> Text'
+
+// Available MDI icons:
+// mdi-truck-delivery (current)
+// mdi-package
+// mdi-check-circle
+// mdi-clock-outline
+// mdi-close-circle
+// mdi-cloud-upload
+// etc.
 ```
 
-### "Can't see requests in dashboard"
-```
-✓ Verify supervisor emp_id matches reports_to
-✓ Check supervisor is logged in
-✓ Ensure employees have reports_to set
-✓ Try clearing browser cache
+### Color Themes
+
+**Green Theme (Current)**
+- Submit Button: #28a745
+- Delivered Badge: #28a745
+- Highlights: Green tints
+
+**Blue Theme**
+```javascript
+confirmButtonColor: '#2196F3',
+// Change badge styles to blue
 ```
 
-### "Date validation failing"
-```
-✓ Client-side: Check browser console for errors
-✓ Server-side: Verify timezone settings match
-✓ Verify MySQL date format (YYYY-MM-DD)
-✓ Check server can calculate 3-day window
-```
-
-### "Adjustment window not working"
-```
-✓ Verify supervisor selected "Adjust"
-✓ Check database has adjustment_from_date
-✓ Confirm window is ±3 days from requested
-✓ Verify employee is within window when submitting
+**Purple Theme**
+```javascript
+confirmButtonColor: '#9c27b0',
+// Change badge styles to purple
 ```
 
 ---
 
-## Key Statistics
+## Common Issues & Solutions
 
-| Metric | Typical Value |
-|--------|---------------|
-| Approval Time | 1-2 hours |
-| Adjustment Rate | 15-20% |
-| Rejection Rate | <5% |
-| Dashboard Refresh | 30 seconds |
-| Date Window | ±3 days |
-| Max Days Late | 3 days |
+### Problem: Select2 Not Working
+**Solution**: 
+- Check Select2 library is loaded
+- Verify AJAX endpoint is accessible
+- Check browser console for errors
 
----
+### Problem: Modal Won't Close
+**Solution**:
+- Check for JavaScript errors
+- Verify SweetAlert2 is loaded
+- Try clearing browser cache
 
-## Emergency Contacts
+### Problem: File Upload Not Working
+**Solution**:
+- Check file size is < 5MB
+- Verify file type is allowed
+- Check FormData is building correctly
 
-- **Technical Issue**: [Contact IT Support]
-- **Process Question**: [Contact HR]
-- **Database Problem**: [Contact DBA]
-- **System Down**: [Contact Admin]
+### Problem: Employee Not Saving
+**Solution**:
+- Verify hidden input has value
+- Check AJAX response format
+- Verify database permissions
+
+### Problem: Modal Styling Off
+**Solution**:
+- Check Bootstrap CSS is loaded
+- Verify no CSS conflicts
+- Check viewport/responsive design
 
 ---
 
 ## Quick Links
 
-- Employee Dashboard: `/system/view_employee.php`
-- Supervisor Approvals: `/system/rejoin_approvals.php`
-- Full Documentation: `/system/REJOIN_SYSTEM_DOCUMENTATION.md`
-- Setup Guide: `/system/REJOIN_SETUP_GUIDE.php`
+- **Main File**: `view_general_request.php`
+- **AJAX Handler**: `includes/ajaxFile/ajaxGeneralRequest.php`
+- **Guide**: `DELIVERY_MODAL_GUIDE.md`
+- **Visual**: `DELIVERY_MODAL_VISUAL.md`
+- **Notes**: `IMPLEMENTATION_NOTES.md`
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: December 2025  
-**Status**: PRODUCTION READY  
-**Print & Laminate**: ✓ Recommended
+## Version Info
+
+**Version**: 2.0 (Modal-based)
+**Created**: January 31, 2025
+**Status**: Production Ready
+**Compatibility**: PHP 7.4+, jQuery 3.6+, SweetAlert2 11+
+
+---
+
+## Support
+
+For issues or questions:
+1. Check documentation files above
+2. Review console errors
+3. Check network tab in DevTools
+4. Verify database is accessible
+5. Test on staging environment first
+
+**Emergency Rollback**: 
+- Revert to previous `view_general_request.php` from version control
+- Clear browser cache
+- Test before deploying again

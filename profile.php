@@ -2424,43 +2424,103 @@ RTL Support
         <!-- ACTION CARDS -->
         <div>
             <h3 class="section-title"><i class="fa fa-folder-open"></i> <?= __('employee_records') ?></h3>
+            <?php
+            // Get counts for active/pending requests
+            $emp_id_escaped = mysqli_real_escape_string($conDB, $emprow['empid']);
+            
+            // Pending vacation requests (using current_status column)
+            $vac_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_vacation WHERE emp_id = '$emp_id_escaped' AND current_status IN ('pending_approval', 'approved')");
+            $vac_count = 0;
+            if ($vac_count_query) {
+                $vac_result = mysqli_fetch_assoc($vac_count_query);
+                $vac_count = (int)$vac_result['total'];
+            }
+            
+            // Pending loan applications (emp_loan might not have status column, count all active loans)
+            $loan_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_loan WHERE emp_id = '$emp_id_escaped' AND status LIKE 'pending%'");
+            $loan_count = 0;
+            if ($loan_count_query) {
+                $loan_result = mysqli_fetch_assoc($loan_count_query);
+                $loan_count = (int)$loan_result['total'];
+            }
+            
+            // Active assigned assets (already calculated above)
+            // $total_assets already available
+            
+            // Total salary records count (emp_salary doesn't have date filter)
+            $payroll_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_salary WHERE emp_id = '$emp_id_escaped' AND status = 1");
+            $payroll_count = 0;
+            if ($payroll_count_query) {
+                $payroll_result = mysqli_fetch_assoc($payroll_count_query);
+                $payroll_count = (int)$payroll_result['total'];
+            }
+            
+            // Notice count (all types in emp_notice, active + not deleted)
+            $warnings_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_notice WHERE emp_id = '$emp_id_escaped' AND status = 1 AND is_deleted = 0");
+            $warnings_count = 0;
+            if ($warnings_count_query) {
+                $warnings_result = mysqli_fetch_assoc($warnings_count_query);
+                $warnings_count = (int)$warnings_result['total'];
+            }
+            
+            // Evaluations table doesn't exist in current schema
+            $eval_count = 0;
+            ?>
             <div class="action-cards-grid">
-                <a href="employee_vacation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card blue">
+                <a href="employee_vacation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card blue" style="position: relative;">
+                    <?php if ($vac_count > 0): ?>
+                        <span class="badge badge-danger" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $vac_count ?></span>
+                    <?php endif; ?>
                     <i class="fa fa-calendar-check action-icon"></i>
                     <div class="action-title"><?= __('vacation_history') ?></div>
                     <div class="action-desc"><?= __('view_all_vacation_records') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
 
-                <a href="employee_loan_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card green">
+                <a href="employee_loan_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card green" style="position: relative;">
+                    <?php if ($loan_count > 0): ?>
+                        <span class="badge badge-danger" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $loan_count ?></span>
+                    <?php endif; ?>
                     <i class="fa fa-money-bill action-icon"></i>
                     <div class="action-title"><?= __('loan_history') ?></div>
                     <div class="action-desc"><?= __('view_loan_applications') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
 
-                <a href="employee_assigned_assets.php?emp_id=<?= $emprow['empid'] ?>" class="action-card info">
+                <a href="employee_assigned_assets.php?emp_id=<?= $emprow['empid'] ?>" class="action-card info" style="position: relative;">
+                    <?php if ($total_assets > 0): ?>
+                        <span class="badge badge-success" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $total_assets ?></span>
+                    <?php endif; ?>
                     <i class="fa fa-briefcase action-icon"></i>
                     <div class="action-title"><?= __('assigned_assets') ?></div>
                     <div class="action-desc"><?= __('view_assigned_assets') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
 
-                <a href="employee_payroll_slip.php?emp_id=<?= $emprow['empid'] ?>" class="action-card warning">
+                <a href="employee_payroll_slip.php?emp_id=<?= $emprow['empid'] ?>" class="action-card warning" style="position: relative;">
+                    <?php if ($payroll_count > 0): ?>
+                        <span class="badge badge-info" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $payroll_count ?></span>
+                    <?php endif; ?>
                     <i class="fa fa-file-invoice action-icon"></i>
                     <div class="action-title"><?= __('payroll_slips') ?></div>
                     <div class="action-desc"><?= __('download_salary_slips') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
 
-                <a href="employee_warnings.php?emp_id=<?= $emprow['empid'] ?>" class="action-card danger">
+                <a href="employee_warnings.php?emp_id=<?= $emprow['empid'] ?>" class="action-card danger" style="position: relative;">
+                    <?php if ($warnings_count > 0): ?>
+                        <span class="badge badge-warning" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px; background: #ff9800; color: #fff;"><?= $warnings_count ?></span>
+                    <?php endif; ?>
                     <i class="fa fa-exclamation-circle action-icon"></i>
-                    <div class="action-title"><?= __('warnings') ?></div>
-                    <div class="action-desc"><?= __('view_disciplinary_records') ?></div>
+                    <div class="action-title"><?= __('notices') ?></div>
+                    <div class="action-desc"><?= __('view_employee_notices') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
 
-                <a href="employee_evaluation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card purple">
+                <a href="employee_evaluation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card purple" style="position: relative;">
+                    <?php if ($eval_count > 0): ?>
+                        <span class="badge badge-primary" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $eval_count ?></span>
+                    <?php endif; ?>
                     <i class="fa fa-star action-icon"></i>
                     <div class="action-title"><?= __('evaluations') ?></div>
                     <div class="action-desc"><?= __('view_performance_evaluations') ?></div>

@@ -1,56 +1,37 @@
 <?php
 // File: all_notifications.php
-// Displays a list of notifications from the current week for the logged-in user.
-// MODIFICATION: Removed automatic mark-as-read on page load. Added JS to mark-as-read on click.
+// Displays all notifications for the logged-in user.
+// MODIFICATION: Shows ALL notifications (not just current week). Removed automatic mark-as-read on page load. Added JS to mark-as-read on click.
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php'; // Includes helper_functions.php now
 
-// Calculate start and end of the current week (Sunday to Saturday)
-$today = new DateTime('now', new DateTimeZone('Asia/Riyadh')); // Use appropriate timezone
-$dayOfWeek = $today->format('w'); // 0 (Sunday) to 6 (Saturday)
-
-// Calculate Sunday (start of the week)
-$startOfWeek = clone $today;
-$startOfWeek->modify('-' . $dayOfWeek . ' days');
-$startOfWeek->setTime(0, 0, 0); // Set time to beginning of the day
-
-// Calculate Saturday (end of the week)
-$endOfWeek = clone $today;
-$daysUntilSaturday = 6 - $dayOfWeek;
-$endOfWeek->modify('+' . $daysUntilSaturday . ' days');
-$endOfWeek->setTime(23, 59, 59); // Set time to end of the day
-
-$startOfWeekStr = $startOfWeek->format('Y-m-d H:i:s');
-$endOfWeekStr = $endOfWeek->format('Y-m-d H:i:s');
-
-
-// Fetch notifications for the current user *within the current week*, newest first
+// Fetch ALL notifications for the current user, newest first
 $notifications = [];
-if (isset($empid) && $empid > 0) {
+if (isset($empid) && !empty($empid)) {
     $emp_id_safe = (int)$empid;
 
-    // Use prepared statement for security
+    // Query ALL notifications (removed date filter to show all records)
     $sql = "SELECT * FROM `user_notifications`
             WHERE `emp_id` = ?
-              AND `created_at` BETWEEN ? AND ?
-            ORDER BY `created_at` DESC";
+            ORDER BY `created_at` DESC
+            LIMIT 500";
 
     $stmt = mysqli_prepare($conDB, $sql);
     if ($stmt) {
-        mysqli_stmt_bind_param($stmt, "iss", $emp_id_safe, $startOfWeekStr, $endOfWeekStr);
+        mysqli_stmt_bind_param($stmt, "i", $emp_id_safe);
         if (mysqli_stmt_execute($stmt)) {
             $result = mysqli_stmt_get_result($stmt);
             if ($result) {
                 while ($row = mysqli_fetch_assoc($result)) {
                     $notifications[] = $row;
                 }
-                 mysqli_free_result($result);
+                mysqli_free_result($result);
             } else {
-                 error_log("Error getting result for notifications: " . mysqli_stmt_error($stmt));
+                error_log("Error getting result for notifications: " . mysqli_stmt_error($stmt));
             }
         } else {
-             error_log("Error executing notification query: " . mysqli_stmt_error($stmt));
+            error_log("Error executing notification query: " . mysqli_stmt_error($stmt));
         }
         mysqli_stmt_close($stmt);
     } else {
@@ -58,15 +39,6 @@ if (isset($empid) && $empid > 0) {
         error_log("Error preparing notification query: " . mysqli_error($conDB));
     }
 }
-
-// --- REMOVED: Automatic mark *fetched* unread notifications as read block ---
-/*
-if (!empty($notifications) && isset($empid) && $empid > 0) {
-    // ... code to call mark_notifications_as_read removed ...
-}
-*/
-// --- END REMOVAL ---
-
 
 // --- HTML Structure ---
 ?>
@@ -99,43 +71,75 @@ if (!empty($notifications) && isset($empid) && $empid > 0) {
             color: #495057;
             transition: background-color 0.2s ease-in-out;
         }
-        .notification-item:hover {
-            background-color: #f8f9fa;
-            text-decoration: none;
-            color: #495057;
-        }
+
         .notification-item.unread {
-            background-color: #f0faff; /* Light blue background for unread */
-            font-weight: bold;
+            background-color: #f8f9ff;
+            font-weight: 500;
+            border-left: 3px solid #007bff;
         }
-        .notification-item .notification-title {
-            font-size: 1rem;
-            margin-bottom: 0.25rem;
+
+        .notification-item:hover {
+            background-color: #f5f5f5;
+            text-decoration: none;
         }
-        .notification-item .notification-message {
-            font-size: 0.875rem;
+
+        .notification-item.unread:hover {
+            background-color: #f0f2ff;
+        }
+
+        .notification-title {
+            font-size: 0.95rem;
+            margin: 0;
+            word-break: break-word;
+        }
+
+        .notification-message {
+            font-size: 0.85rem;
             color: #6c757d;
-            margin-bottom: 0.25rem;
+            margin: 0.5rem 0 0 0;
+            word-break: break-word;
         }
-        .notification-item .notification-time {
-            font-size: 0.75rem;
-            color: #adb5bd;
+
+        .notification-time {
+            font-size: 0.8rem;
+            color: #999;
+            white-space: nowrap;
+            margin-left: 1rem;
         }
-        /* Style to indicate processing */
+
         .notification-item.processing {
-             opacity: 0.6;
-             pointer-events: none; /* Prevent clicking again while processing */
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .notification-list-wrapper {
+            max-height: calc(100vh - 400px);
+            overflow-y: auto;
+        }
+
+        .notification-list-wrapper::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .notification-list-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .notification-list-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+
+        .notification-list-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
     </style>
-     <?php if ($is_rtl): ?>
-        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
-     <?php endif; ?>
-     <script>
-        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
-     </script>
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
+
+    <!-- Loader -->
+    <div id="preloader"><div id="status"><div class="spinner"></div></div></div>
 
     <!-- Begin page -->
     <div id="wrapper">
@@ -188,7 +192,7 @@ if (!empty($notifications) && isset($empid) && $empid > 0) {
                             <div class="card">
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between align-items-center mb-3">
-                                        <h4 class="m-t-0 header-title mb-0"><?= __('your_notifications') ?> <small>(<?= __('current_week_only') ?>)</small></h4>
+                                        <h4 class="m-t-0 header-title mb-0"><?= __('your_notifications') ?> <small>(<?= count($notifications) ?> <?= __('notification_plural') ?>)</small></h4>
                                         <button type="button" id="mark-all-read-page" class="btn btn-sm btn-outline-primary">
                                             <i class="fa fa-check-double mr-1"></i><?= function_exists('__') ? __('mark_all_read') : 'Mark all read' ?>
                                         </button>
@@ -196,7 +200,7 @@ if (!empty($notifications) && isset($empid) && $empid > 0) {
 
                                     <div class="notification-list-wrapper">
                                         <?php if (empty($notifications)): ?>
-                                            <p class="text-center text-muted"><?= __('no_notifications_found_this_week') ?></p>
+                                            <p class="text-center text-muted py-5"><?= __('no_notifications_found') ?></p>
                                         <?php else: ?>
                                             <?php foreach ($notifications as $notification):
                                                 // Determine class based on read status
@@ -205,9 +209,9 @@ if (!empty($notifications) && isset($empid) && $empid > 0) {
                                                 $time_display = ($current_lang == 'ar') ? timeAgoAr($notification['created_at']) : timeAgo($notification['created_at']);
                                             ?>
                                                 <!-- ADDED: data-id attribute -->
-                                                <a href="<?= htmlspecialchars($notification['url']) ?>"
+                                                <a href="<?= htmlspecialchars($notification['url'] ?? '#') ?>"
                                                    class="<?= $item_class ?>"
-                                                   data-id="<?= $notification['id'] ?>"
+                                                   data-id="<?= htmlspecialchars($notification['id']) ?>"
                                                    target="_blank">
                                                     <div class="d-flex justify-content-between align-items-center">
                                                          <h5 class="notification-title"><?= htmlspecialchars($notification['title']) ?></h5>

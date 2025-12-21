@@ -9099,6 +9099,21 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
 ////////////      End Rejoin Request Handling        //////////////
 ////////////////////////////////////////////////////////////////////
 
+// Safe HTML escaper (since Swal.escapeHtml is not available)
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, function (s) {
+        switch (s) {
+            case '&': return '&amp;';
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '"': return '&quot;';
+            case "'": return '&#39;';
+            default: return s;
+        }
+    });
+}
+
 (function ($) {
     "use_strict";
     $.App.init();

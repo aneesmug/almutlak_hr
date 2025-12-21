@@ -325,14 +325,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                         <div class="row">
                             <div class="col-xl-12">
                                 <div class="card-box">
-                                    <?php if($is_system_admin || $isHR_Payroll): ?>
-                                    <div class="d-flex justify-content-between align-items-center m-b-30">
-                                        <h4 class="header-title m-t-0 m-b-0"><?=__('loan_approval_center')?></h4>
-                                        <a href="upload_loan_history.php" class="btn btn-success waves-effect waves-light">
-                                            <i class="fa fa-plus"></i> <?=__('add_manual_loan_history')?>
-                                        </a>
-                                    </div>
-                                    <?php endif; ?>
+                                    <h4 class="header-title m-t-0 m-b-30"><?=__('loan_approval_center')?></h4>
                                     <div class="row filter-controls mx-auto mb-5">
                                         <div class="col-md-6 mb-3 mb-md-0">
                                             <div class="form-group">

@@ -89,9 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
             }
         }
         
-        // Get employee details and verify they belong to manager's department
+        // Get employee details and verify they belong to manager's supervision
         $stmt = $pdo->prepare("
-            SELECT e.emp_id, e.name, e.dept, e.actual_job, d.dep_nme, j.job
+            SELECT e.emp_id, e.name, e.dept, e.actual_job, e.supervisor_id, d.dep_nme, j.job
             FROM employees e
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN ac_jobs j ON e.actual_job = j.id
@@ -104,9 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
             throw new Exception('Selected employee not found or inactive.');
         }
         
-        // Verify manager has permission to evaluate this employee (same department)
-        if ($employee['dept'] != $user_dept) {
-            throw new Exception('You can only evaluate employees in your own department.');
+        // Verify manager has permission to evaluate this employee (must be their direct supervisor)
+        if ($employee['supervisor_id'] != $empid) {
+            throw new Exception('You can only evaluate employees who are directly under your supervision.');
         }
         
         // Calculate total score
@@ -180,10 +180,11 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
 }
 
 // ================================================================
-// GET DEPARTMENT EMPLOYEES FOR DROPDOWN
+// GET DIRECT SUBORDINATE EMPLOYEES FOR DROPDOWN
 // ================================================================
 $dept_employees = [];
 try {
+    // Get employees where current user is their direct supervisor
     // Exclude employees who have been evaluated in the current month
     $stmt = $pdo->prepare("
         SELECT e.emp_id, e.name, e.actual_job, j.job
@@ -192,14 +193,14 @@ try {
         LEFT JOIN emp_evaluations ev ON ev.employee_emp_id = e.emp_id 
             AND YEAR(ev.created_at) = YEAR(CURDATE()) 
             AND MONTH(ev.created_at) = MONTH(CURDATE())
-        WHERE e.dept = ? AND e.status = 1 AND e.emp_id != ?
+        WHERE e.supervisor_id = ? AND e.status = 1 AND e.emp_id != ?
             AND ev.id IS NULL
         ORDER BY e.name ASC
     ");
-    $stmt->execute([$user_dept, $empid]); // Exclude manager from list
+    $stmt->execute([$empid, $empid]); // Filter by supervisor_id instead of dept
     $dept_employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    error_log("Error fetching department employees: " . $e->getMessage());
+    error_log("Error fetching direct subordinate employees: " . $e->getMessage());
 }
 
 // ================================================================
