@@ -140,8 +140,10 @@ elseif ($ajaxType == 'canApplyVacation') {
         
         // ALSO check for any active/approved vacation (for Emergency vacation date restriction)
         // If there's an approved vacation that hasn't ended yet, get its return_date
+        // Also check if there's an active vacation with review = 'A' to show its approval chain
+        $active_vacation_inv = null;
         if (empty($active_return_date)) {
-            $sql_active = "SELECT `return_date` FROM `emp_vacation` 
+            $sql_active = "SELECT `return_date`, `request_inv_no` FROM `emp_vacation` 
                           WHERE `emp_id` = ? 
                           AND `current_status` IN ('approved', 'completed') 
                           AND `return_date` >= CURDATE() 
@@ -153,6 +155,7 @@ elseif ($ajaxType == 'canApplyVacation') {
                     $res_active = mysqli_stmt_get_result($stmt_active);
                     if ($row_active = mysqli_fetch_assoc($res_active)) {
                         $active_return_date = $row_active['return_date'] ?? null;
+                        $active_vacation_inv = $row_active['request_inv_no'] ?? null;
                     }
                     if ($res_active) mysqli_free_result($res_active);
                 }
@@ -272,6 +275,71 @@ elseif ($ajaxType == 'canApplyVacation') {
             exit;
         }
 
+        // Also show approval chain for active vacation with review = 'A'
+        if (!empty($active_vacation_inv)) {
+            $sql_active_review = "SELECT `review` FROM `emp_vacation` WHERE `request_inv_no` = ? AND `current_status` IN ('approved', 'completed') LIMIT 1";
+            $stmt_review = mysqli_prepare($conDB, $sql_active_review);
+            if ($stmt_review) {
+                mysqli_stmt_bind_param($stmt_review, "s", $active_vacation_inv);
+                if (mysqli_stmt_execute($stmt_review)) {
+                    $res_review = mysqli_stmt_get_result($stmt_review);
+                    if ($row_review = mysqli_fetch_assoc($res_review)) {
+                        if (!empty($row_review['review']) && strtoupper($row_review['review']) === 'A') {
+                            // Build approval chain for this active vacation
+                            $chain = [];
+                            if (function_exists('get_approval_chain_status')) {
+                                $rows = get_approval_chain_status($conDB, $active_vacation_inv, 'vacation_request');
+                                if (is_array($rows)) {
+                                    // Group by level to get the approver for each level
+                                    $byLevel = [];
+                                    foreach ($rows as $r) {
+                                        $lvl = isset($r['approval_level']) ? (int)$r['approval_level'] : 0;
+                                        $row_id = isset($r['id']) ? (int)$r['id'] : 0;
+                                        $aid = isset($r['approver_id']) ? (int)$r['approver_id'] : 0;
+                                        $name = isset($r['approver_name']) ? $r['approver_name'] : ('ID ' . ($aid ?: ''));
+                                        $db_status = $r['status'] ?? 'approved'; // All are approved in completed vacation
+
+                                        // Keep the latest row for each level
+                                        if (!isset($byLevel[$lvl]) || $row_id > $byLevel[$lvl]['id']) {
+                                            $byLevel[$lvl] = ['id' => $row_id, 'name' => $name, 'status' => $db_status];
+                                        }
+                                    }
+
+                                    // Build chain - all levels should be approved for completed vacation
+                                    foreach ($byLevel as $lvl => $data) {
+                                        $chain[] = ['level' => $lvl, 'name' => parseName($data['name']), 'status' => 'approved'];
+                                    }
+                                    usort($chain, function ($a, $b) {
+                                        return ($a['level'] ?? 0) <=> ($b['level'] ?? 0);
+                                    });
+                                }
+                            }
+
+                            // $human_msg = __("you_have_an_active_vacation") . " (" . htmlspecialchars($active_vacation_inv) . "). " . __("viewing_approval_chain");
+                            $human_msg = sprintf(__("you_have_an_active_vacation_viewing_approval_chain"), $active_vacation_inv);
+                            
+                            echo json_encode([
+                                'ok' => true,
+                                'can_apply' => false,
+                                'is_active_vacation' => true,
+                                'pending_inv' => $active_vacation_inv,
+                                'current_status' => 'approved',
+                                'current_level' => null,
+                                'chain' => $chain,
+                                'message' => $human_msg,
+                                'active_return_date' => $active_return_date
+                            ]);
+                            if ($res_review) mysqli_free_result($res_review);
+                            mysqli_stmt_close($stmt_review);
+                            exit;
+                        }
+                    }
+                    if ($res_review) mysqli_free_result($res_review);
+                }
+                mysqli_stmt_close($stmt_review);
+            }
+        }
+
         // Optionally return remaining balance snapshot for UI
         require_once __DIR__ . '/../../includes/get_vacation_balance.php';
         $remaining_balance = get_employee_vacation_balance($conDB, $emp_id);
@@ -312,6 +380,216 @@ elseif ($ajaxType == 'applyVacation') {
         $vacation_salary_type = escape_string($_POST['vacation_salary_type'] ?? '');
         $encash_days = isset($_POST['encash_days']) ? (float)$_POST['encash_days'] : 0;
         $encashment_salary = isset($_POST['encashment_salary']) ? (float)str_replace(',', '', $_POST['encashment_salary']) : 0;
+
+        // Build approval chain from configured settings
+        $approver_chain = [];
+        $is_annual_vacation = (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual');
+        $is_encashed_vacation = ($vac_type === 'Encashed');
+
+        if ($is_annual_vacation) {
+            // Fetch employee context (supervisor + department) for role resolution
+            $emp_ctx = ['supervisor_id' => null, 'dept' => null];
+            $stmt_ctx = mysqli_prepare($conDB, "SELECT supervisor_id, dept FROM employees WHERE emp_id = ? LIMIT 1");
+            if ($stmt_ctx) {
+                mysqli_stmt_bind_param($stmt_ctx, "i", $emp_id);
+                mysqli_stmt_execute($stmt_ctx);
+                $res_ctx = mysqli_stmt_get_result($stmt_ctx);
+                if ($res_ctx && ($row_ctx = mysqli_fetch_assoc($res_ctx))) {
+                    $emp_ctx['supervisor_id'] = $row_ctx['supervisor_id'];
+                    $emp_ctx['dept'] = $row_ctx['dept'];
+                }
+                if ($res_ctx) mysqli_free_result($res_ctx);
+                mysqli_stmt_close($stmt_ctx);
+            }
+
+            // Load configured approval chain from app_settings (approval_chain_vacation_request)
+            $settingName = "approval_chain_vacation_request";
+            $cfg_res = mysqli_query($conDB, "SELECT setting_value FROM app_settings WHERE setting_name = '" . escape_string($settingName) . "' LIMIT 1");
+            $configured_chain = [];
+            if ($cfg_res && mysqli_num_rows($cfg_res) > 0) {
+                $cfg_row = mysqli_fetch_assoc($cfg_res);
+                $decoded = json_decode($cfg_row['setting_value'], true);
+                if (is_array($decoded)) {
+                    $configured_chain = $decoded;
+                }
+            }
+            if ($cfg_res) mysqli_free_result($cfg_res);
+
+            // Helper: resolve a configured role to an approver emp_id
+            $resolveApprover = function ($role) use ($conDB, $emp_ctx) {
+                $role = trim((string)$role);
+                if ($role === '') return null;
+
+                // Direct Supervisor
+                if ($role === 'direct_supervisor') {
+                    return !empty($emp_ctx['supervisor_id']) ? (int)$emp_ctx['supervisor_id'] : null;
+                }
+
+                // Department Manager
+                if ($role === 'dept_manager' && function_exists('getDeptManager')) {
+                    $dept_mgr = getDeptManager($conDB, $emp_ctx['dept']);
+                    return ($dept_mgr && !empty($dept_mgr['emp_id'])) ? (int)$dept_mgr['emp_id'] : null;
+                }
+
+                // Default: first active employee with matching user_type
+                $stmt = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = ? AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
+                if ($stmt) {
+                    mysqli_stmt_bind_param($stmt, "s", $role);
+                    mysqli_stmt_execute($stmt);
+                    $res = mysqli_stmt_get_result($stmt);
+                    if ($res && ($row = mysqli_fetch_assoc($res))) {
+                        $empId = (int)$row['emp_id'];
+                        mysqli_free_result($res);
+                        mysqli_stmt_close($stmt);
+                        return $empId > 0 ? $empId : null;
+                    }
+                    if ($res) mysqli_free_result($res);
+                    mysqli_stmt_close($stmt);
+                }
+                return null;
+            };
+
+            if (!empty($configured_chain)) {
+                foreach ($configured_chain as $step) {
+                    $role = $step['user_type'] ?? '';
+                    $approverId = $resolveApprover($role);
+                    if ($approverId && !in_array($approverId, $approver_chain, true)) {
+                        $approver_chain[] = $approverId;
+                    }
+                }
+            }
+
+            // Fallback to provided first approver if config produced nothing
+            if (empty($approver_chain) && $first_approver_id > 0) {
+                $approver_chain[] = $first_approver_id;
+            }
+
+            // If we have a chain, override first approver with the configured first step
+            if (!empty($approver_chain)) {
+                $first_approver_id = (int)$approver_chain[0];
+            }
+        }
+
+        // ENCASHED VACATION: separate logic, always follow app_settings and append Finance Manager at the end
+        if ($is_encashed_vacation) {
+            // Reset chain for encashed flow
+            $approver_chain = [];
+
+            // Fetch employee context (supervisor + department) for role resolution
+            $emp_ctx = ['supervisor_id' => null, 'dept' => null];
+            $stmt_ctx = mysqli_prepare($conDB, "SELECT supervisor_id, dept FROM employees WHERE emp_id = ? LIMIT 1");
+            if ($stmt_ctx) {
+                mysqli_stmt_bind_param($stmt_ctx, "i", $emp_id);
+                mysqli_stmt_execute($stmt_ctx);
+                $res_ctx = mysqli_stmt_get_result($stmt_ctx);
+                if ($res_ctx && ($row_ctx = mysqli_fetch_assoc($res_ctx))) {
+                    $emp_ctx['supervisor_id'] = $row_ctx['supervisor_id'];
+                    $emp_ctx['dept'] = $row_ctx['dept'];
+                }
+                if ($res_ctx) mysqli_free_result($res_ctx);
+                mysqli_stmt_close($stmt_ctx);
+            }
+
+            // Load configured approval chain from app_settings (approval_chain_encashed_vacation)
+            $settingName = "approval_chain_encashed_vacation";
+            $cfg_res = mysqli_query($conDB, "SELECT setting_value FROM app_settings WHERE setting_name = '" . escape_string($settingName) . "' LIMIT 1");
+            $configured_chain = [];
+            if ($cfg_res && mysqli_num_rows($cfg_res) > 0) {
+                $cfg_row = mysqli_fetch_assoc($cfg_res);
+                $decoded = json_decode($cfg_row['setting_value'], true);
+                if (is_array($decoded)) {
+                    $configured_chain = $decoded;
+                }
+            }
+            if ($cfg_res) mysqli_free_result($cfg_res);
+
+            // Helper: resolve a configured role to an approver emp_id
+            $resolveApprover = function ($role) use ($conDB, $emp_ctx) {
+                $role = trim((string)$role);
+                if ($role === '') return null;
+
+                // Direct Supervisor
+                if ($role === 'direct_supervisor') {
+                    return !empty($emp_ctx['supervisor_id']) ? (int)$emp_ctx['supervisor_id'] : null;
+                }
+
+                // Department Manager
+                if ($role === 'dept_manager' && function_exists('getDeptManager')) {
+                    $dept_mgr = getDeptManager($conDB, $emp_ctx['dept']);
+                    return ($dept_mgr && !empty($dept_mgr['emp_id'])) ? (int)$dept_mgr['emp_id'] : null;
+                }
+
+                // Finance Manager - find user with user_type = 'finance', emp_type = 'Manager', dept = 2
+                if ($role === 'finance_manager') {
+                    $stmt = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = 'finance' AND al.emp_type = 'Manager' AND al.dept = 2 AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
+                    if ($stmt) {
+                        mysqli_stmt_execute($stmt);
+                        $res = mysqli_stmt_get_result($stmt);
+                        if ($res && ($row = mysqli_fetch_assoc($res))) {
+                            $empId = (int)$row['emp_id'];
+                            mysqli_free_result($res);
+                            mysqli_stmt_close($stmt);
+                            return $empId > 0 ? $empId : null;
+                        }
+                        if ($res) mysqli_free_result($res);
+                        mysqli_stmt_close($stmt);
+                    }
+                    return null;
+                }
+
+                // Default: first active employee with matching user_type
+                $stmt = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = ? AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
+                if ($stmt) {
+                    mysqli_stmt_bind_param($stmt, "s", $role);
+                    mysqli_stmt_execute($stmt);
+                    $res = mysqli_stmt_get_result($stmt);
+                    if ($res && ($row = mysqli_fetch_assoc($res))) {
+                        $empId = (int)$row['emp_id'];
+                        mysqli_free_result($res);
+                        mysqli_stmt_close($stmt);
+                        return $empId > 0 ? $empId : null;
+                    }
+                    if ($res) mysqli_free_result($res);
+                    mysqli_stmt_close($stmt);
+                }
+                return null;
+            };
+
+            // Build chain from settings (skip finance_manager here to append at end)
+            if (!empty($configured_chain)) {
+                foreach ($configured_chain as $step) {
+                    $role = $step['user_type'] ?? '';
+                    if ($role === 'finance_manager') {
+                        continue; // will append Finance Manager at the end
+                    }
+                    $approverId = $resolveApprover($role);
+                    if ($approverId && !in_array($approverId, $approver_chain, true)) {
+                        $approver_chain[] = $approverId;
+                    }
+                }
+            }
+
+            // Always append Finance Manager at the end (per requirement)
+            $finance_mgr_id = $resolveApprover('finance_manager');
+            if ($finance_mgr_id && !in_array($finance_mgr_id, $approver_chain, true)) {
+                $approver_chain[] = $finance_mgr_id;
+            }
+
+            // Fallback to provided first approver if config+finance produced nothing
+            if (empty($approver_chain) && $first_approver_id > 0) {
+                $approver_chain[] = $first_approver_id;
+            }
+
+            // If we have a chain, override first approver with the configured first step
+            if (!empty($approver_chain)) {
+                $first_approver_id = (int)$approver_chain[0];
+            }
+        }
+
+        // For non-annual or if config missing, default chain starts with provided first approver
+        if (empty($approver_chain) && $first_approver_id > 0) {
+            $approver_chain = [$first_approver_id];
+        }
 
         // 2. Validate critical data
         if (empty($emp_id) || empty($vac_type) || empty($first_approver_id)) {
@@ -706,263 +984,120 @@ elseif ($ajaxType == 'applyVacation') {
         // Deduct immediately upon submission to reserve the days
         $should_deduct_balance = false;
         
-        // Annual vacation should deduct from balance
-        if (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual') {
-            $should_deduct_balance = true;
-        }
-        
-        // Encashment should also deduct from balance
-        if ($is_encashment_request) {
-            $should_deduct_balance = true;
-        }
-        
-        // Emergency vacation does NOT deduct (it's unpaid)
-        if ($is_emergency_vacation) {
-            $should_deduct_balance = false;
-        }
-        
-        if ($should_deduct_balance && $vacdays > 0) {
-            // Get the current balance record for this employee
-            $sql_get_balance = "SELECT `id`, `total_days`, `used_days`, `remaining_balance`, `available_balance` 
-                                FROM `emp_vacation_balance` 
-                                WHERE `emp_id` = ? 
-                                ORDER BY `last_updated` DESC 
-                                LIMIT 1";
-            $stmt_get_balance = mysqli_prepare($conDB, $sql_get_balance);
-            
-            if ($stmt_get_balance) {
-                mysqli_stmt_bind_param($stmt_get_balance, "s", $emp_id);
-                mysqli_stmt_execute($stmt_get_balance);
-                $res_balance = mysqli_stmt_get_result($stmt_get_balance);
-                
-                if ($res_balance && ($row_balance = mysqli_fetch_assoc($res_balance))) {
-                    $balance_id = (int)$row_balance['id'];
-                    $current_used_days = (float)$row_balance['used_days'];
-                    $current_remaining = (float)$row_balance['remaining_balance'];
-                    $current_available = (float)$row_balance['available_balance'];
-                    
-                    // Calculate new values after deduction
-                    $new_used_days = $current_used_days + $vacdays;
-                    $new_remaining = max(0, $current_remaining - $vacdays);
-                    $new_available = max(0, $current_available - $vacdays);
-                    
-                    // Update the balance record
-                    $sql_update_balance = "UPDATE `emp_vacation_balance` 
-                                          SET `used_days` = ?, 
-                                              `remaining_balance` = ?, 
-                                              `available_balance` = ?,
-                                              `last_updated` = NOW() 
-                                          WHERE `id` = ?";
-                    $stmt_update_balance = mysqli_prepare($conDB, $sql_update_balance);
-                    
-                    if ($stmt_update_balance) {
-                        mysqli_stmt_bind_param($stmt_update_balance, "dddi", $new_used_days, $new_remaining, $new_available, $balance_id);
-                        if (mysqli_stmt_execute($stmt_update_balance)) {
-                            // Balance successfully deducted
-                            // Log the deduction
-                            ActivityLogger::logUpdate('VacationBalance', 'ajaxVacation.php', $balance_id, 
-                                "Deducted {$vacdays} days for request {$request_inv_no}. New remaining: {$new_remaining}", 
-                                'emp_vacation_balance');
-                        } else {
-                            // Failed to update balance, but don't fail the whole request
-                            error_log("Failed to deduct vacation balance for emp_id {$emp_id}: " . mysqli_stmt_error($stmt_update_balance));
-                        }
-                        mysqli_stmt_close($stmt_update_balance);
-                    }
-                } else {
-                    // No balance record found - this shouldn't happen if validation was done correctly
-                    error_log("No vacation balance record found for emp_id {$emp_id} when trying to deduct {$vacdays} days");
-                }
-                
-                if ($res_balance) mysqli_free_result($res_balance);
-                mysqli_stmt_close($stmt_get_balance);
-            }
-        }
+        // NOTE: Balance deduction is now handled ONLY on final approval via update_vacation_balance_on_approval()
+        // Do NOT deduct from emp_vacation_balance when applying - only at final approval
+        // This prevents duplicate deductions when multiple approval stages occur
 
-        // 9. Save the approval chain
-        $approver_chain = [$first_approver_id];
-        if (!save_approval_chain($conDB, $request_inv_no, 'vacation_request', $approver_chain)) {
+        // 9. Create approval chain using ApprovalChainManager
+        require_once __DIR__ . '/../ApprovalChainManager.php';
+        $chainManager = new ApprovalChainManager($conDB, $pdo);
+        
+        // Get employee department for approval chain
+        $dept_id = null;
+        $dept_stmt = mysqli_prepare($conDB, "SELECT dept FROM employees WHERE emp_id = ? LIMIT 1");
+        if ($dept_stmt) {
+            mysqli_stmt_bind_param($dept_stmt, "i", $emp_id);
+            mysqli_stmt_execute($dept_stmt);
+            $dept_res = mysqli_stmt_get_result($dept_stmt);
+            if ($dept_row = mysqli_fetch_assoc($dept_res)) {
+                $dept_id = $dept_row['dept'];
+            }
+            if ($dept_res) mysqli_free_result($dept_res);
+            mysqli_stmt_close($dept_stmt);
+        }
+        
+        $chainResult = $chainManager->createApprovalChain(
+            'vacation_request',
+            $request_inv_no,
+            $emp_id,
+            $dept_id
+        );
+        
+        if (!$chainResult['success']) {
             throw new Exception(sprintf(__("vacation_request_created_but_failed_to_save_approval_chain"), htmlspecialchars($request_inv_no)));
         }
+        
+        $first_approver = $chainResult['first_approver'];
 
-        // 9b. Pre-build of remaining approvers DISABLED to avoid duplicate approver rows.
-        // The next approvers will be appended dynamically on approval using the chain provided by the approver (or auto-detected if none provided).
-        // Keeping the old logic wrapped in a conditional that is always false for reference and quick rollback if needed.
-        if (false) try {
-            $additional_approvers = [];
-
-            // Helper closure to push unique approvers (skip first approver & duplicates)
-            $pushApprover = function ($empId) use (&$additional_approvers, $first_approver_id) {
-                $empId = (int)$empId;
-                if ($empId > 0 && $empId !== (int)$first_approver_id && !in_array($empId, $additional_approvers, true)) {
-                    $additional_approvers[] = $empId;
+        // ENCASHED: ensure Finance Manager is appended at the end of the approval chain (per requirement)
+        if ($is_encashed_vacation) {
+            // Resolve Finance Manager (user_type = finance, emp_type = Manager, dept = 2)
+            $finance_mgr_id = null;
+            $stmt_fm = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = 'finance' AND al.emp_type = 'Manager' AND al.dept = 2 AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
+            if ($stmt_fm) {
+                mysqli_stmt_execute($stmt_fm);
+                $res_fm = mysqli_stmt_get_result($stmt_fm);
+                if ($res_fm && ($row_fm = mysqli_fetch_assoc($res_fm))) {
+                    $finance_mgr_id = (int)$row_fm['emp_id'];
                 }
-            };
-
-            // STEP A: HR Senior BP (user_type = 'hr_senior_bp')
-            $res_hr_senior = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_senior_bp' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-            if ($res_hr_senior && ($row_hr_senior = mysqli_fetch_assoc($res_hr_senior))) {
-                $pushApprover($row_hr_senior['emp_id']);
-            }
-            if ($res_hr_senior) mysqli_free_result($res_hr_senior);
-
-            // STEP B: HR BP (user_type = 'hr_bp')
-            $res_hr_bp = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_bp' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-            if ($res_hr_bp && ($row_hr_bp = mysqli_fetch_assoc($res_hr_bp))) {
-                $pushApprover($row_hr_bp['emp_id']);
-            }
-            if ($res_hr_bp) mysqli_free_result($res_hr_bp);
-
-            // STEP C: Asset Clearance Teams (based on assigned assets)
-            $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea JOIN assets a ON ea.asset_id = a.id WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
-            $stmt_assets = mysqli_prepare($conDB, $sql_assets);
-            if ($stmt_assets) {
-                // Bind as string (emp_id may be varchar in schema)
-                mysqli_stmt_bind_param($stmt_assets, "s", $emp_id);
-                mysqli_stmt_execute($stmt_assets);
-                $res_assets = mysqli_stmt_get_result($stmt_assets);
-                $needs_it = false;
-                $needs_admin = false;
-                $needs_transport = false;
-                while ($res_assets && ($asset_row = mysqli_fetch_assoc($res_assets))) {
-                    $asset_name = strtolower(trim($asset_row['asset_name']));
-                    if (strpos($asset_name, 'laptop') !== false || strpos($asset_name, 'computer') !== false) {
-                        $needs_it = true;
-                    }
-                    if (strpos($asset_name, 'mobile') !== false || strpos($asset_name, 'phone') !== false || strpos($asset_name, 'sim') !== false) {
-                        $needs_admin = true;
-                    }
-                    if (strpos($asset_name, 'car') !== false || strpos($asset_name, 'vehicle') !== false) {
-                        $needs_transport = true;
-                    }
-                }
-                if ($res_assets) mysqli_free_result($res_assets);
-                mysqli_stmt_close($stmt_assets);
-
-                if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
-                    $deptLookup = ['IT' => 'Information Technology', 'Administration' => 'Administration', 'Transportation' => 'Transportation'];
-                    if ($needs_it) {
-                        $it_dept_id = get_department_id_by_name($conDB, $deptLookup['IT']);
-                        if ($it_dept_id) {
-                            $it_mgr = getDeptManager($conDB, $it_dept_id);
-                            if ($it_mgr && !empty($it_mgr['emp_id'])) $pushApprover($it_mgr['emp_id']);
-                        }
-                    }
-                    if ($needs_admin) {
-                        $admin_dept_id = get_department_id_by_name($conDB, $deptLookup['Administration']);
-                        if ($admin_dept_id) {
-                            $admin_mgr = getDeptManager($conDB, $admin_dept_id);
-                            if ($admin_mgr && !empty($admin_mgr['emp_id'])) $pushApprover($admin_mgr['emp_id']);
-                        }
-                    }
-                    if ($needs_transport) {
-                        $transport_dept_id = get_department_id_by_name($conDB, $deptLookup['Transportation']);
-                        if ($transport_dept_id) {
-                            $transport_mgr = getDeptManager($conDB, $transport_dept_id);
-                            if ($transport_mgr && !empty($transport_mgr['emp_id'])) $pushApprover($transport_mgr['emp_id']);
-                        }
-                    }
-                }
+                if ($res_fm) mysqli_free_result($res_fm);
+                mysqli_stmt_close($stmt_fm);
             }
 
-            // STEP D: HR Payroll (FINAL APPROVAL for ALL vacation types)
-            // ALL vacations (Local, Fly Annual, Fly Emergency, Encash) must have final approval from HR Payroll
-            // HR Payroll is ALWAYS the final step regardless of vacation type or salary type
-            $res_hr_payroll = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-            if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
-                $pushApprover($row_hr_payroll['emp_id']);
-            }
-            if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
-
-            // STEP E: GR Officer (ONLY if fly_type = 'annual' AND vac_type = 'Fly')
-            if ($fly_type === 'annual' && strtolower($vac_type) === 'fly') {
-                // $res_gr = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='gr_officer' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-                $res_gr = mysqli_query($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type='hr_payroll' AND e.status=1 ORDER BY e.emp_id ASC LIMIT 1");
-                if ($res_gr && ($row_gr = mysqli_fetch_assoc($res_gr))) {
-                    $pushApprover($row_gr['emp_id']);
-                }
-                if ($res_gr) mysqli_free_result($res_gr);
-            }
-
-            if (!empty($additional_approvers)) {
-                // Fetch request_type_id for vacation_request
+            if ($finance_mgr_id) {
+                // Determine request_type_id for vacation_request
+                $request_type_id = 3; // default fallback
                 $type_q = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name='vacation_request' LIMIT 1");
                 if ($type_q && ($type_row = mysqli_fetch_assoc($type_q))) {
                     $request_type_id = (int)$type_row['id'];
                     mysqli_free_result($type_q);
-
-                    // Determine next level start (first approver already level 1)
-                    $level = 2;
-                    mysqli_begin_transaction($conDB);
-                    $ok = true;
-                    foreach ($additional_approvers as $aid) {
-                        $aid_safe = (int)$aid;
-                        $sqlIns = "INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')";
-                        $stmtIns = mysqli_prepare($conDB, $sqlIns);
-                        if ($stmtIns) {
-                            mysqli_stmt_bind_param($stmtIns, "siii", $request_inv_no, $request_type_id, $aid_safe, $level);
-                            if (!mysqli_stmt_execute($stmtIns)) {
-                                $last_error = mysqli_error($conDB);
-                                throw new Exception(__('database_error_during_overlap_check') . $last_error);
-                                $ok = false;
-                                mysqli_stmt_close($stmtIns);
-                                break;
-                            }
-                            mysqli_stmt_close($stmtIns);
-                            $level++;
-                        } else {
-                            $last_error = mysqli_error($conDB);
-                            throw new Exception(__('database_error_during_overlap_check') . $last_error);
-                            $ok = false;
-                            break;
-                        }
-                    }
-                    if ($ok) {
-                        mysqli_commit($conDB);
-                        $last_error = mysqli_error($conDB);
-                        throw new Exception(__('database_error_during_overlap_check') . $last_error);
-                    } else {
-                        mysqli_rollback($conDB);
-                        $last_error = mysqli_error($conDB);
-                        throw new Exception(__('database_error_during_overlap_check') . $last_error);
-                    }
-                } else {
-                    if ($type_q) mysqli_free_result($type_q);
-                    $last_error = mysqli_error($conDB);
-                    throw new Exception(__('database_error_during_overlap_check') . $last_error);
                 }
-            } else {
-                $last_error = mysqli_error($conDB);
-                throw new Exception(__('database_error_during_overlap_check') . $last_error);
+
+                // Skip if Finance Manager already present
+                $exists_stmt = mysqli_prepare($conDB, "SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? LIMIT 1");
+                $already_present = false;
+                if ($exists_stmt) {
+                    mysqli_stmt_bind_param($exists_stmt, "sii", $request_inv_no, $request_type_id, $finance_mgr_id);
+                    mysqli_stmt_execute($exists_stmt);
+                    mysqli_stmt_store_result($exists_stmt);
+                    $already_present = mysqli_stmt_num_rows($exists_stmt) > 0;
+                    mysqli_stmt_close($exists_stmt);
+                }
+
+                if (!$already_present) {
+                    // Find current max approval level
+                    $max_level = 1;
+                    $max_stmt = mysqli_prepare($conDB, "SELECT MAX(approval_level) as max_lvl FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ?");
+                    if ($max_stmt) {
+                        mysqli_stmt_bind_param($max_stmt, "si", $request_inv_no, $request_type_id);
+                        mysqli_stmt_execute($max_stmt);
+                        $max_res = mysqli_stmt_get_result($max_stmt);
+                        if ($max_res && ($max_row = mysqli_fetch_assoc($max_res))) {
+                            $max_level = (int)($max_row['max_lvl'] ?? 1);
+                        }
+                        if ($max_res) mysqli_free_result($max_res);
+                        mysqli_stmt_close($max_stmt);
+                    }
+
+                    $insert_stmt = mysqli_prepare($conDB, "INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')");
+                    if ($insert_stmt) {
+                        $next_level = $max_level + 1;
+                        mysqli_stmt_bind_param($insert_stmt, "siii", $request_inv_no, $request_type_id, $finance_mgr_id, $next_level);
+                        mysqli_stmt_execute($insert_stmt);
+                        mysqli_stmt_close($insert_stmt);
+                    }
+                }
             }
-        } catch (Exception $chainEx) {
-            $last_error = mysqli_error($conDB);
-            throw new Exception(__('database_error_during_overlap_check') . $last_error);
-            // Non-fatal: request remains valid with first approver only.
         }
 
         // 10. Send success response with next approver name (where it will wait)
         $pending_with_text = '';
-        if (function_exists('getEmployeeDetailsForApproval') && !empty($first_approver_id)) {
-            $first_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver_id);
+        if ($first_approver && !empty($first_approver['approver_id'])) {
+            $first_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver['approver_id']);
             if ($first_details && !empty($first_details['name'])) {
                 $label = function_exists('__') ? __('pending_with') : 'Pending with';
                 $pending_with_text = " $label: " . $first_details['name'] . ".";
 
-                // --- [NEW] SEND NOTIFICATION TO FIRST APPROVER ---
+                // Notify first approver using ApprovalChainManager
+                $chainManager->notifyApprover(
+                    $first_approver['approver_id'],
+                    __("new_vacation_request_pending_your_approval"),
+                    sprintf(__("new_vacation_request_from_employee_pending_your_approval"), htmlspecialchars($request_inv_no), htmlspecialchars($emp_id)),
+                    "all_applied_vac.php?status=my_pending"
+                );
 
-
-                if (function_exists('create_browser_notification')) {
-                    $notification_title = __("new_vacation_request_pending_your_approval");
-                    $notification_message = sprintf(__("new_vacation_request_from_employee_pending_your_approval"), htmlspecialchars($request_inv_no), htmlspecialchars($emp_id));
-                    $notification_url = "all_applied_vac.php?status=my_pending";
-                    $notif_result = create_browser_notification($conDB, $first_approver_id, $notification_title, $notification_message, $notification_url);
-                } else {
-                }
-
+                // Send email notification
                 if (!empty($first_details['email']) && function_exists('send_approval_email')) {
-
-
                     // Get employee name for template
                     $employee_name = 'Employee';
                     $emp_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$emp_id' LIMIT 1");
@@ -986,23 +1121,11 @@ elseif ($ajaxType == 'applyVacation') {
                     ];
 
                     $email_subject = __("new_vacation_request_pending_approval");
-
                     $email_result = send_approval_email($conDB, $first_details['email'], $first_details['name'], $email_subject, 'vacation_request', $template_data);
-                } else {
-                    if (empty($first_details['email'])) {
-                    }
-                    if (!function_exists('send_approval_email')) {
-                    }
                 }
-                // --- [END NEW] ---
-            } else {
-            }
-        } else {
-            if (!function_exists('getEmployeeDetailsForApproval')) {
-            }
-            if (empty($first_approver_id)) {
             }
         }
+        
         send_json_response("Success!", sprintf(__("your_vacation_request_submitted_for_approval"), htmlspecialchars($request_inv_no)) . $pending_with_text, "success");
     } catch (Exception $e) {
         send_json_response("Error", __("an_error_occurred") . ": " . $e->getMessage(), "error", 500);
@@ -1017,6 +1140,7 @@ elseif ($ajaxType == 'approveVacation') {
     try {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
         $approver_chain = (array)($_POST['approver_chain'] ?? []);
+        $asset_checker_emp_id = (int)($_POST['asset_checker_emp_id'] ?? 0);
 
         // Payment and travel details (sent by HR Assistant or GR Officer)
         $departure_date = trim($_POST['departure_date'] ?? '');
@@ -1047,21 +1171,282 @@ elseif ($ajaxType == 'approveVacation') {
             throw new Exception(__("session_expired_please_log_in_again"));
         }
 
-        // 1. Get the request_inv_no from the vacation ID
-        $query_inv = mysqli_query($conDB, "SELECT `request_inv_no` FROM `emp_vacation` WHERE `id` = " . $vacation_id);
+        // 1. Get the request_inv_no and payment-related fields from the vacation ID
+        $query_inv = mysqli_query($conDB, "SELECT `request_inv_no`, `vac_type`, `fly_type`, `payment_status`, `is_payment_completed`, `departure_date`, `arrival_date`, `ticket_pay`, `permit_fee` FROM `emp_vacation` WHERE `id` = " . $vacation_id);
         if (!$query_inv || mysqli_num_rows($query_inv) == 0) {
             if ($query_inv) mysqli_free_result($query_inv);
             throw new Exception("Invalid Vacation ID.");
         }
         $row_inv = mysqli_fetch_assoc($query_inv);
         $request_inv_no = $row_inv['request_inv_no'];
+        $vac_type = $row_inv['vac_type'] ?? '';
+        $fly_type = $row_inv['fly_type'] ?? '';
+        $payment_status = $row_inv['payment_status'] ?? 'pending_payment';
+        $is_payment_completed = (int)($row_inv['is_payment_completed'] ?? 0);
+        // Payment fields that must be present before final approval
+        $has_departure = !empty($row_inv['departure_date']);
+        $has_arrival = !empty($row_inv['arrival_date']);
+        $ticket_pay_val = (float)($row_inv['ticket_pay'] ?? 0);
+        $permit_fee_val = (float)($row_inv['permit_fee'] ?? 0);
         mysqli_free_result($query_inv);
+        
+        // 1.1 CHECK (UPDATED): HR Payroll can approve Fly + Annual without upfront payment.
+        // Payment and travel details will be handled after approval via a separate action.
+        // Get current user's role and department
+        $user_role = '';
+        $current_user_dept = null;
+        $user_role_query = mysqli_query($conDB, "SELECT al.user_type, e.dept FROM admin_login al LEFT JOIN employees e ON al.emp_id = e.emp_id WHERE al.emp_id = '{$current_user_id}'");
+        if ($user_role_query && mysqli_num_rows($user_role_query) > 0) {
+            $user_data = mysqli_fetch_assoc($user_role_query);
+            $user_role = $user_data['user_type'];
+            $current_user_dept = isset($user_data['dept']) ? (int)$user_data['dept'] : null;
+            mysqli_free_result($user_role_query);
+            // No enforcement here; allow approval to proceed.
+        }
 
-        // 2. Call the main approval handler
+        // Normalize approver chain into integers and enforce uniqueness early
+        $approver_chain = array_values(array_filter(array_map('intval', $approver_chain)));
+        $asset_checker_added = false;
+
+        // Asset checker selection (IT/Administration/Transportation managers only)
+        // NOTE: Asset checker is NOT applicable for Encashed vacations
+        $asset_manager_departments = [1, 6, 17];
+        // Treat any active staff within the asset departments as eligible to assign a checker;
+        // frontend is already restricted to those departments.
+        $is_asset_manager = ($current_user_dept !== null && in_array($current_user_dept, $asset_manager_departments, true));
+        $is_encashed_vacation = ($vac_type === 'Encashed');
+
+        if ($asset_checker_emp_id > 0) {
+            // Check: Asset checker selection NOT allowed for Encashed vacations
+            if ($is_encashed_vacation) {
+                throw new Exception('Asset checker selection is not applicable for Encashed vacations.');
+            }
+
+            if (!$is_asset_manager) {
+                throw new Exception('Only IT, Administration, or Transportation managers can assign an asset checker.');
+            }
+
+            // Validate asset checker exists and belongs to the same department
+            $checker_dept = null;
+            $checker_status = null;
+            $checker_stmt = mysqli_prepare($conDB, "SELECT dept, status FROM employees WHERE emp_id = ? LIMIT 1");
+            if ($checker_stmt) {
+                mysqli_stmt_bind_param($checker_stmt, "i", $asset_checker_emp_id);
+                mysqli_stmt_execute($checker_stmt);
+                $checker_res = mysqli_stmt_get_result($checker_stmt);
+                if ($checker_res && ($checker_row = mysqli_fetch_assoc($checker_res))) {
+                    $checker_dept = isset($checker_row['dept']) ? (int)$checker_row['dept'] : null;
+                    $checker_status = (int)($checker_row['status'] ?? 0);
+                }
+                if ($checker_res) mysqli_free_result($checker_res);
+                mysqli_stmt_close($checker_stmt);
+            }
+
+            if ($checker_status !== 1) {
+                throw new Exception('Selected asset checker is not active.');
+            }
+            if ($checker_dept !== $current_user_dept) {
+                throw new Exception('Asset checker must belong to your department.');
+            }
+
+            // Don't add asset checker to chain here - it will be added after approval with correct level
+            // $approver_chain = array_merge([$asset_checker_emp_id], $approver_chain);
+            $asset_checker_added = true;
+        }
+
+        // Remove duplicates and self-assignments
+        $approver_chain = array_values(array_filter(array_unique($approver_chain), function ($id) use ($current_user_id) {
+            return $id > 0 && $id !== (int)$current_user_id;
+        }));
+
+        // 2. Detect the actual request type (vacation_request or excuse_leave)
+        $type_detect_query = mysqli_query($conDB, "SELECT art.type_name, art.id AS type_id FROM request_approvers ra JOIN approval_request_types art ON ra.request_type_id = art.id WHERE ra.request_inv_no = '" . escape_string($request_inv_no) . "' LIMIT 1");
+        $detected_type = 'vacation_request'; // Default fallback
+        $detected_type_id = null;
+        if ($type_detect_query && mysqli_num_rows($type_detect_query) > 0) {
+            $type_row = mysqli_fetch_assoc($type_detect_query);
+            $detected_type = $type_row['type_name'];
+            $detected_type_id = isset($type_row['type_id']) ? (int)$type_row['type_id'] : null;
+            mysqli_free_result($type_detect_query);
+        }
+        
+        // 2.1 Check if Finance Manager is selecting a payer for this vacation
+        $payer_emp_id = (int)($_POST['payer_emp_id'] ?? 0);
+        $is_finance_manager = ($user_role === 'finance');
+        
+        if ($is_finance_manager && $payer_emp_id > 0) {
+            // Finance Manager is approving and selecting a payer
+            require_once __DIR__ . '/../ApprovalChainManager.php';
+            $chainManager = new ApprovalChainManager($conDB, $pdo);
+            
+            try {
+                // Use ApprovalChainManager to handle payer selection
+                $payerSelectionResult = $chainManager->approveWithPayerSelection(
+                    $request_inv_no,
+                    $current_user_id,
+                    $payer_emp_id,
+                    $approval_comment ?: 'Approved. Finance payer selected for payment processing.'
+                );
+                
+                // Payer information is now recorded in request_approvers table (no need to update emp_vacation)
+                
+                error_log("Vacation $request_inv_no: Payer selection via ApprovalChainManager - Payer: {$payer_emp_id}");
+                
+                // Notify payer about assignment via browser notification
+                $chainManager->notifyApprover(
+                    $payer_emp_id,
+                    'Vacation Request - Payment Processing Assignment',
+                    'You have been assigned to process payment for vacation request. Please record the payment amount and proof.',
+                    'all_applied_vac.php'
+                );
+                
+                // Send email to payer
+                if (!empty($payerSelectionResult['payer']['email']) && function_exists('send_approval_email')) {
+                    $vacation_details_stmt = $pdo->prepare("
+                        SELECT ev.*, e.name as employee_name 
+                        FROM emp_vacation ev
+                        LEFT JOIN employees e ON ev.emp_id = e.emp_id
+                        WHERE ev.request_inv_no = :inv_no
+                        LIMIT 1
+                    ");
+                    $vacation_details_stmt->execute([':inv_no' => $request_inv_no]);
+                    $vacation_details = $vacation_details_stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($vacation_details) {
+                        $base_url = 'https://hr.almutlaksystem.com';
+                        $payer_name = $payerSelectionResult['payer']['name'] ?? 'Finance Staff';
+                        $employee_name = $vacation_details['employee_name'] ?? 'Employee';
+                        $emp_id = $vacation_details['emp_id'] ?? 'N/A';
+                        $vacation_type = ucfirst($vacation_details['vac_type'] ?? 'Vacation');
+                        $fly_type = !empty($vacation_details['fly_type']) ? ucfirst($vacation_details['fly_type']) : '';
+                        $start_date = $vacation_details['start_date'] ?? 'N/A';
+                        $return_date = $vacation_details['return_date'] ?? 'N/A';
+                        $vacation_days = $vacation_details['vacdays'] ?? 'N/A';
+                        $replacement = $vacation_details['replacement_person'] ?? 'N/A';
+                        
+                        // Format dates for display
+                        $start_date_formatted = ($start_date !== 'N/A') ? date('d M Y', strtotime($start_date)) : 'N/A';
+                        $return_date_formatted = ($return_date !== 'N/A') ? date('d M Y', strtotime($return_date)) : 'N/A';
+                        
+                        $template_data = [
+                            'APPROVER_NAME' => $payer_name,
+                            'REQUEST_ID' => $request_inv_no,
+                            'EMPLOYEE_NAME' => $employee_name,
+                            'EMPLOYEE_ID' => $emp_id,
+                            'VACATION_TYPE' => $fly_type ? "$vacation_type ($fly_type)" : $vacation_type,
+                            'START_DATE' => $start_date_formatted,
+                            'RETURN_DATE' => $return_date_formatted,
+                            'VACATION_DAYS' => $vacation_days,
+                            'REPLACEMENT_PERSON' => $replacement,
+                            'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending',
+                            'EMAIL_MESSAGE' => 'You have been assigned by Finance Manager to process the payment for this vacation request. Please review all details, record the payment amount, confirm the salary deduction details, and upload payment proof to complete the transaction. Click the link above to process this request.'
+                        ];
+                        
+                        $email_subject = "Vacation Payment Processing Assignment - " . $request_inv_no . " (" . $employee_name . ")";
+                        send_approval_email($conDB, $payerSelectionResult['payer']['email'], $payer_name, $email_subject, 'vacation_request', $template_data);
+                    }
+                }
+                
+                // Return success - payer selection is complete, don't call normal approval handler
+                echo json_encode([
+                    'status' => 'success',
+                    'title' => 'Payer Assigned Successfully',
+                    'message' => 'Finance payer has been assigned. Awaiting payment details.',
+                    'type' => 'success'
+                ]);
+                return;
+            } catch (Exception $e) {
+                // Log error and return failure
+                error_log("Vacation $request_inv_no: Error in approveWithPayerSelection: " . $e->getMessage());
+                echo json_encode([
+                    'status' => 'error',
+                    'title' => 'Error',
+                    'message' => 'Error assigning payer: ' . $e->getMessage(),
+                    'type' => 'error'
+                ]);
+                return;
+            }
+        }
+        
+        // 2.2 Check if current user is assigned as a PAYER and process payment
+        require_once __DIR__ . '/../ApprovalChainManager.php';
+        $chainManager = new ApprovalChainManager($conDB, $pdo);
+        
+        // Try to process payer payment
+        try {
+            $paymentAmount = (float)($_POST['payment_amount'] ?? 0);
+            $paymentProof = $_FILES['payment_proof'] ?? null;
+            
+            $payerResult = $chainManager->processPayerPayment(
+                $request_inv_no,
+                $current_user_id,
+                $paymentAmount,
+                $paymentProof,
+                $approval_comment
+            );
+            
+            // If user IS a payer, handle payment response
+            if ($payerResult['is_payer']) {
+                if ($payerResult['success']) {
+                    // Payer payment processed successfully
+                    ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+                        "Payer approved: Payment amount {$paymentAmount} SAR, Proof: {$payerResult['payment_proof']}", 'emp_vacation');
+                    
+                    // For ENCASHED vacations, mark as completed immediately (no asset clearance needed)
+                    if ($vac_type === 'Encashed') {
+                        $update_encashed_stmt = mysqli_prepare($conDB, "UPDATE emp_vacation SET current_status = 'completed', review = 'C' WHERE id = ?");
+                        if ($update_encashed_stmt) {
+                            mysqli_stmt_bind_param($update_encashed_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($update_encashed_stmt);
+                            mysqli_stmt_close($update_encashed_stmt);
+                            
+                            ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+                                "Encashed vacation marked as completed after payer payment - no asset clearance required", 'emp_vacation');
+                        }
+                    }
+                    
+                    // Return success
+                    send_json_response(
+                        "Payment Confirmed!",
+                        $payerResult['message'] . " Vacation request completed.",
+                        "success"
+                    );
+                } else {
+                    // Payment processing failed
+                    throw new Exception($payerResult['message'] ?? "Payment processing failed");
+                }
+            }
+            // If not a payer, continue with normal approval below
+            
+        } catch (Exception $payerEx) {
+            // Check if user is a payer but payment validation failed
+            // Try to get payer status without payment requirements
+            try {
+                $payer_check = $chainManager->processPayerPayment(
+                    $request_inv_no,
+                    $current_user_id,
+                    0,
+                    null,
+                    ''
+                );
+                
+                if ($payer_check['is_payer']) {
+                    // User IS a payer but payment processing failed, throw error
+                    throw $payerEx;
+                }
+            } catch (Exception $e) {
+                // If still error, might indicate user is indeed a payer
+                // Throw original exception
+                throw $payerEx;
+            }
+            // User is NOT a payer, continue with normal approval
+        }
+        
+        // 2.3 Call the main approval handler with detected type (only if NOT Finance Manager with payer selection and NOT a payer)
         $result = handle_approval_action(
             $conDB,
             $request_inv_no,
-            'vacation_request',
+            $detected_type, // Use detected type instead of hardcoded
             $current_user_id,
             'approve',
             'Approved', // Default note
@@ -1071,8 +1456,71 @@ elseif ($ajaxType == 'approveVacation') {
         if ($result['status'] == 'error') {
             throw new Exception($result['message']);
         }
+
+        // Notify the selected asset checker and ensure their task is marked AWAITING (not pending)
+        // They will be awaiting their turn, and when shown the approval UI, they'll see asset clearance modal
+        if ($asset_checker_added && $asset_checker_emp_id > 0) {
+            if ($detected_type_id !== null) {
+                // Get the maximum approval level from existing approvers to calculate asset checker's level
+                $max_level_query = mysqli_query($conDB, "SELECT MAX(approval_level) as max_level FROM request_approvers WHERE request_inv_no = '" . escape_string($request_inv_no) . "' AND request_type_id = " . (int)$detected_type_id);
+                $max_level = 1; // Default to 1 if no existing approvers
+                if ($max_level_query && mysqli_num_rows($max_level_query) > 0) {
+                    $level_row = mysqli_fetch_assoc($max_level_query);
+                    $max_level = isset($level_row['max_level']) && $level_row['max_level'] > 0 ? (int)$level_row['max_level'] : 0;
+                    mysqli_free_result($max_level_query);
+                }
+                
+                // Asset checker level = last_level + 1
+                $asset_checker_level = $max_level + 1;
+                
+                // Check if asset checker already exists in the approval chain
+                $check_exists_stmt = mysqli_prepare($conDB, "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? LIMIT 1");
+                if ($check_exists_stmt) {
+                    mysqli_stmt_bind_param($check_exists_stmt, "sii", $request_inv_no, $detected_type_id, $asset_checker_emp_id);
+                    mysqli_stmt_execute($check_exists_stmt);
+                    $exists_result = mysqli_stmt_get_result($check_exists_stmt);
+                    $exists = mysqli_num_rows($exists_result) > 0;
+                    mysqli_stmt_close($check_exists_stmt);
+                    
+                    if ($exists_result) mysqli_free_result($exists_result);
+                    
+                    if ($exists) {
+                        // Asset checker already exists - just update status and level
+                        $stmt_set_awaiting = mysqli_prepare($conDB, "UPDATE request_approvers SET status = 'awaiting', approval_level = ? WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ?");
+                        if ($stmt_set_awaiting) {
+                            mysqli_stmt_bind_param($stmt_set_awaiting, "isii", $asset_checker_level, $request_inv_no, $detected_type_id, $asset_checker_emp_id);
+                            mysqli_stmt_execute($stmt_set_awaiting);
+                            mysqli_stmt_close($stmt_set_awaiting);
+                        }
+                    } else {
+                        // Asset checker doesn't exist - INSERT them into the approval chain
+                        $stmt_insert_checker = mysqli_prepare($conDB, "INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')");
+                        if ($stmt_insert_checker) {
+                            mysqli_stmt_bind_param($stmt_insert_checker, "siii", $request_inv_no, $detected_type_id, $asset_checker_emp_id, $asset_checker_level);
+                            mysqli_stmt_execute($stmt_insert_checker);
+                            mysqli_stmt_close($stmt_insert_checker);
+                        }
+                    }
+                }
+            }
+
+            $notification_title = 'Asset clearance required';
+            $notification_message = "Vacation {$request_inv_no} needs asset clearance.";
+            $notification_url = "all_applied_vac.php?status=my_pending";
+            if (function_exists('create_browser_notification')) {
+                create_browser_notification($conDB, $asset_checker_emp_id, $notification_title, $notification_message, $notification_url);
+            }
+
+            if (function_exists('getEmployeeDetailsForApproval')) {
+                $checker_details = getEmployeeDetailsForApproval($conDB, $asset_checker_emp_id);
+                if ($checker_details && !empty($checker_details['email'])) {
+                    $template_data = get_request_details_for_email($conDB, $request_inv_no, $detected_type, $checker_details['name']);
+                    send_approval_email($conDB, $checker_details['email'], $checker_details['name'], $notification_title, $detected_type, $template_data ?: []);
+                }
+            }
+        }
         
-        // 2.1 Save approval comment if provided
+        // 2.4 Save approval comment if provided
         if (!empty($approval_comment)) {
             // Get approver name
             $sql_approver = "SELECT name FROM employees WHERE emp_id = ?";
@@ -1094,7 +1542,7 @@ elseif ($ajaxType == 'approveVacation') {
                 save_approval_comment_db(
                     $conDB,
                     $request_inv_no,
-                    'vacation_request',
+                    $detected_type, // Use detected type
                     'approved',
                     $current_user_id,
                     $approver_name,
@@ -1310,6 +1758,155 @@ elseif ($ajaxType == 'approveVacation') {
 }
 
 // ================================================================
+// === [NEW] PROCESS PAYMENT ENDPOINT (HR PAYROLL ONLY) ===
+// ================================================================
+// Purpose: HR Payroll processes payment separately from approval
+// This marks the vacation as "paid" and moves to approval stage
+// ================================================================
+elseif ($ajaxType == 'processPayment') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $request_inv_no = trim($_POST['request_inv_no'] ?? '');
+        
+        if (empty($vacation_id) || empty($request_inv_no)) {
+            throw new Exception("Missing vacation_id or request_inv_no");
+        }
+        
+        if (empty($current_user_id)) {
+            throw new Exception(__("session_expired_please_log_in_again"));
+        }
+        
+        // Verify current user is HR Payroll
+        $user_check = mysqli_query($conDB, "SELECT user_type FROM admin_login WHERE emp_id = '{$current_user_id}'");
+        if (!$user_check || mysqli_num_rows($user_check) === 0) {
+            throw new Exception("User not found or unauthorized");
+        }
+        $user_row = mysqli_fetch_assoc($user_check);
+        if ($user_row['user_type'] !== 'hr_payroll') {
+            throw new Exception("Only HR Payroll can process payments");
+        }
+        mysqli_free_result($user_check);
+        
+        // 1. Verify vacation exists and is in correct status
+        $vac_query = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
+        if (!$vac_query || mysqli_num_rows($vac_query) === 0) {
+            throw new Exception("Vacation request not found");
+        }
+        $vacation = mysqli_fetch_assoc($vac_query);
+        mysqli_free_result($vac_query);
+        
+        // Verify current status is "approved" or "pending_approval" with right approval level
+        if (!in_array($vacation['current_status'], ['approved', 'pending_approval'])) {
+            throw new Exception("Vacation must be approved or pending approval before payment");
+        }
+        
+        // 2. Update payment status to "paid"
+        $payment_date = date('Y-m-d H:i:s');
+        $update_query = "UPDATE emp_vacation 
+                        SET payment_status = 'paid',
+                            payment_date = ?,
+                            is_payment_completed = 1
+                        WHERE id = ?";
+        
+        $stmt = mysqli_prepare($conDB, $update_query);
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $conDB->error);
+        }
+        
+        mysqli_stmt_bind_param($stmt, "si", $payment_date, $vacation_id);
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception("Payment update failed: " . mysqli_stmt_error($stmt));
+        }
+        mysqli_stmt_close($stmt);
+        
+        // 3. Log the payment action
+        ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+            "Payment processed by HR Payroll - Request {$request_inv_no}", 'emp_vacation');
+        
+        // 4. Send success response with next steps
+        send_json_response("Payment Processed!", 
+            "Payment has been recorded. You can now approve the vacation request.", 
+            "success");
+            
+    } catch (Exception $e) {
+        send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+// ================================================================
+// === [NEW] MODIFY PAYMENT ENDPOINT (HR PAYROLL ONLY) ===
+// ================================================================
+// Purpose: HR Payroll can modify payment details if marked as "needs_modification"
+// ================================================================
+elseif ($ajaxType == 'modifyPayment') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $payment_note = trim($_POST['payment_note'] ?? '');
+        
+        if (empty($vacation_id)) {
+            throw new Exception("Missing vacation_id");
+        }
+        
+        if (empty($current_user_id)) {
+            throw new Exception(__("session_expired_please_log_in_again"));
+        }
+        
+        // Verify current user is HR Payroll
+        $user_check = mysqli_query($conDB, "SELECT user_type FROM admin_login WHERE emp_id = '{$current_user_id}'");
+        if (!$user_check || mysqli_num_rows($user_check) === 0) {
+            throw new Exception("User not found or unauthorized");
+        }
+        $user_row = mysqli_fetch_assoc($user_check);
+        if ($user_row['user_type'] !== 'hr_payroll') {
+            throw new Exception("Only HR Payroll can modify payments");
+        }
+        mysqli_free_result($user_check);
+        
+        // 1. Verify vacation exists
+        $vac_query = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
+        if (!$vac_query || mysqli_num_rows($vac_query) === 0) {
+            throw new Exception("Vacation request not found");
+        }
+        $vacation = mysqli_fetch_assoc($vac_query);
+        mysqli_free_result($vac_query);
+        
+        // 2. Mark payment as "needs_modification"
+        $modified_date = date('Y-m-d H:i:s');
+        $update_query = "UPDATE emp_vacation 
+                        SET payment_status = 'needs_modification',
+                            payment_modified_date = ?,
+                            payment_modified_by = ?,
+                            payroll_note = CONCAT(COALESCE(payroll_note, ''), '\n[PAYMENT MODIFICATION] ', ?)
+                        WHERE id = ?";
+        
+        $stmt = mysqli_prepare($conDB, $update_query);
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $conDB->error);
+        }
+        
+        mysqli_stmt_bind_param($stmt, "siss", $modified_date, $current_user_id, $payment_note, $vacation_id);
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception("Payment modification failed: " . mysqli_stmt_error($stmt));
+        }
+        mysqli_stmt_close($stmt);
+        
+        // 3. Log the modification
+        ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+            "Payment marked for modification by HR Payroll - Note: {$payment_note}", 'emp_vacation');
+        
+        // 4. Send success response
+        send_json_response("Payment Modification Recorded!", 
+            "Payment has been marked for modification. Please review and update as needed.", 
+            "success");
+            
+    } catch (Exception $e) {
+        send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+// ================================================================
 // --- [NEW] BLOCK TO HANDLE VACATION REJECTION ---
 // ================================================================
 elseif ($ajaxType == 'rejectVacation') {
@@ -1337,11 +1934,20 @@ elseif ($ajaxType == 'rejectVacation') {
         $request_inv_no = $row_inv['request_inv_no'];
         mysqli_free_result($query_inv);
 
-        // 2. Call the main approval handler
+        // 2. Detect the actual request type (vacation_request or excuse_leave)
+        $type_detect_query = mysqli_query($conDB, "SELECT art.type_name FROM request_approvers ra JOIN approval_request_types art ON ra.request_type_id = art.id WHERE ra.request_inv_no = '" . escape_string($request_inv_no) . "' LIMIT 1");
+        $detected_type = 'vacation_request'; // Default fallback
+        if ($type_detect_query && mysqli_num_rows($type_detect_query) > 0) {
+            $type_row = mysqli_fetch_assoc($type_detect_query);
+            $detected_type = $type_row['type_name'];
+            mysqli_free_result($type_detect_query);
+        }
+        
+        // 2.1 Call the main approval handler with detected type
         $result = handle_approval_action(
             $conDB,
             $request_inv_no,
-            'vacation_request',
+            $detected_type, // Use detected type instead of hardcoded
             $current_user_id,
             'reject',
             $rejection_note, // Pass the rejection note
@@ -1612,6 +2218,44 @@ elseif ($ajaxType == 'updateVacationPayments') {
         mysqli_stmt_close($stmt_pay);
 
         if ($rows_affected > 0) {
+            // Check if this is an Annual Fly vacation and if all required fields are filled
+            // Then update status to completed
+            $check_complete_sql = "SELECT vac_type, fly_type, ticket_pay, permit_fee, overtime_hours, deduction_hours, emp_id FROM emp_vacation WHERE id = ?";
+            $check_complete_stmt = mysqli_prepare($conDB, $check_complete_sql);
+            if ($check_complete_stmt) {
+                mysqli_stmt_bind_param($check_complete_stmt, "i", $vacation_id);
+                mysqli_stmt_execute($check_complete_stmt);
+                $check_res = mysqli_stmt_get_result($check_complete_stmt);
+                $vac_data = mysqli_fetch_assoc($check_res);
+                mysqli_stmt_close($check_complete_stmt);
+                
+                // For Annual Fly: ticket_pay AND permit_fee AND (overtime_hours OR deduction_hours) must all be filled
+                if ($vac_data && $vac_data['vac_type'] === 'Fly' && $vac_data['fly_type'] === 'annual') {
+                    $has_payment = ($vac_data['ticket_pay'] > 0 || $vac_data['permit_fee'] > 0);
+                    $has_adjustment = ($vac_data['overtime_hours'] > 0 || $vac_data['deduction_hours'] > 0);
+                    
+                    if ($has_payment && $has_adjustment) {
+                        // All required fields are filled - mark as completed
+                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_stmt = mysqli_prepare($conDB, $complete_sql);
+                        if ($complete_stmt) {
+                            mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($complete_stmt);
+                            mysqli_stmt_close($complete_stmt);
+                        }
+                        // Set employees.fly = 1 except for Encashment type
+                        $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
+                        if ($vac_type_lower !== 'encashed' && !empty($vac_data['emp_id'])) {
+                            $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
+                            if ($stmtFly) {
+                                mysqli_stmt_bind_param($stmtFly, "s", $vac_data['emp_id']);
+                                mysqli_stmt_execute($stmtFly);
+                                mysqli_stmt_close($stmtFly);
+                            }
+                        }
+                    }
+                }
+            }
             send_json_response("Success!", __("payment_details_have_been_updated"), "success");
         } else {
             send_json_response("Info", __("no_changes_were_made_to_the_payment_details"), "info");
@@ -1624,6 +2268,225 @@ elseif ($ajaxType == 'updateVacationPayments') {
 }
 
 // ================================================================
+// --- [NEW] BLOCK TO HANDLE VACATION PAYROLL ADJUSTMENTS (POST-APPROVAL) ---
+// ================================================================
+elseif ($ajaxType == 'updateVacationAdjustments') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $overtime_hours = (float)($_POST['overtime_hours'] ?? 0);
+        $deduction_hours = (float)($_POST['deduction_hours'] ?? 0);
+        $deduction_days = (float)($_POST['deduction_days'] ?? 0);
+        $other_earnings = (float)($_POST['other_earnings'] ?? 0);
+        $payroll_note = trim($_POST['payroll_note'] ?? '');
+
+        if (empty($vacation_id)) {
+            throw new Exception(__("vacation_id_is_missing"));
+        }
+
+        // Basic validation for negative values
+        if ($overtime_hours < 0 || $deduction_hours < 0 || $deduction_days < 0 || $other_earnings < 0) {
+            throw new Exception(__("invalid_negative_values_not_allowed"));
+        }
+
+        // Ensure vacation exists and get employee salary info
+        $exists_sql = "SELECT ev.id, ev.emp_id, es.basic, es.housing FROM emp_vacation ev 
+                       LEFT JOIN emp_salary es ON ev.emp_id = es.emp_id AND es.status = 1
+                       WHERE ev.id = ?";
+        $exists_stmt = mysqli_prepare($conDB, $exists_sql);
+        if (!$exists_stmt) {
+            throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($exists_stmt, "i", $vacation_id);
+        mysqli_stmt_execute($exists_stmt);
+        $exists_res = mysqli_stmt_get_result($exists_stmt);
+        if (!$exists_res || mysqli_num_rows($exists_res) === 0) {
+            mysqli_stmt_close($exists_stmt);
+            throw new Exception(__("invalid_vacation_id"));
+        }
+        $vacation_row = mysqli_fetch_assoc($exists_res);
+        mysqli_stmt_close($exists_stmt);
+
+        // Get full salary base for calculation
+        $salary_sql = "SELECT basic, housing, transport, food, misc, cashier, fuel, tel, guard, other 
+                       FROM emp_salary WHERE emp_id = ? AND status = 1";
+        $salary_stmt = mysqli_prepare($conDB, $salary_sql);
+        if ($salary_stmt) {
+            mysqli_stmt_bind_param($salary_stmt, "s", $vacation_row['emp_id']);
+            mysqli_stmt_execute($salary_stmt);
+            $salary_res = mysqli_stmt_get_result($salary_stmt);
+            $salary_data = mysqli_fetch_assoc($salary_res);
+            mysqli_stmt_close($salary_stmt);
+        } else {
+            $salary_data = ['basic' => 0, 'housing' => 0];
+        }
+
+        // Calculate salary base for adjustments (excluding calculated housing)
+        $basic_salary = 0;
+        $salary_base = 0;
+        if ($salary_data) {
+            $basic_salary = (float)($salary_data['basic'] ?? 0);
+            $salary_base = $basic_salary +
+                          (float)($salary_data['housing'] ?? 0) +
+                          (float)($salary_data['transport'] ?? 0) +
+                          (float)($salary_data['food'] ?? 0) +
+                          (float)($salary_data['misc'] ?? 0) +
+                          (float)($salary_data['cashier'] ?? 0) +
+                          (float)($salary_data['fuel'] ?? 0) +
+                          (float)($salary_data['tel'] ?? 0) +
+                          (float)($salary_data['guard'] ?? 0) +
+                          (float)($salary_data['other'] ?? 0);
+        }
+
+        // Calculate overtime and deduction amounts using EOS formula
+        // OVERTIME CALCULATION (matching EOS file and frontend):
+        // per-hour overtime rate = (basic/240)/2 + (salary_base/240)
+        // This gives higher overtime rate as per labor law requirements
+        $overtime_hourly_rate = $basic_salary > 0 ? (($basic_salary / 240) / 2) + ($salary_base / 240) : 0;
+        
+        // DEDUCTION CALCULATION (standard hourly/daily rate):
+        $daily_rate_deduction = $salary_base > 0 ? $salary_base / 30 : 0;
+        $hourly_rate_deduction = $daily_rate_deduction > 0 ? $daily_rate_deduction / 8 : 0;
+        
+        $overtime_amount = ($overtime_hours * $overtime_hourly_rate);
+        $deduction_amount = ($deduction_hours * $hourly_rate_deduction) + ($deduction_days * $daily_rate_deduction);
+        
+        // DEBUG: Log calculation details
+        error_log("OVERTIME CALC - Emp: {$vacation_row['emp_id']}, Basic: {$basic_salary}, Total: {$salary_base}, Hours: {$overtime_hours}, Rate: {$overtime_hourly_rate}, Amount: {$overtime_amount}");
+        
+        // Update adjustments with calculation fields
+        $sql_adj = "UPDATE emp_vacation SET overtime_hours = ?, deduction_hours = ?, deduction_days = ?, other_earnings = ?, payroll_note = ?, overtime_amount = ?, deduction_amount = ? WHERE id = ?";
+        $stmt_adj = mysqli_prepare($conDB, $sql_adj);
+        if (!$stmt_adj) {
+            throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($stmt_adj, "ddddsddi", $overtime_hours, $deduction_hours, $deduction_days, $other_earnings, $payroll_note, $overtime_amount, $deduction_amount, $vacation_id);
+        if (!mysqli_stmt_execute($stmt_adj)) {
+            $err = mysqli_stmt_error($stmt_adj);
+            mysqli_stmt_close($stmt_adj);
+            throw new Exception(__('database_prepare_error') . ": " . $err);
+        }
+        $rows = mysqli_stmt_affected_rows($stmt_adj);
+        mysqli_stmt_close($stmt_adj);
+
+        if ($rows > 0) {
+            // Add calculation details to response for debugging
+            $calc_details = [
+                'emp_id' => $vacation_row['emp_id'],
+                'basic_salary' => $basic_salary,
+                'total_salary' => $salary_base,
+                'overtime_hours' => $overtime_hours,
+                'overtime_hourly_rate' => round($overtime_hourly_rate, 4),
+                'overtime_amount' => round($overtime_amount, 2),
+                'deduction_hours' => $deduction_hours,
+                'deduction_days' => $deduction_days,
+                'hourly_rate_deduction' => round($hourly_rate_deduction, 4),
+                'daily_rate_deduction' => round($daily_rate_deduction, 2),
+                'deduction_amount' => round($deduction_amount, 2),
+                'formula' => "overtime_rate = (basic/{$basic_salary}/240/2) + (total/{$salary_base}/240) = " . round($overtime_hourly_rate, 4)
+            ];
+            
+            // Check vacation type and decide completion + balance update rules
+            $check_complete_sql = "SELECT vac_type, fly_type, ticket_pay, permit_fee, overtime_hours, deduction_hours FROM emp_vacation WHERE id = ?";
+            $check_complete_stmt = mysqli_prepare($conDB, $check_complete_sql);
+            if ($check_complete_stmt) {
+                mysqli_stmt_bind_param($check_complete_stmt, "i", $vacation_id);
+                mysqli_stmt_execute($check_complete_stmt);
+                $check_res = mysqli_stmt_get_result($check_complete_stmt);
+                $vac_data = mysqli_fetch_assoc($check_res);
+                mysqli_stmt_close($check_complete_stmt);
+                
+                if ($vac_data) {
+                    $did_complete = false;
+                    $is_fly = ($vac_data['vac_type'] === 'Fly');
+                    $is_annual = (strtolower($vac_data['fly_type']) === 'annual');
+                    $is_emergency = (strtolower($vac_data['fly_type']) === 'emergency');
+
+                    $has_payment = ((float)($vac_data['ticket_pay'] ?? 0) > 0 || (float)($vac_data['permit_fee'] ?? 0) > 0);
+                    $has_adjustment = ((float)($vac_data['overtime_hours'] ?? 0) > 0 || (float)($vac_data['deduction_hours'] ?? 0) > 0);
+
+                    // Rule 1: Local | Annual vacation -> Booking button hidden; complete on adjustments update
+                    // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
+                    if (!$is_fly && $is_annual && $has_adjustment) {
+                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_stmt = mysqli_prepare($conDB, $complete_sql);
+                        if ($complete_stmt) {
+                            mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($complete_stmt);
+                            mysqli_stmt_close($complete_stmt);
+                        }
+                        $did_complete = true;
+                    }
+
+                    // Rule 2: Fly | Annual vacation -> complete when booking (payment) AND adjustments are updated
+                    // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
+                    if ($is_fly && $is_annual && $has_payment && $has_adjustment) {
+                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_stmt = mysqli_prepare($conDB, $complete_sql);
+                        if ($complete_stmt) {
+                            mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($complete_stmt);
+                            mysqli_stmt_close($complete_stmt);
+                        }
+                        $did_complete = true;
+                    }
+
+                    // Rule 3: Fly | Emergency vacation -> Booking button hidden; complete on adjustments; deduct annual balance once
+                    // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
+                    if ($is_fly && $is_emergency && $has_adjustment) {
+                        // Mark completed
+                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_stmt = mysqli_prepare($conDB, $complete_sql);
+                        if ($complete_stmt) {
+                            mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($complete_stmt);
+                            mysqli_stmt_close($complete_stmt);
+                        }
+                        $did_complete = true;
+
+                        // Deduct annual balance if not already linked to this vacation
+                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
+                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
+                        if ($bal_chk_stmt) {
+                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($bal_chk_stmt);
+                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
+                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
+                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
+                            mysqli_stmt_close($bal_chk_stmt);
+
+                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
+                                // Update balance once for emergency vacations using annual balance
+                                update_vacation_balance_on_approval($conDB, $vacation_id);
+                            }
+                        }
+                    }
+
+                    // If completed in any branch, set employees.fly = 1 unless Encashment
+                    if ($did_complete && !empty($vacation_row['emp_id'])) {
+                        $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
+                        if ($vac_type_lower !== 'encashed') {
+                            $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
+                            if ($stmtFly) {
+                                mysqli_stmt_bind_param($stmtFly, "s", $vacation_row['emp_id']);
+                                mysqli_stmt_execute($stmtFly);
+                                mysqli_stmt_close($stmtFly);
+                            }
+                        }
+                    }
+                }
+            }
+            send_json_response("Success!", __("payroll_adjustments_saved"), "success", 200, $calc_details);
+        } else {
+            send_json_response("Info", __("no_changes_were_made_to_the_adjustments"), "info");
+        }
+    } catch (Exception $e) {
+        send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+
+// ================================================================
 // --- GET VACATION DETAILS (for payment modal) ---
 // ================================================================
 elseif ($ajaxType == 'getVacationDetails') {
@@ -1634,7 +2497,7 @@ elseif ($ajaxType == 'getVacationDetails') {
             throw new Exception(__("vacation_id_is_missing"));
         }
 
-        $sql = "SELECT departure_date, arrival_date FROM emp_vacation WHERE id = ?";
+        $sql = "SELECT id, departure_date, arrival_date, ticket_pay, permit_fee, encashment_amount, vac_type, emp_id, request_inv_no FROM emp_vacation WHERE id = ?";
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
@@ -1651,16 +2514,133 @@ elseif ($ajaxType == 'getVacationDetails') {
         mysqli_stmt_close($stmt);
 
         if ($row) {
+            // Get asset checker ID from request_approvers table if exists
+            // Asset checker is an approver from IT (6), Admin (1), or Transport (17) departments
+            $asset_checker_emp_id = null;
+            if (!empty($row['request_inv_no'])) {
+                // First, get the vacation_request type ID
+                $type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'vacation_request' LIMIT 1");
+                $type_id = null;
+                if ($type_query && mysqli_num_rows($type_query) > 0) {
+                    $type_row = mysqli_fetch_assoc($type_query);
+                    $type_id = $type_row['id'];
+                    mysqli_free_result($type_query);
+                }
+
+                // If we found the type, look for asset checker
+                if ($type_id) {
+                    $checker_sql = "SELECT ra.approver_id, e.dept
+                                   FROM request_approvers ra
+                                   JOIN employees e ON ra.approver_id = e.emp_id
+                                   WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
+                                   AND e.dept IN (1, 6, 17)
+                                   ORDER BY ra.approval_level DESC
+                                   LIMIT 1";
+                    $checker_stmt = mysqli_prepare($conDB, $checker_sql);
+                    if ($checker_stmt) {
+                        mysqli_stmt_bind_param($checker_stmt, "si", $row['request_inv_no'], $type_id);
+                        if (mysqli_stmt_execute($checker_stmt)) {
+                            $checker_result = mysqli_stmt_get_result($checker_stmt);
+                            if ($checker_row = mysqli_fetch_assoc($checker_result)) {
+                                $asset_checker_emp_id = $checker_row['approver_id'];
+                            }
+                            if ($checker_result) mysqli_free_result($checker_result);
+                        }
+                        mysqli_stmt_close($checker_stmt);
+                    }
+                }
+            }
+
+            // Get current user's emp_type from admin_login table
+            $current_user_emp_type = null;
+            $current_empid = $_SESSION['empid'] ?? null;
+            if ($current_empid) {
+                $emp_type_sql = "SELECT emp_type FROM admin_login WHERE emp_id = ?";
+                $emp_type_stmt = mysqli_prepare($conDB, $emp_type_sql);
+                if ($emp_type_stmt) {
+                    mysqli_stmt_bind_param($emp_type_stmt, "i", $current_empid);
+                    if (mysqli_stmt_execute($emp_type_stmt)) {
+                        $emp_type_result = mysqli_stmt_get_result($emp_type_stmt);
+                        if ($emp_type_row = mysqli_fetch_assoc($emp_type_result)) {
+                            $current_user_emp_type = $emp_type_row['emp_type'];
+                        }
+                        if ($emp_type_result) mysqli_free_result($emp_type_result);
+                    }
+                    mysqli_stmt_close($emp_type_stmt);
+                }
+            }
+
             echo json_encode([
                 'status' => 200,
                 'departure_date' => $row['departure_date'] ?? '',
-                'arrival_date' => $row['arrival_date'] ?? ''
+                'arrival_date' => $row['arrival_date'] ?? '',
+                'ticket_pay' => (float)($row['ticket_pay'] ?? 0),
+                'permit_fee' => (float)($row['permit_fee'] ?? 0),
+                'encashment_amount' => (float)($row['encashment_amount'] ?? 0),
+                'vac_type' => $row['vac_type'] ?? '',
+                'emp_id' => $row['emp_id'] ?? '',
+                'asset_checker_emp_id' => $asset_checker_emp_id,
+                'current_user_emp_type' => $current_user_emp_type
             ]);
         } else {
             echo json_encode(['status' => 404, 'message' => 'Vacation not found']);
         }
     } catch (Exception $e) {
 
+        echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// --- [NEW] BLOCK TO HANDLE FETCHING EMPLOYEE ASSIGNED ASSETS ---
+// ================================================================
+elseif ($ajaxType == 'getEmployeeAssignedAssets') {
+    try {
+        $emp_id = (int)($_POST['emp_id'] ?? 0);
+
+        if (empty($emp_id)) {
+            throw new Exception(__("employee_id_is_missing"));
+        }
+
+        // Fetch all assigned assets for the employee (status = 'Assigned' and not yet returned)
+        $sql = "SELECT id, asset_id, serial_number, description, assigned_date, status 
+                FROM employee_assets 
+                WHERE emp_id = ? AND status = 'Assigned'
+                ORDER BY assigned_date DESC";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
+        }
+
+        mysqli_stmt_bind_param($stmt, "i", $emp_id);
+
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception(__('database_prepare_error') . ": " . mysqli_stmt_error($stmt));
+        }
+
+        $result = mysqli_stmt_get_result($stmt);
+        $assets = [];
+
+        while ($row = mysqli_fetch_assoc($result)) {
+            $assets[] = [
+                'id' => $row['id'],
+                'asset_id' => $row['asset_id'],
+                'serial_number' => $row['serial_number'] ?? '',
+                'description' => $row['description'] ?? '',
+                'assigned_date' => $row['assigned_date'],
+                'status' => $row['status']
+            ];
+        }
+
+        mysqli_stmt_close($stmt);
+
+        echo json_encode([
+            'status' => 200,
+            'assets' => $assets,
+            'total' => count($assets)
+        ]);
+    } catch (Exception $e) {
         echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
     }
     exit;
@@ -1950,8 +2930,9 @@ elseif ($ajaxType == 'sendTravelEmail') {
             throw new Exception(__("error_sending_travel_email", "Failed to send email to travel company. Please check SMTP settings and email configuration."));
         }
 
-        // Update database to mark email as sent AND set status to completed
-        $update_sql = "UPDATE `emp_vacation` SET `travel_email_sent` = 1, `current_status` = 'completed' WHERE `id` = ?";
+        // Update database to mark email as sent (but DO NOT mark as completed yet)
+        // Status will be marked as completed only when payment AND overtime/deduction are entered
+        $update_sql = "UPDATE `emp_vacation` SET `travel_email_sent` = 1 WHERE `id` = ?";
         $update_stmt = mysqli_prepare($conDB, $update_sql);
         if ($update_stmt) {
             mysqli_stmt_bind_param($update_stmt, 'i', $vacation_id);
@@ -2690,10 +3671,146 @@ elseif ($ajaxType == 'get_potential_approvers') {
     $data = get_department_approvers($conDB, $dept_id);
     echo json_encode(['data' => $data, 'status' => 200]);
     exit;
+} elseif ($ajaxType == 'get_asset_department_employees') {
+    // Return all active employees for the manager's asset department (Admin, IT, or Transportation)
+    $dept_id = (int)($_POST['dept_id'] ?? 0);
+    if ($dept_id <= 0) {
+        echo json_encode(['status' => 400, 'message' => 'Department id is required']);
+        exit;
+    }
+
+    $asset_dept_ids = [1, 6, 17];
+    if (!in_array($dept_id, $asset_dept_ids, true)) {
+        echo json_encode(['status' => 403, 'message' => 'Invalid asset department']);
+        exit;
+    }
+
+    $employees = get_department_employees_all($conDB, $dept_id);
+    echo json_encode(['status' => 200, 'employees' => $employees]);
+    exit;
 } elseif ($ajaxType == 'get_hr_assistants') {
     // This function is defined in helper_functions.php
     $data = get_hr_assistants($conDB);
     echo json_encode(['data' => $data, 'status' => 200]);
+    exit;
+}
+
+// ================================================================
+// --- [NEW] CHECK IF CURRENT USER IS ASSET CHECKER FOR VACATION ---
+// ================================================================
+elseif ($ajaxType == 'checkAssetCheckerStatus') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        if (empty($vacation_id) || empty($current_user_id)) {
+            throw new Exception('Missing required parameters');
+        }
+
+        // Get the request_inv_no from vacation ID
+        $query_inv = mysqli_query($conDB, "SELECT request_inv_no FROM emp_vacation WHERE id = " . $vacation_id);
+        if (!$query_inv || mysqli_num_rows($query_inv) == 0) {
+            throw new Exception('Vacation not found');
+        }
+        $inv_row = mysqli_fetch_assoc($query_inv);
+        $request_inv_no = $inv_row['request_inv_no'];
+        mysqli_free_result($query_inv);
+
+        // Check if current user is an asset checker in pending status
+        $asset_check_query = mysqli_query($conDB, "SELECT ra.id, ra.status, ra.approval_level, art.type_name FROM request_approvers ra 
+            JOIN approval_request_types art ON ra.request_type_id = art.id
+            WHERE ra.request_inv_no = '" . escape_string($request_inv_no) . "' 
+            AND ra.approver_id = " . (int)$current_user_id . "
+            AND ra.status IN ('pending', 'awaiting')
+            LIMIT 1");
+
+        $is_asset_checker = false;
+        $approver_status = null;
+
+        if ($asset_check_query && mysqli_num_rows($asset_check_query) > 0) {
+            $approver_row = mysqli_fetch_assoc($asset_check_query);
+            $approver_status = $approver_row['status'];
+            
+            // Check if this is an asset checker role (first in chain, approval_level = 1)
+            // Asset checkers are those added at the beginning of the approval chain
+            $is_asset_checker = ($approver_row['approval_level'] == 1);
+        }
+        mysqli_free_result($asset_check_query);
+
+        echo json_encode([
+            'status' => 'success',
+            'is_asset_checker' => $is_asset_checker,
+            'approver_status' => $approver_status
+        ]);
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage(),
+            'is_asset_checker' => false
+        ]);
+    }
+    exit;
+}
+
+// ================================================================
+// --- [NEW] PROCESS ASSET CLEARANCE DECISION ---
+// ================================================================
+elseif ($ajaxType == 'processAssetClearance') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $asset_decision = trim($_POST['asset_decision'] ?? ''); // 'assets_received' or 'employee_keeps_assets'
+        $clearance_comment = trim($_POST['clearance_comment'] ?? '');
+
+        if (empty($vacation_id) || empty($current_user_id)) {
+            throw new Exception('Missing required parameters');
+        }
+
+        if (!in_array($asset_decision, ['assets_received', 'employee_keeps_assets'])) {
+            throw new Exception('Invalid asset decision');
+        }
+
+        // Get the request_inv_no and emp_id from vacation ID
+        $query_inv = mysqli_query($conDB, "SELECT request_inv_no, emp_id FROM emp_vacation WHERE id = " . $vacation_id);
+        if (!$query_inv || mysqli_num_rows($query_inv) == 0) {
+            throw new Exception('Vacation not found');
+        }
+        $inv_row = mysqli_fetch_assoc($query_inv);
+        $request_inv_no = $inv_row['request_inv_no'];
+        $emp_id = $inv_row['emp_id'];
+        mysqli_free_result($query_inv);
+
+        // Save the asset clearance decision by approving as asset checker
+        // NOTE: Do NOT update emp_vacation_balance here - it's already updated by HR_Payroll when they approve
+        $result = handle_approval_action(
+            $conDB,
+            $request_inv_no,
+            'vacation_request',
+            $current_user_id,
+            'approve',
+            "Asset Clearance: " . ($asset_decision === 'assets_received' ? 'Assets received from employee' : 'Employee is keeping assets')
+        );
+
+        if ($result['status'] == 'error') {
+            throw new Exception($result['message']);
+        }
+
+        // Log the asset clearance decisiona
+        $asset_decision_label = ($asset_decision === 'assets_received') ? 'Assets Received' : 'Employee Keeps Assets';
+        if (function_exists('save_approval_comment_db')) {
+            $approver_name = 'Asset Checker';
+            save_approval_comment_db(
+                $conDB,
+                $request_inv_no,
+                'vacation_request',
+                'approve',
+                $current_user_id,
+                $approver_name,
+                "Asset Clearance Decision: {$asset_decision_label}" . (!empty($clearance_comment) ? " - {$clearance_comment}" : '')
+            );
+        }
+
+        send_json_response((__("asset_clearance_complete")), sprintf(__("asset_clearance_has_been_recorded_asset_decision_label"), $asset_decision_label), "success");
+    } catch (Exception $e) {
+        send_json_response("Error", $e->getMessage(), "error");
+    }
     exit;
 }
 
@@ -3079,21 +4196,98 @@ elseif ($ajaxType == 'applyLeave') {
             exit;
         }
 
-        // Get HR Senior BP (second approver)
-        $sql_hr_bp = "SELECT e.emp_id, e.name, al.email 
-                      FROM `employees` e 
-                      LEFT JOIN `admin_login` al ON e.emp_id = al.emp_id 
-                      WHERE al.`user_type` = 'hr_senior_bp' AND e.`status` = 1 
-                      ORDER BY e.emp_id ASC 
-                      LIMIT 1";
-        $result_hr_bp = mysqli_query($conDB, $sql_hr_bp);
-        $hr_bp = mysqli_fetch_assoc($result_hr_bp);
-        mysqli_free_result($result_hr_bp);
-
-        if (!$hr_bp || empty($hr_bp['emp_id'])) {
-            send_json_response(__('error'), __('hr_senior_bp_not_found_please_contact_administrator'), 'error', 400);
+        // ================================================================
+        // BUILD APPROVAL CHAIN FROM DATABASE (approval_request_types + app_settings)
+        // This replaces hardcoded approver roles with database-driven configuration
+        // ================================================================
+        $approver_chain = [];
+        
+        // Load configured approval chain from app_settings for 'excuse_leave'
+        $settingName = "approval_chain_excuse_leave";
+        $query_chain = mysqli_query($conDB, "SELECT setting_value FROM app_settings WHERE setting_name = '{$settingName}' LIMIT 1");
+        
+        if ($query_chain && mysqli_num_rows($query_chain) > 0) {
+            $row_chain = mysqli_fetch_assoc($query_chain);
+            $chainConfig = json_decode($row_chain['setting_value'], true);
+            
+            if ($chainConfig && is_array($chainConfig) && count($chainConfig) > 0) {
+                // Resolve each approver in the configured chain
+                foreach ($chainConfig as $step) {
+                    $user_type = $step['user_type'] ?? '';
+                    $approver_emp_id = null;
+                    
+                    // Special handling for direct_supervisor
+                    if ($user_type === 'direct_supervisor') {
+                        if (!empty($first_approver['emp_id'])) {
+                            $approver_emp_id = (int)$first_approver['emp_id'];
+                        }
+                    } 
+                    // Special handling for dept_manager
+                    elseif ($user_type === 'dept_manager') {
+                        $dept_mgr = getDeptManager($conDB, $emp_dept);
+                        if ($dept_mgr && !empty($dept_mgr['emp_id'])) {
+                            $approver_emp_id = (int)$dept_mgr['emp_id'];
+                        }
+                    }
+                    // For all other user types, query by user_type
+                    else {
+                        $user_type_esc = mysqli_real_escape_string($conDB, $user_type);
+                        $sql_approver = "SELECT e.emp_id FROM employees e 
+                                        LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
+                                        WHERE al.user_type = '{$user_type_esc}' AND e.status = 1 
+                                        ORDER BY e.emp_id ASC LIMIT 1";
+                        $result_approver = mysqli_query($conDB, $sql_approver);
+                        if ($result_approver && mysqli_num_rows($result_approver) > 0) {
+                            $approver_row = mysqli_fetch_assoc($result_approver);
+                            $approver_emp_id = (int)$approver_row['emp_id'];
+                            mysqli_free_result($result_approver);
+                        }
+                    }
+                    
+                    // Add approver to chain if found (skip duplicates)
+                    if ($approver_emp_id > 0 && !in_array($approver_emp_id, $approver_chain, true)) {
+                        $approver_chain[] = $approver_emp_id;
+                    }
+                }
+            }
+        }
+        // Free result after all processing is complete
+        if ($query_chain) mysqli_free_result($query_chain);
+        
+        // FALLBACK: If no configured chain or chain is empty, use legacy 2-level approval
+        // [Direct Supervisor/Dept Manager → HR Senior BP]
+        if (empty($approver_chain)) {
+            // Add first approver (Direct Supervisor or Dept Manager)
+            if (!empty($first_approver['emp_id'])) {
+                $approver_chain[] = (int)$first_approver['emp_id'];
+            }
+            
+            // Add HR Senior BP as second approver
+            $sql_hr_senior_bp = "SELECT e.emp_id FROM employees e 
+                                LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
+                                WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 
+                                ORDER BY e.emp_id ASC LIMIT 1";
+            $result_hr_senior_bp = mysqli_query($conDB, $sql_hr_senior_bp);
+            if ($result_hr_senior_bp && mysqli_num_rows($result_hr_senior_bp) > 0) {
+                $hr_senior_bp = mysqli_fetch_assoc($result_hr_senior_bp);
+                if (!in_array((int)$hr_senior_bp['emp_id'], $approver_chain, true)) {
+                    $approver_chain[] = (int)$hr_senior_bp['emp_id'];
+                }
+                mysqli_free_result($result_hr_senior_bp);
+            }
+        }
+        
+        // Validate that we have at least one approver
+        if (empty($approver_chain)) {
+            send_json_response(__('error'), __('no_approvers_configured_for_excuse_leave_please_contact_administrator'), 'error', 400);
             exit;
         }
+        
+        // Get first approver for notifications
+        $first_approver_emp_id = $approver_chain[0];
+        // ================================================================
+        // END: Database-driven approval chain configuration
+        // ================================================================
 
         // Determine if leave is deductible (affects payroll)
 
@@ -3201,30 +4395,46 @@ elseif ($ajaxType == 'applyLeave') {
         // They are tracked separately and don't consume the employee's annual vacation entitlement
         // Only annual vacation (applied through applyVacation with fly_type='annual') and encashment deduct from balance
 
-        // Save approval chain: [Direct Supervisor/Dept Manager, HR Senior BP]
-        // Note: Using 'vacation_request' type since both vacation and leave use emp_vacation table
-        $approver_chain = [(int)$first_approver['emp_id'], (int)$hr_bp['emp_id']];
-        if (!save_approval_chain($conDB, $request_inv_no, 'vacation_request', $approver_chain)) {
+        // ================================================================
+        // SAVE APPROVAL CHAIN using ApprovalChainManager
+        // Note: Request type 'excuse_leave' is stored separately from 'vacation_request'
+        // to allow independent approval workflow configuration
+        // ================================================================
+        
+        require_once __DIR__ . '/../ApprovalChainManager.php';
+        $chainManager = new ApprovalChainManager($conDB, $pdo);
+        
+        $chainResult = $chainManager->createApprovalChain(
+            'excuse_leave',
+            $request_inv_no,
+            $empid,
+            $employee['dept']
+        );
+        
+        if (!$chainResult['success']) {
+            error_log("EXCUSE LEAVE ERROR: createApprovalChain failed for request $request_inv_no");
+            send_json_response(__('error'), 'Failed to create approval chain: ' . ($chainResult['message'] ?? 'Unknown error'), 'error', 500);
+            exit;
         }
-
-        // Send notification to first approver (Direct Supervisor or Department Manager)
-        if (function_exists('getEmployeeDetailsForApproval') && !empty($first_approver['emp_id'])) {
-            $approver_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver['emp_id']);
+        
+        $first_approver = $chainResult['first_approver'];
+        
+        // ================================================================
+        // SEND NOTIFICATION TO FIRST APPROVER
+        // Using the first approver from the database-configured chain
+        // ================================================================
+        if ($first_approver && !empty($first_approver['approver_id'])) {
+            $approver_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver['approver_id']);
             if ($approver_details) {
-                // --- [UPDATED] SEND ACTUAL NOTIFICATIONS ---
-
-
-                if (function_exists('create_browser_notification')) {
-                    $notification_title = "New Leave Request";
-                    $notification_message = "A new leave request ($request_inv_no) for $leave_type from employee ID $empid is pending your approval.";
-                    $notification_url = "all_applied_vac.php?status=my_pending";
-                    $notif_result = create_browser_notification($conDB, $first_approver['emp_id'], $notification_title, $notification_message, $notification_url);
-                } else {
-                }
+                // Send browser notification using ApprovalChainManager
+                $chainManager->notifyApprover(
+                    $first_approver['approver_id'],
+                    "New Leave Request",
+                    "A new leave request ($request_inv_no) for $leave_type from employee ID $empid is pending your approval.",
+                    "all_applied_vac.php?status=my_pending"
+                );
 
                 if (!empty($approver_details['email']) && function_exists('send_approval_email')) {
-
-
                     // Get employee name for template
                     $employee_name = 'Employee';
                     $emp_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$empid' LIMIT 1");
@@ -3277,7 +4487,8 @@ elseif ($ajaxType == 'applyLeave') {
 
         send_json_response(
             __('success'),
-            sprintf(__('leave_request_submitted_successfully_request_no_pending_approval_from_your'), $request_inv_no, $first_approver_label),
+            sprintf(__('leave_request_submitted_successfully_request_no_pending_approval_from_your'), $request_inv_no, 
+                    isset($first_approver_label) ? $first_approver_label : __('supervisor')),
             'success'
         );
     } catch (Exception $e) {
@@ -3562,95 +4773,72 @@ elseif ($ajaxType == 'submitRejoinRequest') {
             throw new Exception(__("failed_to_update_request_inv_no"));
         }
 
-        // Create approval request using unified system with rejoin request ID
-        $supervisor_id = $vacation['supervisor_id'];
-        if (!empty($supervisor_id)) {
-            $stmt = $pdo->prepare("
-                INSERT INTO request_approvers 
-                (request_inv_no, request_type_id, approver_id, approval_level, status, note)
-                VALUES (:inv_no, 5, :approver_id, 1, 'pending', :note)
-            ");
-            $result = $stmt->execute([
-                ':inv_no' => $request_inv_no,
-                ':approver_id' => $supervisor_id,
-                ':note' => 'Rejoin request for vacation ID: ' . $vacation_id
-            ]);
-            if (!$result) {
-                throw new Exception(__("failed_to_create_approval_chain"));
-            }
-        } else {
-            // If no supervisor, still create approval chain entry with HR as approver
-            // Get HR senior BP as fallback approver
-            $stmt_hr = $pdo->prepare("
-                SELECT e.emp_id FROM employees e 
-                JOIN admin_login al ON e.emp_id = al.emp_id
-                WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 
-                LIMIT 1
-            ");
-            $stmt_hr->execute();
-            $hr_approver = $stmt_hr->fetch(PDO::FETCH_ASSOC);
-            
-            if ($hr_approver && !empty($hr_approver['emp_id'])) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO request_approvers 
-                    (request_inv_no, request_type_id, approver_id, approval_level, status, note)
-                    VALUES (:inv_no, 5, :approver_id, 1, 'pending', :note)
-                ");
-                $result = $stmt->execute([
-                    ':inv_no' => $request_inv_no,
-                    ':approver_id' => $hr_approver['emp_id'],
-                    ':note' => 'Rejoin request for vacation ID: ' . $vacation_id . ' (No supervisor assigned, escalated to HR)'
-                ]);
-                if (!$result) {
-                    throw new Exception(__("failed_to_create_approval_chain"));
-                }
-            }
+        // ====================================================================
+        // CREATE APPROVAL CHAIN USING APPROVAL CHAIN MANAGER
+        // ====================================================================
+        require_once __DIR__ . '/../ApprovalChainManager.php';
+        
+        $chainManager = new ApprovalChainManager($conDB, $pdo);
+        
+        // Get employee department
+        $stmt_dept = $pdo->prepare("SELECT dept FROM employees WHERE emp_id = :emp_id LIMIT 1");
+        $stmt_dept->execute([':emp_id' => $emp_id]);
+        $dept_row = $stmt_dept->fetch(PDO::FETCH_ASSOC);
+        $dept_id = $dept_row ? (int)$dept_row['dept'] : null;
+        
+        // Create approval chain
+        $chainResult = $chainManager->createApprovalChain(
+            'rejoin_request',
+            $request_inv_no,
+            $emp_id,
+            $dept_id
+        );
+        
+        if (!$chainResult['success']) {
+            throw new Exception("Failed to create approval chain");
         }
+        
+        $firstApprover = $chainResult['first_approver'];
 
         $pdo->commit();
 
-        // Send email notification to supervisor
-        if (!empty($supervisor_id)) {
-            // Get supervisor email from admin_login
-            $stmt = $pdo->prepare("
-                SELECT al.email, e.name as supervisor_name
-                FROM admin_login al
-                JOIN employees e ON al.emp_id = e.emp_id
-                WHERE al.emp_id = :supervisor_id
-                LIMIT 1
-            ");
-            $stmt->execute([':supervisor_id' => $supervisor_id]);
-            $supervisor = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Send email notification to first approver
+        if ($firstApprover && !empty($firstApprover['email'])) {
+            // Get employee details
+            $employee_name = $vacation['name'] ?? 'Employee';
+            
+            // Prepare email template data
+            $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+            
+            $template_data = [
+                'EMPLOYEE_NAME' => $employee_name,
+                'EMPLOYEE_ID' => $emp_id,
+                'REQUESTED_DATE' => $rejoin_date,
+                'REASON' => $rejoin_reason,
+                'APPROVAL_URL' => $base_url . '/rejoin_approvals.php',
+                'APPROVER_NAME' => $firstApprover['name']
+            ];
 
-            if ($supervisor && !empty($supervisor['email'])) {
-                // Get employee details
-                $employee_name = $vacation['name'] ?? 'Employee';
-                
-                // Prepare email template data
-                $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
-                
-                $template_data = [
-                    'EMPLOYEE_NAME' => $employee_name,
-                    'EMPLOYEE_ID' => $emp_id,
-                    'REQUESTED_DATE' => $rejoin_date,
-                    'REASON' => $rejoin_reason,
-                    'APPROVAL_URL' => $base_url . '/rejoin_approvals.php',
-                    'APPROVER_NAME' => $supervisor['supervisor_name']
-                ];
-
-                // Send email if function exists
-                if (function_exists('send_approval_email')) {
-                    $email_subject = "New Rejoin Request from " . $employee_name . " (ID: " . $emp_id . ")";
-                    send_approval_email(
-                        $conDB, 
-                        $supervisor['email'], 
-                        $supervisor['supervisor_name'], 
-                        $email_subject, 
-                        'rejoin_request', 
-                        $template_data
-                    );
-                }
+            // Send email if function exists
+            if (function_exists('send_approval_email')) {
+                $email_subject = "New Rejoin Request from " . $employee_name . " (ID: " . $emp_id . ")";
+                send_approval_email(
+                    $conDB, 
+                    $firstApprover['email'], 
+                    $firstApprover['name'], 
+                    $email_subject, 
+                    'rejoin_request', 
+                    $template_data
+                );
             }
+            
+            // Send browser notification to first approver
+            $chainManager->notifyApprover(
+                $firstApprover['approver_id'],
+                'New Rejoin Request',
+                $employee_name . ' has submitted a rejoin request requiring your approval.',
+                'rejoin_approvals.php'
+            );
         }
 
         send_json_response(
@@ -3700,7 +4888,7 @@ elseif ($ajaxType == 'processRejoinApproval') {
 
         // Get rejoin request
         $stmt = $pdo->prepare("
-            SELECT rr.*, v.return_date, v.vacdays, e.supervisor_id
+            SELECT rr.*, v.return_date, v.vacdays, v.vac_type AS vacation_vac_type, v.fly_type AS vacation_fly_type, e.supervisor_id
             FROM rejoin_requests rr
             JOIN emp_vacation v ON rr.vacation_id = v.id
             JOIN employees e ON rr.emp_id = e.emp_id
@@ -3716,58 +4904,168 @@ elseif ($ajaxType == 'processRejoinApproval') {
         // Get emp_id from rejoin_requests table
         $employee_id = $request['emp_id'];
 
-        // Verify supervisor is the one approving
-        if ($request['supervisor_id'] != $current_user_id && $_SESSION['user_type'] !== 'admin') {
-            throw new Exception(__("unauthorized_to_approve_request"));
+        // ====================================================================
+        // VERIFY APPROVER USING APPROVAL CHAIN MANAGER
+        // ====================================================================
+        require_once __DIR__ . '/../ApprovalChainManager.php';
+        $chainManager = new ApprovalChainManager($conDB, $pdo);
+        
+        $verification = $chainManager->verifyApprover($request['request_inv_no'], $current_user_id);
+        if (!$verification['authorized']) {
+            throw new Exception($verification['message']);
         }
         
+        $current_level = $verification['level'];
+        
+        // Check if current user is Finance Manager
+        $user_type_stmt = $pdo->prepare("
+            SELECT user_type FROM admin_login WHERE emp_id = :emp_id LIMIT 1
+        ");
+        $user_type_stmt->execute([':emp_id' => $current_user_id]);
+        $user_type_row = $user_type_stmt->fetch(PDO::FETCH_ASSOC);
+        $is_finance_manager = ($user_type_row && $user_type_row['user_type'] == 'finance');
+        
         if ($action === 'approve') {
-            // Approve the request immediately
-            $stmt = $pdo->prepare("
-                UPDATE rejoin_requests 
-                SET 
-                    status = 'approved',
-                    approved_by_emp_id = :supervisor_id,
-                    approved_at = NOW(),
-                    approval_note = :note,
-                    final_approved_date = :rejoin_date
-                WHERE id = :id
-            ");
-            $stmt->execute([
-                ':supervisor_id' => $current_user_id,
-                ':note' => $approval_note,
-                ':rejoin_date' => $request['requested_rejoin_date'],
-                ':id' => $rejoin_request_id
-            ]);
+            // Check if Finance Manager is selecting a payer
+            if ($is_finance_manager && isset($_POST['payer_emp_id']) && !empty($_POST['payer_emp_id'])) {
+                $payer_emp_id = (int)$_POST['payer_emp_id'];
+                
+                if ($payer_emp_id <= 0) {
+                    throw new Exception(__("invalid_payer_selected", "Invalid payer selected"));
+                }
+                
+                // Use ApprovalChainManager to handle payer selection
+                try {
+                    $payerSelectionResult = $chainManager->approveWithPayerSelection(
+                        $request['request_inv_no'],
+                        $current_user_id,
+                        $payer_emp_id,
+                        $approval_note ?: 'Approved. Finance payer selected for payment processing.'
+                    );
+                    
+                    // Payer is now recorded in request_approvers table (no need to update rejoin_requests)
+                    
+                    // Notify payer via browser notification
+                    $chainManager->notifyApprover(
+                        $payer_emp_id,
+                        'Rejoin Request - Payment Processing Assignment',
+                        'You have been assigned to process payment for rejoin request. Please record the payment amount and proof.',
+                        'rejoin_approvals.php'
+                    );
+                    
+                    // Send email to payer
+                    if (!empty($payerSelectionResult['payer']['email']) && function_exists('send_approval_email')) {
+                        $rejoin_details_stmt = $pdo->prepare("
+                            SELECT rr.*, e.name as employee_name 
+                            FROM rejoin_requests rr
+                            LEFT JOIN employees e ON rr.emp_id = e.emp_id
+                            WHERE rr.request_inv_no = :inv_no
+                            LIMIT 1
+                        ");
+                        $rejoin_details_stmt->execute([':inv_no' => $request['request_inv_no']]);
+                        $rejoin_details = $rejoin_details_stmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        if ($rejoin_details) {
+                            $base_url = 'https://hr.almutlaksystem.com';
+                            $payer_name = $payerSelectionResult['payer']['name'] ?? 'Finance Staff';
+                            
+                            $template_data = [
+                                'APPROVER_NAME' => $payer_name,
+                                'REQUEST_ID' => $request['request_inv_no'],
+                                'EMPLOYEE_NAME' => $rejoin_details['employee_name'] ?? 'Employee',
+                                'REJOIN_DATE' => $rejoin_details['requested_rejoin_date'] ?? 'N/A',
+                                'REQUEST_URL' => $base_url . '/rejoin_approvals.php',
+                                'EMAIL_MESSAGE' => 'You have been assigned by Finance Manager to process the payment for this rejoin request. Please record the payment amount, confirm the settlement details, and upload payment proof to complete the transaction.'
+                            ];
+                            
+                            $email_subject = "Rejoin Payment Processing Assignment - " . $request['request_inv_no'];
+                            send_approval_email($conDB, $payerSelectionResult['payer']['email'], $payer_name, $email_subject, 'rejoin_request', $template_data);
+                        }
+                    }
+                    
+                    // Return early with success response - do NOT call handle_approval_action as it checks for duplicate approvals
+                    echo json_encode([
+                        'status' => 'success',
+                        'message' => __("rejoin_payer_assigned", "Rejoin request approved. Finance payer assigned."),
+                        'payer_assigned' => true,
+                        'payer_name' => $payerSelectionResult['payer']['name'] ?? 'Unknown'
+                    ]);
+                    exit;
+                } catch (Exception $e) {
+                    throw new Exception("Error assigning payer: " . $e->getMessage());
+                }
+            } else {
+                // Normal approval without payer selection
+                $approvalResult = $chainManager->processApproval(
+                    $request['request_inv_no'],
+                    $current_user_id,
+                    'approve',
+                    $approval_note
+                );
+                
+                if ($approvalResult['is_final']) {
+                    // Final approval - complete the request
+                    $stmt = $pdo->prepare("
+                        UPDATE rejoin_requests 
+                        SET 
+                            status = 'approved',
+                            approved_by_emp_id = :approver_id,
+                            approved_at = NOW(),
+                            approval_note = :note,
+                            final_approved_date = :rejoin_date
+                        WHERE id = :id
+                    ");
+                    $stmt->execute([
+                        ':approver_id' => $current_user_id,
+                        ':note' => $approval_note,
+                        ':rejoin_date' => $request['requested_rejoin_date'],
+                        ':id' => $rejoin_request_id
+                    ]);
 
-            // Update request_approvers table
-            $stmt = $pdo->prepare("
-                UPDATE request_approvers 
-                SET status = 'approved', note = :note, action_date = NOW()
-                WHERE request_inv_no = :inv_no AND request_type_id = 5
-            ");
-            $stmt->execute([
-                ':note' => $approval_note,
-                ':inv_no' => $request['request_inv_no']
-            ]);
+                    // Set employee fly status to 0 (employee has rejoined)
+                    $stmt = $pdo->prepare("
+                        UPDATE employees 
+                        SET fly = 0
+                        WHERE emp_id = :emp_id
+                    ");
+                    $stmt->execute([':emp_id' => $employee_id]);
 
-            // Set employee fly status to 0 (employee has rejoined)
-            $stmt = $pdo->prepare("
-                UPDATE employees 
-                SET fly = 0
-                WHERE emp_id = :emp_id
-            ");
-            $stmt->execute([':emp_id' => $employee_id]);
+                    // Mark vacation as reviewed/completed
+                    $stmt = $pdo->prepare("
+                        UPDATE emp_vacation 
+                        SET review = 'C'
+                        WHERE id = :vacation_id
+                    ");
+                    $stmt->execute([':vacation_id' => $request['vacation_id']]);
 
-            // Mark vacation as reviewed/completed
-            $stmt = $pdo->prepare("
-                UPDATE emp_vacation 
-                SET review = 'C'
-                WHERE id = :vacation_id
-            ");
-            $stmt->execute([':vacation_id' => $request['vacation_id']]);
-
-            $message = __("rejoin_request_approved_text", "Rejoin request has been approved");
+                    $message = __("rejoin_request_approved_text", "Rejoin request has been approved");
+                } else {
+                    // More approvals needed
+                    $stmt = $pdo->prepare("
+                        UPDATE rejoin_requests 
+                        SET 
+                            status = 'pending',
+                            approval_note = :note
+                        WHERE id = :id
+                    ");
+                    $stmt->execute([
+                        ':note' => $approval_note,
+                        ':id' => $rejoin_request_id
+                    ]);
+                    
+                    // Notify next approver
+                    if ($approvalResult['next_approver']) {
+                        $chainManager->notifyApprover(
+                            $approvalResult['next_approver']['approver_id'],
+                            'Rejoin Request Awaiting Approval',
+                            'A rejoin request requires your approval.',
+                            'rejoin_approvals.php'
+                        );
+                    }
+                    
+                    $message = __("rejoin_request_approved_text", "Rejoin request has been approved and forwarded to next approver");
+                }
+            }
 
         } elseif ($action === 'adjust') {
             // Allow employee to adjust date within 3-day window
@@ -3823,6 +5121,8 @@ elseif ($ajaxType == 'processRejoinApproval') {
                 }
 
                 if ($extra_days > 0) {
+                    // Skip balance deduction for Emergency vacations on rejoin
+                    $is_emergency = (strtolower($request['vacation_fly_type'] ?? '') === 'emergency');
                     // Extend vacation record and total days
                     $stmtUpdVac = $pdo->prepare("UPDATE emp_vacation SET return_date = :new_date, vacdays = vacdays + :extra WHERE id = :vac_id");
                     $stmtUpdVac->execute([
@@ -3830,14 +5130,15 @@ elseif ($ajaxType == 'processRejoinApproval') {
                         ':extra' => $extra_days,
                         ':vac_id' => $request['vacation_id']
                     ]);
-
-                    // Deduct from linked balance row if available
-                    $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
-                    $stmtBal->execute([':vac_id' => $request['vacation_id']]);
-                    if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
-                        $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
-                        $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
-                        $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+                    if (!$is_emergency) {
+                        // Deduct from linked balance row if available
+                        $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
+                        $stmtBal->execute([':vac_id' => $request['vacation_id']]);
+                        if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
+                            $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
+                            $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
+                            $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+                        }
                     }
                 }
 
@@ -3905,11 +5206,20 @@ elseif ($ajaxType == 'processRejoinApproval') {
                 $message = __("rejoin_adjustment_allowed_text", "Employee has been allowed to adjust rejoin date within 3 days");
             }
 
+
         } else { // reject
             if (empty($rejection_reason)) {
                 throw new Exception(__("rejection_reason_required"));
             }
 
+            // Process rejection using chain manager
+            $approvalResult = $chainManager->processApproval(
+                $request['request_inv_no'],
+                $current_user_id,
+                'reject',
+                'Rejected: ' . $rejection_reason
+            );
+            
             $stmt = $pdo->prepare("
                 UPDATE rejoin_requests 
                 SET 
@@ -3923,17 +5233,6 @@ elseif ($ajaxType == 'processRejoinApproval') {
                 ':supervisor_id' => $current_user_id,
                 ':reason' => $rejection_reason,
                 ':id' => $rejoin_request_id
-            ]);
-
-            // Update request_approvers table
-            $stmt = $pdo->prepare("
-                UPDATE request_approvers 
-                SET status = 'rejected', note = :note, action_date = NOW()
-                WHERE request_inv_no = :inv_no AND request_type_id = 5
-            ");
-            $stmt->execute([
-                ':note' => 'Rejected: ' . $rejection_reason,
-                ':inv_no' => $request['request_inv_no']
             ]);
 
             $message = __("rejoin_request_rejected_text", "Rejoin request has been rejected");
@@ -3989,7 +5288,7 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
 
         // Get rejoin request
         $stmt = $pdo->prepare("
-            SELECT rr.*, v.return_date, v.vacdays
+            SELECT rr.*, v.return_date, v.vacdays, v.vac_type AS vacation_vac_type, v.fly_type AS vacation_fly_type
             FROM rejoin_requests rr
             JOIN emp_vacation v ON rr.vacation_id = v.id
             WHERE rr.id = :id AND rr.emp_id = :emp_id
@@ -4047,19 +5346,21 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
         }
 
         if ($extra_days > 0) {
+            $is_emergency = (strtolower($request['vacation_fly_type'] ?? '') === 'emergency');
             $stmtUpdVac = $pdo->prepare("UPDATE emp_vacation SET return_date = :new_date, vacdays = vacdays + :extra WHERE id = :vac_id");
             $stmtUpdVac->execute([
                 ':new_date' => $adjusted_date,
                 ':extra' => $extra_days,
                 ':vac_id' => $request['vacation_id']
             ]);
-
-            $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
-            $stmtBal->execute([':vac_id' => $request['vacation_id']]);
-            if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
-                $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
-                $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
-                $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+            if (!$is_emergency) {
+                $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
+                $stmtBal->execute([':vac_id' => $request['vacation_id']]);
+                if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
+                    $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
+                    $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
+                    $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+                }
             }
         }
 

@@ -87,7 +87,7 @@ if ($current_filter === 'my_pending') {
         $where_clauses[] = "ra.approver_id = ?";
         $params[] = $empid;
         $types .= "i";
-        $where_clauses[] = "ra.status = 'pending'";
+            $where_clauses[] = "ra.status = 'pending'";
     }
 } elseif ($current_filter === 'my_dept') {
     $where_clauses[] = "e.dept = ?";
@@ -427,7 +427,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                     </a>
                                                                     <?php if($can_take_action): ?>
                                                                         <div class="dropdown-divider"></div>
-                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['loan_amount']; ?>, '<?=$loan['current_approver_user_type'] ?? ''?>', <?=$loan['current_approval_level'] ?? 0?>)">
+                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['loan_amount']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['current_approval_level'] ?? 0?>, <?=(int)($loan['payer_emp_id'] ?? 0)?>, <?=(int)$_SESSION['empid']?>)">
                                                                             <i class="fa fa-check text-success"></i> <?=__('approve')?>
                                                                         </button>
                                                                         <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>')">

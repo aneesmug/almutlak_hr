@@ -90,10 +90,15 @@ if ($current_page > $total_pages && $total_pages > 0) {
     $current_page = $total_pages;
 }
 
-// 4. Fetch requests for the current page
+// 4. Fetch requests for the current page (with payroll adjustments)
 $requests = [];
 if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
-    $sql = "SELECT v.*, e.name as employee_name FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id" . $where_sql;
+    $sql = "SELECT v.*, e.name as employee_name, 
+            v.overtime_hours, v.overtime_amount, 
+            v.deduction_hours, v.deduction_days, v.deduction_amount,
+            v.other_earnings, v.payroll_note
+            FROM emp_vacation v 
+            JOIN employees e ON v.emp_id = e.emp_id" . $where_sql;
     $sql .= " ORDER BY v.created_at DESC";
     
     if (!$show_all) {
@@ -316,6 +321,88 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
                                     <i class="fas fa-sun"></i>
                                     <strong>Days:</strong> <?=htmlspecialchars($req['vacdays']); ?>
                                 </div>
+                                
+                                <!-- Payroll Adjustments Section -->
+                                <?php if (isset($req['overtime_hours']) || isset($req['deduction_hours']) || isset($req['deduction_days'])): ?>
+                                    <?php 
+                                    $hasAdjustments = 
+                                        (isset($req['overtime_hours']) && $req['overtime_hours'] > 0) || 
+                                        (isset($req['deduction_hours']) && $req['deduction_hours'] > 0) || 
+                                        (isset($req['deduction_days']) && $req['deduction_days'] > 0) ||
+                                        (isset($req['other_earnings']) && $req['other_earnings'] > 0);
+                                    ?>
+                                    <?php if ($hasAdjustments): ?>
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-2" style="font-size: 0.85em; font-weight: 600;">
+                                            <i class="fas fa-calculator"></i> Payroll Adjustments
+                                        </div>
+                                        
+                                        <?php if (isset($req['overtime_hours']) && $req['overtime_hours'] > 0): ?>
+                                            <div class="detail-item" style="margin-bottom: 0.5rem;">
+                                                <i class="fas fa-clock text-success"></i>
+                                                <strong>Overtime:</strong> 
+                                                <span class="text-success">
+                                                    <?=number_format($req['overtime_hours'], 1); ?> hrs 
+                                                    (<?=number_format($req['overtime_amount'] ?? 0, 2); ?> SAR)
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <?php if (isset($req['deduction_hours']) && $req['deduction_hours'] > 0): ?>
+                                            <div class="detail-item" style="margin-bottom: 0.5rem;">
+                                                <i class="fas fa-minus-circle text-danger"></i>
+                                                <strong>Deduction:</strong> 
+                                                <span class="text-danger">
+                                                    <?=number_format($req['deduction_hours'], 1); ?> hrs
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <?php if (isset($req['deduction_days']) && $req['deduction_days'] > 0): ?>
+                                            <div class="detail-item" style="margin-bottom: 0.5rem;">
+                                                <i class="fas fa-calendar-times text-danger"></i>
+                                                <strong>Days Ded:</strong> 
+                                                <span class="text-danger">
+                                                    <?=number_format($req['deduction_days'], 1); ?> days
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <?php if (isset($req['other_earnings']) && $req['other_earnings'] > 0): ?>
+                                            <div class="detail-item" style="margin-bottom: 0.5rem;">
+                                                <i class="fas fa-plus-circle text-success"></i>
+                                                <strong>Other:</strong> 
+                                                <span class="text-success">
+                                                    <?=number_format($req['other_earnings'], 2); ?> SAR
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <?php 
+                                        // Calculate total adjustment
+                                        $totalOvertime = floatval($req['overtime_amount'] ?? 0) + floatval($req['other_earnings'] ?? 0);
+                                        $totalDeductions = floatval($req['deduction_amount'] ?? 0);
+                                        $netAdjustment = $totalOvertime - $totalDeductions;
+                                        ?>
+                                        <?php if ($netAdjustment != 0): ?>
+                                            <div class="detail-item" style="margin-bottom: 0.5rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #ddd;">
+                                                <i class="fas fa-equals <?=$netAdjustment >= 0 ? 'text-success' : 'text-danger'; ?>"></i>
+                                                <strong>Net:</strong> 
+                                                <span class="<?=$netAdjustment >= 0 ? 'text-success' : 'text-danger'; ?> font-weight-bold">
+                                                    <?=$netAdjustment >= 0 ? '+' : ''; ?><?=number_format($netAdjustment, 2); ?> SAR
+                                                </span>
+                                            </div>
+                                        <?php endif; ?>
+                                        
+                                        <?php if (!empty($req['payroll_note'])): ?>
+                                            <div class="detail-item" style="margin-bottom: 0.5rem;">
+                                                <i class="fas fa-sticky-note text-info"></i>
+                                                <strong>Note:</strong> 
+                                                <small class="text-muted"><?=htmlspecialchars(substr($req['payroll_note'], 0, 50)); ?><?=strlen($req['payroll_note']) > 50 ? '...' : ''; ?></small>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                <?php endif; ?>
                             </div>
                             <div class="card-footer text-right">
                                 <!-- Only show buttons if the request is in a state that can be actioned by the current user -->
@@ -380,6 +467,10 @@ document.getElementById('searchFilter').addEventListener('keypress', function (e
 
 // Function to handle the approval action.
 function approveRequest(vacationId, role) {
+    // Check if current user is Finance Manager
+    const currentUserType = document.body.getAttribute('data-user-type') || '<?php echo $_SESSION['user_type'] ?? ""; ?>';
+    const isFinanceManager = (currentUserType === 'finance');
+    
     if (role === 'HR_Assistant') {
         Swal.fire({
             title: 'Approval Details',
@@ -399,6 +490,89 @@ function approveRequest(vacationId, role) {
             if (result.isConfirmed) {
                 sendApproval(vacationId, role, result.value.ticket_pay, result.value.permit_fee);
             }
+        });
+    } else if (isFinanceManager) {
+        // Finance Manager approval - show payer selection modal
+        $.ajax({
+            url: './includes/ajaxFile/ajaxLoan.php',
+            type: 'POST',
+            data: { ajaxType: 'get_finance_staff' },
+            dataType: 'JSON',
+        }).done(function(staffResponse) {
+            let payerOptions = '<option value="">-- Select Finance Payer --</option>';
+            if (staffResponse.status === 'success' && staffResponse.staff) {
+                staffResponse.staff.forEach(function(staff) {
+                    payerOptions += `<option value="${staff.emp_id}">${staff.name} (${staff.emp_id})</option>`;
+                });
+            }
+            
+            Swal.fire({
+                title: 'Finance Manager - Vacation Approval',
+                html: `
+                    <form class="text-left">
+                        <p class="alert alert-info" style="margin-bottom: 15px;">
+                            <i class="fa fa-info-circle"></i> Select the finance staff member who will process the payment for this vacation.
+                        </p>
+                        <div class="form-group">
+                            <label style="text-align: left; display: block;">Finance Payer <span class="text-danger">*</span></label>
+                            <select id="payer_emp_id" class="swal2-input form-control" required>
+                                ${payerOptions}
+                            </select>
+                            <small class="text-muted">The selected person will handle payment processing</small>
+                        </div>
+                        <div class="form-group">
+                            <label style="text-align: left; display: block;">Approval Note <span class="text-muted">(Optional)</span></label>
+                            <textarea id="approval_comment" class="swal2-input form-control" rows="3" placeholder="Write your comment..." maxlength="5000" style="height: 80px;"></textarea>
+                            <small class="text-muted"><span id="char-count">0</span>/5000 characters</small>
+                        </div>
+                    </form>
+                `,
+                width: '40%',
+                showCancelButton: true,
+                confirmButtonText: 'Approve & Assign Payer',
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#dc3545',
+                showLoaderOnConfirm: true,
+                preConfirm: () => {
+                    const payerId = document.getElementById('payer_emp_id').value;
+                    const comment = document.getElementById('approval_comment').value;
+                    
+                    if (!payerId) {
+                        Swal.showValidationMessage('Please select a finance payer');
+                        return false;
+                    }
+                    
+                    return {
+                        payer_emp_id: payerId,
+                        approval_comment: comment
+                    }
+                },
+                didOpen: () => {
+                    // Character counter
+                    document.getElementById('approval_comment').addEventListener('input', function() {
+                        document.getElementById('char-count').textContent = this.value.length;
+                    });
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    sendApprovalWithPayer(vacationId, role, result.value.payer_emp_id, result.value.approval_comment);
+                }
+            });
+        }).fail(function() {
+            // Fallback to simple approval if staff fetch fails
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "Do you want to approve this vacation request?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#50e3c2',
+                cancelButtonColor: '#e35050',
+                confirmButtonText: 'Yes, approve it!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    sendApproval(vacationId, role);
+                }
+            });
         });
     } else {
         Swal.fire({
@@ -432,6 +606,29 @@ function sendApproval(vacationId, role, ticketPay = null, permitFee = null) {
         },
         success: function(response) {
             Swal.fire('Approved!', 'The request has been approved.', 'success')
+                .then(() => location.reload());
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            Swal.fire('Error!', 'Something went wrong with the approval.', 'error');
+        }
+    });
+}
+
+// AJAX call for sending approval with payer selection (Finance Manager)
+function sendApprovalWithPayer(vacationId, role, payerId, approvalComment = '') {
+    $.ajax({
+        url: './includes/ajaxFile/ajaxVacation.php',
+        type: 'POST',
+        dataType: 'JSON',
+        data: {
+            ajaxType: 'approveVacation',
+            vacation_id: vacationId,
+            approver_role: role,
+            payer_emp_id: payerId,
+            approval_comment: approvalComment
+        },
+        success: function(response) {
+            Swal.fire('Approved!', 'The request has been approved and payer has been assigned.', 'success')
                 .then(() => location.reload());
         },
         error: function(jqXHR, textStatus, errorThrown) {

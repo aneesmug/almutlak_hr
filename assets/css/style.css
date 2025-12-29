@@ -6863,7 +6863,7 @@ label.atch {
 
 .date-batch-g::before {
   color: #fff;
-  background: var(--info)
+  /* background: var(--info) */
     /*#e1e9ef*/
   ;
   margin-right: 5px;
@@ -6871,7 +6871,7 @@ label.atch {
 
 .date-batch-h::before {
   color: #fff;
-  background: var(--green9)
+  /* background: var(--green9) */
     /*#cee7df*/
   ;
   margin-right: 5px;

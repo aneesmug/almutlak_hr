@@ -436,120 +436,9 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         }
         if ($res_hr_bp) mysqli_free_result($res_hr_bp);
         
-        // STEP 4: Add Asset Clearance Teams
-        $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea 
-                       JOIN assets a ON ea.asset_id = a.id 
-                       WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
-        $stmt_assets = mysqli_prepare($conDB, $sql_assets);
-        if ($stmt_assets) {
-            mysqli_stmt_bind_param($stmt_assets, "s", $emp_id);
-            mysqli_stmt_execute($stmt_assets);
-            $res_assets = mysqli_stmt_get_result($stmt_assets);
-            
-            $needs_it = false;
-            $needs_admin = false;
-            $needs_transport = false;
-            
-            while ($asset_row = mysqli_fetch_assoc($res_assets)) {
-                $asset_name = strtolower(trim($asset_row['asset_name']));
-                // Mapping by asset name keywords → departments:
-                //  IT: laptop, computer
-                //  Administration: mobile, phone, sim card
-                //  Transportation: car, vehicle
-                if (strpos($asset_name, 'laptop') !== false || strpos($asset_name, 'computer') !== false) {
-                    $needs_it = true;
-                }
-                if (strpos($asset_name, 'mobile') !== false || strpos($asset_name, 'phone') !== false || strpos($asset_name, 'sim') !== false) {
-                    $needs_admin = true;
-                }
-                if (strpos($asset_name, 'car') !== false || strpos($asset_name, 'vehicle') !== false) {
-                    $needs_transport = true;
-                }
-            }
-            mysqli_free_result($res_assets);
-            mysqli_stmt_close($stmt_assets);
-            
-            if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
-                // Department name normalization mapping to actual dep_nme values in DB
-                $deptLookup = [
-                    'IT' => __('information_technology'),
-                    'Administration' => __('administration'),
-                    'Transportation' => __('transportation')    
-                ];
-                if ($needs_it) {
-                    $it_dept_id = get_department_id_by_name($conDB, $deptLookup['IT']);
-                    if ($it_dept_id) {
-                        $it_mgr = getDeptManager($conDB, $it_dept_id);
-                        if ($it_mgr && !empty($it_mgr['emp_id']) && !in_array($it_mgr['emp_id'], $chain)) {
-                            $chain[] = $it_mgr['emp_id'];
-                            $chain_details[] = [
-                                'emp_id' => $it_mgr['emp_id'],
-                                'name' => $it_mgr['name'],
-                                'label' => __('it_team_asset_clearance'),
-                                'level' => count($chain)
-                            ];
-                        }
-                    }
-                }
-                
-                if ($needs_admin) {
-                    $admin_dept_id = get_department_id_by_name($conDB, $deptLookup['Administration']);
-                    if ($admin_dept_id) {
-                        $admin_mgr = getDeptManager($conDB, $admin_dept_id);
-                        if ($admin_mgr && !empty($admin_mgr['emp_id']) && !in_array($admin_mgr['emp_id'], $chain)) {
-                            $chain[] = $admin_mgr['emp_id'];
-                            $chain_details[] = [
-                                'emp_id' => $admin_mgr['emp_id'],
-                                'name' => $admin_mgr['name'],
-                                'label' => __('administration_team_asset_clearance'),
-                                'level' => count($chain)
-                            ];
-                        }
-                    }
-                }
-                
-                if ($needs_transport) {
-                    $transport_dept_id = get_department_id_by_name($conDB, $deptLookup['Transportation']);
-                    if ($transport_dept_id) {
-                        $transport_mgr = getDeptManager($conDB, $transport_dept_id);
-                        if ($transport_mgr && !empty($transport_mgr['emp_id']) && !in_array($transport_mgr['emp_id'], $chain)) {
-                            $chain[] = $transport_mgr['emp_id'];
-                            $chain_details[] = [
-                                'emp_id' => $transport_mgr['emp_id'],
-                                'name' => $transport_mgr['name'],
-                                'label' => __('transportation_team_asset_clearance'),
-                                'level' => count($chain)
-                            ];
-                        }
-                    }
-                }
-            }
-        }
+        // STEP 4: Asset clearance selection now occurs during approval by managers; no auto-added asset approvers here.
         
-        // STEP 5: Add HR Payroll (for ALL annual vacations to process overtime/deductions)
-        // All annual vacations must go to HR Payroll regardless of vacation_salary_type
-        if ($fly_type === 'annual') {
-            $sql_hr_payroll = "SELECT e.emp_id, e.name FROM employees e 
-                               JOIN admin_login al ON e.emp_id = al.emp_id 
-                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
-                               ORDER BY e.emp_id ASC LIMIT 1";
-            $res_hr_payroll = mysqli_query($conDB, $sql_hr_payroll);
-            if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
-                if (!in_array($row_hr_payroll['emp_id'], $chain)) {
-                    $chain[] = $row_hr_payroll['emp_id'];
-                    $chain_details[] = [
-                        'emp_id' => $row_hr_payroll['emp_id'],
-                        'name' => $row_hr_payroll['name'],
-                        'label' => __('hr_payroll'),
-                        'level' => count($chain)
-                    ];
-                }
-            }
-            if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
-        }
-        
-        // STEP 6: Add GR Officer (ONLY if vac_type = 'Fly' AND fly_type = 'annual')
-        // GR Officer handles ticket payments and exit-reentry permits for annual fly vacations
+        // STEP 5: Determine vacation type (used for UI flow only)
         // Note: vac_type is fetched from emp_vacation.vac_type column
         $sql_vac_type = "SELECT vac_type FROM emp_vacation WHERE id = ? LIMIT 1";
         $stmt_vac_type = mysqli_prepare($conDB, $sql_vac_type);
@@ -566,26 +455,6 @@ elseif($ajaxType == 'get_asset_clearance_chain') {
         }
         
         $is_fly_vacation = ($fly_type === 'annual' && strtolower($vac_type) === 'fly');
-        if ($is_fly_vacation) {
-            $sql_gr_officer = "SELECT e.emp_id, e.name FROM employees e 
-                               JOIN admin_login al ON e.emp_id = al.emp_id 
-                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
-                               ORDER BY e.emp_id ASC LIMIT 1";
-            $res_gr_officer = mysqli_query($conDB, $sql_gr_officer);
-            if ($res_gr_officer && ($row_gr_officer = mysqli_fetch_assoc($res_gr_officer))) {
-                if (!in_array($row_gr_officer['emp_id'], $chain)) {
-                    $chain[] = $row_gr_officer['emp_id'];
-                    $chain_details[] = [
-                        'emp_id' => $row_gr_officer['emp_id'],
-                        'name' => $row_gr_officer['name'],
-                        'label' => __('hr_payroll_final_ticket_exit_fee'),
-                        'level' => count($chain),
-                        'is_final' => true
-                    ];
-                }
-            }
-            if ($res_gr_officer) mysqli_free_result($res_gr_officer);
-        }
         
         // Log the chain BEFORE exclusion
         
@@ -743,141 +612,9 @@ elseif($ajaxType == 'build_vacation_approval_chain') {
         }
         if ($res_hr_bp) mysqli_free_result($res_hr_bp);
 
-        // STEP 5: Add Asset Clearance Teams (IT, Administration, Transportation)
-        $sql_assets = "SELECT a.name AS asset_name FROM employee_assets ea 
-                       JOIN assets a ON ea.asset_id = a.id 
-                       WHERE ea.emp_id = ? AND ea.status = 'Assigned'";
-        $stmt_assets = mysqli_prepare($conDB, $sql_assets);
-        if ($stmt_assets) {
-            mysqli_stmt_bind_param($stmt_assets, "s", $emp_id);
-            mysqli_stmt_execute($stmt_assets);
-            $res_assets = mysqli_stmt_get_result($stmt_assets);
-            
-            $needs_it = false;
-            $needs_admin = false;
-            $needs_transport = false;
-            
-            while ($asset_row = mysqli_fetch_assoc($res_assets)) {
-                $asset_name = strtolower(trim($asset_row['asset_name']));
-                // Mapping by asset name keywords → departments:
-                //  IT: laptop, computer
-                //  Administration: mobile, phone, sim card
-                //  Transportation: car, vehicle
-                if (strpos($asset_name, 'laptop') !== false || strpos($asset_name, 'computer') !== false) {
-                    $needs_it = true;
-                }
-                if (strpos($asset_name, 'mobile') !== false || strpos($asset_name, 'phone') !== false || strpos($asset_name, 'sim') !== false) {
-                    $needs_admin = true;
-                }
-                if (strpos($asset_name, 'car') !== false || strpos($asset_name, 'vehicle') !== false) {
-                    $needs_transport = true;
-                }
-            }
-            mysqli_free_result($res_assets);
-            mysqli_stmt_close($stmt_assets);
-
-            // Add asset team managers
-            if (function_exists('get_department_id_by_name') && function_exists('getDeptManager')) {
-                // Department name normalization mapping to actual dep_nme values in DB
-                $deptLookup = [
-                    'IT' => __('information_technology'),
-                    'Administration' => __('administration'),
-                    'Transportation' => __('transportation')
-                ];
-                if ($needs_it) {
-                    $it_dept_id = get_department_id_by_name($conDB, $deptLookup['IT']);
-                    if ($it_dept_id) {
-                        $it_mgr = getDeptManager($conDB, $it_dept_id);
-                        if ($it_mgr && !empty($it_mgr['emp_id']) && !in_array($it_mgr['emp_id'], $chain)) {
-                            $chain[] = $it_mgr['emp_id'];
-                            $chain_details[] = [
-                                'emp_id' => $it_mgr['emp_id'],
-                                'name' => $it_mgr['name'],
-                                'label' => 'IT Team (Asset Clearance)',
-                                'level' => count($chain)
-                            ];
-                        }
-                    }
-                }
-                
-                if ($needs_admin) {
-                    $admin_dept_id = get_department_id_by_name($conDB, $deptLookup['Administration']);
-                    if ($admin_dept_id) {
-                        $admin_mgr = getDeptManager($conDB, $admin_dept_id);
-                        if ($admin_mgr && !empty($admin_mgr['emp_id']) && !in_array($admin_mgr['emp_id'], $chain)) {
-                            $chain[] = $admin_mgr['emp_id'];
-                            $chain_details[] = [
-                                'emp_id' => $admin_mgr['emp_id'],
-                                'name' => $admin_mgr['name'],
-                                'label' => __('administration_team_asset_clearance'),
-                                'level' => count($chain)
-                            ];
-                        }
-                    }
-                }
-                
-                if ($needs_transport) {
-                    $transport_dept_id = get_department_id_by_name($conDB, $deptLookup['Transportation']);
-                    if ($transport_dept_id) {
-                        $transport_mgr = getDeptManager($conDB, $transport_dept_id);
-                        if ($transport_mgr && !empty($transport_mgr['emp_id']) && !in_array($transport_mgr['emp_id'], $chain)) {
-                            $chain[] = $transport_mgr['emp_id'];
-                            $chain_details[] = [
-                                'emp_id' => $transport_mgr['emp_id'],
-                                'name' => $transport_mgr['name'],
-                                'label' => __('transportation_team_asset_clearance'),
-                                'level' => count($chain)
-                            ];
-                        }
-                    }
-                }
-            }
-        }
-
-        // STEP 6: Add HR Payroll (ONLY if vacation_salary_type = 'payroll')
-        if ($vacation_salary_type === 'payroll') {
-            $sql_hr_payroll = "SELECT e.emp_id, e.name FROM employees e 
-                               JOIN admin_login al ON e.emp_id = al.emp_id 
-                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
-                               ORDER BY e.emp_id ASC LIMIT 1";
-            $res_hr_payroll = mysqli_query($conDB, $sql_hr_payroll);
-            if ($res_hr_payroll && ($row_hr_payroll = mysqli_fetch_assoc($res_hr_payroll))) {
-                if (!in_array($row_hr_payroll['emp_id'], $chain)) {
-                    $chain[] = $row_hr_payroll['emp_id'];
-                    $chain_details[] = [
-                        'emp_id' => $row_hr_payroll['emp_id'],
-                        'name' => $row_hr_payroll['name'],
-                        'label' => __('hr_payroll'),
-                        'level' => count($chain)
-                    ];
-                }
-            }
-            if ($res_hr_payroll) mysqli_free_result($res_hr_payroll);
-        }
-
-        // STEP 7: Add GR Officer (ONLY if fly_type = 'annual' AND vac_type = 'Fly')
-        // GR Officer handles ticket payments and exit-reentry permits for annual fly vacations
+        // STEP 5: Asset clearance selection now occurs during approval by managers; no auto-added asset approvers here.
+        // STEP 6/7: Final approvers come from configured chain; no static HR Payroll/GR Officer
         $is_fly_vacation = ($fly_type === 'annual' && strtolower($vac_type) === 'fly');
-        if ($is_fly_vacation) {
-            $sql_gr_officer = "SELECT e.emp_id, e.name FROM employees e 
-                               JOIN admin_login al ON e.emp_id = al.emp_id 
-                               WHERE al.user_type = 'hr_payroll' AND e.status = 1 
-                               ORDER BY e.emp_id ASC LIMIT 1";
-            $res_gr_officer = mysqli_query($conDB, $sql_gr_officer);
-            if ($res_gr_officer && ($row_gr_officer = mysqli_fetch_assoc($res_gr_officer))) {
-                if (!in_array($row_gr_officer['emp_id'], $chain)) {
-                    $chain[] = $row_gr_officer['emp_id'];
-                    $chain_details[] = [
-                        'emp_id' => $row_gr_officer['emp_id'],
-                        'name' => $row_gr_officer['name'],
-                        'label' => __('hr_payroll_final_ticket_exit_fee'),
-                        'level' => count($chain),
-                        'is_final' => true
-                    ];
-                }
-            }
-            if ($res_gr_officer) mysqli_free_result($res_gr_officer);
-        }
 
         // Return the complete chain
         echo json_encode([
@@ -1928,9 +1665,22 @@ elseif($ajaxType == 'unassign_asset') {
                 (float)($row['other'] ?? 0) + 
                 (float)($row['guard'] ?? 0);
             
-            // Calculate daily rate: monthly_salary / 30 days (30/360 day-count convention)
-            // Then multiply to calculate encashment amount
-            $daily_rate = $total_monthly_salary / 30;
+            // Get employee's contract vacation days (critical fix: use contract days, not hardcoded 30)
+            $contract_stmt = mysqli_query($conDB, "SELECT e.vac_period, cp.vac_period AS contract_days, cp.period 
+                                                   FROM employees e 
+                                                   JOIN contract_period cp ON e.vac_period = cp.id 
+                                                   WHERE e.emp_id = {$empid} LIMIT 1");
+            
+            $contract_days = 30; // Default fallback (should not be needed)
+            if ($contract_stmt && mysqli_num_rows($contract_stmt) > 0) {
+                $contract_row = mysqli_fetch_assoc($contract_stmt);
+                mysqli_free_result($contract_stmt);
+                $contract_days = (float)($contract_row['contract_days'] ?? 30);
+            }
+            
+            // Calculate daily rate: monthly_salary / contract_vacation_days (not hardcoded 30)
+            // This ensures employees with 21-day, 30-day, or 42-day contracts use the correct rate
+            $daily_rate = $total_monthly_salary / $contract_days;
             $encash_amount = $daily_rate * $days;
             
             echo json_encode([

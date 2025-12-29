@@ -187,6 +187,11 @@ const ASSISTANT_RESTRICTED_PAGES = ['dashbydepart.php', 'filter_employee.php', '
 // Skip access control for AJAX file requests - they return JSON and handle their own auth
 $is_ajax_file = (strpos($_SERVER['PHP_SELF'], '/ajaxFile/') !== false);
 
+// Allow specific endpoints to bypass page access redirects while still enforcing auth
+if (defined('SKIP_PAGE_ACCESS_CONTROL') && SKIP_PAGE_ACCESS_CONTROL === true) {
+    $is_ajax_file = true;
+}
+
 if (!$is_ajax_file && ($emprow['user_type'] ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true)) {
     header("Location: ./profile.php");
     exit();
@@ -264,6 +269,23 @@ function update_employee_fly_status_on_session($conDB) {
         
         // STEP 2: DISABLED - fly=0 should only be reset via returnVacationRequest() function in emp_top_info.php
         // This ensures proper workflow control and prevents automatic resets
+        
+        // STEP 3: Auto-complete LV-* (Excuse Leave) requests after return date has passed
+        // At the end of the return_date day, mark review = 'C' (Completed)
+        // We run this when current date > return_date by checking return_date < CURDATE()
+        $sql_complete_lv = "
+            UPDATE emp_vacation
+            SET review = 'C', current_status = 'completed' 
+            WHERE request_inv_no LIKE 'LV-%'
+              AND review <> 'C'
+              AND return_date < ?
+              AND (current_status = 'approved' OR current_status = 'completed')
+        ";
+        if ($stmt_lv = mysqli_prepare($conDB, $sql_complete_lv)) {
+            mysqli_stmt_bind_param($stmt_lv, 's', $today);
+            mysqli_stmt_execute($stmt_lv);
+            mysqli_stmt_close($stmt_lv);
+        }
         
     } catch (Exception $e) {
         // Silently fail to avoid breaking page loads

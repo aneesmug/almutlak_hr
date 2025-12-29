@@ -863,12 +863,7 @@ if (mysqli_num_rows($query) == 1) {
                                                     <th><?= __('serial_number') ?></th>
                                                     <th><?= __('asset_type') ?></th>
                                                     <th><?= __('clearance_status') ?></th>
-                                                        <div class="icon"><i class="fa <?= $status_icon ?>"></i></div>
-                                                        <span class="status ml-3 <?= $status_class ?>">
-                                                            <strong><?= htmlspecialchars($approver['approver_name']) ?></strong>
-                                                            <small class="text-muted">(<?= __('level') ?? 'Level' ?> <?= $approver['approval_level'] ?>)</small>
-                                                            - <span class="<?= $status_class ?>"><?= $status_text ?></span>
-                                                        </span>
+                                                </tr>
                                             </thead>
                                             <tbody>
                                                 <?php foreach ($assigned_assets as $asset): 

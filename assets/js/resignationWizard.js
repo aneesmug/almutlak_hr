@@ -182,22 +182,60 @@ function submitResignation() {
         data: formData,
         processData: false,
         contentType: false,
-        dataType: 'json',
-        success: function(response) {
-            Swal.fire({
-                title: response.title || __('success') || 'Success',
-                text: response.message || __('resignation_submitted') || 'Your resignation has been submitted',
-                icon: response.type || 'success',
-                allowOutsideClick: false,
-                confirmButtonText: __('ok') || 'OK'
-            }).then(() => {
-                location.reload();
-            });
+        dataType: 'text', // Changed to 'text' to handle parsing manually
+        success: function(responseText) {
+            let response;
+            try {
+                response = JSON.parse(responseText);
+            } catch (e) {
+                console.error('Failed to parse response:', responseText);
+                Swal.fire({
+                    title: __('error') || 'Error',
+                    text: __('invalid_response') || 'Invalid server response',
+                    icon: 'error',
+                    allowOutsideClick: false,
+                    confirmButtonText: __('ok') || 'OK'
+                });
+                return;
+            }
+            
+            // Handle both success and error responses
+            if (response.type === 'success') {
+                Swal.fire({
+                    title: response.title || __('success') || 'Success',
+                    text: response.message || __('resignation_submitted') || 'Your resignation has been submitted',
+                    icon: 'success',
+                    allowOutsideClick: false,
+                    confirmButtonText: __('ok') || 'OK'
+                }).then(() => {
+                    location.reload();
+                });
+            } else {
+                Swal.fire({
+                    title: response.title || __('error') || 'Error',
+                    text: response.message || __('failed_to_submit_resignation') || 'Failed to submit resignation',
+                    icon: response.type || 'error',
+                    allowOutsideClick: false,
+                    confirmButtonText: __('ok') || 'OK'
+                });
+            }
         },
         error: function(jqXHR, textStatus, errorThrown) {
             let errorMessage = __('failed_to_submit_resignation') || 'Failed to submit resignation';
-            if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
-                errorMessage = jqXHR.responseJSON.message;
+            
+            // Try to parse response if available
+            if (jqXHR.responseText) {
+                try {
+                    const response = JSON.parse(jqXHR.responseText);
+                    if (response.message) {
+                        errorMessage = response.message;
+                    }
+                } catch (e) {
+                    // If parsing fails, use the response text as error message
+                    if (jqXHR.responseText) {
+                        errorMessage = jqXHR.responseText.substring(0, 200); // Limit length
+                    }
+                }
             }
             
             Swal.fire({

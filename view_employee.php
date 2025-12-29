@@ -570,6 +570,186 @@ if (mysqli_num_rows($query) == 1) {
 				font-weight: 600;
 				padding: 10px 30px;
 			}
+
+			/* ===== MODERN PROFILE LAYOUT ===== */
+			.profile-content-wrapper {
+				background: #f5f7fa;
+				padding: 25px;
+				border-radius: 8px;
+			}
+
+			.profile-section {
+				background: white;
+				border-radius: 8px;
+				margin-bottom: 20px;
+				overflow: hidden;
+				box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+			}
+
+			.profile-section-header {
+				background: linear-gradient(135deg, #4facfe 0%, #00a8ff 100%);
+				color: white;
+				padding: 15px 20px;
+				font-size: 15px;
+				font-weight: 600;
+				display: flex;
+				align-items: center;
+				gap: 10px;
+			}
+
+			.profile-section-header i {
+				font-size: 18px;
+				opacity: 0.9;
+			}
+
+			.profile-section-body {
+				padding: 0;
+			}
+
+			.profile-grid {
+				display: grid;
+				grid-template-columns: repeat(2, 1fr);
+				gap: 0;
+			}
+
+			.profile-field {
+				padding: 15px 20px;
+				border-bottom: 1px solid #eef2f7;
+				border-right: 1px solid #eef2f7;
+				display: flex;
+				flex-direction: column;
+				gap: 5px;
+				transition: background 0.2s;
+			}
+
+			.profile-field:nth-child(2n) {
+				border-right: none;
+			}
+
+			.profile-field:hover {
+				background: #f8fafc;
+			}
+
+			.profile-field-label {
+				font-size: 11px;
+				font-weight: 600;
+				text-transform: uppercase;
+				color: #94a3b8;
+				letter-spacing: 0.5px;
+			}
+
+			.profile-field-value {
+				font-size: 14px;
+				color: #1e293b;
+				font-weight: 500;
+				word-break: break-word;
+			}
+
+			.profile-field-value .copyToClipboard {
+				cursor: pointer;
+				padding: 2px 6px;
+				border-radius: 4px;
+				transition: all 0.2s;
+			}
+
+			.profile-field-value .copyToClipboard:hover {
+				background: #e0e7ff;
+				color: #4f46e5;
+			}
+
+			.profile-field-value .fa-clipboard {
+				color: #94a3b8;
+				font-size: 12px;
+				margin-left: 6px;
+				cursor: pointer;
+				transition: color 0.2s;
+			}
+
+			.profile-field-value .fa-clipboard:hover {
+				color: #4f46e5;
+			}
+
+			/* Full width fields */
+			.profile-field.full-width {
+				grid-column: 1 / -1;
+				border-right: none;
+			}
+
+			/* Date badges */
+			.date-batch-g, .date-batch-h {
+				display: inline-flex;
+				align-items: center;
+				gap: 4px;
+				padding: 6px 12px;
+				background: white;
+				border: 1px solid #e2e8f0;
+				border-radius: 6px;
+				font-size: 13px;
+				margin-right: 8px;
+				margin-top: 4px;
+				/* color: #334155; */
+				font-weight: 500;
+				transition: all 0.2s ease;
+			}
+
+			.date-batch-g:hover, .date-batch-h:hover {
+				border-color: #4facfe;
+				background: #f0f9ff;
+				transform: translateY(-1px);
+				box-shadow: 0 2px 4px rgba(79, 172, 254, 0.1);
+			}
+
+			.date-batch-g::before {
+				content: "📅";
+				font-size: 14px;
+				margin-right: 2px;
+			}
+
+			.date-batch-h::before {
+				content: "🌙";
+				font-size: 14px;
+				margin-right: 2px;
+			}
+
+			.date-batch-g::after {
+				content: attr(data-prefix);
+				font-size: 10px;
+				font-weight: 600;
+				text-transform: uppercase;
+				color: #64748b;
+				background: #f1f5f9;
+				padding: 2px 6px;
+				border-radius: 3px;
+				letter-spacing: 0.5px;
+				margin-left: 4px;
+			}
+
+			.date-batch-h::after {
+				content: attr(data-prefix);
+				font-size: 10px;
+				font-weight: 600;
+				text-transform: uppercase;
+				color: #64748b;
+				background: #f1f5f9;
+				padding: 2px 6px;
+				border-radius: 3px;
+				letter-spacing: 0.5px;
+				margin-left: 4px;
+			}
+
+			@media (max-width: 768px) {
+				.profile-grid {
+					grid-template-columns: 1fr;
+				}
+
+				.profile-field {
+					border-right: none;
+				}
+
+				.profile-content-wrapper {
+					padding: 15px;
+				}
+			}
 		</style>
 		<?php if ($is_rtl): ?>
 			<link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -736,11 +916,6 @@ if (mysqli_num_rows($query) == 1) {
 										</li>
 										<?php /*if($user_type <> "dept_user"){*/ ?>
 										<li class="nav-item">
-											<a href="#messages1" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-bank mr-2"></i> <?= __('bank_&_gosi_details') ?>
-											</a>
-										</li>
-										<li class="nav-item">
 											<a href="#home1" data-toggle="tab" aria-expanded="false" class="nav-link">
 												<i class="mdi mdi-buffer mr-2"></i> <?= __('vacation_details') ?>
 											</a>
@@ -785,179 +960,311 @@ if (mysqli_num_rows($query) == 1) {
 									<div class="tab-content">
 										<!-- Profile -->
 										<div class="tab-pane active show" id="profile1">
-											<table class="table table-hover mb-0">
-												<tbody>
-													<tr>
-														<th><?= __('name_of_employee') ?>:</th>
-														<td><span class="copyToClipboard"><?= translate_name($emprow['name'], $current_lang ?? 'en'); ?></span> <i class="fa fa-clipboard"></i></td>
-														<th><?= __('email') ?>:</th>
-														<td><?= ($emprow['c_email']) ? "<b>" . __('personal') . "</b> : <span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i> | <b>" . __('company') . "</b> : <span class='copyToClipboard'>" . $emprow['c_email'] . "</span> <i class='fa fa-clipboard'></i>" : "<span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i>" ?></td>
-													</tr>
-													<tr>
-														<th><?= __('iqama_id') ?>:</th>
-														<td><span class="copyToClipboard"><?= $emprow['iqama']; ?></span> <i class="fa fa-clipboard"></i></td>
-														<th><?= __('id_expiry') ?>:</th>
-														<td>
-															<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $emprow['iqama_exp']; ?></span>
-															<span class="date-batch-g float-right" data-prefix="<?= __('gregorian') ?>"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
-														</td>
-													</tr>
-													<tr>
-														<th><?= __('passport_no') ?>:</th>
-														<td>
-															<span class="copyToClipboard"><?= $emprow['passport_number']; ?></span> <i class="fa fa-clipboard"></i>
-														</td>
-														<th><?= __('passport_expiry') ?>:</th>
-														<td>
-															<?php if ($emprow['passport_exp']): ?>
-																<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
-															<?php endif ?>
-															<!-- <span class="date-batch-h float-right"><? //=$DateConv->GregorianToHijri($emprow['passport_exp'], $format); 
-																										?></span> -->
-															<?php if ($emprow['passport_exp']): ?>
-																<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
-															<?php endif ?>
-														</td>
-													</tr>
-													<tr>
-														<th><?= __('date_of_birth') ?>:</th>
-														<td>
-															<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["dob"]; ?></span>
-															<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
-														</td>
-														<th><?= __('age') ?>:</th>
-														<td><?= ($emprow["dob"] <> "") ? $years : "" ?></td>
-													</tr>
-													<tr>
-														<th><?= __('gender_blood_group') ?>:</th>
-														<td><?= ucfirst(__($emprow["sex"])) . " | " . $emprow['blood_type']; ?></td>
-														<th><?= __('marital_status') ?>:</th>
-														<td><?= ucfirst(__($emprow["mar_status"])); ?></td>
-													</tr>
-													<tr>
-														<th><?= __('tshirt_size') ?>:</th>
-														<td><?= ucfirst($emprow['t_shirt_size']); ?></td>
-														<th><?= __('contract_period') ?>:</th>
-														<td><?= formatPeriod($emprow["period"]) ?></td>
-													</tr>
-													<tr>
-														<th><?= __('mobile') ?>:</th>
-														<td><span class="copyToClipboard"><?= $emprow['mobile']; ?></span> <i class="fa fa-clipboard"></i></td>
-														<th><?= __('country') ?>:</th>
-														<td><?= ($is_rtl ?? false) ? $emprow["country_name_ar"] : $emprow["country_name"]; ?></td>
-													</tr>
-													<tr>
-														<th><?= __('joining_date') ?>:</th>
-														<td>
-															<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["joining_date"]; ?></span>
-															<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
-														</td>
-														<th><?= __('department') ?>:</th>
-														<td><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></td>
-													</tr>
-													<tr>
-														<th><?= __('employee_type') ?? "Employee Type" ?>:</th>
-														<td><?= translate_name($emprow['emptype'], $current_lang ?? 'en') ?? 'N/A' ?></td>
-														<th><?= __('direct_supervisor') ?? "Direct Supervisor" ?>:</th>
-														<td>
-															<?php
-															if (!empty($emprow['supervisor_id'])) {
-																$supervisor_query = mysqli_query($conDB, "
-																	SELECT `name`, `emp_id`, `emptype` 
-																	FROM `employees` 
-																	WHERE `emp_id` = '{$emprow['supervisor_id']}' 
-																	LIMIT 1
-																");
-																$supervisor = mysqli_fetch_assoc($supervisor_query);
-																if ($supervisor) {
-																	echo '<a href="view_employee.php?emp_id=' . $supervisor['emp_id'] . '" class="text-primary">' .
-																		translate_name($supervisor['name'], $current_lang ?? 'en') . ' (' . $supervisor['emp_id'] . ')</a>' .
-																		' <span class="badge badge-soft-info">' . translate_name($supervisor['emptype'], $current_lang ?? 'en') . '</span>';
-																} else {
-																	echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
-																}
-															} else {
-																echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
-															}
-															?>
-														</td>
-													</tr>
+											<div class="profile-content-wrapper">
+												<!-- Personal Information Section -->
+												<div class="profile-section">
+													<div class="profile-section-header personal">
+														<i class="mdi mdi-account-circle"></i>
+														<span><?= __('personal_information', 'Personal Information') ?></span>
+													</div>
+													<div class="profile-section-body">
+														<div class="profile-grid">
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('name_of_employee') ?></div>
+																<div class="profile-field-value">
+																	<span class="copyToClipboard"><?= translate_name($emprow['name'], $current_lang ?? 'en'); ?></span>
+																	<i class="fa fa-clipboard"></i>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('iqama_id') ?></div>
+																<div class="profile-field-value">
+																	<span class="copyToClipboard"><?= $emprow['iqama']; ?></span>
+																	<i class="fa fa-clipboard"></i>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('id_expiry') ?></div>
+																<div class="profile-field-value">
+																	<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $emprow['iqama_exp']; ?></span>
+																	<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('passport_no') ?></div>
+																<div class="profile-field-value">
+																	<span class="copyToClipboard"><?= $emprow['passport_number']; ?></span>
+																	<i class="fa fa-clipboard"></i>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('passport_expiry') ?></div>
+																<div class="profile-field-value">
+																	<?php if ($emprow['passport_exp']): ?>
+																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
+																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
+																	<?php else: ?>
+																		<span class="text-muted">N/A</span>
+																	<?php endif ?>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('date_of_birth') ?></div>
+																<div class="profile-field-value">
+																	<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["dob"]; ?></span>
+																	<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('age') ?></div>
+																<div class="profile-field-value"><?= ($emprow["dob"] <> "") ? $years : "" ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('gender_blood_group') ?></div>
+																<div class="profile-field-value"><?= ucfirst(__($emprow["sex"])) . " | " . $emprow['blood_type']; ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('marital_status') ?></div>
+																<div class="profile-field-value"><?= ucfirst(__($emprow["mar_status"])); ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('tshirt_size') ?></div>
+																<div class="profile-field-value"><?= ucfirst($emprow['t_shirt_size']); ?></div>
+															</div>
+														</div>
+													</div>
+												</div>
 
-													<?php if (car_get_info($emprow["car_id"])) { ?>
-														<tr class="table-info">
-															<th><?= __('car_maker') ?>:</th>
-															<td><?= car_get_info($emprow["car_id"])['maker_name'] . " | " . car_get_info($emprow["car_id"])['made_year'] ?></td>
-															<th><?= __('car_model') ?>:</th>
-															<td><?= car_get_info($emprow["car_id"])['model'] ?></td>
-														</tr>
-													<?php } ?>
+												<!-- Employment Information Section -->
+												<div class="profile-section">
+													<div class="profile-section-header employment">
+														<i class="mdi mdi-briefcase"></i>
+														<span><?= __('employment', 'Employment Information') ?></span>
+													</div>
+													<div class="profile-section-body">
+														<div class="profile-grid">
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('joining_date') ?></div>
+																<div class="profile-field-value">
+																	<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["joining_date"]; ?></span>
+																	<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('contract_expiry_label', 'Contract Expiry') ?></div>
+																<div class="profile-field-value">
+																	<?php
+																	$expiryIso = computeContractExpiry(
+																		$emprow['joining_date'] ?? null,
+																		isset($emprow['vac_period']) ? (int)$emprow['vac_period'] : null,
+																		'Y-m-d'
+																	);
+																	if ($expiryIso) {
+																		$expiryDisplay = date('d M Y', strtotime($expiryIso));
+																		?>
+																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= htmlspecialchars($expiryDisplay) ?></span>
+																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($expiryIso, $format); ?></span>
+																		<?php
+																	} else {
+																		?>
+																		<span class="text-muted">N/A</span>
+																		<?php
+																	}
+																	?>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('department') ?></div>
+																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('section_area') ?></div>
+																<div class="profile-field-value"><?= translate_name($emprow["sectin_nme"], $current_lang ?? 'en') ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('employee_type') ?? "Employee Type" ?></div>
+																<div class="profile-field-value"><?= translate_name($emprow['emptype'], $current_lang ?? 'en') ?? 'N/A' ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('actual_job') ?></div>
+																<div class="profile-field-value"><?= ($is_rtl ?? false ? $emprow["jobname_ar"] : $emprow["jobname"]) ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('direct_supervisor') ?? "Direct Supervisor" ?></div>
+																<div class="profile-field-value">
+																	<?php
+																	if (!empty($emprow['supervisor_id'])) {
+																		$supervisor_query = mysqli_query($conDB, "
+																			SELECT `name`, `emp_id`, `emptype` 
+																			FROM `employees` 
+																			WHERE `emp_id` = '{$emprow['supervisor_id']}' 
+																			LIMIT 1
+																		");
+																		$supervisor = mysqli_fetch_assoc($supervisor_query);
+																		if ($supervisor) {
+																			echo '<a href="view_employee.php?emp_id=' . $supervisor['emp_id'] . '" class="text-primary">' .
+																				translate_name($supervisor['name'], $current_lang ?? 'en') . ' (' . $supervisor['emp_id'] . ')</a>';
+																		} else {
+																			echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
+																		}
+																	} else {
+																		echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
+																	}
+																	?>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('probation_period') ?></div>
+																<div class="profile-field-value"><?= $probationStatus ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('sponsorship_label') ?></div>
+																<div class="profile-field-value"><?= translate_name($emprow['sponsor'], $current_lang ?? 'en') ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('contract_period') ?></div>
+																<div class="profile-field-value"><?= formatPeriod($emprow["period"]) ?></div>
+															</div>
+														</div>
+													</div>
+												</div>
 
-													<tr>
-														<th><?= __('section_area_sponsorship') ?>:</th>
-														<td><?= translate_name($emprow["sectin_nme"], $current_lang ?? 'en') . " | " . translate_name($emprow['sponsor'], $current_lang ?? 'en') ?></td>
-														<th><?= __('total_salary') ?>:</th>
-														<td><?= $emprow['salary']; ?><i class="icon-saudi_riyal" style="font-size: 14px !important;"></i> -
-															<?= ($emprow['payment_type'] == 1 ? __('bank_transfer') : ($emprow['payment_type'] == 2 ? __('cash_payment') : __('about_to_hold'))) ?>
-														</td>
-													</tr>
+												<!-- Contact Information Section -->
+												<div class="profile-section">
+													<div class="profile-section-header contact">
+														<i class="mdi mdi-phone"></i>
+														<span><?= __('contact', 'Contact Information') ?></span>
+													</div>
+													<div class="profile-section-body">
+														<div class="profile-grid">
+															<div class="profile-field full-width">
+																<div class="profile-field-label"><?= __('email') ?></div>
+																<div class="profile-field-value">
+																	<?= ($emprow['c_email']) ? "<b>" . __('personal') . ":</b> <span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i> | <b>" . __('company') . ":</b> <span class='copyToClipboard'>" . $emprow['c_email'] . "</span> <i class='fa fa-clipboard'></i>" : "<span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i>" ?>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('mobile') ?></div>
+																<div class="profile-field-value">
+																	<span class="copyToClipboard"><?= $emprow['mobile']; ?></span>
+																	<i class="fa fa-clipboard"></i>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('country') ?></div>
+																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow["country_name_ar"] : $emprow["country_name"]; ?></div>
+															</div>
+															<div class="profile-field full-width">
+																<div class="profile-field-label"><?= __('emergency_contact') ?></div>
+																<div class="profile-field-value"><?= $emprow['emg_name'] . " - " . $emprow["emg_mobile"] ?></div>
+															</div>
+															<div class="profile-field full-width">
+																<div class="profile-field-label"><?= __('address') ?></div>
+																<div class="profile-field-value"><?= translate_name(ucfirst($emprow['address']), $current_lang ?? 'en') ?></div>
+															</div>
+														</div>
+													</div>
+												</div>
 
-													<tr>
-														<th><?= __('bank_name') ?>:</th>
-														<td><?= ($is_rtl ?? false) ? $emprow["b_name_ar"] : $emprow["b_name"] ?></td>
-														<th><?= __('iban') ?>:</th>
-														<td><?= $emprow["iban"] ?></td>
-													</tr>
-													<?php //if($emprow["country"] == 191){ 
-													?>
-													<tr>
-														<th><?= __('gosi_gosi_no') ?>:</th>
-														<td><?= $emprow["gosi"] . " | " . $emprow["gosi_no"] ?></td>
-														<th><?= __('gosi_expiry') ?>:</th>
-														<td><?= $emprow["date_hijri"] . " | " . $emprow["date_greg"] ?></td>
-													</tr>
-													<?php //} 
-													?>
-													<tr>
-														<th><?= __('actual_job') ?>:</th>
-														<td><?= ($is_rtl ?? false ? $emprow["jobname_ar"] : $emprow["jobname"]) ?></td>
-														<th><?= __('probation_period') ?>:</th>
-														<td><?= $probationStatus ?></td>
-													</tr>
+												<!-- Banking & Salary Information Section -->
+												<div class="profile-section">
+													<div class="profile-section-header banking">
+														<i class="mdi mdi-bank"></i>
+														<span><?= __('bank_&_gosi_details', 'Banking & Salary') ?></span>
+													</div>
+													<div class="profile-section-body">
+														<div class="profile-grid">
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('total_salary') ?></div>
+																<div class="profile-field-value">
+																	<?= number_format($emprow['salary'], 2); ?> <i class="icon-saudi_riyal"></i> -
+																	<?= ($emprow['payment_type'] == 1 ? __('bank_transfer') : ($emprow['payment_type'] == 2 ? __('cash_payment') : __('about_to_hold'))) ?>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('bank_name') ?></div>
+																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow["b_name_ar"] : $emprow["b_name"] ?></div>
+															</div>
+															<div class="profile-field full-width">
+																<div class="profile-field-label"><?= __('iban') ?></div>
+																<div class="profile-field-value">
+																	<span class="copyToClipboard"><?= $emprow["iban"] ?></span>
+																	<i class="fa fa-clipboard"></i>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('gosi_gosi_no') ?></div>
+																<div class="profile-field-value"><?= $emprow["gosi"] . " | " . $emprow["gosi_no"] ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('gosi_expiry') ?></div>
+																<div class="profile-field-value"><?= $emprow["date_hijri"] . " | " . $emprow["date_greg"] ?></div>
+															</div>
+														</div>
+													</div>
+												</div>
 
-													<tr>
-														<th><?= __('insurance_no_class') ?>:</th>
-														<td><?= $emprow['insurance_no'] . " | " . $emprow['insurance_class'] ?></td>
-														<th><?= __('insurance_expiry') ?>:</th>
-														<td>
-															<?php if ($emprow['insurance_exp']): ?>
-																<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
-															<?php endif ?>
-															<?php if ($emprow['insurance_exp']): ?>
-																<span class="date-batch-h float-right" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
-															<?php endif ?>
-														</td>
-													</tr>
-													<tr>
-														<th><?= __('emergency_contact') ?>:</th>
-														<td><?= $emprow["emg_mobile"] . " | " . $emprow['emg_name'] ?></td>
-														<th><?= __('address') ?>:</th>
-														<td><?= translate_name(ucfirst($emprow['address']), $current_lang ?? 'en') ?></td>
-													</tr>
-												</tbody>
-											</table>
+												<!-- Insurance Information Section -->
+												<div class="profile-section">
+													<div class="profile-section-header insurance">
+														<i class="mdi mdi-shield-check"></i>
+														<span><?= __('insurance', 'Insurance Information') ?></span>
+													</div>
+													<div class="profile-section-body">
+														<div class="profile-grid">
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('insurance_no_class') ?></div>
+																<div class="profile-field-value"><?= $emprow['insurance_no'] . " | " . $emprow['insurance_class'] ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('insurance_expiry') ?></div>
+																<div class="profile-field-value">
+																	<?php if ($emprow['insurance_exp']): ?>
+																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
+																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
+																	<?php else: ?>
+																		<span class="text-muted">N/A</span>
+																	<?php endif ?>
+																</div>
+															</div>
+														</div>
+													</div>
+												</div>
 
+												<?php if (car_get_info($emprow["car_id"])): ?>
+												<!-- Car Information Section -->
+												<div class="profile-section">
+													<div class="profile-section-header car">
+														<i class="mdi mdi-car"></i>
+														<span><?= __('car_details', 'Car Information') ?></span>
+													</div>
+													<div class="profile-section-body">
+														<div class="profile-grid">
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('car_maker') ?></div>
+																<div class="profile-field-value"><?= car_get_info($emprow["car_id"])['maker_name'] . " (" . car_get_info($emprow["car_id"])['made_year'] . ")" ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('car_model') ?></div>
+																<div class="profile-field-value"><?= car_get_info($emprow["car_id"])['model'] ?></div>
+															</div>
+														</div>
+													</div>
+												</div>
+												<?php endif; ?>
+											</div>
 
-											<div class="text-right">
+											<div class="text-right mt-4">
 												<div class="btn-group" role="group" aria-label="Edit Button">
 													<a href="./employee_profile.php?emp_id=<?= $emprow['empid']; ?>" class="btn btn-sm waves-effect btn-primary" target="_blank"><i class="fi-printer "></i> <?= __('print_profile') ?></a>
 												</div>
 											</div>
-
 										</div>
+										<!-- End Profile Tab -->
 
-										<?php /*if($user_type <> "dept_user"){*/ ?>
-										<div class="tab-pane" id="home1">
-											<?php
+									<!-- Vacation Details Tab -->
+									<div class="tab-pane" id="home1">
+										<?php
 											// Get vacation balance data
 											$vac_total = $emprow['vacation_days'] ?? 0;
 											$vac_used = $emprow['used_days'] ?? 0;
@@ -1085,58 +1392,6 @@ if (mysqli_num_rows($query) == 1) {
 													</tbody>
 												</table>
 											</div>
-										</div>
-										<div class="tab-pane" id="messages1">
-											<table class="table table-hover mb-0">
-												<tbody>
-													<thead class="thead-dark">
-														<tr>
-															<th colspan="4">
-																<center><?= __('bank_account_information') ?></center>
-															</th>
-														</tr>
-													</thead>
-													<tr>
-														<th><?= __('bank_name') ?>:</th>
-														<td><?= $emprow["b_name"]; ?></td>
-														<th><?= __('iban') ?>:</th>
-														<td>
-															<span class="copyToClipboard"><?= implode(" ", str_split($emprow["iban"], 4)); ?></span> <i class="fa fa-clipboard"></i>
-														</td>
-													</tr>
-													<?php
-													if ($emprow['gosi_no'] <> "") {
-													?>
-														<thead class="thead-dark">
-															<tr>
-																<th colspan="4">
-																	<center><?= __('gosi_information') ?></center>
-																</th>
-															</tr>
-														</thead>
-														<tr>
-															<th><?= __('gosi_no') ?>:</th>
-															<td><?= $emprow['gosi_no']; ?></td>
-															<th><?= __('gosi_payment') ?>:</th>
-															<td><?= $emprow["amount"]; ?></td>
-														</tr>
-														<tr>
-															<th><?= __('gregorian_date') ?>:</th>
-															<td><?= $emprow["date_greg"]; ?></td>
-															<th><?= __('hijri_date') ?>:</th>
-															<td><?= $emprow["date_hijri"]; ?></td>
-														</tr>
-													<?php } else { ?>
-														<tr>
-															<td colspan="4">
-																<a href="./add_gosi.php?emp_id=<?= "" . $emprow['emp_id'] . "" ?>" class="btn btn-sm btn-primary waves-effect">
-																	<i class="mdi mdi-database-plus"></i><?= __('add_gosi_details') ?>
-																</a>
-															</td>
-														</tr>
-													<?php } ?>
-												</tbody>
-											</table>
 										</div>
 
 										<div class="tab-pane" id="loan1">
@@ -2357,13 +2612,39 @@ if (mysqli_num_rows($query) == 1) {
 					event.preventDefault(); // Prevent the link from opening immediately
 
 					const assetRecordId = $(this).data('asset-id');
-					const url = $(this).attr('href');
+					const baseUrl = $(this).attr('href');
 
-					// Enable the corresponding submit button
-					$('#submit-return-btn-' + assetRecordId).prop('disabled', false);
-
-					// Open the report in a new tab
-					window.open(url, '_blank');
+					Swal.fire({
+						title: __('return_date'),
+						html: '<input type="text" id="view-emp-return-date-input" class="form-control" value="' + new Date().toISOString().slice(0, 10) + '">',
+						showCancelButton: true,
+						confirmButtonText: __('print_for_return'),
+						cancelButtonText: __('cancel'),
+						allowOutsideClick: false,
+						willOpen: function() {
+							$('#view-emp-return-date-input').datepicker({
+								format: "yyyy-mm-dd",
+								todayHighlight: true,
+								autoclose: true
+							});
+						},
+						preConfirm: () => {
+							const selectedDate = $('#view-emp-return-date-input').val();
+							if (!selectedDate) {
+								Swal.showValidationMessage('Please select a return date');
+								return false;
+							}
+							return selectedDate;
+						}
+					}).then((result) => {
+						if (result.isConfirmed && result.value) {
+							const selectedDate = result.value;
+							const joinChar = baseUrl.includes('?') ? '&' : '?';
+							const urlWithDate = baseUrl + joinChar + 'print_return_date=' + encodeURIComponent(selectedDate);
+							window.open(urlWithDate, '_blank');
+							$('#submit-return-btn-' + assetRecordId).prop('disabled', false);
+						}
+					});
 				});
 			});
 

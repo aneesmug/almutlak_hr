@@ -469,11 +469,11 @@
                                                         </div>
                                                         <div class="col-md-10">
                                                             <div class="row">
-                                                                <div class="col-md-4"><p><strong><?=__('Name');?>:</strong><br><?= htmlspecialchars($emprow['name']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Employee ID');?>:</strong><br><?= htmlspecialchars($emprow['empid']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Iqama / ID');?>:</strong><br><?= htmlspecialchars($emprow['iqama']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Department');?>:</strong><br><?= htmlspecialchars($emprow['deptnme']); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Job Title');?>:</strong><br><?= htmlspecialchars($emprow['jobname']); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('Name');?>:</strong><br><?= htmlspecialchars($emprow['name'] ?? ''); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('Employee ID');?>:</strong><br><?= htmlspecialchars($emprow['empid'] ?? ''); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('Iqama / ID');?>:</strong><br><?= htmlspecialchars($emprow['iqama'] ?? ''); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('Department');?>:</strong><br><?= htmlspecialchars($emprow['deptnme'] ?? ''); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('Job Title');?>:</strong><br><?= htmlspecialchars($emprow['jobname'] ?? ''); ?></p></div>
                                                                 <div class="col-md-4"><p><strong><?=__('Joining Date');?>:</strong><br><?= date('d M, Y', strtotime($emprow['joining_date'])); ?></p></div>
                                                             </div>
                                                         </div>
@@ -504,7 +504,13 @@
                                         <div class="card-body">
                                             <table class="table table-sm table-bordered">
                                                 <thead>
-                                                    <tr><th><?=__('Asset Type');?></th><th><?=__('Serial Number');?></th><th><?=__('Description');?></th><th><?=__('Assigned Date');?></th></tr>
+                                                    <tr>
+                                                        <th><?=__('Asset Type');?></th>
+                                                        <th><?=__('Serial Number');?></th>
+                                                        <th><?=__('Description');?></th>
+                                                        <th><?=__('Assigned Date');?></th>
+                                                        <th><?=__('Action');?></th>
+                                                    </tr>
                                                 </thead>
                                                 <tbody>
                                                 <?php
@@ -517,12 +523,22 @@
                                                         <td><?= htmlspecialchars($asset_row['serial_number']); ?></td>
                                                         <td><?= htmlspecialchars($asset_row['description']); ?></td>
                                                         <td><?= htmlspecialchars($asset_row['assigned_date']); ?></td>
+                                                        <td>
+                                                            <div class="btn-group">
+                                                                <a href="asset_return_report.php?asset_id=<?= (int)$asset_row['id']; ?>" target="_blank" class="btn btn-sm btn-primary eos-print-return-btn" data-asset-id="<?= (int)$asset_row['id']; ?>">
+                                                                    <?= __('print_for_return'); ?>
+                                                                </a>
+                                                                <button type="button" class="btn btn-sm btn-danger" id="eos-submit-return-btn-<?= (int)$asset_row['id']; ?>" onclick="unassignAsset(<?= (int)$asset_row['id']; ?>)" disabled>
+                                                                    <?= __('submit_return'); ?>
+                                                                </button>
+                                                            </div>
+                                                        </td>
                                                     </tr>
                                                 <?php
                                                         endwhile;
                                                     else:
                                                 ?>
-                                                    <tr><td colspan="4" class="text-center"><?=__('No assets are currently assigned to this employee.');?></td></tr>
+                                                    <tr><td colspan="5" class="text-center"><?=__('No assets are currently assigned to this employee.');?></td></tr>
                                                 <?php endif; ?>
                                                 </tbody>
                                             </table>
@@ -578,7 +594,7 @@
                                                             </div>
                                                             <div class="form-group col-lg-6">
                                                                 <label for="joining_date"><?=__('joining_date_label');?>:</label>
-                                                                <input type="text" name="joining_date" class="form-control" id="joining_date" value="<?=htmlspecialchars($emprow['joining_date']);?>" readonly>
+                                                                <input type="text" name="joining_date" class="form-control" id="joining_date" value="<?=htmlspecialchars($emprow['joining_date'] ?? '');?>" readonly>
                                                             </div>
                                                             <div class="form-group col-lg-6">
                                                                 <label for="end_date"><?=__('last_working_day');?>:<span class="text-danger">*</span></label>
@@ -588,8 +604,12 @@
 
                                                             <!-- Calculation Row 1 -->
                                                             <div class="form-group col-lg-2">
+                                                                <label for="vac_days_delta"><?=__('Accrued days (to LWD)');?></label>
+                                                                <input type="number" class="form-control" value="0.00" id="vac_days_delta" name="vac_days_delta" step="any" placeholder="0.00" readonly>
+                                                            </div>
+                                                            <div class="form-group col-lg-2">
                                                                 <label for="anul_vac_days"><?=__('Annual vacation days');?></label>
-                                                                <input type="number" class="form-control" value="0.00" id="anul_vac_days" name="anul_vac_days" step="any" placeholder="0.00" readonly>
+                                                                <input type="number" class="form-control" value="<?= htmlspecialchars(number_format($current_vacation_balance, 2, '.', '')); ?>" id="anul_vac_days" name="anul_vac_days" step="any" placeholder="0.00" readonly>
                                                             </div>
                                                             <div class="form-group col-lg-2">
                                                                 <label for="curt_month_days_display"><?=__('Working Days');?></label>
@@ -611,31 +631,31 @@
                                                                 <label for="overtime_days" class="text-success"><?=__('Overtime (Days)');?></label>
                                                                 <input type="number" class="form-control calculation-trigger" id="overtime_days" name="overtime_days" value="0" min="0" step="0.5">
                                                             </div>
-                                                            <div class="form-group col-lg-4">
+                                                            <div class="form-group col-lg-2">
                                                                 <label for="curt_month_salry"><?=__('Resignation Month Salary');?></label>
                                                                 <input type="text" class="form-control" value="0.00" id="curt_month_salry" name="curt_month_salry" readonly>
                                                             </div>
 
                                                             <!-- Calculation Row 2 (Deductions) -->
                                                             <?php if ($emprow['country'] == 191 && floatval($emprow['gosi']) > 0): ?>
-                                                                <div class="form-group col-lg-4">
+                                                                <div class="form-group col-lg-3">
                                                                     <label for="gosi_deduction" class="text-danger"><?=__('GOSI Deduction');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" id="gosi_deduction" name="gosi_deduction" value="0.00" step="any">
                                                                 </div>
-                                                                <div class="form-group col-lg-4">
+                                                                <div class="form-group col-lg-2">
                                                                     <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
                                                                     <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
                                                                 </div>
-                                                                <div class="form-group col-lg-4">
+                                                                <div class="form-group col-lg-3">
                                                                     <label for="deduct" class="text-danger"><?=__('Other Deductions (Loan, etc.)');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
                                                                 </div>
                                                             <?php else: ?>
-                                                                <div class="form-group col-lg-4">
+                                                                <div class="form-group col-lg-2">
                                                                     <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
                                                                     <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
                                                                 </div>
-                                                                <div class="form-group col-lg-4">
+                                                                <div class="form-group col-lg-2">
                                                                     <label for="deduct" class="text-danger"><?=__('Deduct (Loan, etc.)');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
                                                                 </div>
@@ -682,9 +702,9 @@
                                                         <input type="hidden" id="current_vacation_balance" value="<?= htmlspecialchars($current_vacation_balance); ?>">
                                                         <input type="hidden" id="balance_period_end" value="<?= htmlspecialchars($balance_period_end ?? ''); ?>">
                                                         <input type="hidden" id="is_two_year_contract" value="<?= htmlspecialchars($is_two_year_contract); ?>">
-                                                        <input type="hidden" id="emp_country" value="<?= htmlspecialchars($emprow['country']); ?>">
-                                                        <input type="hidden" id="emp_gosi_percent" value="<?= htmlspecialchars($emprow['gosi']); ?>">
-                                                        <input type="hidden" id="emp_contract_type" value="<?= htmlspecialchars($emprow['contract_type']); ?>">
+                                                        <input type="hidden" id="emp_country" value="<?= htmlspecialchars($emprow['country'] ?? ''); ?>">
+                                                        <input type="hidden" id="emp_gosi_percent" value="<?= htmlspecialchars($emprow['gosi'] ?? 0); ?>">
+                                                        <input type="hidden" id="emp_contract_type" value="<?= htmlspecialchars($emprow['contract_type'] ?? ''); ?>">
                                                     </fieldset>
                                                 </form>
                                             <?php else: ?>
@@ -711,6 +731,46 @@
 		<script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
 		<script src="assets/js/jquery.app.js"></script>
+        <script type="text/javascript">
+            // Prompt for return date before printing; do not write to DB
+            $(document).on('click', '.eos-print-return-btn', function(event) {
+                event.preventDefault();
+                const assetId = $(this).data('asset-id');
+                const baseUrl = $(this).attr('href');
+
+                Swal.fire({
+                    title: __('return_date'),
+                    html: '<input type="text" id="eos-return-date-input" class="form-control" value="' + new Date().toISOString().slice(0, 10) + '">',
+                    showCancelButton: true,
+                    confirmButtonText: __('print_for_return'),
+                    cancelButtonText: __('cancel'),
+                    allowOutsideClick: false,
+                    willOpen: function() {
+                        $('#eos-return-date-input').datepicker({
+                            format: "yyyy-mm-dd",
+                            todayHighlight: true,
+                            autoclose: true
+                        });
+                    },
+                    preConfirm: () => {
+                        const selectedDate = $('#eos-return-date-input').val();
+                        if (!selectedDate) {
+                            Swal.showValidationMessage('Please select a return date');
+                            return false;
+                        }
+                        return selectedDate;
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed && result.value) {
+                        const selectedDate = result.value;
+                        const joinChar = baseUrl.includes('?') ? '&' : '?';
+                        const urlWithDate = baseUrl + joinChar + 'print_return_date=' + encodeURIComponent(selectedDate);
+                        window.open(urlWithDate, '_blank');
+                        $('#eos-submit-return-btn-' + assetId).prop('disabled', false);
+                    }
+                });
+            });
+        </script>
         <script>
             const paidPayrolls = <?= json_encode($paid_payrolls); ?>;
             const vacationRecords = <?= json_encode($vacation_records); ?>;
@@ -734,75 +794,35 @@
                     return window.paidPayrolls.some(paidMonth => String(paidMonth).trim() === targetMonthYear);
                 }
 
+                // Server-side current date (balance already up to today)
+                const serverTodayStr = '<?= date('Y-m-d'); ?>';
+                const serverToday = new Date(serverTodayStr + 'T00:00:00');
+
                 function updateProratedVacation() {
                     const endDateStr = $('#end_date').val();
-                    // This variable name is misleading. It holds the TOTAL entitlement for the period (e.g., 42 for 2 years)
-                    const periodEntitlement = parseFloat($('#annual_vacation_entitlement').val()) || 0;
-                    const currentVacationBalance = parseFloat($('#current_vacation_balance').val()) || 0;
-                    const balancePeriodEndStr = $('#balance_period_end').val();
-                    
-                    if (!endDateStr) {
-                        $('#anul_vac_days').val('0.00');
-                        $('#vacation_days_summary').text('0.00');
-                        return;
-                    }
-                    
-                    let finalBalance = currentVacationBalance;
-                    
-                    // Calculate accrued days from period_end to EOS date
-                    if (periodEntitlement > 0 && balancePeriodEndStr) {
-                        const periodEndDate = new Date(balancePeriodEndStr + 'T00:00:00');
-                        const eosDate = new Date(endDateStr + 'T00:00:00');
-                        
-                        if (eosDate > periodEndDate) {
-                            const eosYear = eosDate.getFullYear();
-                            const eosMonth = eosDate.getMonth();
-                            const eosDay = eosDate.getDate();
-                            
-                            // --- START: MODIFIED CALCULATION TO MATCH OLD SYSTEM (Target 41.88 for emp 5313) ---
-                            
-                            // 1. Get the contract duration (1 or 2 years) passed from PHP
-                            const isTwoYear = parseInt($('#is_two_year_contract').val()) || 0;
-                            
-                            // 2. Determine the *true* annual rate. The DB field stores the *period* total.
-                            // For emp 5313: periodEntitlement is 42, isTwoYear is 1. trueAnnualRate becomes 21.
-                            // For a 1-year contract: periodEntitlement might be 21, isTwoYear is 0. trueAnnualRate remains 21.
-                            const trueAnnualRate = isTwoYear ? (periodEntitlement / 2) : periodEntitlement;
+                    const periodEntitlement = parseFloat($('#annual_vacation_entitlement').val()) || 0; // stored as period total (e.g., 42 for 2-year contract)
+                    const currentVacationBalance = parseFloat($('#current_vacation_balance').val()) || 0; // already up to today
+                    const isTwoYear = parseInt($('#is_two_year_contract').val()) || 0;
 
-                            // 3. The old system's target (41.88) is achieved by using a 365-day daily rate.
-                            const dailyAccrualRate = trueAnnualRate / 365;
-                            
-                            // 4. The old system (and this code) has a bug, calculating days from the 1st of the month
-                            //    instead of from the period_end date. We keep this bug to match the target number.
-                            //    For Nov 4, this calculates 3 days (Nov 1, 2, 3).
-                            const daysToAccrue = eosDay - 1; 
-                            
-                            const accruedDays = daysToAccrue * dailyAccrualRate;
-                            
-                            // --- END: MODIFIED CALCULATION ---
-                            
-                            finalBalance += accruedDays;
-                            
-                            console.log('=== Vacation Calculation Debug (Old System Match) ===');
-                            console.log('EOS Date:', endDateStr);
-                            console.log('Period End Date:', balancePeriodEndStr);
-                            console.log('Opening Balance:', currentVacationBalance.toFixed(4));
-                            console.log('Period Entitlement (from DB):', periodEntitlement);
-                            console.log('Is 2-Year Contract:', isTwoYear);
-                            console.log('True Annual Rate:', trueAnnualRate);
-                            console.log('Daily Accrual Rate (Annual/365):', dailyAccrualRate.toFixed(10));
-                            console.log('Days to Accrue (Buggy: eosDay - 1):', daysToAccrue);
-                            console.log('Accrued Days:', accruedDays.toFixed(4));
-                            console.log('Final Balance:', finalBalance.toFixed(4));
-                            console.log('Target (41.88)');
-                            console.log('====================================================');
-                        }
+                    // Determine true annual rate (period total / 2 if 2-year contract)
+                    const trueAnnualRate = isTwoYear ? (periodEntitlement / 2) : periodEntitlement;
+                    const dailyAccrualRate = trueAnnualRate / 365;
+
+                    // Accrual delta always relative to today: future LWD adds, past LWD deducts
+                    let accruedDays = 0;
+                    if (endDateStr) {
+                        const eosDate = new Date(endDateStr + 'T00:00:00');
+                        const diffMs = eosDate - serverToday;
+                        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        accruedDays = diffDays * dailyAccrualRate;
                     }
-                    
-                    finalBalance = Math.max(0, finalBalance);
-                    
-                    $('#anul_vac_days').val(finalBalance.toFixed(2));
-                    $('#vacation_days_summary').text(finalBalance.toFixed(2));
+
+                    // Total vacation days = current (as of today) + delta (can be +/-)
+                    const totalVacationDays = currentVacationBalance + accruedDays;
+
+                    $('#vac_days_delta').val(accruedDays.toFixed(2));
+                    $('#anul_vac_days').val(totalVacationDays.toFixed(2));
+                    $('#vacation_days_summary').text(totalVacationDays.toFixed(2));
                 }
 
                 function calculateFinalPayment() {

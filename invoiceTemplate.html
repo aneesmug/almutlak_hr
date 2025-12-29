@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tax Invoice / فاتورة ضريبية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans Arabic', sans-serif;
+            background-color: #f3f4f6;
+            -webkit-print-color-adjust: exact;
+        }
+        .label-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .data-value {
+            font-weight: 600;
+            color: #111827;
+        }
+
+        th {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- Invoice Container -->
+    <div class="invoice-container max-w-4xl mx-auto bg-white shadow-xl rounded-xl overflow-hidden border border-gray-200">
+        
+        <!-- Header Section -->
+        <div class="p-8 border-b border-gray-200">
+            <div class="flex flex-col md:flex-row justify-between items-start gap-6">
+                
+                <!-- Company Logo & Details (Left) -->
+                <div class="w-full md:w-1/2">
+                    <div class="h-16 w-16 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-2xl mb-4">
+                        LOGO
+                    </div>
+                    <h1 class="text-xl font-bold text-gray-900">Tech Solutions Co.</h1>
+                    <h2 class="text-lg text-gray-600 text-right" dir="rtl">شركة الحلول التقنية</h2>
+                    
+                    <div class="mt-4 space-y-1 text-sm text-gray-600">
+                        <p>123 Business Road, Olaya Dist.</p>
+                        <p>Riyadh 12211, Saudi Arabia</p>
+                        <div class="flex gap-2">
+                            <span class="font-semibold">VAT No:</span>
+                            <span>300123456700003</span>
+                            <span class="font-semibold text-right flex-1" dir="rtl">:الرقم الضريبي</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Invoice Title & QR (Right) -->
+                <div class="w-full md:w-1/2 flex flex-col items-end">
+                    <div class="text-right mb-4">
+                        <h1 class="text-3xl font-bold text-gray-900 uppercase">Tax Invoice</h1>
+                        <h2 class="text-2xl font-bold text-blue-600 font-arabic">فاتورة ضريبية</h2>
+                    </div>
+                    <!-- QR Code Placeholder -->
+                    <div id="qrcode" class="bg-white p-2 border border-gray-200 rounded-lg"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoice Details Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-gray-200 border-b border-gray-200">
+            <!-- Invoice Number -->
+            <div class="bg-white p-4">
+                <div class="label-group">
+                    <span>Invoice No</span>
+                    <span class="font-arabic">رقم الفاتورة</span>
+                </div>
+                <div class="data-value text-lg mt-1">INV-2023-001</div>
+            </div>
+            
+            <!-- Invoice Date -->
+            <div class="bg-white p-4">
+                <div class="label-group">
+                    <span>Invoice Date</span>
+                    <span class="font-arabic">تاريخ الفاتورة</span>
+                </div>
+                <div class="data-value text-lg mt-1">2023-10-25</div>
+            </div>
+
+            <!-- Supply Date -->
+            <div class="bg-white p-4">
+                <div class="label-group">
+                    <span>Date of Supply</span>
+                    <span class="font-arabic">تاريخ التوريد</span>
+                </div>
+                <div class="data-value text-lg mt-1">2023-10-20</div>
+            </div>
+
+            <!-- Payment Due -->
+            <div class="bg-white p-4">
+                <div class="label-group">
+                    <span>Due Date</span>
+                    <span class="font-arabic">تاريخ الاستحقاق</span>
+                </div>
+                <div class="data-value text-lg mt-1">2023-11-25</div>
+            </div>
+        </div>
+
+        <!-- Client Section -->
+        <div class="p-8 border-b border-gray-200 bg-gray-50">
+            <div class="flex justify-between items-center mb-2 border-b border-gray-200 pb-2">
+                <h3 class="font-bold text-gray-700">Bill To</h3>
+                <h3 class="font-bold text-gray-700 font-arabic">الفاتورة إلى</h3>
+            </div>
+            <div class="flex flex-col md:flex-row justify-between">
+                <div class="space-y-1 text-sm">
+                    <p class="font-bold text-lg text-gray-900">Alpha Trading Est.</p>
+                    <p class="text-gray-600">King Fahd Road, Building 44</p>
+                    <p class="text-gray-600">Jeddah, Saudi Arabia</p>
+                </div>
+                <div class="mt-4 md:mt-0 text-right space-y-1">
+                    <p class="font-bold text-lg text-gray-900 font-arabic">مؤسسة ألفا التجارية</p>
+                    <p class="text-gray-600 font-arabic">طريق الملك فهد، مبنى 44</p>
+                    <div class="flex justify-end gap-2 text-sm">
+                        <span class="font-semibold">VAT No:</span>
+                        <span>310123456700003</span>
+                        <span class="font-semibold">:الرقم الضريبي</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Items Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="bg-gray-100 border-b border-gray-200 text-gray-600">
+                        <th class="p-4 w-12 text-center">#</th>
+                        <th class="p-4">
+                            <div class="flex justify-between">
+                                <span>Item Description</span>
+                                <span class="font-arabic">تفاصيل السلعة والخدمة</span>
+                            </div>
+                        </th>
+                        <th class="p-4 text-center w-24">
+                            <div class="flex flex-col items-center">
+                                <span>Qty</span>
+                                <span class="font-arabic text-xs">الكمية</span>
+                            </div>
+                        </th>
+                        <th class="p-4 text-right w-32">
+                            <div class="flex flex-col items-end">
+                                <span>Unit Price</span>
+                                <span class="font-arabic text-xs">سعر الوحدة</span>
+                            </div>
+                        </th>
+                        <th class="p-4 text-right w-32">
+                            <div class="flex flex-col items-end">
+                                <span>Subtotal</span>
+                                <span class="font-arabic text-xs">المجموع (غير شامل)</span>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    <!-- Item 1 -->
+                    <tr>
+                        <td class="p-4 text-center text-gray-500">1</td>
+                        <td class="p-4">
+                            <div class="font-medium text-gray-900">Web Development Services</div>
+                            <div class="text-gray-500 text-xs mt-0.5 font-arabic text-right" dir="rtl">خدمات تطوير مواقع الويب</div>
+                        </td>
+                        <td class="p-4 text-center">1</td>
+                        <td class="p-4 text-right font-mono">5,000.00</td>
+                        <td class="p-4 text-right font-mono font-medium">5,000.00</td>
+                    </tr>
+                    <!-- Item 2 -->
+                    <tr>
+                        <td class="p-4 text-center text-gray-500">2</td>
+                        <td class="p-4">
+                            <div class="font-medium text-gray-900">Server Configuration</div>
+                            <div class="text-gray-500 text-xs mt-0.5 font-arabic text-right" dir="rtl">إعداد وتهيئة الخوادم</div>
+                        </td>
+                        <td class="p-4 text-center">2</td>
+                        <td class="p-4 text-right font-mono">1,500.00</td>
+                        <td class="p-4 text-right font-mono font-medium">3,000.00</td>
+                    </tr>
+                    <!-- Item 3 -->
+                    <tr>
+                        <td class="p-4 text-center text-gray-500">3</td>
+                        <td class="p-4">
+                            <div class="font-medium text-gray-900">Annual Maintenance</div>
+                            <div class="text-gray-500 text-xs mt-0.5 font-arabic text-right" dir="rtl">الصيانة السنوية</div>
+                        </td>
+                        <td class="p-4 text-center">1</td>
+                        <td class="p-4 text-right font-mono">2,000.00</td>
+                        <td class="p-4 text-right font-mono font-medium">2,000.00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Summary Section -->
+        <div class="flex flex-col md:flex-row border-t border-gray-200">
+            
+            <!-- Notes / Terms -->
+            <div class="w-full md:w-1/2 p-8 bg-gray-50">
+                <div class="mb-4">
+                    <h4 class="font-bold text-gray-700 text-sm mb-1">Bank Details / بيانات البنك</h4>
+                    <p class="text-sm text-gray-600">Bank Name: Al Rajhi Bank</p>
+                    <p class="text-sm text-gray-600">IBAN: SA00 0000 0000 0000 0000 0000</p>
+                </div>
+                <div class="text-xs text-gray-500">
+                    <p class="mb-1"><strong>Terms & Conditions:</strong> Payment is due within 30 days.</p>
+                    <p class="font-arabic text-right" dir="rtl"><strong>الشروط والأحكام:</strong> يستحق الدفع خلال 30 يوماً.</p>
+                </div>
+            </div>
+
+            <!-- Totals -->
+            <div class="w-full md:w-1/2 p-8 bg-white">
+                <div class="space-y-3">
+                    <!-- Subtotal -->
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <div class="text-gray-600 text-sm">
+                            <span>Total (Excl. VAT)</span>
+                            <div class="text-xs font-arabic text-right">المجموع غير شامل الضريبة</div>
+                        </div>
+                        <span class="font-mono font-bold text-gray-900">10,000.00 SAR</span>
+                    </div>
+
+                    <!-- VAT -->
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <div class="text-gray-600 text-sm">
+                            <span>Total VAT (15%)</span>
+                            <div class="text-xs font-arabic text-right">مجموع الضريبة</div>
+                        </div>
+                        <span class="font-mono font-bold text-red-600">1,500.00 SAR</span>
+                    </div>
+
+                    <!-- Grand Total -->
+                    <div class="flex justify-between items-center pt-2">
+                        <div class="text-blue-900 font-bold">
+                            <span>Total Amount Due</span>
+                            <div class="text-sm font-arabic text-right">المبلغ الإجمالي المستحق</div>
+                        </div>
+                        <span class="font-mono text-2xl font-bold text-blue-700">11,500.00 SAR</span>
+                    </div>
+                </div>
+                
+                <!-- Amount in words (Optional) -->
+                <div class="mt-6 pt-4 border-t border-gray-200 text-center">
+                    <p class="text-xs text-gray-500 uppercase tracking-wide">Eleven Thousand Five Hundred Saudi Riyals Only</p>
+                    <p class="text-xs text-gray-500 font-arabic mt-1">أحد عشر ألفاً وخمسمائة ريال سعودي فقط</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Generate a sample QR Code
+        // In a real scenario, this would be a Base64 TLV string for ZATCA E-invoicing
+        const qrData = "Seller: Tech Solutions Co.; VAT: 300123456700003; Date: 2023-10-25; Total: 11500.00; VAT: 1500.00";
+        
+        new QRCode(document.getElementById("qrcode"), {
+            text: qrData,
+            width: 100,
+            height: 100,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+    </script>
+</body>
+</html>

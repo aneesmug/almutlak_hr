@@ -60,7 +60,7 @@ $page_roles = [
     'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
     'rejoin_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'all_resignations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll', 'DPT_Manager', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'all_resignations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'add_manual_loan.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_cars.php' => ['Administrator', 'GR_Officer'],
     'all_locations.php' => ['Administrator', 'GR_Officer'],
@@ -141,7 +141,7 @@ $can_see_loan_approvals_page = [
 ];
 
 $can_see_resignations_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll',
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll','HR_Recruitment',
     'DPT_Manager', 'IT_Team_Manager',
     'HR_Team', 'HR_Team_Manager',
     'HR_Manager'
@@ -223,22 +223,38 @@ if ($row = mysqli_fetch_assoc($loan_type_query)) {
     $loan_type_id = (int)$row['id'];
 }
 if ($loan_type_id > 0) {
-    if ($user_role == 'Administrator') {
-        // Admin: count all distinct loan requests still pending anywhere
-        $loan_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                                     FROM request_approvers ra
-                                     WHERE ra.status = 'pending' AND ra.request_type_id = $loan_type_id";
+    if ($is_system_admin || $user_role == 'Administrator') {
+    // Admin: count all distinct loan requests still pending anywhere
+                $loan_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                         FROM request_approvers ra
+                                                                         JOIN emp_loan l ON l.inv_no = ra.request_inv_no
+                                                                         WHERE ra.status = 'pending' 
+                                                                             AND ra.request_type_id = $loan_type_id
+                                                                             AND l.status NOT IN ('approved','completed','rejected','paid')";
         $res_loan_admin = mysqli_query($conDB, $loan_pending_query_admin);
         if ($res_loan_admin && ($rla = mysqli_fetch_assoc($res_loan_admin))) {
             $loan_pending_count = (int)$rla['count'];
         }
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+        // Department Manager: count all loan requests from their department employees
+                $loan_pending_query_dept = "SELECT COUNT(DISTINCT l.inv_no) AS count
+                                                                     FROM emp_loan l
+                                                                     JOIN employees e ON l.emp_id = e.emp_id
+                                                                     WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                                         AND l.status NOT IN ('approved','completed','rejected','paid')";
+        $res_loan_dept = mysqli_query($conDB, $loan_pending_query_dept);
+        if ($res_loan_dept && ($rld = mysqli_fetch_assoc($res_loan_dept))) {
+            $loan_pending_count = (int)$rld['count'];
+        }
     } else {
         // Regular user: count requests awaiting THIS user's approval
-        $loan_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                              FROM request_approvers ra
-                              WHERE ra.approver_id = " . (int)$empid . "
-                                AND ra.status = 'pending'
-                                AND ra.request_type_id = $loan_type_id";
+                $loan_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                            FROM request_approvers ra
+                                                            JOIN emp_loan l ON l.inv_no = ra.request_inv_no
+                                                            WHERE ra.approver_id = " . (int)$empid . "
+                                                                AND ra.status = 'pending'
+                                                                AND ra.request_type_id = $loan_type_id
+                                                                AND l.status NOT IN ('approved','completed','rejected','paid')";
         $res_loan = mysqli_query($conDB, $loan_pending_query);
         if ($res_loan && ($rl = mysqli_fetch_assoc($res_loan))) {
             $loan_pending_count = (int)$rl['count'];
@@ -249,13 +265,24 @@ if ($loan_type_id > 0) {
 
 // --- Fetch Smart Request Counts (NEW GENERAL SYSTEM) ---
 $smart_request_count = 0;
-if ($user_role == 'Administrator') {
+if ($is_system_admin || $user_role == 'Administrator') {
     // Admin sees a count of ALL pending requests (excluding drafts)
     $smart_request_query_admin = "SELECT COUNT(*) as count FROM smart_request WHERE current_status NOT IN ('approved', 'rejected', 'paid', 'draft')";
     $result_admin = mysqli_query($conDB, $smart_request_query_admin);
     if ($row_admin = mysqli_fetch_assoc($result_admin)) {
        $smart_request_count = $row_admin['count'];
    }
+} elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+    // Department Manager: count requests from their department employees
+    $smart_request_query_dept = "SELECT COUNT(*) as count 
+                                                          FROM smart_request sr
+                                                          JOIN employees e ON sr.emp_id = e.emp_id
+                                                          WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                              AND sr.current_status NOT IN ('approved','rejected','paid','draft')";
+    $result_dept = mysqli_query($conDB, $smart_request_query_dept);
+    if ($row_dept = mysqli_fetch_assoc($result_dept)) {
+        $smart_request_count = $row_dept['count'];
+    }
 } else {
     // All other users see a count of requests pending *their* approval
     $smart_request_type_id = 0;
@@ -265,11 +292,13 @@ if ($user_role == 'Administrator') {
     }
 
     if ($smart_request_type_id > 0) {
-        $smart_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
-                                FROM request_approvers ra
-                                WHERE ra.approver_id = " . (int)$empid . " 
-                                  AND ra.status = 'pending' 
-                                  AND ra.request_type_id = $smart_request_type_id";
+                $smart_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
+                                                                FROM request_approvers ra
+                                                                JOIN smart_request sr ON sr.inv_no = ra.request_inv_no
+                                                                WHERE ra.approver_id = " . (int)$empid . " 
+                                                                    AND ra.status = 'pending' 
+                                                                    AND ra.request_type_id = $smart_request_type_id
+                                                                    AND sr.current_status NOT IN ('approved','rejected','paid','draft')";
         
         $result = mysqli_query($conDB, $smart_request_query);
         if ($row = mysqli_fetch_assoc($result)) {
@@ -281,12 +310,23 @@ if ($user_role == 'Administrator') {
 
 // --- Fetch General Request Counts ---
 $general_request_count = 0;
-if ($user_role == 'Administrator') {
+if ($is_system_admin || $user_role == 'Administrator') {
     // Admin sees a count of ALL pending general requests (excluding completed)
     $general_request_query_admin = "SELECT COUNT(*) as count FROM general_requests WHERE current_status NOT IN ('approved', 'rejected', 'draft', 'completed')";
     $result_admin = mysqli_query($conDB, $general_request_query_admin);
     if ($row_admin = mysqli_fetch_assoc($result_admin)) {
         $general_request_count = $row_admin['count'];
+    }
+} elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+    // Department Manager: count requests from their department employees
+    $general_request_query_dept = "SELECT COUNT(*) as count 
+                                                            FROM general_requests gr
+                                                            JOIN employees e ON gr.emp_id = e.emp_id
+                                                            WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                                AND gr.current_status NOT IN ('approved','rejected','draft','completed')";
+    $result_dept = mysqli_query($conDB, $general_request_query_dept);
+    if ($row_dept = mysqli_fetch_assoc($result_dept)) {
+        $general_request_count = $row_dept['count'];
     }
 } else {
     // All other users see a count of general requests pending *their* approval
@@ -297,11 +337,13 @@ if ($user_role == 'Administrator') {
     }
 
     if ($general_request_type_id > 0) {
-        $general_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
-                                FROM request_approvers ra
-                                WHERE ra.approver_id = " . (int)$empid . " 
-                                  AND ra.status = 'pending' 
-                                  AND ra.request_type_id = $general_request_type_id";
+                $general_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
+                                                                FROM request_approvers ra
+                                                                JOIN general_requests gr ON gr.inv_no = ra.request_inv_no
+                                                                WHERE ra.approver_id = " . (int)$empid . " 
+                                                                    AND ra.status = 'pending' 
+                                                                    AND ra.request_type_id = $general_request_type_id
+                                                                    AND gr.current_status NOT IN ('approved','rejected','draft','completed')";
         
         $result = mysqli_query($conDB, $general_request_query);
         if ($row = mysqli_fetch_assoc($result)) {
@@ -319,22 +361,38 @@ if ($row = mysqli_fetch_assoc($vac_type_query)) {
     $vacation_type_id = (int)$row['id'];
 }
 if ($vacation_type_id > 0) {
-    if ($user_role == 'Administrator') {
-        // Admin: count all distinct vacation requests still pending anywhere
-        $vacation_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                                         FROM request_approvers ra
-                                         WHERE ra.status = 'pending' AND ra.request_type_id = $vacation_type_id";
+    if ($is_system_admin || $user_role == 'Administrator') {
+    // Admin: count all distinct vacation requests still pending anywhere
+                $vacation_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                                 FROM request_approvers ra
+                                                                                 JOIN emp_vacation v ON v.request_inv_no = ra.request_inv_no
+                                                                                 WHERE ra.status = 'pending' 
+                                                                                     AND ra.request_type_id = $vacation_type_id
+                                                                                     AND v.current_status NOT IN ('approved','completed','rejected')";
         $res_vac_admin = mysqli_query($conDB, $vacation_pending_query_admin);
         if ($res_vac_admin && ($rva = mysqli_fetch_assoc($res_vac_admin))) {
             $vacation_pending_count = (int)$rva['count'];
         }
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+        // Department Manager: count all vacation requests from their department employees
+                $vacation_pending_query_dept = "SELECT COUNT(DISTINCT v.request_inv_no) AS count
+                                                                             FROM emp_vacation v
+                                                                             JOIN employees e ON v.emp_id = e.emp_id
+                                                                             WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                                                 AND v.current_status NOT IN ('approved','completed','rejected')";
+        $res_vac_dept = mysqli_query($conDB, $vacation_pending_query_dept);
+        if ($res_vac_dept && ($rvd = mysqli_fetch_assoc($res_vac_dept))) {
+            $vacation_pending_count = (int)$rvd['count'];
+        }
     } else {
         // Regular user: count requests awaiting THIS user's approval
-        $vacation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                                   FROM request_approvers ra
-                                   WHERE ra.approver_id = " . (int)$empid . "
-                                     AND ra.status = 'pending'
-                                     AND ra.request_type_id = $vacation_type_id";
+                $vacation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                     FROM request_approvers ra
+                                                                     JOIN emp_vacation v ON v.request_inv_no = ra.request_inv_no
+                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                         AND ra.status = 'pending'
+                                                                         AND ra.request_type_id = $vacation_type_id
+                                                                         AND v.current_status NOT IN ('approved','completed','rejected')";
         $res_vac = mysqli_query($conDB, $vacation_pending_query);
         if ($res_vac && ($rv = mysqli_fetch_assoc($res_vac))) {
             $vacation_pending_count = (int)$rv['count'];
@@ -351,8 +409,8 @@ if ($row = mysqli_fetch_assoc($rejoin_type_query)) {
     $rejoin_type_id = (int)$row['id'];
 }
 if ($rejoin_type_id > 0) {
-    if ($user_role == 'Administrator') {
-        // Admin: count all distinct rejoin requests still pending anywhere
+    if ($is_system_admin || $user_role == 'Administrator') {
+    // Admin: count all distinct rejoin requests still pending anywhere
                 $rejoin_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                                  FROM request_approvers ra
                                                                                  JOIN rejoin_requests rr ON rr.id = ra.request_inv_no
@@ -362,6 +420,19 @@ if ($rejoin_type_id > 0) {
         $res_rejoin_admin = mysqli_query($conDB, $rejoin_pending_query_admin);
         if ($res_rejoin_admin && ($rra = mysqli_fetch_assoc($res_rejoin_admin))) {
             $rejoin_pending_count = (int)$rra['count'];
+        }
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+        // Department Manager: count all rejoin requests from their department employees
+                $rejoin_pending_query_dept = "SELECT COUNT(DISTINCT rr.id) AS count
+                                                                           FROM rejoin_requests rr
+                                                                           JOIN employees e ON rr.emp_id = e.emp_id
+                                                                           WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                                               AND rr.status = 'pending'";
+        // error_log("REJOIN DEPT QUERY: " . $rejoin_pending_query_dept . " | User Role: " . $user_role . " | Dept: " . $user_dept);
+        $res_rejoin_dept = mysqli_query($conDB, $rejoin_pending_query_dept);
+        if ($res_rejoin_dept && ($rrd = mysqli_fetch_assoc($res_rejoin_dept))) {
+            $rejoin_pending_count = (int)$rrd['count'];
+            // error_log("REJOIN DEPT COUNT: " . $rejoin_pending_count);
         }
     } else {
         // Regular user: count requests awaiting THIS user's approval
@@ -388,22 +459,38 @@ if ($row = mysqli_fetch_assoc($res_type_query)) {
     $resignation_type_id = (int)$row['id'];
 }
 if ($resignation_type_id > 0) {
-    if ($user_role == 'Administrator') {
+    if ($is_system_admin || $user_role == 'Administrator') {
         // Admin: count all distinct resignation requests still pending anywhere
-        $resignation_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                                            FROM request_approvers ra
-                                            WHERE ra.status = 'awaiting' AND ra.request_type_id = $resignation_type_id";
+                $resignation_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                                        FROM request_approvers ra
+                                                                                        JOIN emp_resignations r ON r.request_inv_no = ra.request_inv_no
+                                                                                        WHERE ra.status IN ('pending','awaiting')
+                                                                                            AND ra.request_type_id = $resignation_type_id
+                                                                                            AND r.status = 'pending'";
         $res_resig_admin = mysqli_query($conDB, $resignation_pending_query_admin);
         if ($res_resig_admin && ($rra = mysqli_fetch_assoc($res_resig_admin))) {
             $resignation_pending_count = (int)$rra['count'];
         }
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+        // Department Manager: count all resignation requests from their department employees
+                $resignation_pending_query_dept = "SELECT COUNT(DISTINCT r.request_inv_no) AS count
+                                                                                    FROM emp_resignations r
+                                                                                    JOIN employees e ON r.emp_id = e.emp_id
+                                                                                    WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                                                        AND r.status = 'pending'";
+        $res_resig_dept = mysqli_query($conDB, $resignation_pending_query_dept);
+        if ($res_resig_dept && ($rrd = mysqli_fetch_assoc($res_resig_dept))) {
+            $resignation_pending_count = (int)$rrd['count'];
+        }
     } else {
         // Regular user: count requests awaiting THIS user's approval
-        $resignation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-                                      FROM request_approvers ra
-                                      WHERE ra.approver_id = " . (int)$empid . "
-                                        AND ra.status = 'awaiting'
-                                        AND ra.request_type_id = $resignation_type_id";
+                $resignation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                            FROM request_approvers ra
+                                                                            JOIN emp_resignations r ON r.request_inv_no = ra.request_inv_no
+                                                                            WHERE ra.approver_id = " . (int)$empid . "
+                                                                                AND ra.status IN ('pending','awaiting')
+                                                                                AND ra.request_type_id = $resignation_type_id
+                                                                                AND r.status = 'pending'";
         $res_resig = mysqli_query($conDB, $resignation_pending_query);
         if ($res_resig && ($rr = mysqli_fetch_assoc($res_resig))) {
             $resignation_pending_count = (int)$rr['count'];

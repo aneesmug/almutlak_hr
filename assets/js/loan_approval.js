@@ -14,39 +14,56 @@
  * 6.  ADDED EOS DETAILS TO GM MODAL: The `modifyAndApproveLoan` function for the GM has been updated to fetch and display the End of Service and max loan amount details, and validates the new loan amount against this limit.
  */
 
-function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLevel) {
-    // Check if this is the final payer (Level 7 - Finance Officer)
-    const isFinalPayer = (approvalLevel == 7 && userType === 'finance_officer');
+function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLevel, payerEmpId, currentUserId) {
+    // Check if this is Finance Manager (user_type = 'finance')
+    const isFinanceManager = (userType === 'finance');
     
-    if (isFinalPayer) {
-        // Show payment proof and final amount modal for finance officer
+    // Check if current user is the assigned payer
+    const isPayer = (payerEmpId > 0 && payerEmpId === currentUserId);
+    
+    if (isPayer) {
+        // Show payment proof upload modal for assigned payer
         Swal.fire({
-            title: __('final_approval_payment_proof_title') || 'Final Approval - Payment Proof Required',
+            title: __('process_payment_upload_proof') || 'Process Payment & Upload Proof',
             html: `
-                <form id="finalApprovalForm" class="text-left" enctype="multipart/form-data">
-                    <p class="alert alert-info text-center"><i class="fa fa-info-circle"></i> ${__('final_approval_notice') || 'As the final approver, you must upload payment proof and confirm the approved amount.'}</p>
+                <form id="payerApprovalForm" class="text-left" enctype="multipart/form-data">
+                    <p class="alert alert-warning text-center"><i class="fa fa-exclamation-triangle"></i> ${__('payer_notice') || 'You have been assigned to process this payment. Please enter the final amount and upload payment proof.'}</p>
                     
                     <div class="form-group">
-                        <label for="final_approved_amount">${__('final_approved_amount_label') || 'Final Approved Amount (SAR)'} <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" id="final_approved_amount" name="final_approved_amount" class="form-control" placeholder="${__('enter_approved_amount') || 'Enter amount to be paid'}" value="${requestedAmount}" required>
-                        <small class="form-text text-muted">${__('requested_amount_label') || 'Requested Amount'}: ${parseFloat(requestedAmount).toFixed(2)} SAR</small>
+                        <label for="final_approved_amount">${__('final_approved_amount_sar') || 'Final Approved Amount (SAR)'} <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" id="final_approved_amount" name="final_approved_amount" class="form-control" placeholder="${__('enter_amount_actually_paid') || 'Enter amount actually paid'}" value="${requestedAmount}" required>
+                        <small class="form-text text-muted">${__('requested_amount') || 'Requested Amount'}: ${parseFloat(requestedAmount).toFixed(2)} SAR</small>
                     </div>
                     
                     <div class="form-group">
-                        <label for="payment_proof">${__('payment_proof_file_label') || 'Payment Proof Document'} <span class="text-danger">*</span></label>
+                        <label for="payment_proof">${__('payment_proof_document') || 'Payment Proof Document'} <span class="text-danger">*</span></label>
                         <input type="file" id="payment_proof" name="payment_proof" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required>
                         <small class="form-text text-muted">${__('accepted_formats') || 'Accepted: PDF, JPG, PNG, DOC, DOCX'}</small>
                     </div>
+                    
+                    <div class="form-group">
+                        <label for="approval_comment">${__('payment_notes') || 'Payment Notes'} <span class="text-muted">(${__('optional')})</span></label>
+                        <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_payment_notes') || 'Write any notes about the payment...'}" maxlength="5000"></textarea>
+                        <small class="form-text text-muted"><span id="char-count">0</span>/5000 ${__('characters')}</small>
+                    </div>
                 </form>
             `,
+            width: '40%',
             showCancelButton: true,
-            confirmButtonText: __('approve_and_submit_button') || 'Approve & Submit',
+            confirmButtonText: __('confirm_payment_upload_proof') || 'Confirm Payment & Upload Proof',
             confirmButtonColor: '#28a745',
             cancelButtonColor: '#dc3545',
+            cancelButtonText: __('cancel'),
             showLoaderOnConfirm: true,
             allowOutsideClick: false,
+            didOpen: () => {
+                // Character counter
+                $('#approval_comment').on('input', function() {
+                    $('#char-count').text($(this).val().length);
+                });
+            },
             preConfirm: () => {
-                const form = document.getElementById('finalApprovalForm');
+                const form = document.getElementById('payerApprovalForm');
                 const formData = new FormData(form);
                 formData.append('ajaxType', 'approve_loan');
                 formData.append('loan_id', loanId);
@@ -56,12 +73,12 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                 const paymentProof = document.getElementById('payment_proof').files[0];
 
                 if (!approvedAmount || parseFloat(approvedAmount) <= 0) {
-                    Swal.showValidationMessage(__('approved_amount_required') || 'Approved amount is required and must be greater than zero');
+                    Swal.showValidationMessage(__('approved_amount_required') || 'Final amount is required and must be greater than zero');
                     return false;
                 }
                 
                 if (!paymentProof) {
-                    Swal.showValidationMessage(__('payment_proof_required') || 'Payment proof document is required');
+                    Swal.showValidationMessage(__('payment_proof_document_is_required') || 'Payment proof document is required');
                     return false;
                 }
 
@@ -92,6 +109,126 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                     }
                 });
             }
+        });
+    } else if (isFinanceManager) {
+        // Show payer selection, payment proof and final amount modal for Finance Manager
+        // First, fetch list of finance staff who can be payers
+        $.ajax({
+            url: './includes/ajaxFile/ajaxLoan.php',
+            type: 'POST',
+            data: { ajaxType: 'get_finance_staff' },
+            dataType: 'JSON',
+        }).done(function(staffResponse) {
+            let payerOptions = '<option value="">-- Select Payer --</option>';
+            if (staffResponse.status === 'success' && staffResponse.staff) {
+                staffResponse.staff.forEach(function(staff) {
+                    payerOptions += `<option value="${staff.emp_id}">${staff.name} (${staff.emp_id})</option>`;
+                });
+            }
+            
+            Swal.fire({
+                title: __('finance_manager_payment_processing') || 'Finance Manager - Assign Payer',
+                html: `
+                    <form id="financeApprovalForm" class="text-left">
+                        <p class="alert alert-info text-center"><i class="fa fa-info-circle"></i> ${__('finance_manager_approval_notice') || 'Select the finance staff member who will process the payment and upload proof.'}</p>
+                        
+                        <div class="form-group">
+                            <label for="payer_emp_id">${__('who_will_process_payment') || 'Who Will Process Payment?'} <span class="text-danger">*</span></label>
+                            <select id="payer_emp_id" name="payer_emp_id" class="form-control" required>
+                                ${payerOptions}
+                            </select>
+                            <small class="form-text text-muted">${__('payer_hint') || 'The selected person will handle payment processing and upload payment proof'}</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>${__('requested_amount') || 'Requested Amount'}</label>
+                            <div class="form-control-plaintext"><strong>${parseFloat(requestedAmount).toFixed(2)} SAR</strong></div>
+                            <small class="form-text text-muted">${__('payer_will_confirm') || 'The payer will confirm the final amount when uploading proof'}</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="approval_comment">${__('approval_comment') || 'Approval Comment'} <span class="text-muted">(${__('optional')})</span></label>
+                            <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Write your comment...'}" maxlength="5000"></textarea>
+                            <small class="form-text text-muted"><span id="char-count">0</span>/5000 ${__('characters')}</small>
+                        </div>
+                    </form>
+                `,
+                width: '40%',
+                showCancelButton: true,
+                confirmButtonText: __('approve_and_assign_button') || 'Approve & Assign Payer',
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#dc3545',
+                cancelButtonText: __('cancel'),
+                showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                didOpen: () => {
+                    // Character counter
+                    $('#approval_comment').on('input', function() {
+                        $('#char-count').text($(this).val().length);
+                    });
+                },
+                willClose: (result) => {
+                    // Show custom loader when confirmed
+                    if (result.isConfirmed) {
+                        Swal.fire({
+                            title: 'Processing...',
+                            html: 'Assigning payer and sending notification emails...',
+                            icon: 'info',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+                    }
+                },
+                preConfirm: () => {
+                    const payerEmpId = document.getElementById('payer_emp_id').value;
+                    const approvalComment = document.getElementById('approval_comment').value;
+
+                    if (!payerEmpId) {
+                        Swal.showValidationMessage(__('payer_required') || 'Please select who will process the payment');
+                        return false;
+                    }
+
+                    return $.ajax({
+                        url: './includes/ajaxFile/ajaxLoan.php',
+                        type: 'POST',
+                        data: {
+                            ajaxType: 'approve_loan',
+                            loan_id: loanId,
+                            approver_role: role,
+                            payer_emp_id: payerEmpId,
+                            approval_comment: approvalComment
+                        },
+                        dataType: 'JSON',
+                    })
+                    .fail(function(jqXHR, textStatus) {
+                        const error = handleAjaxFailure(jqXHR, textStatus);
+                        Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
+                    });
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const response = result.value;
+                    Swal.fire({
+                        title: response.title,
+                        text: response.message,
+                        icon: response.type,
+                        allowOutsideClick: false
+                    }).then(() => {
+                        if (response.status === 'success') {
+                            location.reload();
+                        }
+                    });
+                }
+            });
+        }).fail(function() {
+            Swal.fire({
+                title: __('error_title'),
+                text: __('failed_to_load_payer_list') || 'Failed to load payer list',
+                icon: 'error'
+            });
         });
     } else {
         // Normal approval for other levels

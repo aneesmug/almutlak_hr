@@ -13,6 +13,7 @@
  *******************************************************************************************************************/
 	require_once __DIR__ . '/includes/db.php';
 	require_once __DIR__ . '/includes/session_check.php';
+    require_once __DIR__ . '/includes/helper_functions.php';
 	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
 	if(mysqli_num_rows($query) == 1){
 	include("./includes/avatar_select.php");
@@ -365,9 +366,9 @@
                                                     <tbody>
                                                         <tr><th style="width:150px;"><?=__('employee_id_label')?>:</th><td><strong>#<?=$emprow['empid']; ?></strong></td></tr>
                                                         <tr><th><?=__('iqama_id_label')?>:</th><td><?=$emprow['iqama']; ?></td></tr>
-                                                        <tr><th><?=__('iqama_exp_label')?>:</th><td><?=$emprow['iqama_exp']; ?></td></tr>
+                                                        <tr><th><?=__('iqama_expiry')?>:</th><td><?=$emprow['iqama_exp']; ?></td></tr>
                                                         <tr><th><?=__('passport_label')?>:</th><td><?=$emprow['passport_number']; ?></td></tr>
-                                                        <tr><th><?=__('passport_exp_label')?>:</th><td><?php if (!empty($emprow['passport_exp'])) echo $emprow['passport_exp']; else echo 'N/A'; ?></td></tr>
+                                                        <tr><th><?=__('passport_expiry')?>:</th><td><?php if (!empty($emprow['passport_exp'])) echo $emprow['passport_exp']; else echo 'N/A'; ?></td></tr>
                                                         <tr><th><?=__('dob_label')?>:</th><td><?=$emprow['dob']; ?> (<?=$years?> <?=__('years_text')?>)</td></tr>
                                                         <tr><th><?=__('nationality_label')?>:</th><td><?=($is_rtl ?? false ? $emprow['country_name_ar']:$emprow['country_name']); ?></td></tr>
                                                     </tbody>
@@ -379,12 +380,16 @@
                                                     <tbody>
                                                         <tr><th style="width:150px;"><?=__('department_label')?>:</th><td><?=$emprow['deptnme']; ?></td></tr>
                                                         <tr><th><?=__('section_label')?>:</th><td><?=$emprow['sectin_nme']; ?></td></tr>
-                                                        <tr><th><?=__('job_position_label')?>:</th><td><?=($is_rtl ?? false ? $emprow['jobname_ar']:$emprow['jobname']); ?></td></tr>
+                                                        <tr><th><?=__('current_position')?>:</th><td><?=($is_rtl ?? false ? $emprow['jobname_ar']:$emprow['jobname']); ?></td></tr>
                                                         <tr><th><?=__('date_hired_label')?>:</th><td><?=$emprow['joining_date']; ?></td></tr>
+                                                        <tr>
+                                                            <th><?= __('contract_expiry_label', 'Contract Expiry') ?>:</th>
+                                                            <td><?=computeContractExpiry($emprow['joining_date'],isset($emprow['vac_period']) ? (int)$emprow['vac_period'] : null,'Y-m-d') ?></td>
+                                                        </tr>
                                                         <tr><th><?=__('working_period')?>:</th><td><?=ageDOB($emprow['joining_date']) ?></td></tr>
                                                         <tr><th><?=__('contract_period_label')?>:</th><td><?=formatPeriod($emprow["period"])?></td></tr>
                                                         <tr><th><?=__('contact_label')?>:</th><td><?=$emprow['mobile']; ?></td></tr>
-                                                        <tr><th><?=__('email_label')?>:</th><td><?=$emprow['c_email']; ?></td></tr>
+                                                        <tr><th><?=__('email')?>:</th><td><?=$emprow['c_email']; ?></td></tr>
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -401,7 +406,7 @@
                                                     $salaryItems = ['basic','housing','transport','food','misc','cashier','fuel','tel','other','guard'];
                                                     foreach ($salaryItems as $item) {
                                                         if (!empty($emprow[$item]) && $emprow[$item] != "0") {
-                                                            echo "<tr><th style='width:150px;'>" . __(ucfirst($item).'_label') . ":</th><td>" . number_format($emprow[$item], 2) . " " . __('sar_currency') . "</td></tr>";
+                                                            echo "<tr><th style='width:150px;'>" . __($item) . ":</th><td>" . number_format($emprow[$item], 2) . " " . __('sar_currency') . "</td></tr>";
                                                         }
                                                     }
                                                     ?>
@@ -499,7 +504,7 @@
                                             <tbody>
                                                 <?php foreach ($vacation_history as $vac): ?>
                                                 <tr>
-                                                    <td><?= htmlspecialchars($vac['note']); ?></td>
+                                                    <td><?= htmlspecialchars($vac['note'] ?? 'N/A'); ?></td>
                                                     <td><?= date('d M Y', strtotime($vac['start_date'])); ?></td>
                                                     <td><?= date('d M Y', strtotime($vac['return_date'])); ?></td>
                                                     <td><?= htmlspecialchars($vac['vacdays']); ?></td>

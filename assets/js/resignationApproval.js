@@ -506,7 +506,36 @@ function fetchReplacementData(resignationId, callback) {
         dataType: 'json',
         success: function(response) {
             if (response.success) {
-                callback(response.data || {});
+                const data = response.data || {};
+                const hasDetails = !!(data.job_title || data.job_description || data.experience || data.certificate || data.academic_achievement || data.date_of_joining);
+                if (hasDetails) {
+                    callback(data);
+                } else {
+                    // Fallback: fetch full resignation details and parse replacement_data if present
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxResignation.php',
+                        type: 'POST',
+                        data: { ajaxType: 'get_resignation_details', resignation_id: resignationId },
+                        dataType: 'json',
+                        success: function(res) {
+                            let merged = data;
+                            if (res && res.success && res.resignation && res.resignation.replacement_data) {
+                                let raw = res.resignation.replacement_data;
+                                try {
+                                    let parsed = JSON.parse(raw);
+                                    if (typeof parsed === 'string') {
+                                        try { parsed = JSON.parse(parsed); } catch (e) { /* noop */ }
+                                    }
+                                    if (parsed && typeof parsed === 'object') {
+                                        merged = Object.assign({}, data, parsed);
+                                    }
+                                } catch (e) { /* noop */ }
+                            }
+                            callback(merged);
+                        },
+                        error: function() { callback(data); }
+                    });
+                }
             } else {
                 callback({});
             }
@@ -1219,7 +1248,13 @@ function generateResignationDetailsHTML(data) {
  * Utility: Format date
  */
 function formatDate(dateString) {
+    if (!dateString) {
+        return 'N/A';
+    }
     const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) {
+        return 'N/A';
+    }
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();

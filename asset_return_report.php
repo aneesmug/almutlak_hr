@@ -26,6 +26,11 @@ if (mysqli_num_rows($query) == 0) {
 }
 $asset = mysqli_fetch_assoc($query);
 
+$print_return_date = null;
+if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['print_return_date'])) {
+    $print_return_date = $_GET['print_return_date'];
+}
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -77,7 +82,7 @@ $asset = mysqli_fetch_assoc($query);
                 </tr>
                 <tr>
                     <th>Return Date</th>
-                    <td><?= date('d M, Y', strtotime($asset['return_date'])) ?></td>
+                    <td><?= $print_return_date ? date('d M, Y', strtotime($print_return_date)) : ($asset['return_date'] ? date('d M, Y', strtotime($asset['return_date'])) : 'N/A'); ?></td>
                 </tr>
                  <tr>
                     <th>Return Status</th>

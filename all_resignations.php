@@ -78,7 +78,8 @@ if ($current_filter === 'my_pending') {
     $params[] = $empid; // $empid is from session_check.php
     $types .= "i";
 
-    $where_clauses[] = "ra.status = 'awaiting'";
+        // Treat both 'pending' (current level) and 'awaiting' (legacy/edge cases) as actionable
+        $where_clauses[] = "ra.status IN ('pending','awaiting')";
     
 } elseif ($current_filter === 'my_dept') {
     // Show all requests from the user's department
@@ -152,27 +153,34 @@ if ($current_page > $total_pages && $total_pages > 0) {
 
 $requests = [];
 if ($total_items > 0) {
-    // This query fetches the full data *including* the current pending approver's name
+    // This query fetches the full data *including* approval chain details
     $sql = "SELECT 
         r.*, 
+        r.request_inv_no,
         e.name as employee_name,
         e.emp_id as employee_id,
         e.iqama,
         e.dept,
+        e.supervisor_id,
         d.dep_nme as department,
         j.job as designation,
         ra_pending.approver_id as current_approver_id,
         approver_emp.name as current_approver_name,
-        ra_pending.approval_level as current_approval_level
+        ra_pending.approval_level as current_approval_level,
+        ra_pending.status as current_approval_status,
+        supervisor_emp.name as supervisor_name
     FROM emp_resignations r 
     JOIN employees e ON r.emp_id = e.emp_id
     LEFT JOIN department d ON d.id = e.dept
     LEFT JOIN ac_jobs j ON j.id = e.actual_job
     
-    -- This JOIN finds the current pending approver
+    -- This JOIN finds the current pending/awaiting approver
     LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = r.request_inv_no 
-         AND ra_pending.request_type_id = ? AND ra_pending.status = 'awaiting'
+         AND ra_pending.request_type_id = ? AND (ra_pending.status = 'pending' OR ra_pending.status = 'awaiting')
     LEFT JOIN employees approver_emp ON ra_pending.approver_id = approver_emp.emp_id
+    
+    -- This JOIN gets the supervisor information
+    LEFT JOIN employees supervisor_emp ON e.supervisor_id = supervisor_emp.emp_id
     
     -- This JOIN is for the 'my_pending' filter
     $join_sql
@@ -383,7 +391,8 @@ if ($can_see_all_depts) {
                                                 // Determine if current user has pending approval
                                                 $user_has_pending_approval = false;
                                                 foreach ($approval_chain as $approval) {
-                                                    if ($approval['status'] === 'awaiting') {
+                                                    // Check for both 'pending' (first level) and 'awaiting' (subsequent levels) statuses
+                                                    if (in_array($approval['status'], ['pending', 'awaiting'])) {
                                                         $awaiting_approver_id = $approval['approver_id'] ?? null;
                                                         if ($awaiting_approver_id == $empid) {
                                                             $user_has_pending_approval = true;
@@ -413,11 +422,27 @@ if ($can_see_all_depts) {
                                                             
                                                             <div class="detail-item">
                                                                 <?php 
-                                                                    // Dynamic status logic
+                                                                    // Dynamic status logic with approval chain info
                                                                     $badge_class = 'secondary';
                                                                     $status_text = '';
                                                                     $status_icon = '';
-                                                                    $next_approver_display = '';
+
+                                                                    // Fetch approval chain info from request_approvers table
+                                                                    $approval_query = mysqli_query($conDB, "
+                                                                        SELECT ra.approval_level, ra.status, ra.approver_id, e.name as approver_name
+                                                                        FROM request_approvers ra
+                                                                        LEFT JOIN employees e ON ra.approver_id = e.emp_id
+                                                                        WHERE ra.request_inv_no = '" . mysqli_real_escape_string($conDB, $resignation['request_inv_no']) . "'
+                                                                        ORDER BY ra.approval_level ASC
+                                                                    ");
+                                                                    
+                                                                    $approval_statuses = [];
+                                                                    if ($approval_query && mysqli_num_rows($approval_query) > 0) {
+                                                                        while ($app = mysqli_fetch_assoc($approval_query)) {
+                                                                            $approval_statuses[] = $app;
+                                                                        }
+                                                                        mysqli_free_result($approval_query);
+                                                                    }
 
                                                                     switch ($resignation['status']) {
                                                                         case 'pending':
@@ -425,24 +450,14 @@ if ($can_see_all_depts) {
                                                                             $status_text = __('pending');
                                                                             $status_icon = "<i class='fa fa-solid fa-hourglass-half text-white'></i>";
                                                                             
-                                                                            // Find next awaiting approver
-                                                                            foreach ($approval_chain as $approval) {
-                                                                                if ($approval['status'] === 'awaiting') {
-                                                                                    $level_name = '';
-                                                                                    switch ($approval['approval_level']) {
-                                                                                        case 1:
-                                                                                            $level_name = 'Manager';
-                                                                                            break;
-                                                                                        case 2:
-                                                                                            $level_name = 'HR Operations';
-                                                                                            break;
-                                                                                        case 3:
-                                                                                            $level_name = 'HR Payroll';
-                                                                                            break;
+                                                                            // Find current/next pending or awaiting approver
+                                                                            if (!empty($approval_statuses)) {
+                                                                                foreach ($approval_statuses as $approval) {
+                                                                                    if ($approval['status'] === 'pending' || $approval['status'] === 'awaiting') {
+                                                                                        $approver_name = $approval['approver_name'] ?? 'N/A';
+                                                                                        $status_text .= " - Level " . $approval['approval_level'] . ": " . htmlspecialchars($approver_name);
+                                                                                        break;
                                                                                     }
-                                                                                    $approval_name = parseName($approval['approver_name'] ?? 'N/A');
-                                                                                    $status_text .= ' with ' . $level_name . ': ' . $approval_name;
-                                                                                    break;
                                                                                 }
                                                                             }
                                                                             break;
@@ -471,8 +486,8 @@ if ($can_see_all_depts) {
                                                                 <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=$status_icon." ".htmlspecialchars($status_text); ?></span>
                                                             </div>
                                                         </div>
-                                                        <div class="card-footer" style="<?= $can_take_action ? 'display: grid; grid-template-columns: 1fr auto; gap: 0.5rem;' : '' ?> padding: 1rem;">
-                                                            <button type="button" class="btn btn-info waves-effect viewResignation <?= !$can_take_action ? 'btn-block' : '' ?>"
+                                                        <div class="card-footer" style="<?= $can_take_action ? 'display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem;' : 'display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;' ?> padding: 1rem;">
+                                                            <button type="button" class="btn btn-info waves-effect viewResignation"
                                                                     data-id="<?= $resignation['id'] ?>"
                                                                     data-emp-id="<?= $resignation['employee_id'] ?>"
                                                                     data-iqama="<?= $resignation['iqama'] ?>"
@@ -483,6 +498,9 @@ if ($can_see_all_depts) {
                                                                     data-status="<?= $resignation['status'] ?>">
                                                                 <i class="fa fa-eye"></i> <?= __('view') ?>
                                                             </button>
+                                                            <a href="resignation_report_details.php?id=<?= $resignation['id'] ?>&emp_id=<?= $resignation['employee_id'] ?>" class="btn btn-primary waves-effect">
+                                                                <i class="fa fa-file-pdf"></i> <?= __('report') ?>
+                                                            </a>
                                                             
                                                             <?php if ($can_take_action): ?>
                                                             <div class="btn-group" role="group">

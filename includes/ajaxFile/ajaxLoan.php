@@ -21,12 +21,37 @@
  * 6.  UPDATED `get_loan_details`: This function now checks the logged-in user's session. It hides "Total Calculated" details only when a user with the 'employee' role is viewing their own loan application. Managers and Administrators will see the full details.
  *******************************************************************************************************************/
 
-require_once __DIR__ . '/../../includes/db.php';
-require_once __DIR__ . '/../../includes/session_check.php';
-include("./../../includes/helper_functions.php"); // --- Helper Function (REQUIRED for notifications) ---
+// require_once __DIR__ . '/../../includes/session_check.php';
+// require_once __DIR__ . '/../ApprovalChainManager.php';
+// include("./../../includes/helper_functions.php"); // --- Helper Function (REQUIRED for notifications) ---
 include("./../../includes/validate_supervisor.php"); // --- Supervisor Validation ---
 
+// header('Content-Type: application/json');
+
 header('Content-Type: application/json');
+
+try {
+    require_once __DIR__ . '/../../includes/session_check.php';
+    // Helper functions
+    $helperFile = __DIR__ . '/../../includes/helper_functions.php';
+    require_once __DIR__ . '/../ApprovalChainManager.php';
+    if (file_exists($helperFile)) {
+        include($helperFile);
+    }
+    // Supervisor validation
+    $supervisorFile = __DIR__ . '/../../includes/validate_supervisor.php';
+    if (file_exists($supervisorFile)) {
+        include($supervisorFile);
+    }
+} catch (Exception $e) {
+    echo json_encode([
+        'type' => 'error',
+        'title' => 'System Error',
+        'message' => 'Failed to load required files: ' . $e->getMessage()
+    ]);
+    exit;
+}
+
 // Ensure session and capture current submitter id
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 $current_user_id = $_SESSION['empid'] ?? 0;
@@ -76,6 +101,9 @@ if (isset($_POST['ajaxType'])) {
     $ajaxType = $_POST['ajaxType'];
 
     switch ($ajaxType) {
+        case 'get_finance_staff':
+            get_finance_staff();
+            break;
         case 'get_loan_details':
             get_loan_details();
             break;
@@ -217,19 +245,19 @@ function finalize_loan() {
 }
 
 function approve_loan() {
-    global $conDB;
+    global $conDB, $pdo;
     
+    // ===== APPROVE LOAN using ApprovalChainManager =====
     try {
         if (session_status() == PHP_SESSION_NONE) session_start();
-        $username = $_SESSION['auth_user']['user_id'] ?? null; // admin_login.id_iqama
+        $username = $_SESSION['auth_user']['user_id'] ?? null;
         if (empty($username)) {
             echo json_encode(['status' => 'error', 'title' => 'Authentication Error', 'message' => 'User session not found. Please log in again.', 'type' => 'error']);
             return;
         }
-        // Resolve approver's employee ID (request_approvers.approver_id stores employees.emp_id)
+        
         $approver_emp_id = $_SESSION['empid'] ?? null;
         if (!$approver_emp_id) {
-            // Fallback: look up via admin_login.id_iqama
             $stmt_user = $conDB->prepare("SELECT emp_id FROM admin_login WHERE id_iqama = ? LIMIT 1");
             $stmt_user->bind_param("s", $username);
             $stmt_user->execute();
@@ -242,31 +270,23 @@ function approve_loan() {
             echo json_encode(['status' => 'error', 'title' => 'Authentication Error', 'message' => 'Could not resolve approver identity.', 'type' => 'error']);
             return;
         }
+        
         if (!isset($_POST['loan_id'], $_POST['approver_role'])) {
             echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Missing required approval data.', 'type' => 'error']);
             return;
         }
+        
         $loan_id = filter_var($_POST['loan_id'], FILTER_VALIDATE_INT);
         $approver_role = mysqli_real_escape_string($conDB, $_POST['approver_role']);
-        
-        // Get approval comment if provided
         $approval_comment = trim($_POST['approval_comment'] ?? '');
-        $approval_comment = mb_substr($approval_comment, 0, 5000); // Limit to 5000 chars
+        $approval_comment = mb_substr($approval_comment, 0, 5000);
         
         if ($loan_id === false) {
             echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Invalid Loan ID.', 'type' => 'error']);
             return;
         }
 
-        // Use request_approvers for approval chain
-        // Find current approval record
-        $type_stmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE type_name = 'loan_request' LIMIT 1");
-        $type_stmt->execute();
-        $type_result = $type_stmt->get_result();
-        $type_row = $type_result->fetch_assoc();
-        $type_stmt->close();
-        $request_type_id = $type_row ? $type_row['id'] : 2;
-        // Resolve loan inv_no from numeric loan id
+        // Get loan details and invoice number
         $stmt_inv = $conDB->prepare("SELECT inv_no FROM emp_loan WHERE id = ? LIMIT 1");
         $stmt_inv->bind_param("i", $loan_id);
         $stmt_inv->execute();
@@ -274,36 +294,59 @@ function approve_loan() {
         $inv_row = $inv_res->fetch_assoc();
         $stmt_inv->close();
         $inv_no = $inv_row['inv_no'] ?? null;
+        
         if (empty($inv_no)) {
-            echo json_encode(['status' => 'error', 'title' => 'Not Allowed', 'message' => 'This loan request is missing a request number. Please refresh the page or contact support.', 'type' => 'error']);
+            echo json_encode(['status' => 'error', 'title' => 'Not Found', 'message' => 'Loan request not found.', 'type' => 'error']);
             return;
         }
-        // Find current approver record
-        $sel = $conDB->prepare("SELECT ra.*, al.user_type FROM request_approvers ra LEFT JOIN admin_login al ON ra.approver_id = al.emp_id WHERE ra.request_inv_no = ? AND ra.request_type_id = ? AND ra.approver_id = ? AND ra.status = 'pending' LIMIT 1");
-        $sel->bind_param("sii", $inv_no, $request_type_id, $approver_emp_id);
-        $sel->execute();
-        $res = $sel->get_result();
-        $row = $res->fetch_assoc();
-        $sel->close();
-        if (!$row) {
-            echo json_encode(['status' => 'error', 'title' => 'Not Allowed', 'message' => 'No pending approval found for this user.', 'type' => 'error']);
+        
+        // Initialize ApprovalChainManager
+        $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
+        
+        // Verify approver is authorized
+        $verifyResult = $chainManager->verifyApprover($inv_no, 'loan_request', $approver_emp_id);
+        if (!$verifyResult['success']) {
+            echo json_encode(['status' => 'error', 'title' => 'Not Allowed', 'message' => $verifyResult['message'], 'type' => 'error']);
             return;
         }
+        
+        $approvalLevel = $verifyResult['approval_level'];
+        $requestTypeId = $verifyResult['request_type_id'];
+        
+        // Check approver's user type for special handling
+        $user_type_stmt = $conDB->prepare("SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
+        $user_type_stmt->bind_param("i", $approver_emp_id);
+        $user_type_stmt->execute();
+        $user_type_res = $user_type_stmt->get_result();
+        $user_type_row = $user_type_res->fetch_assoc();
+        $user_type_stmt->close();
+        
+        // Check if this is Finance Manager approval (user_type = 'finance')
+        $is_finance_manager = ($user_type_row && $user_type_row['user_type'] == 'finance');
+        
+        // Check if current user is the assigned payer for this loan
+        $is_payer = false;
+        $final_approved_amount = 0;
+        $loan_payer_check = $conDB->prepare("SELECT payer_emp_id FROM emp_loan WHERE id = ? LIMIT 1");
+        $loan_payer_check->bind_param("i", $loan_id);
+        $loan_payer_check->execute();
+        $payer_result = $loan_payer_check->get_result();
+        if ($payer_row = $payer_result->fetch_assoc()) {
+            $is_payer = ($payer_row['payer_emp_id'] == $approver_emp_id && !empty($payer_row['payer_emp_id']));
+        }
+        $loan_payer_check->close();
 
-        // Check if this is the final payer (Level 7 - Finance Officer)
-        $is_final_payer = ($row['approval_level'] == 7 && $row['user_type'] == 'finance_officer');
-
-        // If final payer, require payment proof and approved amount
-        if ($is_final_payer) {
+        // If payer is approving, require payment proof and final amount
+        if ($is_payer) {
             // Validate payment proof file
             if (!isset($_FILES['payment_proof']) || $_FILES['payment_proof']['error'] != UPLOAD_ERR_OK) {
-                echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Payment proof file is required for final approval.', 'type' => 'error']);
+                echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Payment proof file is required.', 'type' => 'error']);
                 return;
             }
             
             // Validate final approved amount
             if (!isset($_POST['final_approved_amount']) || empty($_POST['final_approved_amount'])) {
-                echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Final approved amount is required for final approval.', 'type' => 'error']);
+                echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Final approved amount is required.', 'type' => 'error']);
                 return;
             }
             
@@ -335,22 +378,210 @@ function approve_loan() {
                 return;
             }
             
-            // Update emp_loan with payment proof and final amount
-            $update_loan_stmt = $conDB->prepare("UPDATE emp_loan SET payment_proof_file = ?, final_approved_amount = ? WHERE id = ?");
+            // Update emp_loan with payment proof, final amount, and payment date
+            $update_loan_stmt = $conDB->prepare("UPDATE emp_loan SET payment_proof_file = ?, final_approved_amount = ?, payment_date = NOW() WHERE id = ?");
             $update_loan_stmt->bind_param("sdi", $payment_proof_filename, $final_approved_amount, $loan_id);
             $update_loan_stmt->execute();
             $update_loan_stmt->close();
+            
+            // Log payment processing
+            error_log("Loan $inv_no: Payer (emp_id: $approver_emp_id) uploaded payment proof - Amount: $final_approved_amount, File: $payment_proof_filename");
+            
+            // Use ApprovalChainManager to record payer payment
+            try {
+                $paymentResult = $chainManager->recordPayerPayment(
+                    $inv_no,
+                    $approver_emp_id,
+                    $final_approved_amount,
+                    $payment_proof_filename,
+                    'file_upload'
+                );
+                
+                error_log("Loan $inv_no: Payment recorded via ApprovalChainManager - Result: " . json_encode($paymentResult));
+                
+                // If payment is final, update main emp_loan status
+                if ($paymentResult['is_final']) {
+                    $update_status = $conDB->prepare("UPDATE emp_loan SET status = 'paid' WHERE id = ?");
+                    $update_status->bind_param("i", $loan_id);
+                    $update_status->execute();
+                    $update_status->close();
+                }
+            } catch (Exception $e) {
+                // Log the error but continue - payment is already recorded in emp_loan
+                error_log("Loan $inv_no: Error in recordPayerPayment: " . $e->getMessage());
+            }
+        } elseif ($is_finance_manager) {
+            // Validate payer selection
+            if (!isset($_POST['payer_emp_id']) || empty($_POST['payer_emp_id'])) {
+                echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Please select who will process the payment.', 'type' => 'error']);
+                return;
+            }
+            
+            $payer_emp_id = (int)$_POST['payer_emp_id'];
+            if ($payer_emp_id <= 0) {
+                echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Invalid payer selection.', 'type' => 'error']);
+                return;
+            }
+            
+            // Update emp_loan with payer assignment
+            $update_loan_stmt = $conDB->prepare("UPDATE emp_loan SET payer_emp_id = ? WHERE id = ?");
+            $update_loan_stmt->bind_param("ii", $payer_emp_id, $loan_id);
+            $update_loan_stmt->execute();
+            $update_loan_stmt->close();
+            
+            // Log payer assignment
+            error_log("Loan $inv_no: Finance Manager approved and assigned payer: $payer_emp_id");
+            
+            // Use ApprovalChainManager to handle payer selection
+            try {
+                $payerSelectionResult = $chainManager->approveWithPayerSelection(
+                    $inv_no,
+                    $approver_emp_id,
+                    $payer_emp_id,
+                    $approval_comment ?: 'Approved. Finance payer selected for payment processing.'
+                );
+                
+                error_log("Loan $inv_no: Payer selection via ApprovalChainManager - Result: " . json_encode($payerSelectionResult));
+            } catch (Exception $e) {
+                // Log the error but continue with alternative method
+                error_log("Loan $inv_no: Error in approveWithPayerSelection: " . $e->getMessage());
+                
+                // Fallback: Manual payer addition to request_approvers
+                $max_level_stmt = $conDB->prepare("SELECT MAX(approval_level) as max_level FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ?");
+                $max_level_stmt->bind_param("si", $inv_no, $requestTypeId);
+                $max_level_stmt->execute();
+                $max_level_res = $max_level_stmt->get_result();
+                $max_level_row = $max_level_res->fetch_assoc();
+                $max_level_stmt->close();
+                
+                $payer_approval_level = ($max_level_row['max_level'] ?? 0) + 100; // Use 100+ to distinguish payer
+                
+                // Check if payer is already in the approval chain
+                $check_payer_stmt = $conDB->prepare("SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND approval_level >= 100 LIMIT 1");
+                $check_payer_stmt->bind_param("sii", $inv_no, $requestTypeId, $payer_emp_id);
+                $check_payer_stmt->execute();
+                $payer_exists = $check_payer_stmt->get_result()->num_rows > 0;
+                $check_payer_stmt->close();
+                
+                if (!$payer_exists) {
+                    $insert_payer_stmt = $conDB->prepare("INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status, note) VALUES (?, ?, ?, ?, 'awaiting', ?)");
+                    $payer_note = "Finance payer selected by Finance Manager";
+                    $insert_payer_stmt->bind_param("siis", $inv_no, $requestTypeId, $payer_emp_id, $payer_approval_level, $payer_note);
+                    $insert_payer_stmt->execute();
+                    $insert_payer_stmt->close();
+                    
+                    error_log("Loan $inv_no: Added payer (emp_id: $payer_emp_id) to request_approvers at level $payer_approval_level");
+                }
+            }
+            
+            // --- NOTIFY LOAN CREATOR ABOUT FINANCE MANAGER APPROVAL WITH PAYMENT DETAILS ---
+            $stmt_creator_fm = $conDB->prepare("SELECT emp_id FROM emp_loan WHERE id = ? LIMIT 1");
+            $stmt_creator_fm->bind_param("i", $loan_id);
+            $stmt_creator_fm->execute();
+            $creator_res_fm = $stmt_creator_fm->get_result();
+            $creator_row_fm = $creator_res_fm->fetch_assoc();
+            $stmt_creator_fm->close();
+            
+            if ($creator_row_fm && function_exists('getEmployeeDetails')) {
+                $creator_emp_id_fm = $creator_row_fm['emp_id'];
+                $creator_details_fm = getEmployeeDetails($conDB, $creator_emp_id_fm);
+                
+                // Get payer details
+                $payer_details = getEmployeeDetails($conDB, $payer_emp_id);
+                $payer_name = $payer_details ? $payer_details['name'] : 'Finance Staff';
+                
+                if ($creator_details_fm && $creator_details_fm['name'] !== 'N/A') {
+                    // Send browser notification about Finance Manager approval
+                    if (function_exists('create_browser_notification')) {
+                        $notification_title = "Loan Payment Processing Approved";
+                        $notification_message = "Finance Manager approved your loan request " . htmlspecialchars($inv_no) . ". Payment will be processed by " . $payer_name . ".";
+                        $notification_url = "loan_status_history.php?inv_no=" . urlencode($inv_no);
+                        create_browser_notification($conDB, $creator_emp_id_fm, $notification_title, $notification_message, $notification_url);
+                    }
+                    
+                    // Send email with payment details
+                    if (!empty($creator_details_fm['email']) && function_exists('send_approval_email')) {
+                        $loan_details_fm_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.id = ? LIMIT 1");
+                        $loan_details_fm_stmt->bind_param("i", $loan_id);
+                        $loan_details_fm_stmt->execute();
+                        $loan_details_fm = $loan_details_fm_stmt->get_result()->fetch_assoc();
+                        $loan_details_fm_stmt->close();
+                        
+                        if ($loan_details_fm) {
+                            $base_url = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com');
+                            $template_data = [
+                                'APPROVER_NAME' => $creator_details_fm['name'],
+                                'REQUEST_ID' => $inv_no,
+                                'EMPLOYEE_NAME' => $loan_details_fm['employee_name'] ?? 'Employee',
+                                'LOAN_TYPE' => str_replace('_', ' ', $loan_details_fm['loan_type']),
+                                'LOAN_AMOUNT' => number_format($final_approved_amount, 2),
+                                'INSTALLMENTS' => $loan_details_fm['installments'],
+                                'REQUEST_URL' => $base_url . '/loan_status_history.php?inv_no=' . urlencode($inv_no),
+                                'EMAIL_MESSAGE' => 'Great news! Finance Manager has approved your loan and assigned payment processing to ' . $payer_name . '. The payer will handle the payment and upload proof shortly.'
+                            ];
+                            
+                            $email_subject = "Finance Manager Approved Payment - " . ucfirst(str_replace('_', ' ', $loan_details_fm['loan_type'])) . " (" . $inv_no . ")";
+                            send_approval_email($conDB, $creator_details_fm['email'], $creator_details_fm['name'], $email_subject, 'loan_request', $template_data);
+                        }
+                    }
+                }
+            }
+            
+            // --- NOTIFY SELECTED PAYER ABOUT ASSIGNMENT ---
+            if ($payer_emp_id && function_exists('getEmployeeDetails')) {
+                $payer_details_notify = getEmployeeDetails($conDB, $payer_emp_id);
+                if ($payer_details_notify && $payer_details_notify['name'] !== 'N/A') {
+                    // Send browser notification to payer
+                    if (function_exists('create_browser_notification')) {
+                        $notification_title = "Loan Payment Assignment";
+                        $notification_message = "You have been assigned to process payment for loan " . htmlspecialchars($inv_no) . ". Please process payment and upload proof.";
+                        $notification_url = "all_applied_loan.php?status=my_pending";
+                        create_browser_notification($conDB, $payer_emp_id, $notification_title, $notification_message, $notification_url);
+                    }
+                    
+                    // Send email to payer
+                    if (!empty($payer_details_notify['email']) && function_exists('send_approval_email')) {
+                        $loan_details_payer_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.id = ? LIMIT 1");
+                        $loan_details_payer_stmt->bind_param("i", $loan_id);
+                        $loan_details_payer_stmt->execute();
+                        $loan_details_payer = $loan_details_payer_stmt->get_result()->fetch_assoc();
+                        $loan_details_payer_stmt->close();
+                        
+                        if ($loan_details_payer) {
+                            $base_url = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com');
+                            $template_data = [
+                                'APPROVER_NAME' => $payer_details_notify['name'],
+                                'REQUEST_ID' => $inv_no,
+                                'EMPLOYEE_NAME' => $loan_details_payer['employee_name'] ?? 'Employee',
+                                'LOAN_TYPE' => str_replace('_', ' ', $loan_details_payer['loan_type']),
+                                'LOAN_AMOUNT' => number_format($loan_details_payer['loan_amount'], 2),
+                                'INSTALLMENTS' => $loan_details_payer['installments'],
+                                'REQUEST_URL' => $base_url . '/all_applied_loan.php?status=my_pending',
+                                'EMAIL_MESSAGE' => 'You have been assigned by Finance Manager to process the payment for this loan. Please process the payment, confirm the amount, and upload payment proof to complete the transaction.'
+                            ];
+                            
+                            $email_subject = "Payment Assignment - " . ucfirst(str_replace('_', ' ', $loan_details_payer['loan_type'])) . " (" . $inv_no . ")";
+                            send_approval_email($conDB, $payer_details_notify['email'], $payer_details_notify['name'], $email_subject, 'loan_request', $template_data);
+                        }
+                    }
+                }
+            }
+            // --- END FINANCE MANAGER NOTIFICATIONS ---
         }
         
-        // Approve current level
-        $upd = $conDB->prepare("UPDATE request_approvers SET status = 'approved', action_date = NOW() WHERE id = ?");
-        $upd->bind_param("i", $row['id']);
-        $upd->execute();
-        $upd->close();
+        // ===== PROCESS APPROVAL using ApprovalChainManager =====
+        $approvalResult = $chainManager->processApproval($inv_no, 'loan_request', $approver_emp_id, 'approved');
+        
+        if (!$approvalResult['success']) {
+            echo json_encode(['status' => 'error', 'title' => 'Approval Error', 'message' => $approvalResult['message'], 'type' => 'error']);
+            return;
+        }
+        
+        $isFinalApproval = $approvalResult['is_final'];
+        $nextApprover = $approvalResult['next_approver'] ?? null;
         
         // Save approval comment if provided
         if (!empty($approval_comment)) {
-            // Get approver name
             $sql_approver = "SELECT name FROM employees WHERE emp_id = ?";
             $stmt_approver = $conDB->prepare($sql_approver);
             if ($stmt_approver) {
@@ -364,7 +595,6 @@ function approve_loan() {
                 $approver_name = 'Unknown';
             }
             
-            // Save to approval_comments table if the function exists
             if (function_exists('save_approval_comment_db')) {
                 save_approval_comment_db(
                     $conDB,
@@ -374,46 +604,24 @@ function approve_loan() {
                     $approver_emp_id,
                     $approver_name,
                     $approval_comment,
-                    $row['approval_level'], // approval_level
-                    null // approver_admin_id
+                    $approvalLevel,
+                    null
                 );
             }
         }
         
         // Log loan approval
-        $loan_details = $conDB->prepare("SELECT * FROM emp_loan WHERE id = ?");
-        $loan_details->bind_param("i", $loan_id);
-        $loan_details->execute();
-        $loan_result = $loan_details->get_result();
-        $old_loan = $loan_result->fetch_assoc();
-        if ($old_loan) {
-            ActivityLogger::logApproval('Loan', 'ajaxLoan.php', $loan_id, 'approved', "Approved loan: {$inv_no}, Level: {$row['approval_level']}, Role: {$approver_role}", 'emp_loan');
-        }
-        $loan_details->close();
+        ActivityLogger::logApproval('Loan', 'ajaxLoan.php', $loan_id, 'approved', "Approved loan: {$inv_no}, Level: {$approvalLevel}, Role: {$approver_role}", 'emp_loan');
         
         // Add status history to smt_request_status
-        $status_label = 'approved_level_' . $row['approval_level'];
-        $approver_name = 'System'; // You can get the actual approver name if needed
-        $note = 'Approved by approver at level ' . $row['approval_level'];
-        $hist_stmt = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, ?, ?, ?)");
-        $hist_stmt->bind_param("sssss", $inv_no, $approver_emp_id, $approver_name, $note, $status_label);
+        $status_label = 'approved_level_' . $approvalLevel;
+        $note = 'Approved by approver at level ' . $approvalLevel;
+        $hist_stmt = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, ?)");
+        $hist_stmt->bind_param("siss", $inv_no, $approver_emp_id, $note, $status_label);
         $hist_stmt->execute();
         $hist_stmt->close();
         
-        // Check if next level exists
-        $next_level = $row['approval_level'] + 1;
-        $next_sel = $conDB->prepare("SELECT * FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approval_level = ? LIMIT 1");
-        $next_sel->bind_param("sii", $inv_no, $request_type_id, $next_level);
-        $next_sel->execute();
-        $next_row = $next_sel->get_result()->fetch_assoc();
-        $next_sel->close();
-        if ($next_row) {
-            // Set next approver status to pending
-            $upd_next = $conDB->prepare("UPDATE request_approvers SET status = 'pending' WHERE id = ?");
-            $upd_next->bind_param("i", $next_row['id']);
-            $upd_next->execute();
-            $upd_next->close();
-            
+        if (!$isFinalApproval && $nextApprover) {
             // Update main loan status to reflect next stage
             $stmt = $conDB->prepare("UPDATE emp_loan SET status = 'pending' WHERE id = ?");
             $stmt->bind_param("i", $loan_id);
@@ -421,55 +629,50 @@ function approve_loan() {
             $stmt->close();
             
             // Add status history for moving to next level
-            $next_status_label = 'pending_level_' . $next_level;
-            $note_next = 'Moved to approval level ' . $next_level;
+            $next_status_label = 'pending_level_' . $nextApprover['approval_level'];
+            $note_next = 'Moved to approval level ' . $nextApprover['approval_level'];
             $hist_next = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, ?)");
-            $hist_next->bind_param("ssss", $inv_no, $approver_emp_id, $note_next, $next_status_label);
+            $hist_next->bind_param("siss", $inv_no, $approver_emp_id, $note_next, $next_status_label);
             $hist_next->execute();
             $hist_next->close();
             
-            // --- SEND NOTIFICATION AND EMAIL TO NEXT APPROVER ---
-            $next_approver_id = $next_row['approver_id'];
-            if (function_exists('getEmployeeDetails')) {
-                $next_approver_details = getEmployeeDetails($conDB, $next_approver_id);
-                if ($next_approver_details && $next_approver_details['name'] !== 'N/A') {
-                    // Send browser notification
-                    if (function_exists('create_browser_notification')) {
-                        $notification_title = "Loan Request for Approval";
-                        $notification_message = "Loan request " . htmlspecialchars($inv_no) . " is now pending your approval.";
-                        $notification_url = "all_applied_loan.php?status=my_pending";
-                        create_browser_notification($conDB, $next_approver_id, $notification_title, $notification_message, $notification_url);
-                    }
-                    
-                    // Send email with template
-                    if (!empty($next_approver_details['email']) && function_exists('send_approval_email')) {
-                        // Fetch loan details for email template
-                        $loan_details_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.inv_no = ? LIMIT 1");
-                        $loan_details_stmt->bind_param("s", $inv_no);
-                        $loan_details_stmt->execute();
-                        $loan_details = $loan_details_stmt->get_result()->fetch_assoc();
-                        $loan_details_stmt->close();
-                        
-                        if ($loan_details) {
-                            $base_url = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com');
-                            $template_data = [
-                                'APPROVER_NAME' => $next_approver_details['name'],
-                                'REQUEST_ID' => $inv_no,
-                                'EMPLOYEE_NAME' => $loan_details['employee_name'] ?? 'Employee',
-                                'LOAN_TYPE' => str_replace('_', ' ', $loan_details['loan_type']),
-                                'LOAN_AMOUNT' => number_format($loan_details['loan_amount'], 2),
-                                'INSTALLMENTS' => $loan_details['installments'],
-                                'REQUEST_URL' => $base_url . '/all_applied_loan.php?status=my_pending',
-                                'EMAIL_MESSAGE' => 'A loan request has been approved at a previous level and now requires your approval.'
-                            ];
-                            
-                            $email_subject = "Loan Request Pending Your Approval - " . ucfirst(str_replace('_', ' ', $loan_details['loan_type'])) . " (" . $inv_no . ")";
-                            send_approval_email($conDB, $next_approver_details['email'], $next_approver_details['name'], $email_subject, 'loan_request', $template_data);
-                        }
-                    }
-                }
+            // ===== NOTIFY NEXT APPROVER using ApprovalChainManager =====
+            // Fetch loan details for email template
+            $loan_details_stmt = $conDB->prepare("SELECT el.*, e.name as employee_name FROM emp_loan el LEFT JOIN employees e ON el.emp_id = e.emp_id WHERE el.inv_no = ? LIMIT 1");
+            $loan_details_stmt->bind_param("s", $inv_no);
+            $loan_details_stmt->execute();
+            $loan_details = $loan_details_stmt->get_result()->fetch_assoc();
+            $loan_details_stmt->close();
+            
+            if ($loan_details) {
+                $emailData = [
+                    'APPROVER_NAME' => $nextApprover['fullname'],
+                    'REQUEST_ID' => $inv_no,
+                    'EMPLOYEE_NAME' => $loan_details['employee_name'] ?? 'Employee',
+                    'LOAN_TYPE' => str_replace('_', ' ', $loan_details['loan_type']),
+                    'LOAN_AMOUNT' => number_format($loan_details['loan_amount'], 2),
+                    'INSTALLMENTS' => $loan_details['installments'],
+                    'REQUEST_URL' => 'https://hr.almutlaksystem.com/all_applied_loan.php?status=my_pending',
+                    'EMAIL_MESSAGE' => 'A loan request has been approved at a previous level and now requires your approval.'
+                ];
+                
+                send_approval_email(
+                    $conDB,
+                    $nextApprover['email'],
+                    $nextApprover['fullname'],
+                    "Loan Request Pending Your Approval - " . ucfirst(str_replace('_', ' ', $loan_details['loan_type'])) . " (" . $inv_no . ")",
+                    'loan_request',
+                    $emailData
+                );
+                
+                create_browser_notification(
+                    $conDB,
+                    $nextApprover['approver_id'],
+                    'Loan Request for Approval',
+                    "Loan request " . htmlspecialchars($inv_no) . " is now pending your approval.",
+                    'all_applied_loan.php?status=my_pending'
+                );
             }
-            // --- END NOTIFICATION ---
             
             echo json_encode(['status' => 'success', 'title' => 'Approved!', 'message' => 'Moved to next approval stage.', 'type' => 'success']);
         } else {
@@ -562,6 +765,57 @@ function approve_loan() {
 
 // --- Other functions remain unchanged ---
 
+/**
+ * Get Finance Staff for Payer Selection
+ * Returns list of employees with finance roles who can process payments
+ */
+function get_finance_staff() {
+    global $conDB;
+    
+    try {
+        // Get all staff from finance department (dept = 2) with user_type = 'finance_officer'
+        // Join with employees table to get accurate employee details
+        $query = "SELECT al.emp_id, e.name, al.user_type 
+                  FROM admin_login al
+                  INNER JOIN employees e ON al.emp_id = e.emp_id
+                  WHERE al.dept = 2
+                  AND al.user_type = 'finance_officer'
+                  AND al.status = 1
+                  AND e.status = 1
+                  ORDER BY e.name ASC";
+        
+        $result = mysqli_query($conDB, $query);
+        
+        if (!$result) {
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Database error: ' . mysqli_error($conDB)
+            ]);
+            return;
+        }
+        
+        $staff = [];
+        while ($row = mysqli_fetch_assoc($result)) {
+            $staff[] = [
+                'emp_id' => $row['emp_id'],
+                'name' => $row['name'],
+                'user_type' => $row['user_type']
+            ];
+        }
+        
+        echo json_encode([
+            'status' => 'success',
+            'staff' => $staff
+        ]);
+        
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Failed to retrieve finance staff: ' . $e->getMessage()
+        ]);
+    }
+}
+
 function get_loan_details() {
     global $conDB;
     // Start session to access logged-in user's data
@@ -638,7 +892,7 @@ function get_loan_details() {
 }
 
 function apply_for_loan() {
-    global $conDB;
+    global $conDB, $pdo;
     // Check for required fields
     if (!isset($_POST['emp_id'], $_POST['loan_amount'], $_POST['loan_type'])) {
         echo json_encode(['status' => 'error','title' => 'Input Error','message' => 'Missing required fields.','type' => 'error']);
@@ -829,33 +1083,20 @@ function apply_for_loan() {
         // Log loan application submission
         ActivityLogger::logSubmit('Loan', 'ajaxLoan.php', $loan_id, "Submitted loan application: {$inv_no}, Amount: {$loan_amount}, Type: {$loan_type}", 'emp_loan');
         
-        // Get loan_request type id
-        $type_stmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE type_name = 'loan_request' LIMIT 1");
-        $type_stmt->execute();
-        $type_result = $type_stmt->get_result();
-        $type_row = $type_result->fetch_assoc();
-        $type_stmt->close();
-        $request_type_id = $type_row ? $type_row['id'] : 2;
-        // Build approval chain using new dynamic function (ordered levels)
-        $approvers = get_dynamic_loan_approvers($conDB, $emp_id); // [level => emp_id]
-        $first_real_approval_level = null;
-        foreach ($approvers as $level => $approver_id) {
-            // Employee (level 1) is the submitter: mark as 'submitted' not awaiting
-            $status = ($level === 1 && $approver_id == $emp_id) ? 'submitted' : 'awaiting';
-            if ($status === 'awaiting' && $first_real_approval_level === null) {
-                $first_real_approval_level = $level;
+        // ===== CREATE APPROVAL CHAIN using ApprovalChainManager =====
+        try {
+            $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
+            $chainResult = $chainManager->createApprovalChain($inv_no, 'loan_request', $emp_id);
+            
+            if (!$chainResult['success']) {
+                throw new Exception($chainResult['message'] ?? 'Failed to create approval chain');
             }
-            $ins = $conDB->prepare("INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, ?)");
-            $ins->bind_param("siiis", $inv_no, $request_type_id, $approver_id, $level, $status);
-            $ins->execute();
-            $ins->close();
-        }
-        // Set first real approver (after employee) to pending
-        if ($first_real_approval_level !== null) {
-            $upd = $conDB->prepare("UPDATE request_approvers SET status = 'pending' WHERE request_inv_no = ? AND request_type_id = ? AND approval_level = ?");
-            $upd->bind_param("sii", $inv_no, $request_type_id, $first_real_approval_level);
-            $upd->execute();
-            $upd->close();
+            
+            error_log("Loan $inv_no: Created approval chain with " . count($chainResult['approvers']) . " approvers");
+        } catch (Exception $chainEx) {
+            error_log("Loan approval chain error for $inv_no: " . $chainEx->getMessage());
+            echo json_encode(['status' => 'error', 'title' => 'Chain Error', 'message' => 'Failed to build approval chain: ' . $chainEx->getMessage(), 'type' => 'error']);
+            return;
         }
         
         // Add initial status history to smt_request_status
@@ -867,7 +1108,7 @@ function apply_for_loan() {
         $hist_initial->close();
         
         // Add pending status history
-        if (count($approvers) > 0) {
+        if (!empty($chainResult['approvers'])) {
             $pending_status = 'pending_level_1';
             $note_pending = 'Pending approval at level 1';
             $hist_pending = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, ?)");
@@ -875,69 +1116,46 @@ function apply_for_loan() {
             $hist_pending->execute();
             $hist_pending->close();
             
-            // --- [NEW] SEND NOTIFICATION TO FIRST APPROVER ---
-            $first_level = min(array_keys($approvers));
-            $first_approver_id = $approvers[$first_level];
-            
-            error_log("apply_for_loan: Attempting to send notification to first approver: $first_approver_id");
-            
-            if (function_exists('getEmployeeDetailsForApproval')) {
-                $first_approver_details = getEmployeeDetailsForApproval($conDB, $first_approver_id);
-                
-                if ($first_approver_details) {
-                    // Send browser notification
-                    if (function_exists('create_browser_notification')) {
-                        $notification_title = "New Loan Request";
-                        $notification_message = "A new loan request ($inv_no) from employee ID $emp_id for SAR " . number_format($loan_amount, 2) . " is pending your approval.";
-                        $notification_url = "all_applied_loan.php?status=my_pending";
-                        $notif_result = create_browser_notification($conDB, $first_approver_id, $notification_title, $notification_message, $notification_url);
-                        error_log("apply_for_loan: Browser notification result: " . ($notif_result ? 'SUCCESS' : 'FAILED'));
-                    } else {
-                        error_log("apply_for_loan: create_browser_notification function NOT FOUND");
-                    }
-                    
-                    // Send email notification
-                    if (!empty($first_approver_details['email']) && function_exists('send_approval_email')) {
-                        error_log("apply_for_loan: Attempting to send email to: " . $first_approver_details['email']);
-                        
-                        // Get employee name for template
-                        $employee_name = 'Employee';
-                        $emp_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$emp_id' LIMIT 1");
-                        if ($emp_result && $emp_row = mysqli_fetch_assoc($emp_result)) {
-                            $employee_name = $emp_row['name'];
-                        }
-                        if ($emp_result) mysqli_free_result($emp_result);
-                        
-                        // Prepare template data
-                        $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
-                        $template_data = [
-                            'APPROVER_NAME' => $first_approver_details['name'],
-                            'REQUEST_ID' => $inv_no,
-                            'EMPLOYEE_NAME' => $employee_name,
-                            'LOAN_TYPE' => str_replace('_', ' ', $loan_type),
-                            'LOAN_AMOUNT' => number_format($loan_amount, 2),
-                            'INSTALLMENTS' => $installments,
-                            'REQUEST_URL' => $base_url . '/all_applied_loan.php?status=my_pending'
-                        ];
-                        
-                        $email_subject = "New Loan Request Pending Approval - " . ucfirst(str_replace('_', ' ', $loan_type));
-                        $email_result = send_approval_email($conDB, $first_approver_details['email'], $first_approver_details['name'], $email_subject, 'loan_request', $template_data);
-                        error_log("apply_for_loan: Email result: " . ($email_result ? 'SUCCESS' : 'FAILED'));
-                    } else {
-                        if (empty($first_approver_details['email'])) {
-                            error_log("apply_for_loan: First approver has NO EMAIL in database");
-                        }
-                        if (!function_exists('send_approval_email')) {
-                            error_log("apply_for_loan: send_approval_email function NOT FOUND");
-                        }
-                    }
-                } else {
-                    error_log("apply_for_loan: Could not get approver details for emp_id: $first_approver_id");
+            // ===== NOTIFY FIRST APPROVER using ApprovalChainManager =====
+            $firstApprover = $chainResult['approvers'][0] ?? null;
+            if ($firstApprover && !empty($firstApprover['approver_id'])) {
+                // Get employee name for email template
+                $employee_name = 'Employee';
+                $emp_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$emp_id' LIMIT 1");
+                if ($emp_result && $emp_row = mysqli_fetch_assoc($emp_result)) {
+                    $employee_name = $emp_row['name'];
                 }
-            } else {
-                error_log("apply_for_loan: getEmployeeDetailsForApproval function NOT FOUND");
+                if ($emp_result) mysqli_free_result($emp_result);
+                
+                $emailData = [
+                    'APPROVER_NAME' => $firstApprover['fullname'],
+                    'REQUEST_ID' => $inv_no,
+                    'EMPLOYEE_NAME' => $employee_name,
+                    'LOAN_TYPE' => str_replace('_', ' ', $loan_type),
+                    'LOAN_AMOUNT' => number_format($loan_amount, 2),
+                    'INSTALLMENTS' => $installments,
+                    'REQUEST_URL' => 'https://hr.almutlaksystem.com/all_applied_loan.php?status=my_pending'
+                ];
+                
+                send_approval_email(
+                    $conDB,
+                    $firstApprover['email'],
+                    $firstApprover['fullname'],
+                    'New Loan Request Pending Approval - ' . ucfirst(str_replace('_', ' ', $loan_type)),
+                    'loan_request',
+                    $emailData
+                );
+                
+                create_browser_notification(
+                    $conDB,
+                    $firstApprover['approver_id'],
+                    'New Loan Request',
+                    "A new loan request ($inv_no) from $employee_name for SAR " . number_format($loan_amount, 2) . " is pending your approval.",
+                    'all_applied_loan.php?status=my_pending'
+                );
+                
+                error_log("Loan $inv_no: Notified first approver (Level {$firstApprover['approval_level']}): {$firstApprover['fullname']}");
             }
-            // --- [END NEW] ---
         }
 
         // --- [NEW] Notify direct supervisor immediately on submission ---

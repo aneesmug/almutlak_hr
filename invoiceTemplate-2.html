@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZATCA Tax Invoice Template</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans Arabic', sans-serif;
+            background-color: #ffffff;
+            color: #1f2937;
+        }
+        
+        .arabic-text {
+            font-family: 'Noto Sans Arabic', sans-serif;
+            direction: rtl;
+        }
+
+        /* Strict Table Styling for ERP Compatibility */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        
+        th, td {
+            border: 1px solid #e5e7eb;
+        }
+
+        /* Utility for bilingual labels */
+        .bilingual-label {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+        .bilingual-label span:first-child {
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: #4b5563;
+        }
+        .bilingual-label span:last-child {
+            font-family: 'Noto Sans Arabic', sans-serif;
+            font-weight: 500;
+            font-size: 0.75rem;
+            color: #6b7280;
+            text-align: right;
+        }
+
+        /* Header Box Styles */
+        .info-box {
+            border: 1px solid #e5e7eb;
+            padding: 0.75rem;
+            height: 100%;
+        }
+        
+        .info-title {
+            background-color: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0.25rem 0.5rem;
+            margin: -0.75rem -0.75rem 0.75rem -0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .row-data {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body class="p-6 max-w-[210mm] mx-auto">
+
+    <!-- Header: Logo, Title, QR -->
+    <header class="flex justify-between items-start mb-6 pb-6 border-b-2 border-gray-800">
+        <div class="w-1/3">
+            <!-- Logo Placeholder -->
+            <div class="h-20 w-auto flex items-center">
+                <div class="bg-gray-900 text-white font-bold p-4 text-xl">COMPANY LOGO</div>
+            </div>
+        </div>
+        
+        <div class="w-1/3 text-center pt-2">
+            <h1 class="text-2xl font-bold uppercase tracking-wider text-gray-900">Tax Invoice</h1>
+            <h2 class="text-xl font-bold font-arabic text-gray-800 mt-1">فاتورة ضريبية</h2>
+        </div>
+
+        <div class="w-1/3 flex justify-end">
+            <!-- QR Code Container -->
+            <div id="qrcode" class="border p-1 bg-white"></div>
+        </div>
+    </header>
+
+    <!-- Info Grid: Seller, Buyer, Invoice Details -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+        
+        <!-- Seller Details -->
+        <div class="info-box bg-gray-50">
+            <div class="info-title">
+                <span>SELLER</span>
+                <span class="font-arabic">المورد</span>
+            </div>
+            <div class="space-y-2 text-sm">
+                <div>
+                    <p class="font-bold">Tech Solutions LLC</p>
+                    <p class="font-arabic text-xs text-right">شركة الحلول التقنية ذ.م.م</p>
+                </div>
+                <div class="text-xs text-gray-600">
+                    <p>Building 4, Digital City</p>
+                    <p>Riyadh 12345, KSA</p>
+                </div>
+                <div class="pt-2 border-t border-gray-200">
+                    <div class="bilingual-label">
+                        <span>VAT Registration No</span>
+                        <span>رقم التسجيل الضريبي</span>
+                    </div>
+                    <p class="font-mono font-bold text-gray-900">300011122233303</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Buyer Details -->
+        <div class="info-box">
+            <div class="info-title">
+                <span>BUYER</span>
+                <span class="font-arabic">العميل</span>
+            </div>
+            <div class="space-y-2 text-sm">
+                <div>
+                    <p class="font-bold">Global Trading Est.</p>
+                    <p class="font-arabic text-xs text-right">مؤسسة التجارة العالمية</p>
+                </div>
+                <div class="text-xs text-gray-600">
+                    <p>King Fahad Branch Rd</p>
+                    <p>Jeddah 23456, KSA</p>
+                </div>
+                <div class="pt-2 border-t border-gray-200">
+                    <div class="bilingual-label">
+                        <span>VAT Registration No</span>
+                        <span>رقم التسجيل الضريبي</span>
+                    </div>
+                    <p class="font-mono font-bold text-gray-900">311122233344403</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoice Meta -->
+        <div class="info-box">
+            <div class="info-title">
+                <span>INVOICE DETAILS</span>
+                <span class="font-arabic">تفاصيل الفاتورة</span>
+            </div>
+            <div class="space-y-3">
+                <div class="row-data">
+                    <div class="bilingual-label">
+                        <span>Number</span>
+                        <span>الرقم</span>
+                    </div>
+                    <span class="font-bold font-mono">INV-000123</span>
+                </div>
+                <div class="row-data">
+                    <div class="bilingual-label">
+                        <span>Issue Date</span>
+                        <span>تاريخ الإصدار</span>
+                    </div>
+                    <span class="font-mono">2023-11-15</span>
+                </div>
+                <div class="row-data">
+                    <div class="bilingual-label">
+                        <span>Issue Time</span>
+                        <span>وقت الإصدار</span>
+                    </div>
+                    <span class="font-mono">14:30:00</span>
+                </div>
+                <div class="row-data">
+                    <div class="bilingual-label">
+                        <span>Supply Date</span>
+                        <span>تاريخ التوريد</span>
+                    </div>
+                    <span class="font-mono">2023-11-10</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Line Items Table -->
+    <div class="mb-6">
+        <table class="w-full text-xs">
+            <thead class="bg-gray-100 text-gray-700">
+                <tr>
+                    <th class="p-2 w-8">#</th>
+                    <th class="p-2 text-left w-1/3">
+                        <div class="flex flex-col">
+                            <span>Nature of Goods / Services</span>
+                            <span class="font-arabic font-normal">تفاصيل السلع والخدمات</span>
+                        </div>
+                    </th>
+                    <th class="p-2 w-16">
+                        <div class="flex flex-col">
+                            <span>Qty</span>
+                            <span class="font-arabic font-normal">الكمية</span>
+                        </div>
+                    </th>
+                    <th class="p-2 w-24">
+                        <div class="flex flex-col text-right">
+                            <span>Unit Price</span>
+                            <span class="font-arabic font-normal">سعر الوحدة</span>
+                        </div>
+                    </th>
+                    <th class="p-2 w-24">
+                        <div class="flex flex-col text-right">
+                            <span>Taxable Amt</span>
+                            <span class="font-arabic font-normal">المبلغ الخاضع</span>
+                        </div>
+                    </th>
+                    <th class="p-2 w-16">
+                        <div class="flex flex-col text-center">
+                            <span>VAT%</span>
+                            <span class="font-arabic font-normal">نسبة</span>
+                        </div>
+                    </th>
+                    <th class="p-2 w-24">
+                        <div class="flex flex-col text-right">
+                            <span>VAT Amt</span>
+                            <span class="font-arabic font-normal">مبلغ الضريبة</span>
+                        </div>
+                    </th>
+                    <th class="p-2 w-24 bg-gray-50">
+                        <div class="flex flex-col text-right">
+                            <span>Item Subtotal</span>
+                            <span class="font-arabic font-normal">المجموع (شامل)</span>
+                        </div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Row 1 -->
+                <tr>
+                    <td class="p-2 text-center">1</td>
+                    <td class="p-2">
+                        <p class="font-bold">Consulting Services</p>
+                        <p class="font-arabic text-gray-500">خدمات استشارية</p>
+                    </td>
+                    <td class="p-2 text-center">10</td>
+                    <td class="p-2 text-right font-mono">200.00</td>
+                    <td class="p-2 text-right font-mono">2,000.00</td>
+                    <td class="p-2 text-center">15%</td>
+                    <td class="p-2 text-right font-mono">300.00</td>
+                    <td class="p-2 text-right font-mono font-bold bg-gray-50">2,300.00</td>
+                </tr>
+                <!-- Row 2 -->
+                <tr>
+                    <td class="p-2 text-center">2</td>
+                    <td class="p-2">
+                        <p class="font-bold">Software License</p>
+                        <p class="font-arabic text-gray-500">رخصة برمجيات</p>
+                    </td>
+                    <td class="p-2 text-center">1</td>
+                    <td class="p-2 text-right font-mono">5,000.00</td>
+                    <td class="p-2 text-right font-mono">5,000.00</td>
+                    <td class="p-2 text-center">15%</td>
+                    <td class="p-2 text-right font-mono">750.00</td>
+                    <td class="p-2 text-right font-mono font-bold bg-gray-50">5,750.00</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Totals Section -->
+    <div class="flex justify-end">
+        <div class="w-1/2 md:w-5/12">
+            <table class="w-full text-sm">
+                <tr>
+                    <td class="p-2 bg-gray-50">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs uppercase font-semibold text-gray-600">Total Taxable Amount (Excl. VAT)</span>
+                            <span class="text-xs font-arabic text-right text-gray-500">الإجمالي الخاضع للضريبة (غير شامل)</span>
+                        </div>
+                    </td>
+                    <td class="p-2 text-right font-mono font-bold w-32">7,000.00</td>
+                </tr>
+                <tr>
+                    <td class="p-2 bg-gray-50">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs uppercase font-semibold text-gray-600">Total VAT (15%)</span>
+                            <span class="text-xs font-arabic text-right text-gray-500">مجموع ضريبة القيمة المضافة</span>
+                        </div>
+                    </td>
+                    <td class="p-2 text-right font-mono font-bold w-32">1,050.00</td>
+                </tr>
+                <tr class="bg-gray-900 text-white border-gray-900">
+                    <td class="p-3">
+                        <div class="flex justify-between items-center">
+                            <span class="uppercase font-bold">Total Amount Due</span>
+                            <span class="font-arabic text-right font-bold">الإجمالي المستحق</span>
+                        </div>
+                    </td>
+                    <td class="p-3 text-right font-mono text-lg font-bold">8,050.00</td>
+                </tr>
+            </table>
+            <div class="mt-2 text-right">
+                 <p class="text-xs text-gray-500">Eight Thousand Fifty Saudi Riyals Only</p>
+                 <p class="text-xs font-arabic text-gray-500">فقط ثمانية آلاف وخمسون ريال سعودي</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Minimal script for QR (replace with actual ZATCA TLV logic in production) -->
+    <script>
+        // Sample QR Data
+        const qrContent = "Seller: Tech Solutions; VAT: 300011122233303; Time: 2023-11-15 14:30:00; Total: 8050.00; Tax: 1050.00";
+        new QRCode(document.getElementById("qrcode"), {
+            text: qrContent,
+            width: 110,
+            height: 110,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.M
+        });
+    </script>
+</body>
+</html>

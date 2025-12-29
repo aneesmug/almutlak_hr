@@ -2129,6 +2129,19 @@ RTL Support
                         <span class="info-value"><?= $emprow['joining_date'] ?></span>
                     </div>
                     <div class="info-row">
+                        <span class="info-label"><?= __('contract_expiry_label', 'Contract Expiry') ?></span>
+                        <span class="info-value">
+                            <?php
+                            $expiryStr = computeContractExpiry(
+                                $emprow['joining_date'] ?? null,
+                                isset($emprow['vac_period']) ? (int)$emprow['vac_period'] : null,
+                                'd M Y'
+                            );
+                            echo htmlspecialchars($expiryStr ?? 'N/A');
+                            ?>
+                        </span>
+                    </div>
+                    <div class="info-row">
                         <span class="info-label"><?= __('section_name_header') ?></span>
                         <span class="info-value"><?= translate_name($emprow['sectin_nme'] ?? null, $current_lang ?? 'en') ?></span>
                     </div>

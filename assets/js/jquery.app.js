@@ -5249,14 +5249,16 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 
                 const startDateConfig = {
                     format: "yyyy-mm-dd",
-                    todayHighlight: true,
-                    autoclose: true
+                    todayHighlight: false,
+                    autoclose: true,
+                    startDate: '+1d' // Start from tomorrow
                 };
                 
                 const endDateConfig = {
                     format: "yyyy-mm-dd",
-                    todayHighlight: true,
-                    autoclose: true
+                    todayHighlight: false,
+                    autoclose: true,
+                    startDate: '+1d' // Start from tomorrow
                 };
                 
                 // Apply minimum date restriction ONLY if Emergency is selected AND activeReturnDate exists
@@ -5334,8 +5336,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             // Initialize departure and arrival date pickers
             $('#departure_date').datepicker({
                 format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
+                todayHighlight: false,
+                autoclose: true,
+                startDate: '+1d'
             }).on('changeDate', function (e) {
                 var departureDate = e.date;
                 $('#arrival_date').datepicker('setStartDate', departureDate);
@@ -5343,8 +5346,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
 
             $('#arrival_date').datepicker({
                 format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
+                todayHighlight: false,
+                autoclose: true,
+                startDate: '+1d'
             }).on('changeDate', function (e) {
                 var arrivalDate = e.date;
                 $('#departure_date').datepicker('setEndDate', arrivalDate);
@@ -5818,6 +5822,251 @@ function add_noties() {
 
 ////////////////////////////////////////////////////////////////////
 ////////////       End Employee vacation /*Handling      /////////////
+// ================================================================
+// New: Global modal to add/edit overtime/deduction adjustments
+// Can be triggered from any page after a vacation is approved
+// Usage (direct): addVacationAdjustments(vacId, empName, otHrs, dedHrs, dedDays, otherEarnings, note)
+// Usage (via DOM): add a button with class 'addVacationAdjustments' and data-*
+//    data-vacation-id, data-employee-name, data-overtime-hours, data-deduction-hours, data-deduction-days, data-other-earnings, data-payroll-note
+// ================================================================
+if (typeof window.addVacationAdjustments === 'undefined') {
+    window.addVacationAdjustments = function(vacationId, employeeName, currentOvertimeHours, currentDeductionHours, currentDeductionDays, otherEarningsOrNote, currentPayrollNote) {
+        try {
+            // Handle backward compatibility: if otherEarningsOrNote is a string, treat it as payroll_note
+            let currentOtherEarnings = 0;
+            let payrollNote = currentPayrollNote || '';
+            
+            // Check if parameter 6 is a numeric string (other_earnings) or text string (payroll_note from old code)
+            // isNaN() returns false for numeric strings, true for non-numeric strings
+            if (typeof otherEarningsOrNote === 'string' && isNaN(otherEarningsOrNote)) {
+                // It's a non-numeric string, treat it as payroll_note (old format)
+                payrollNote = otherEarningsOrNote;
+                currentOtherEarnings = 0;
+            } else {
+                // It's a numeric string or number, treat it as other_earnings (new format)
+                currentOtherEarnings = parseFloat(otherEarningsOrNote) || 0;
+            }
+
+            Swal.fire({
+                title: __('add_edit_adjustments_for', 'Add/Edit adjustments for {0}').replace('{0}', employeeName || ''),
+                html: `
+                    <div class="text-left" style="padding: 10px 20px;">
+                        <div class="form-group">
+                            <label for="adj_overtime_hours" class="text-success font-weight-bold">
+                                <i class="fa fa-clock"></i> ${__('overtime_hours') || 'Overtime (Hours)'}
+                            </label>
+                            <input type="number" id="adj_overtime_hours" class="form-control payroll-calc-trigger" placeholder="0" step="0.5" min="0" value="${currentOvertimeHours || 0}">
+                        </div>
+                        <div class="form-group">
+                            <label for="adj_deduction_hours" class="text-danger font-weight-bold">
+                                <i class="fa fa-minus-circle"></i> ${__('deduction_hours') || 'Deduction (Hours)'}
+                            </label>
+                            <input type="number" id="adj_deduction_hours" class="form-control payroll-calc-trigger" placeholder="0" step="0.5" min="0" value="${currentDeductionHours || 0}">
+                        </div>
+                        <div class="form-group">
+                            <label for="adj_deduction_days" class="text-danger font-weight-bold">
+                                <i class="fa fa-calendar-minus"></i> ${__('deduction_days') || 'Deduction (Days)'}
+                            </label>
+                            <input type="number" id="adj_deduction_days" class="form-control payroll-calc-trigger" placeholder="0" step="0.5" min="0" value="${currentDeductionDays || 0}">
+                        </div>
+                        <div class="form-group">
+                            <label for="adj_other_earnings" class="font-weight-bold text-success">
+                                <i class="fa fa-plus-circle"></i> ${__('other_earnings') || 'Other Earnings'}
+                            </label>
+                            <input type="number" id="adj_other_earnings" class="form-control payroll-calc-trigger" placeholder="0.00" step="0.01" min="0" value="${currentOtherEarnings || 0}">
+                        </div>
+                        
+                        <hr style="display: none;" id="payroll_summary_hr_top">
+                        
+                        <div class="form-group p-3 bg-light rounded" id="payroll_calculation_summary" style="display: none;">
+                            <h6 class="text-primary mb-3"><i class="fa fa-calculator"></i> ${__('payroll_summary') || 'Payroll Summary'}</h6>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span class="text-success font-weight-bold">${__('overtime_hours') || 'Overtime Amount'}:</span>
+                                <span class="text-success font-weight-bold">+<span id="calc_overtime_amount">0.00</span> SAR</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span class="text-danger font-weight-bold">${__('deduction_amount') || 'Deduction Amount'}:</span>
+                                <span class="text-danger font-weight-bold">-<span id="calc_deduction_amount">0.00</span> SAR</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span class="text-success font-weight-bold">${__('other_earnings') || 'Other Earnings'}:</span>
+                                <span class="text-success font-weight-bold">+<span id="calc_other_earnings">0.00</span> SAR</span>
+                            </div>
+                            <hr style="margin: 10px 0;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span class="font-weight-bold text-info">${__('net_adjustment') || 'Net Adjustment'}:</span>
+                                <span class="font-weight-bold text-info" id="calc_net_adjustment">0.00 SAR</span>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="form-group">
+                            <label for="adj_payroll_note" class="font-weight-bold">
+                                <i class="fa fa-sticky-note"></i> ${__('payroll_note') || 'Note'}
+                            </label>
+                            <textarea id="adj_payroll_note" class="form-control" rows="2" placeholder="${__('payroll_note_placeholder') || 'Add any notes about overtime/deductions...'}">${payrollNote || ''}</textarea>
+                        </div>
+                    </div>
+                `,
+                confirmButtonText: __('save_adjustments') || 'Save Adjustments',
+                showCancelButton: true,
+                allowOutsideClick: false,
+                width: '550px',
+                willOpen: () => {
+                    const swalModal = Swal.getHtmlContainer();
+                    
+                    // Fetch employee salary data
+                    let basicSalary = 0;
+                    let totalSalary = 0;
+                    let salaryLoaded = false;
+                    
+                    // Extract employee ID from vacation ID by fetching vacation details
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            ajaxType: 'getVacationDetails',
+                            vacation_id: vacationId
+                        },
+                        success: function(res) {
+                            if (res.status === 200 && res.emp_id) {
+                                // Now fetch salary for this employee
+                                $.ajax({
+                                    url: './includes/ajaxFile/ajaxEmployee.php',
+                                    type: 'POST',
+                                    dataType: 'json',
+                                    data: {
+                                        ajaxType: 'get_employee_salary',
+                                        emp_id: res.emp_id
+                                    },
+                                    success: function(salaryRes) {
+                                        if (salaryRes.status === 200 && salaryRes.salary) {
+                                            totalSalary = parseFloat(salaryRes.salary) || 0;
+                                            basicSalary = parseFloat(salaryRes.basic_salary) || 0;
+                                            salaryLoaded = true;
+                                            
+                                            // Trigger initial calculation
+                                            calculatePayroll();
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                    
+                    // Function to calculate payroll amounts
+                    const calculatePayroll = () => {
+                        const overtimeHours = parseFloat(document.getElementById('adj_overtime_hours').value) || 0;
+                        const deductionHours = parseFloat(document.getElementById('adj_deduction_hours').value) || 0;
+                        const deductionDays = parseFloat(document.getElementById('adj_deduction_days').value) || 0;
+                        const otherEarnings = parseFloat(document.getElementById('adj_other_earnings').value) || 0;
+                        
+                        // Show payroll summary block when user starts modifying
+                        const summaryBlock = document.getElementById('payroll_calculation_summary');
+                        const hrTop = document.getElementById('payroll_summary_hr_top');
+                        const hasModifications = overtimeHours > 0 || deductionHours > 0 || deductionDays > 0 || otherEarnings > 0;
+                        
+                        if (hasModifications) {
+                            summaryBlock.style.display = 'block';
+                            hrTop.style.display = 'block';
+                        } else {
+                            summaryBlock.style.display = 'none';
+                            hrTop.style.display = 'none';
+                        }
+                        
+                        // Wait for salary to load before calculating
+                        if (!salaryLoaded || totalSalary === 0) {
+                            return;
+                        }
+                        
+                        // Calculate using EOS formula matching backend
+                        const dailyRateDeduction = totalSalary / 30;
+                        const hourlyRateDeduction = dailyRateDeduction / 8;
+                        const overtimeHourlyRate = ((basicSalary / 240) / 2) + (totalSalary / 240);
+                        
+                        const overtimeAmount = (overtimeHours * overtimeHourlyRate);
+                        const deductionAmount = (deductionHours * hourlyRateDeduction) + (deductionDays * dailyRateDeduction);
+                        
+                        const netAdjustment = overtimeAmount - deductionAmount + otherEarnings;
+                        
+                        document.getElementById('calc_overtime_amount').textContent = overtimeAmount.toFixed(2);
+                        document.getElementById('calc_deduction_amount').textContent = deductionAmount.toFixed(2);
+                        document.getElementById('calc_other_earnings').textContent = otherEarnings.toFixed(2);
+                        document.getElementById('calc_net_adjustment').textContent = netAdjustment.toFixed(2) + ' SAR';
+                    };
+                    
+                    // Attach event listeners - DO NOT call calculatePayroll on willOpen
+                    // Only call it when user modifies the fields
+                    $(swalModal).on('change keyup', '.payroll-calc-trigger', calculatePayroll);
+                },
+                preConfirm: () => {
+                    const overtime_hours = parseFloat(document.getElementById('adj_overtime_hours').value) || 0;
+                    const deduction_hours = parseFloat(document.getElementById('adj_deduction_hours').value) || 0;
+                    const deduction_days = parseFloat(document.getElementById('adj_deduction_days').value) || 0;
+                    const other_earnings = parseFloat(document.getElementById('adj_other_earnings').value) || 0;
+                    const payroll_note = document.getElementById('adj_payroll_note').value || '';
+
+                    if (overtime_hours < 0 || deduction_hours < 0 || deduction_days < 0 || other_earnings < 0) {
+                        Swal.showValidationMessage(__('invalid_negative_values_not_allowed') || 'Negative values not allowed');
+                        return false;
+                    }
+                    return { overtime_hours, deduction_hours, deduction_days, other_earnings, payroll_note };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'JSON',
+                        data: {
+                            ajaxType: 'updateVacationAdjustments',
+                            vacation_id: vacationId,
+                            overtime_hours: result.value.overtime_hours,
+                            deduction_hours: result.value.deduction_hours,
+                            deduction_days: result.value.deduction_days,
+                            other_earnings: result.value.other_earnings,
+                            payroll_note: result.value.payroll_note
+                        },
+                    })
+                    .done(function(response){
+                        Swal.fire({
+                            title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
+                        }).then(function(isConfirm){(isConfirm)?location.reload():""});
+                    })
+                    .fail(function(){
+                        Swal.fire('Error', __('error_saving_adjustments') || 'Error saving adjustments', 'error');
+                    });
+                }
+            });
+        } catch (e) {
+            Swal.fire('Error', e && e.message ? e.message : 'Unexpected error', 'error');
+        }
+    }
+}
+
+// Optional delegated handler: use buttons/links with class .addVacationAdjustments
+$(document).on('click', '.addVacationAdjustments', function(e){
+    try {
+        e.preventDefault();
+        const $el = $(this);
+        const vacationId = $el.data('vacation-id') || $el.data('id');
+        const employeeName = $el.data('employee-name') || '';
+        const overtime = parseFloat($el.data('overtime-hours')) || 0;
+        const dedHrs = parseFloat($el.data('deduction-hours')) || 0;
+        const dedDays = parseFloat($el.data('deduction-days')) || 0;
+        const otherEarnings = parseFloat($el.data('other-earnings')) || 0;
+        const note = $el.data('payroll-note') || '';
+        if (!vacationId) {
+            Swal.fire('Error', 'Missing vacation id', 'error');
+            return;
+        }
+        window.addVacationAdjustments(vacationId, employeeName, overtime, dedHrs, dedDays, otherEarnings, note);
+    } catch(err) {
+        Swal.fire('Error', err && err.message ? err.message : 'Unexpected error', 'error');
+    }
+});
 ////////////////////////////////////////////////////////////////////
 
 /*:::::::::::::::::::::::::::::::HTML HANDLER::::::::::::::::::::::::::::::*/

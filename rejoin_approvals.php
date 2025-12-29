@@ -620,6 +620,18 @@ $supervisor_emp_id = $_SESSION['empid'];
         }
 
         function processRejoinApproval(rejoinRequestId, data) {
+            // Show loading state
+            Swal.fire({
+                title: 'Processing...',
+                html: 'Processing rejoin approval and sending notification emails...',
+                icon: 'info',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
             $.ajax({
                 url: './includes/ajaxFile/ajaxVacation.php',
                 type: 'POST',

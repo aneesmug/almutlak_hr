@@ -102,7 +102,7 @@ if ($ajaxType == 'get_approval_level') {
     $query = "SELECT `approval_level` FROM `request_approvers` 
               WHERE `request_inv_no` = '$requestInvNo' 
               AND `approver_id` = '$approverId'
-              AND `status` = 'awaiting'
+              AND `status` IN ('pending','awaiting')
               LIMIT 1";
     
     $result = mysqli_query($conDB, $query);
@@ -149,9 +149,17 @@ if ($ajaxType == 'get_replacement_data') {
     if ($row = mysqli_fetch_assoc($result)) {
         $replacementData['needs_replacement'] = $row['needs_replacement'];
         
-        // If replacement data exists, parse JSON
-        if ($row['replacement_data']) {
-            $parsed = json_decode($row['replacement_data'], true);
+        // If replacement data exists, parse JSON (handle double-encoded JSON too)
+        if (!empty($row['replacement_data'])) {
+            $raw = $row['replacement_data'];
+            $parsed = json_decode($raw, true);
+            if (is_string($parsed)) {
+                // Older records may be double-encoded; decode again
+                $parsedSecond = json_decode($parsed, true);
+                if (is_array($parsedSecond)) {
+                    $parsed = $parsedSecond;
+                }
+            }
             if (is_array($parsed)) {
                 $replacementData = array_merge($replacementData, $parsed);
             }
@@ -417,94 +425,79 @@ if ($ajaxType == 'apply_resignation') {
         
         // History is tracked via request_approvers table and ActivityLogger - no additional history table needed
         
-        // ===== CREATE APPROVAL CHAIN =====
+        // ===== CREATE APPROVAL CHAIN using ApprovalChainManager =====
         error_log("ajaxResignation: apply_resignation - starting approval chain creation");
-        
+
+        $firstApproverId = null;
+        $firstApproverLabel = null;
+
         try {
-            // Get resignation request type ID
-            $typeQuery = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'resignation_request' LIMIT 1");
-            if (!$typeQuery) {
-                error_log("ERROR: Failed to query approval_request_types table: " . mysqli_error($conDB));
-            }
-            $typeRow = mysqli_fetch_assoc($typeQuery);
-            $requestTypeId = $typeRow ? $typeRow['id'] : null;
-            if ($typeQuery) mysqli_free_result($typeQuery);
-            error_log("ajaxResignation: apply_resignation - requestTypeId = " . ($requestTypeId ? $requestTypeId : 'NULL'));
+            require_once __DIR__ . '/../ApprovalChainManager.php';
             
-            // Step 1: Get Direct Supervisor (Manager)
-            $supervisorQuery = "SELECT `supervisor_id` FROM `employees` WHERE `emp_id` = '$empId' AND `status` = 1";
-            $supervisorResult = mysqli_query($conDB, $supervisorQuery);
-            $supervisorData = mysqli_fetch_assoc($supervisorResult);
-            mysqli_free_result($supervisorResult);
+            // Get employee's department
+            $dept_query = mysqli_query($conDB, "SELECT dept FROM employees WHERE emp_id = '$empId' LIMIT 1");
+            $dept_row = mysqli_fetch_assoc($dept_query);
+            $empDept = $dept_row ? $dept_row['dept'] : null;
+            if ($dept_query) mysqli_free_result($dept_query);
             
-            $supervisorId = $supervisorData['supervisor_id'] ?? null;
-            error_log("ajaxResignation: apply_resignation - supervisorId = " . ($supervisorId ? $supervisorId : 'NULL'));
+            $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
             
-            if ($supervisorId) {
-                // Add supervisor as Level 1 approver (Manager)
-                $chainInsert = "INSERT INTO `request_approvers` 
-                    (`request_inv_no`, `request_type_id`, `approver_id`, `approval_level`, `status`) 
-                    VALUES 
-                    ('$requestInvNo', $requestTypeId, $supervisorId, 1, 'awaiting')";
-                $chainResult = mysqli_query($conDB, $chainInsert);
-                error_log("ajaxResignation: supervisor approval chain inserted: " . ($chainResult ? 'SUCCESS' : 'FAILED: ' . mysqli_error($conDB)));
+            $chainResult = $chainManager->createApprovalChain(
+                'resignation_request',
+                $requestInvNo,
+                $empId,
+                $empDept
+            );
+            
+            if (!$chainResult['success']) {
+                throw new Exception('Failed to create approval chain: ' . ($chainResult['message'] ?? 'Unknown error'));
             }
             
-            // Step 2: Get HR Operations approver (Level 2)
-            $hrOpsQuery = "SELECT `emp_id` FROM `admin_login` 
-                          WHERE `user_type` = 'hr_operations' AND `status` = 1 LIMIT 1";
-            $hrOpsResult = mysqli_query($conDB, $hrOpsQuery);
-            
-            if ($hrOpsResult && mysqli_num_rows($hrOpsResult) > 0) {
-                $hrOpsData = mysqli_fetch_assoc($hrOpsResult);
-                $chainInsert = "INSERT INTO `request_approvers` 
-                    (`request_inv_no`, `request_type_id`, `approver_id`, `approval_level`, `status`) 
-                    VALUES 
-                    ('$requestInvNo', $requestTypeId, " . $hrOpsData['emp_id'] . ", 2, 'awaiting')";
-                $chainResult = mysqli_query($conDB, $chainInsert);
-                error_log("ajaxResignation: hr_operations approval chain inserted: " . ($chainResult ? 'SUCCESS' : 'FAILED: ' . mysqli_error($conDB)));
-            }
-            if ($hrOpsResult) mysqli_free_result($hrOpsResult);
-            
-            // Step 3: Get HR Payroll approver (Level 3 - Final)
-            $hrPayrollQuery = "SELECT `emp_id` FROM `admin_login` 
-                              WHERE `user_type` = 'hr_payroll' AND `status` = 1 LIMIT 1";
-            $hrPayrollResult = mysqli_query($conDB, $hrPayrollQuery);
-            
-            if ($hrPayrollResult && mysqli_num_rows($hrPayrollResult) > 0) {
-                $hrPayrollData = mysqli_fetch_assoc($hrPayrollResult);
-                $chainInsert = "INSERT INTO `request_approvers` 
-                    (`request_inv_no`, `request_type_id`, `approver_id`, `approval_level`, `status`) 
-                    VALUES 
-                    ('$requestInvNo', $requestTypeId, " . $hrPayrollData['emp_id'] . ", 3, 'awaiting')";
-                $chainResult = mysqli_query($conDB, $chainInsert);
-                error_log("ajaxResignation: hr_payroll approval chain inserted: " . ($chainResult ? 'SUCCESS' : 'FAILED: ' . mysqli_error($conDB)));
-            }
-            if ($hrPayrollResult) mysqli_free_result($hrPayrollResult);
-            
+            $first_approver = $chainResult['first_approver'];
+            $firstApproverId = $first_approver['approver_id'];
+            $firstApproverLabel = $first_approver['role_label'] ?? 'Approver';
+
             error_log("ajaxResignation: apply_resignation - approval chain creation completed");
-            
+
         } catch (Exception $chainException) {
             error_log("ERROR in approval chain creation: " . $chainException->getMessage());
-            // Don't fail - continue to send notifications
+            // Rollback created records (exit interview + resignation)
+            if (!empty($resignationId)) {
+                mysqli_query($conDB, "DELETE FROM `emp_exit_interviews` WHERE `resignation_id` = " . (int)$resignationId);
+                mysqli_query($conDB, "DELETE FROM `emp_resignations` WHERE `id` = " . (int)$resignationId);
+            }
+            echo json_encode([
+                'type' => 'error',
+                'title' => 'Approval Chain Not Configured',
+                'message' => $chainException->getMessage()
+            ]);
+            exit;
         }
-        
-        // ===== SEND NOTIFICATIONS TO FIRST APPROVER (Manager) =====
+
+        // ===== SEND NOTIFICATIONS TO FIRST APPROVER using ApprovalChainManager =====
         try {
-            if ($supervisorId) {
-                // Get supervisor details
-                $supervisorDetailsQuery = "SELECT `e`.`name`, `al`.`email` 
+            if ($firstApproverId) {
+                // Get first approver details
+                $approverDetailsQuery = "SELECT `e`.`name`, `al`.`email` 
                                           FROM `employees` `e` 
                                           LEFT JOIN `admin_login` `al` ON `al`.`emp_id` = `e`.`emp_id`
-                                          WHERE `e`.`emp_id` = '$supervisorId' AND `e`.`status` = 1";
-                $supervisorDetailsResult = mysqli_query($conDB, $supervisorDetailsQuery);
-                
-                if ($supervisorDetailsResult && mysqli_num_rows($supervisorDetailsResult) > 0) {
-                    $supervisor = mysqli_fetch_assoc($supervisorDetailsResult);
-                    mysqli_free_result($supervisorDetailsResult);
-                    
-                    error_log("ajaxResignation: supervisor details retrieved");
-                    
+                                          WHERE `e`.`emp_id` = ? AND `e`.`status` = 1";
+                $approverStmt = $conDB->prepare($approverDetailsQuery);
+                $approver = null;
+                if ($approverStmt) {
+                    $approverStmt->bind_param('i', $firstApproverId);
+                    $approverStmt->execute();
+                    $approverResult = $approverStmt->get_result();
+                    $approver = $approverResult ? $approverResult->fetch_assoc() : null;
+                    if ($approverResult) {
+                        $approverResult->free();
+                    }
+                    $approverStmt->close();
+                }
+
+                if (!empty($approver) && !empty($approver['email'])) {
+                    error_log("ajaxResignation: first approver details retrieved (emp_id: {$firstApproverId})");
+
                     // Get employee dept and job for email
                     $empDetailsQuery = "SELECT `d`.`dep_nme`, `j`.`job` 
                                        FROM `employees` `e`
@@ -514,45 +507,44 @@ if ($ajaxType == 'apply_resignation') {
                     $empDetailsResult = mysqli_query($conDB, $empDetailsQuery);
                     $empDetails = mysqli_fetch_assoc($empDetailsResult);
                     mysqli_free_result($empDetailsResult);
-                    
-                    if (!empty($supervisor['email'])) {
-                        // Send email notification using load_email_template
-                        $emailData = [
-                            'EMP_ID' => $empId,
-                            'EMP_NAME' => $empData['name'],
-                            'DEPARTMENT' => $empDetails['dep_nme'] ?? '',
-                            'DESIGNATION' => $empDetails['job'] ?? '',
-                            'REQUEST_ID' => $requestInvNo,
-                            'RESIGNATION_ID' => $requestInvNo,
-                            'LAST_WORKING_DAY' => $lastWorkingDay,
-                            'SUBMISSION_DATE' => $submissionDate,
-                            'APPROVER_NAME' => $supervisor['name'],
-                            'approval_level' => 1,
-                            'approval_level_name' => 'Manager (Direct Supervisor)'
-                        ];
-                        
-                        send_approval_email(
-                            $conDB,
-                            $supervisor['email'],
-                            $supervisor['name'],
-                            'Employee Resignation Request - Action Required (Level 1: Manager)',
-                            'resignation_request',
-                            $emailData
-                        );
-                        
-                        error_log("ajaxResignation: approval email sent to supervisor");
-                        
-                        // Create browser notification
-                        create_browser_notification(
-                            $conDB,
-                            $supervisorId,
-                            'Resignation Request Requires Your Approval',
-                            $empData['name'] . ' has submitted a resignation request. Please review and approve/reject.',
-                            'all_resignations.php?inv=' . $requestInvNo
-                        );
-                        
-                        error_log("ajaxResignation: browser notification created for supervisor");
-                    }
+
+                    $approvalLevelName = $firstApproverLabel ?: 'Approver';
+
+                    // Send email notification using load_email_template
+                    $emailData = [
+                        'EMP_ID' => $empId,
+                        'EMP_NAME' => $empData['name'],
+                        'DEPARTMENT' => $empDetails['dep_nme'] ?? '',
+                        'DESIGNATION' => $empDetails['job'] ?? '',
+                        'REQUEST_ID' => $requestInvNo,
+                        'RESIGNATION_ID' => $requestInvNo,
+                        'LAST_WORKING_DAY' => $lastWorkingDay,
+                        'SUBMISSION_DATE' => $submissionDate,
+                        'APPROVER_NAME' => $approver['name'],
+                        'approval_level' => 1,
+                        'approval_level_name' => $approvalLevelName
+                    ];
+
+                    send_approval_email(
+                        $conDB,
+                        $approver['email'],
+                        $approver['name'],
+                        'Employee Resignation Request - Action Required (Level 1: ' . $approvalLevelName . ')',
+                        'resignation_request',
+                        $emailData
+                    );
+
+                    error_log("ajaxResignation: approval email sent to first approver");
+
+                    // Create browser notification using ApprovalChainManager
+                    $chainManager->notifyApprover(
+                        $firstApproverId,
+                        'Resignation Request Requires Your Approval',
+                        $empData['name'] . ' has submitted a resignation request. Please review and approve/reject.',
+                        'all_resignations.php?inv=' . $requestInvNo
+                    );
+
+                    error_log("ajaxResignation: browser notification created for first approver");
                 }
             }
         } catch (Exception $notificationException) {
@@ -578,6 +570,9 @@ if ($ajaxType == 'apply_resignation') {
             'type' => 'error',
             'title' => 'System Error',
             'message' => 'An unexpected error occurred. Please contact IT support.',
+            'error_detail' => $e->getMessage(),
+            'error_file' => $e->getFile(),
+            'error_line' => $e->getLine(),
             'debug_info' => (defined('DEBUG_MODE') && constant('DEBUG_MODE') === true ? $dbError : null)
         ]);
     }
@@ -683,7 +678,7 @@ if ($ajaxType == 'apply_resignation') {
     exit;
     
 } elseif ($ajaxType == 'approve_resignation') {
-    // ===== APPROVE RESIGNATION =====
+    // ===== APPROVE RESIGNATION using ApprovalChainManager =====
     try {
         error_log("Approval process started");
         
@@ -691,6 +686,7 @@ if ($ajaxType == 'apply_resignation') {
         $invNo = isset($_POST['inv_no']) ? mysqli_real_escape_string($conDB, $_POST['inv_no']) : '';
         $needsReplacement = isset($_POST['needs_replacement']) ? (int)$_POST['needs_replacement'] : 0;
         $replacementData = isset($_POST['replacement_data']) ? $_POST['replacement_data'] : null;
+        $approval_comment = isset($_POST['approval_comment']) ? trim($_POST['approval_comment']) : '';
         
         error_log("Parameters - ID: $resignationId, InvNo: $invNo, Replacement: $needsReplacement");
         
@@ -747,14 +743,12 @@ if ($ajaxType == 'apply_resignation') {
             exit;
         }
         
-        // Get approval record from request_approvers
-        $approvalQuery = "SELECT `id`, `approval_level` FROM `request_approvers` 
-                         WHERE `request_inv_no` = '$requestInvNo' 
-                         AND `approver_id` = '$approverId'
-                         AND `status` = 'awaiting'";
-        $approvalResult = mysqli_query($conDB, $approvalQuery);
+        // Use ApprovalChainManager to verify and process approval
+        require_once __DIR__ . '/../ApprovalChainManager.php';
+        $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
         
-        if (!$approvalResult || mysqli_num_rows($approvalResult) == 0) {
+        // Verify approver
+        if (!$chainManager->verifyApprover($requestInvNo, $approverId)) {
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Unauthorized',
@@ -763,10 +757,6 @@ if ($ajaxType == 'apply_resignation') {
             exit;
         }
         
-        $approvalRecord = mysqli_fetch_assoc($approvalResult);
-        mysqli_free_result($approvalResult);
-        $approvalLevel = $approvalRecord['approval_level'];
-        
         // Get approver details
         $approverQuery = "SELECT `fullname`, `email` FROM `admin_login` WHERE `emp_id` = '$approverId'";
         $approverResult = mysqli_query($conDB, $approverQuery);
@@ -774,90 +764,73 @@ if ($ajaxType == 'apply_resignation') {
         $approverName = $approverData ? $approverData['fullname'] : 'Unknown';
         mysqli_free_result($approverResult);
         
-        // Get next approver in chain (if exists)
-        $nextApproverQuery = "SELECT `ra`.`id`, `ra`.`approver_id`, `al`.`fullname`, `al`.`email`, `ra`.`approval_level`
-                             FROM `request_approvers` `ra`
-                             LEFT JOIN `admin_login` `al` ON `al`.`emp_id` = `ra`.`approver_id`
-                             WHERE `ra`.`request_inv_no` = '$requestInvNo' 
-                             AND `ra`.`approval_level` > $approvalLevel
-                             AND `ra`.`status` = 'awaiting'
-                             ORDER BY `ra`.`approval_level` ASC
-                             LIMIT 1";
-        $nextApproverResult = mysqli_query($conDB, $nextApproverQuery);
-        $nextApprover = (mysqli_num_rows($nextApproverResult) > 0) ? mysqli_fetch_assoc($nextApproverResult) : null;
-        mysqli_free_result($nextApproverResult);
+        // Process the approval using ApprovalChainManager
+        $approvalResult = $chainManager->processApproval(
+            $requestInvNo,
+            $approverId,
+            'approve',
+            $approval_comment ?: 'Approved'
+        );
         
-        // Prepare replacement data if provided
-        $replacementJson = null;
-        if ($needsReplacement && $replacementData) {
-            $replacementJson = $replacementData;
-        }
+        $isFinalApproval = $approvalResult['is_final'];
+        $nextApprover = $approvalResult['next_approver'] ?? null;
         
-        // Check if this is the final approval level
-        $isFinalApproval = ($nextApprover === null);
+        // Get approval level for this approver
+        $levelQuery = "SELECT approval_level FROM request_approvers 
+                      WHERE request_inv_no = '$requestInvNo' AND approver_id = '$approverId' 
+                      ORDER BY action_date DESC LIMIT 1";
+        $levelResult = mysqli_query($conDB, $levelQuery);
+        $levelRow = mysqli_fetch_assoc($levelResult);
+        $approvalLevel = $levelRow ? $levelRow['approval_level'] : 1;
+        mysqli_free_result($levelResult);
         
-        // Update request_approvers record
-        $updateApprovalQuery = "UPDATE `request_approvers` 
-                               SET `status` = 'approved', 
-                                   `action_date` = NOW(),
-                                   `note` = '" . mysqli_real_escape_string($conDB, "Approved by $approverName") . "'
-                               WHERE `request_inv_no` = '$requestInvNo' 
-                               AND `approver_id` = '$approverId'";
-        
-        if (!mysqli_query($conDB, $updateApprovalQuery)) {
-            $dbErr = mysqli_error($conDB);
-            error_log("Approval update failed: $dbErr");
-            echo json_encode([
-                'type' => 'error',
-                'title' => 'Database Error',
-                'message' => 'Failed to record approval.'
-            ]);
-            exit;
-        }
-        
-        // Build UPDATE query for resignation - only update replacement fields if new data provided
-        // Otherwise preserve existing replacement data from Direct Supervisor
+        // Build UPDATE query for resignation
         $updateQueryParts = [];
         
-        // Always set status if final approval
+        // Set status if final approval
         if ($isFinalApproval) {
             $updateQueryParts[] = "`status` = 'approved'";
         }
         
-        // Only update replacement fields if current approval level is Level 1 (Direct Supervisor)
-        // Level 2 (HR Operations) should NOT overwrite these fields
+        // Update replacement fields for Level 1 (Direct Supervisor)
         if ($approvalLevel == 1) {
-            $updateQueryParts[] = "`needs_replacement` = '$needsReplacement'";
-            if ($replacementJson) {
-                $updateQueryParts[] = "`replacement_data` = '" . mysqli_real_escape_string($conDB, $replacementJson) . "'";
+            $updateQueryParts[] = "`needs_replacement` = '" . (int)$needsReplacement . "'";
+            if (!empty($replacementData)) {
+                $replacementJson = null;
+                if (is_array($replacementData)) {
+                    $replacementJson = json_encode($replacementData);
+                } else {
+                    // Expecting a JSON string from frontend; validate and normalize
+                    $decoded = json_decode($replacementData, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        $replacementJson = json_encode($decoded);
+                    }
+                }
+                if (!empty($replacementJson)) {
+                    $updateQueryParts[] = "`replacement_data` = '" . mysqli_real_escape_string($conDB, $replacementJson) . "'";
+                }
             }
         }
         
-        // Update HR last working day if provided (only for Level 2 - HR Operations)
+        // Update HR last working day for Level 2 (HR Operations)
         if ($approvalLevel == 2) {
             $hrLastWorkingDay = isset($_POST['hr_last_working_day']) ? mysqli_real_escape_string($conDB, $_POST['hr_last_working_day']) : '';
             if ($hrLastWorkingDay) {
-                // Store HR's selected last working day in a separate field
                 $updateQueryParts[] = "`hr_last_working_day` = '$hrLastWorkingDay'";
                 error_log("HR last working day received: $hrLastWorkingDay");
-            } else {
-                error_log("Warning: HR last working day not received for Level 2 approval");
             }
         }
         
         // Always update timestamp
         $updateQueryParts[] = "`updated_at` = NOW()";
         
-        // Build final query if there are updates
+        // Execute update
         if (!empty($updateQueryParts)) {
             $updateQuery = "UPDATE `emp_resignations` 
                            SET " . implode(', ', $updateQueryParts) . "
                            WHERE `id` = $resignationId";
         } else {
-            // No updates needed
-            $updateQuery = "UPDATE `emp_resignations` 
-                           SET `updated_at` = NOW()
-                           WHERE `id` = $resignationId";
+            $updateQuery = "UPDATE `emp_resignations` SET `updated_at` = NOW() WHERE `id` = $resignationId";
         }
         
         if (!mysqli_query($conDB, $updateQuery)) {
@@ -872,15 +845,9 @@ if ($ajaxType == 'apply_resignation') {
         }
         
         // Log the resignation approval
-        $old_resignation = mysqli_query($conDB, "SELECT * FROM emp_resignations WHERE id = $resignationId");
-        $old_data = mysqli_fetch_assoc($old_resignation);
-        if ($old_data) {
-            ActivityLogger::logApproval('Resignation', 'ajaxResignation.php', $resignationId, 'approved', "Approved resignation request: {$requestInvNo}, Level: {$approvalLevel}, Final: " . ($isFinalApproval ? 'Yes' : 'No'), 'emp_resignations');
-        }
-        mysqli_free_result($old_resignation);
+        ActivityLogger::logApproval('Resignation', 'ajaxResignation.php', $resignationId, 'approved', "Approved resignation request: {$requestInvNo}, Level: {$approvalLevel}, Final: " . ($isFinalApproval ? 'Yes' : 'No'), 'emp_resignations');
         
         // Save approval comment if provided
-        $approval_comment = isset($_POST['approval_comment']) ? trim($_POST['approval_comment']) : '';
         if (!empty($approval_comment) && function_exists('save_approval_comment_db')) {
             save_approval_comment_db(
                 $conDB,
@@ -895,69 +862,53 @@ if ($ajaxType == 'apply_resignation') {
             );
         }
         
-        // Log the approval action
-        error_log("Resignation approval: ID=$resignationId, Level=$approvalLevel, IsFinal=$isFinalApproval, Status=" . ($isFinalApproval ? 'approved' : 'pending'));
-        
-        // History is tracked via request_approvers table with status='approved' and action_date=NOW()
-        // No additional history table needed
-        
-        // Send notification to next approver if exists
-        if ($nextApprover && !empty($nextApprover['email'])) {
-            $emailData = [
-                'EMP_ID' => $resignation['emp_id'],
-                'EMP_NAME' => $resignation['emp_name'],
-                'DEPARTMENT' => $resignation['department'] ?? '',
-                'DESIGNATION' => $resignation['designation'] ?? '',
-                'RESIGNATION_ID' => $requestInvNo,
-                'LAST_WORKING_DAY' => isset($resignation['last_working_day']) ? date('d M Y', strtotime($resignation['last_working_day'])) : 'N/A',
-                'SUBMISSION_DATE' => isset($resignation['submission_date']) ? date('d M Y H:i', strtotime($resignation['submission_date'])) : 'N/A',
-                'APPROVER_NAME' => $nextApprover['fullname'],
-                'REQUEST_URL' => 'https://hr.almutlaksystem.com/all_resignations.php'
-            ];
+        // Send notification to next approver using ApprovalChainManager
+        if ($nextApprover && !empty($nextApprover['approver_id'])) {
+            // Get next approver details
+            $nextApproverQuery = "SELECT e.name as fullname, al.email 
+                                 FROM employees e 
+                                 LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
+                                 WHERE e.emp_id = " . $nextApprover['approver_id'];
+            $nextApproverResult = mysqli_query($conDB, $nextApproverQuery);
+            $nextApproverDetails = mysqli_fetch_assoc($nextApproverResult);
+            mysqli_free_result($nextApproverResult);
             
-            send_approval_email(
-                $conDB,
-                $nextApprover['email'],
-                $nextApprover['fullname'],
-                'Employee Resignation Request - Action Required (Level ' . $nextApprover['approval_level'] . ')',
-                'resignation_request',
-                $emailData
-            );
-            
-            // Create browser notification
-            create_browser_notification(
-                $conDB,
-                $nextApprover['approver_id'],
-                'Resignation Requires Your Approval',
-                $resignation['emp_name'] . "'s resignation has been forwarded to you for approval (Level " . $nextApprover['approval_level'] . ").",
-                'all_resignations.php?inv=' . $requestInvNo
-            );
-        }
-        
-        // If HR Operations (Level 2) approves, notify all HR users
-        if ($approvalLevel == 2) {
-            $hrUsersQuery = "SELECT DISTINCT `emp_id`, `fullname`, `email` FROM `admin_login` 
-                            WHERE `user_type` IN ('hr_operations', 'hr_payroll', 'hr_senior_bp') 
-                            AND `emp_id` != '$approverId'
-                            AND `email` IS NOT NULL AND `email` != ''";
-            $hrUsersResult = mysqli_query($conDB, $hrUsersQuery);
-            
-            if ($hrUsersResult) {
-                while ($hrUser = mysqli_fetch_assoc($hrUsersResult)) {
-                    create_browser_notification(
-                        $conDB,
-                        $hrUser['emp_id'],
-                        'Resignation Approved by HR Operations',
-                        $resignation['emp_name'] . "'s resignation has been approved by HR Operations and is now proceeding to HR Payroll.",
-                        'all_resignations.php?inv=' . $requestInvNo
-                    );
-                }
-                mysqli_free_result($hrUsersResult);
+            if ($nextApproverDetails && !empty($nextApproverDetails['email'])) {
+                // Send email
+                $emailData = [
+                    'EMP_ID' => $resignation['emp_id'],
+                    'EMP_NAME' => $resignation['emp_name'],
+                    'DEPARTMENT' => $resignation['department'] ?? '',
+                    'DESIGNATION' => $resignation['designation'] ?? '',
+                    'RESIGNATION_ID' => $requestInvNo,
+                    'LAST_WORKING_DAY' => isset($resignation['last_working_day']) ? date('d M Y', strtotime($resignation['last_working_day'])) : 'N/A',
+                    'SUBMISSION_DATE' => isset($resignation['submission_date']) ? date('d M Y H:i', strtotime($resignation['submission_date'])) : 'N/A',
+                    'APPROVER_NAME' => $nextApproverDetails['fullname'],
+                    'REQUEST_URL' => 'https://hr.almutlaksystem.com/all_resignations.php'
+                ];
+                
+                send_approval_email(
+                    $conDB,
+                    $nextApproverDetails['email'],
+                    $nextApproverDetails['fullname'],
+                    'Employee Resignation Request - Action Required (Level ' . ($approvalLevel + 1) . ')',
+                    'resignation_request',
+                    $emailData
+                );
+                
+                // Send browser notification
+                $chainManager->notifyApprover(
+                    $nextApprover['approver_id'],
+                    'Resignation Requires Your Approval',
+                    $resignation['emp_name'] . "'s resignation has been forwarded to you for approval.",
+                    'all_resignations.php?inv=' . $requestInvNo
+                );
             }
         }
         
-        // If final approval (HR Payroll - Level 3), notify all HR users with full information
+        // If final approval, notify employee and HR team
         if ($isFinalApproval) {
+            // Notify employee
             create_browser_notification(
                 $conDB,
                 $resignation['emp_id'],
@@ -965,78 +916,22 @@ if ($ajaxType == 'apply_resignation') {
                 'Your resignation has been approved by all required approvers. HR will contact you regarding the exit process.',
                 'all_resignations.php?inv=' . $requestInvNo
             );
-            
-            // Notify all HR users about final approval with complete information
-            $hrUsersQuery = "SELECT DISTINCT `emp_id`, `fullname`, `email` FROM `admin_login` 
-                            WHERE `user_type` IN ('hr_operations', 'hr_payroll', 'hr_senior_bp') 
-                            AND `emp_id` != '$approverId'
-                            AND `email` IS NOT NULL AND `email` != ''";
-            $hrUsersResult = mysqli_query($conDB, $hrUsersQuery);
-            
-            if ($hrUsersResult) {
-                while ($hrUser = mysqli_fetch_assoc($hrUsersResult)) {
-                    // Send browser notification
-                    create_browser_notification(
-                        $conDB,
-                        $hrUser['emp_id'],
-                        'Resignation Fully Approved',
-                        $resignation['emp_name'] . "'s resignation has been fully approved by all levels. Employee ID: " . $resignation['emp_id'],
-                        'all_resignations.php?inv=' . $requestInvNo
-                    );
-                    
-                    // Send detailed email with all information
-                    $emailData = [
-                        'EMP_ID' => $resignation['emp_id'],
-                        'EMP_NAME' => $resignation['emp_name'],
-                        'DEPARTMENT' => $resignation['department'] ?? '',
-                        'DESIGNATION' => $resignation['designation'] ?? '',
-                        'RESIGNATION_ID' => $requestInvNo,
-                        'LAST_WORKING_DAY' => isset($resignation['last_working_day']) ? date('d M Y', strtotime($resignation['last_working_day'])) : 'N/A',
-                        'SUBMISSION_DATE' => isset($resignation['submission_date']) ? date('d M Y H:i', strtotime($resignation['submission_date'])) : 'N/A',
-                        'APPROVER_NAME' => $hrUser['fullname'],
-                        'REQUEST_URL' => 'https://hr.almutlaksystem.com/all_resignations.php',
-                        'EMAIL_MESSAGE' => 'A resignation request has been fully approved by all required levels.'
-                    ];
-                    
-                    send_approval_email(
-                        $conDB,
-                        $hrUser['email'],
-                        $hrUser['fullname'],
-                        'Resignation Fully Approved - ' . $resignation['emp_name'] . ' (ID: ' . $resignation['emp_id'] . ')',
-                        'resignation_request',
-                        $emailData
-                    );
-                }
-                mysqli_free_result($hrUsersResult);
-            }
-        }
-        
-        // If final approval and create_eos flag is set, create End of Service record
-        $createEOS = isset($_POST['create_eos']) && $_POST['create_eos'] == '1';
-        $eosCreatedMessage = '';
-        
-        // For final approval, just skip EOS creation and redirect to EOS page
-        // Don't insert anything, user will create EOS manually from the EOS page
-        if ($isFinalApproval && $createEOS) {
-            // Don't create EOS here, just prepare redirect info
-            error_log("Resignation final approval: ID=$resignationId, Skipping EOS creation, will redirect to EOS page");
         }
         
         // Success response
-        $message = $isFinalApproval 
-            ? 'Resignation has been approved successfully by all required approvers.' . $eosCreatedMessage
-            : 'Resignation has been approved and forwarded to the next approver (Level ' . ($nextApprover['approval_level'] ?? 'Final') . ').';
+        $createEOS = isset($_POST['create_eos']) && $_POST['create_eos'] == '1';
         
-        // Check if this is final approval (HR Payroll) with EOS creation flag
         if ($isFinalApproval && $createEOS) {
-            // Return success message for HR Payroll final approval (will redirect in JS)
             echo json_encode([
                 'type' => 'success',
                 'title' => 'Approved',
                 'message' => 'Resignation has been approved successfully. Redirecting to End of Service...'
             ]);
         } else {
-            // Return success message for other approvals
+            $message = $isFinalApproval 
+                ? 'Resignation has been approved successfully by all required approvers.'
+                : 'Resignation has been approved and forwarded to the next approver.';
+            
             echo json_encode([
                 'type' => 'success',
                 'title' => 'Approved',
@@ -1047,11 +942,15 @@ if ($ajaxType == 'apply_resignation') {
     } catch (Exception $e) {
         $errorDetails = 'Error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ' | Line: ' . $e->getLine();
         error_log("Resignation approval error: " . $errorDetails);
+        error_log("Stack Trace: " . $e->getTraceAsString());
         
         echo json_encode([
             'type' => 'error',
             'title' => 'System Error',
-            'message' => 'An unexpected error occurred. Please contact IT support.'
+            'message' => 'An unexpected error occurred. Please contact IT support.',
+            'error_detail' => $e->getMessage(),
+            'error_file' => $e->getFile(),
+            'error_line' => $e->getLine()
         ]);
     }
     exit;
