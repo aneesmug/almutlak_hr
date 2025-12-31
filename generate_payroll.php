@@ -861,6 +861,15 @@ async function generatePayrollReport() {
                     <!-- Options will be loaded dynamically -->
                 </select>
             </div>
+            <div class="text-left mb-4">
+                <label for="reportCompanySelect" class="block text-gray-700 text-sm font-bold mb-2">
+                    ${__('company_filter_label') || 'Select Company (Optional)'}
+                </label>
+                <select id="reportCompanySelect" class="custom-select shadow px-3">
+                    <option value="">All Companies</option>
+                    <!-- Options will be loaded dynamically -->
+                </select>
+            </div>
         `,
         focusConfirm: false,
         showCancelButton: true,
@@ -871,14 +880,16 @@ async function generatePayrollReport() {
         // Pre-confirmation logic: validate if a month is selected
         preConfirm: () => {
             const selectedMonth = $('#reportMonthSelect').val();
+            const selectedCompany = $('#reportCompanySelect').val();
             if (!selectedMonth) {
                 Swal.showValidationMessage(__('please_select_month_for_report_validation'));
             }
-            return selectedMonth; // Return the selected month if valid
+            return { month: selectedMonth, company: selectedCompany }; // Return both month and company
         },
         // didOpen callback: executed after the modal is opened
         didOpen: async () => {
             const reportMonthSelect = document.getElementById('reportMonthSelect');
+            const reportCompanySelect = document.getElementById('reportCompanySelect');
             Swal.showLoading(); // Show loading indicator inside the modal
             try {
                 // Fetch available payroll months from your specified API
@@ -901,10 +912,44 @@ async function generatePayrollReport() {
                         reportMonthSelect.value = data.months[0].value;
                     }
                     
-                    // Initialize Select2 for the modal select element
+                    // Initialize Select2 for the month select element
                     $(reportMonthSelect).select2({
                         placeholder: __('choose_month_for_report_label'),
                         allowClear: false,
+                        width: '100%',
+                        dropdownParent: $('.swal2-container')
+                    });
+                    
+                    // Load companies from allEmployeesData for the company filter
+                    const companies = new Set();
+                    if (Array.isArray(allEmployeesData)) {
+                        allEmployeesData.forEach(emp => {
+                            if (emp.comp_name) {
+                                companies.add(emp.comp_name);
+                            }
+                        });
+                    }
+                    
+                    // Sort and populate company options
+                    const sortedCompanies = Array.from(companies).sort();
+                    var currentLang = getCurrentLanguage();
+                    sortedCompanies.forEach(comp_name => {
+                        const option = document.createElement('option');
+                        option.value = comp_name;
+                        option.textContent = comp_name;
+                        // Apply translation to company name
+                        translateName(comp_name, 'en', currentLang, function(translatedName) {
+                            option.textContent = translatedName || comp_name;
+                            // Refresh Select2 to display the translated text
+                            $(reportCompanySelect).trigger('change');
+                        });
+                        reportCompanySelect.appendChild(option);
+                    });
+                    
+                    // Initialize Select2 for the company select element
+                    $(reportCompanySelect).select2({
+                        placeholder: __('all_companies_option') || 'All Companies',
+                        allowClear: true,
                         width: '100%',
                         dropdownParent: $('.swal2-container')
                     });
@@ -924,11 +969,12 @@ async function generatePayrollReport() {
             }
         }
     }).then(async (result) => {
-        // After the user confirms the month selection
+        // After the user confirms the month and company selection
         if (result.isConfirmed) {
-            const selectedMonth = result.value;
-            // Proceed to fetch and display the payroll report for the selected month
-            await fetchAndDisplayPayrollReport(selectedMonth);
+            const selectedMonth = result.value.month;
+            const selectedCompany = result.value.company;
+            // Proceed to fetch and display the payroll report for the selected month and company
+            await fetchAndDisplayPayrollReport(selectedMonth, selectedCompany);
         }
     });
 }
@@ -972,7 +1018,7 @@ function updateNetSalaryDisplay(grossSalary) {
     netSalaryDisplay.textContent = formatCurrency(netSalary);
 }
 
-async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductions) {
+async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductions, paymentType) {
     Swal.fire({
         title: __('saving_changes_title'),
         html: __('please_wait_fetching_data'),
@@ -997,6 +1043,21 @@ async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductio
         const result = await response.json();
 
         if (result.status === 'success') {
+            // Attempt to update employee payment type as part of save flow
+            try {
+                const ptResp = await fetch('./includes/api/update_payment_type.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emp_id: empId, payment_type: paymentType })
+                });
+                const ptResult = await ptResp.json();
+                if (ptResult.status !== 'success') {
+                    console.warn('Payment type update warning:', ptResult.message || ptResult);
+                }
+            } catch (ptErr) {
+                console.warn('Payment type update failed:', ptErr);
+            }
+
             Swal.fire({
                 icon: 'success',
                 title: __('changes_saved_success_title'),
@@ -1213,6 +1274,26 @@ async function showPayrollDetails(empId, empName, month) {
                         </div>
                     </div>
                     
+                    <!-- Payment Type Tabs -->
+                    <div class="card border-0 shadow-sm mb-3">
+                        <div class="card-body py-2">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="small text-muted fw-bold">${__('salary_payment_type_label') || 'Payment Type'}</div>
+                                <div class="btn-group btn-group-sm" id="payment-type-tabs" role="group" aria-label="Payment Type">
+                                    <button type="button" class="btn btn-outline-info${Number(employee.payment_type||1)===1?' active':''}" data-paytype="1">
+                                        <i class="fas fa-university"></i> ${__('bank_option') || 'Bank'}
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary${Number(employee.payment_type||1)===2?' active':''}" data-paytype="2">
+                                        <i class="fas fa-money-bill-wave"></i> ${__('cash_option') || 'Cash'}
+                                    </button>
+                                    <button type="button" class="btn btn-outline-warning${Number(employee.payment_type||1)===3?' active':''}" data-paytype="3">
+                                        <i class="fas fa-pause-circle"></i> ${__('hold_option') || 'Hold'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="section-content">
                         <!-- Salary Section (default visible) -->
                         <div class="section-pane active" id="salary-section">
@@ -1323,6 +1404,14 @@ async function showPayrollDetails(empId, empName, month) {
                         element.addEventListener(event, handler);
                         currentEventListeners.push(() => element.removeEventListener(event, handler));
                     };
+
+                    // Payment Type tabs behavior
+                    document.querySelectorAll('#payment-type-tabs .btn').forEach(btn => {
+                        addDynamicEventListener(btn, 'click', function() {
+                            document.querySelectorAll('#payment-type-tabs .btn').forEach(b => b.classList.remove('active'));
+                            this.classList.add('active');
+                        });
+                    });
 
                     // Benefit Type Change Handler
                     const handleBenefitTypeChange = function() {
@@ -1696,12 +1785,16 @@ async function showPayrollDetails(empId, empName, month) {
                         }
                     });
 
-                    return { updatedBenefits, updatedDeductions };
+                    // Payment type selected from tabs
+                    const activePayBtn = document.querySelector('#payment-type-tabs .btn.active');
+                    const paymentType = activePayBtn ? parseInt(activePayBtn.dataset.paytype, 10) : (Number(employee.payment_type||1));
+
+                    return { updatedBenefits, updatedDeductions, paymentType };
                 }
             }).then((result) => {
                 addEventListeners();
                 if (result.isConfirmed) {
-                    savePayrollChanges(empId, month, result.value.updatedBenefits, result.value.updatedDeductions);
+                    savePayrollChanges(empId, month, result.value.updatedBenefits, result.value.updatedDeductions, result.value.paymentType);
                 }
             });
         } else {
@@ -1720,18 +1813,20 @@ async function showPayrollDetails(empId, empName, month) {
         
 
         // --- New helper function to encapsulate report fetching and display ---
-        async function fetchAndDisplayPayrollReport(selectedMonth) {
+        async function fetchAndDisplayPayrollReport(selectedMonth, selectedCompany = '') {
+            const companyText = selectedCompany ? ` - ${selectedCompany}` : '';
             Swal.fire({
                 title: __('generating_report_title'),
-                html: `${__('fetching_payroll_data_for_month')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}. ${__('please_wait_fetching_data')}`,
+                html: `${__('fetching_payroll_data_for_month')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}${companyText}. ${__('please_wait_fetching_data')}`,
                 didOpen: () => Swal.showLoading(),
                 allowOutsideClick: false,
                 allowEscapeKey: false
             });
 
             try {
-                // Fetch the payroll report data for the chosen month
-                const response = await fetch(`./includes/api/get_payroll_report.php?month=${selectedMonth}`);
+                // Fetch the payroll report data for the chosen month and optional company filter
+                const companyParam = selectedCompany ? `&company=${encodeURIComponent(selectedCompany)}` : '';
+                const response = await fetch(`./includes/api/get_payroll_report.php?month=${selectedMonth}${companyParam}`);
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`Server responded with status ${response.status}: ${errorText}`);
@@ -1851,6 +1946,57 @@ async function showPayrollDetails(empId, empName, month) {
             }
         }
 
+        // --- Helper: ensure Arabic-capable font for PDF ---
+        const AMIRI_BASE64 = "AAEAAAARAQAABAAwRkZUTV5DHtgAAAEcAAAAHEdERUYAJwCmAAABKAAAACBPUy8yLohbzgAAAVgAAABgY21hcAAlAH8AAAGQAAABWmdhc3D//wADAAABwAAAAAhnbHlmfSw2ZwAAAdgAAAPWaGVhZAVaDQ4AAAz0AAAANmhoZWEOkgBoAAANJAAAACRobXR4AhQBKQAADWgAAAAkbG9jYQD4APsAAA18AAAANm1heHAAjQBkAAANpAAAACBuYW1lYl70xAAADZwAAAJFcG9zdBz5C2IAAA9cAAAB8QABAAAAAQAAAADQ/c3dXw889QADAAEAAAAAAAAAAAAAAAAAAAABAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAACAAQAAAQIBAwEEAQUBBgEHAQgBCQEKAQsBDAENAQ4BDwEQAREBEgETARQBFQEWARcBGAEZARoBGwEcAR0BHgEfASABIQEiASMBJAEoASkBKgErASwBLQEuAS8BMAExATIBMwE0ATUBNgE3ATgBOQE6ATsBPAE9AT4BPwFAAUEBQgFDAUQBRQFGAUcBSAFJAUoBSwFMAU0BTgFPAUABUQFSAVMBVAFVAVYBVwFYAVkBWgFbAVwBXQFeAV8BYAFhAWIBYwFkAWUBZgFnAWgBaQFqAWsBbAFtAW4BbwFwAXEBcgFzAXQBdgF4AX0BgAGCAYQBhwGIAZABkwGUAZgBmwGfAaEBowGlAaYBqgGsAbABswG1AbwBxAHLAcsBzAHNAc4B0AHTAdMB1AHWAdoB3AHgAeoB8QH1AfcB+QH7AfsB/QIBAggCCgIMAg4CEAIWAhgCGgIcAh4CIQIjAiUCIwIxAjMCOQI7Aj0CPwJBAkMCRQJHAkkCSwJNAlACUwJVAlcCWQJbAl0CXwJhAmMCZQJnAmsCbgJxAnMCdgJ5AnoCfQKAAoMChQKHAokCigKMAo8CkQKTApcCmQKbApcCnAKhAqMClwKkAqoCrAKyArQCugK/AsMCxgLJAssC0ALUAtcC2QLbAt0C3wLgAuIC5ALmAu4C8ALzAvUC9wL5AvsC/QMCAwQDBgMIAwoDDAMOAxADEgMUAw4DGANCA0YDTAOEA5oDwgPWA/oEDgQyBD4EQgRIBFUExATiBPwFAQUNBRsFKQVEhU0FYAVihXIFeAWQBaAFsAXCBdYF9AX+BgoGJgZEBmYGjgaRBpwGswbKBtwG5Qb4BwAHDQcTBx8HJwc5B0MHRwdRB1UHVwdpB3sHhAeMB5YHmAefB64HvQfAB8IHxgfXCE8IXQhkCGgIfgiDCI0IlQigCKwIuQi+CMQIygjSCM4I2AjhCOkJAgkGCQ4JGgkvCTIJNwk+CUIJRglMCVQJXwlkCW8JdQl4CX4JgwmCCYYJjgmeCaUJrAmzCbkJxAnUCd4J6woPCg8KFwojCisKMQo9CkEKRwpSCmUKbgqBCocKkgqVCpwKpgqwCsYK0wrZCvILBQsRCxYLGgsjCyoLMQwADYANmAgYDDAOPg42DigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDjAOAAA=";
+        let pdfArabicFontLoaded = false;
+        let pdfArabicFontFailed = false;
+        async function ensurePdfArabicFont(doc) {
+            if (pdfArabicFontLoaded) return pdfArabicFontLoaded;
+            if (pdfArabicFontFailed) return false;
+
+            const tryLoad = async (fontUrl, fontName) => {
+                const resp = await fetch(fontUrl);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const buffer = await resp.arrayBuffer();
+                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                doc.addFileToVFS(`${fontName}.ttf`, base64);
+                doc.addFont(`${fontName}.ttf`, fontName, 'normal');
+                return fontName;
+            };
+
+            // 1) Inline embedded Amiri font (no network required)
+            try {
+                doc.addFileToVFS('Amiri-Regular.ttf', AMIRI_BASE64);
+                doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
+                pdfArabicFontLoaded = 'Amiri';
+                return 'Amiri';
+            } catch (inlineErr) {
+                console.warn('Inline Amiri font load failed. Trying remote.', inlineErr);
+            }
+
+            // 2) Remote Amiri (fallback)
+            try {
+                const remoteFontName = 'Amiri';
+                const remoteFontUrl = 'https://fonts.gstatic.com/s/amiri/v23/J7afnpd8CGxBHpUrtLQ.ttf';
+                const name = await tryLoad(remoteFontUrl, remoteFontName);
+                pdfArabicFontLoaded = name;
+                return name;
+            } catch (remoteErr) {
+                console.warn('Primary Arabic font load failed (remote Amiri). Trying Cairo.', remoteErr);
+                try {
+                    const fallbackName = 'Cairo';
+                    const fallbackUrl = 'https://fonts.gstatic.com/s/cairo/v20/SLXGc1nY6HkvZG9iQw.ttf';
+                    const name = await tryLoad(fallbackUrl, fallbackName);
+                    pdfArabicFontLoaded = name;
+                    return name;
+                } catch (fallbackErr) {
+                    console.warn('Arabic font load failed. Falling back to default font (Arabic will not render).', fallbackErr);
+                    pdfArabicFontFailed = true;
+                    return false;
+                }
+            }
+        }
+
         // --- PDF Export Function (MODIFIED FOR DETAILED REPORT) ---
         async function exportPdfReport(reportData, selectedMonth) {
             const { jsPDF } = window.jspdf;
@@ -1859,6 +2005,10 @@ async function showPayrollDetails(empId, empName, month) {
                 unit: 'pt', // Use points for better control over font sizes and margins
                 format: 'a4'
             });
+            const arabicFontName = await s(doc);
+            if (arabicFontName) {
+                doc.setFont(arabicFontName);
+            }
             const reportTitle = `${__('employee_payroll_report_for_month')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}`;
 
             // Define the two-part header structure
@@ -1867,6 +2017,7 @@ async function showPayrollDetails(empId, empName, month) {
                     { content: '#', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
                     { content: __('emp_id'), rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
                     { content: __('employee_name'), rowSpan: 2, styles: { valign: 'middle' } },
+                    { content: __('salary_payment_type_label'), rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
                     { content: __('salary_allowances_breakdown'), colSpan: 11, styles: { halign: 'center' } },
                     { content: __('benefits_section'), colSpan: 2, styles: { halign: 'center' } },
                     { content: __('deductions_section'), colSpan: 2, styles: { halign: 'center' } },
@@ -1897,11 +2048,17 @@ async function showPayrollDetails(empId, empName, month) {
                     ? p.deductions_list.map(d => `${d.deduction || __('deduction')}: ${parseFloat(d.note || 0).toFixed(2)}`).join('\n')
                     : 'N/A';
 
+                // Map numeric payment_type to label for display
+                const pt = parseInt(p.payment_type || 1, 10);
+                const ptLabelMap = { 1: (__('bank_option') || 'Bank'), 2: (__('cash_option') || 'Cash'), 3: (__('hold_option') || 'Hold') };
+                const paymentTypeLabel = ptLabelMap[pt] || String(pt);
+
                 // Return a single array for the table row with all components
                 return [
                     index + 1,
                     p.emp_id,
                     p.employee_name,
+                    paymentTypeLabel,
                     // Salary & Allowances Data
                     parseFloat(p.basic_salary || 0).toFixed(2),
                     parseFloat(p.housing_allowance || 0).toFixed(2),
@@ -1940,31 +2097,34 @@ async function showPayrollDetails(empId, empName, month) {
                     fillColor: [41, 128, 185],
                     textColor: 255,
                     fontStyle: 'bold',
+                    font: arabicFontName || undefined,
                     halign: 'center',
                     fontSize: 8
                 },
                 styles: {
                     fontSize: 6.5,
                     cellPadding: 3,
-                    valign: 'middle'
+                    valign: 'middle',
+                    font: arabicFontName || undefined
                 },
                 columnStyles: {
                     0: { halign: 'center' }, // #
                     1: { halign: 'center' }, // Emp ID
+                    3: { halign: 'center' }, // Payment Type
                     // Salary & Allowances Columns (right-aligned)
-                    3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' },
-                    6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' },
-                    9: { halign: 'right' }, 10: { halign: 'right' }, 11: { halign: 'right' },
-                    12: { halign: 'right' },
-                    13: { halign: 'right', fontStyle: 'bold' }, // Gross Salary
+                    4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' },
+                    7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' },
+                    10: { halign: 'right' }, 11: { halign: 'right' }, 12: { halign: 'right' },
+                    13: { halign: 'right' },
+                    14: { halign: 'right', fontStyle: 'bold' }, // Gross Salary
                     // Benefits Columns
-                    14: { halign: 'left' }, // Details
-                    15: { halign: 'right' }, // Total
+                    15: { halign: 'left' }, // Details
+                    16: { halign: 'right' }, // Total
                     // Deductions Columns
-                    16: { halign: 'left' }, // Details
-                    17: { halign: 'right' }, // Total
+                    17: { halign: 'left' }, // Details
+                    18: { halign: 'right' }, // Total
                     // Net Salary
-                    18: { halign: 'right', fontStyle: 'bold' } 
+                    19: { halign: 'right', fontStyle: 'bold' } 
                 },
                 didDrawPage: function (data) {
                     // Footer
@@ -1998,9 +2158,14 @@ async function showPayrollDetails(empId, empName, month) {
                 'ADDRESS', 'CUR', 'STATUS', 'DESCRIPTION', 'REF'
             ];
 
+            // Filter out CASH (payment_type = 2) for Bank Excel
+            const bankRows = Array.isArray(reportData)
+                ? reportData.filter(p => parseInt(p.payment_type || 1, 10) !== 2)
+                : [];
+
             // 2. Map reportData to the desired row format, converting strings to numbers
             // By processing the data first, we can separate logic from the sheet creation step.
-            const dataRows = reportData.map((p, index) => {
+            const dataRows = bankRows.map((p, index) => {
                 // Calculate the total for the 'OTHER' allowances column
                 // We ensure all values are parsed as numbers.
                 const totalAllowances =
@@ -2060,7 +2225,7 @@ async function showPayrollDetails(empId, empName, month) {
             XLSX.utils.book_append_sheet(wb, ws, "Payroll Report");
 
             // Generate the XLSX file and trigger download with a dynamic filename
-            const fileName = `payroll_report_${selectedMonth.replace('-', '_')}.xlsx`;
+            const fileName = `bank_payroll_${selectedMonth.replace('-', '_')}.xlsx`;
             XLSX.writeFile(wb, fileName);
         }
 
@@ -2081,7 +2246,7 @@ async function showPayrollDetails(empId, empName, month) {
 
             // 1. Create header rows (matching PDF structure)
             const headerRow1 = [
-                '#', 'Emp ID', 'Employee Name', 'Company', 'Department',
+                '#', 'Emp ID', 'Employee Name', 'Company', 'Department', 'Payment Type',
                 // Salary & Allowances Breakdown (11 columns)
                 'Basic Salary', 'Housing', 'Transport', 'Food', 'Miscellaneous', 'Cashier', 'Fuel', 'Telephone', 'Other', 'Guard', 'Total Gross',
                 // Benefits (2 columns)
@@ -2104,12 +2269,18 @@ async function showPayrollDetails(empId, empName, month) {
                     ? p.deductions_list.map(d => `${d.deduction || 'Deduction'}: ${parseFloat(d.note || 0).toFixed(2)}`).join('\n')
                     : 'N/A';
 
+                // Map numeric payment_type to label for display
+                const pt = parseInt(p.payment_type || 1, 10);
+                const ptLabelMap = { 1: 'Bank', 2: 'Cash', 3: 'Hold' };
+                const paymentTypeLabel = ptLabelMap[pt] || String(pt);
+
                 return [
                     index + 1, // Serial number
                     p.emp_id,
                     p.employee_name,
                     p.comp_name || 'N/A',
                     p.department_name || 'N/A',
+                    paymentTypeLabel,
                     // Salary & Allowances
                     parseFloat(p.basic_salary || 0),
                     parseFloat(p.housing_allowance || 0),
@@ -2146,6 +2317,7 @@ async function showPayrollDetails(empId, empName, month) {
                 { wch: 25 }, // Name
                 { wch: 20 }, // Company
                 { wch: 20 }, // Department
+                { wch: 14 }, // Payment Type
                 { wch: 12 }, // Basic
                 { wch: 10 }, // Housing
                 { wch: 10 }, // Transport
@@ -2167,7 +2339,8 @@ async function showPayrollDetails(empId, empName, month) {
 
             // Format numeric columns with 2 decimal places
             const numberFormat = '#,##0.00';
-            const numericColumns = ['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'T', 'U']; // All monetary columns
+            // Shifted by one column due to added Payment Type column
+            const numericColumns = ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'S', 'U', 'V']; // All monetary columns
 
             // Apply number format to all data rows
             for (let i = 1; i <= dataRows.length; i++) {

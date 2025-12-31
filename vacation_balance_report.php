@@ -5,6 +5,11 @@
  * Reads the last saved JSON report from cron_update_vacation_balances.php
  * and renders a GUI page for viewing.
  */
+require_once __DIR__ . '/includes/session_check.php';
+
+// Allow: System admin, administrator
+$can_see_all_employees = ( $is_system_admin || $user_type == 'administrator' );
+
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);

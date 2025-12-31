@@ -362,6 +362,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             
                                             if (!$can_see_all_departments) {
                                                 // Department managers: show only their department
+                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`dept`, 
@@ -372,10 +373,11 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
                                                     LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
                                                     WHERE `employees`.`status` = 1 
-                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "' 
+                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'" . $company_filter . " 
                                                     GROUP BY `employees`.`dept`");
                                             } else {
                                                 // HR and System Admins: show all departments
+                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`dept`, 
@@ -385,7 +387,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     FROM `employees` 
                                                     LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
                                                     LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
-                                                    WHERE `employees`.`status` = 1
+                                                    WHERE `employees`.`status` = 1" . $company_filter . "
                                                     GROUP BY `employees`.`dept`");
                                             }
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
@@ -422,7 +424,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                                     <div style="height:12px;border-radius:8px;width:<?= $percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
                                                                 </div>
                                                                 <div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-                                                                    <?= $percentage ?>% of total employees
+                                                                    <?= $percentage ?>% <?=__('of_total_employees') ?>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -457,6 +459,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             
                                             if (!$can_see_all_companies) {
                                                 // Department managers: show only companies in their department
+                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`comp_no`, 
@@ -466,10 +469,11 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     FROM `employees` 
                                                     LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
                                                     WHERE `employees`.`status` = 1
-                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'" . $company_filter . "
                                                     GROUP BY `employees`.`comp_no`");
                                             } else {
                                                 // HR and System Admins: show all companies
+                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
                                                 $querygrp = mysqli_query($conDB, "SELECT 
                                                     count(`employees`.`dept`) AS `empcountgrp`,
                                                     `employees`.`comp_no`, 
@@ -478,7 +482,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     `companies`.`comp_id`
                                                     FROM `employees` 
                                                     LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
-                                                    WHERE `employees`.`status` = 1
+                                                    WHERE `employees`.`status` = 1" . $company_filter . "
                                                     GROUP BY `employees`.`comp_no`");
                                             }
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
@@ -487,7 +491,8 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 $colorCount = count($colorArr);
                                                 $cardIndex = 0;
                                                 // Total active employees (for percentage calculation)
-                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1");
+                                                $company_filter = getCompanyFilterSQL('comp_no', true);
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
@@ -564,6 +569,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
 
                                                 if (!$can_see_all_employees) {
                                                     // Department users: show only their department employees
+                                                    $company_filter = getCompanyFilterSQL('emp.comp_no', true);
                                                     $sql = "SELECT 
                                                             `emp`.*, 
                                                             CASE 
@@ -572,17 +578,20 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                                 ELSE ''
                                                             END AS `sex`,  
                                                             `countries`.`name` AS `country_name`,
+                                                            `countries`.`name_ar` AS `country_name_ar`,
                                                             `department`.`dep_nme`,
                                                             `department`.`dep_nme_ar`,
-                                                            `sponsorship`.`sponsor` AS `emp_sup_type`
+                                                            `sponsorship`.`sponsor`,
+                                                            `sponsorship`.`sponsor_ar`
                                                             FROM `employees` `emp`
                                                             LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
                                                             LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
                                                             LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
                                                             WHERE `emp`.`status`=1 AND `emp`.`fly`=0 
-                                                            AND `emp`.`dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "' ";
+                                                            AND `emp`.`dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'" . $company_filter . " ";
                                                 } else {
                                                     // HR and System Admins: show all employees
+                                                    $company_filter = getCompanyFilterSQL('emp.comp_no', true);
                                                     $sql = "SELECT 
                                                             `emp`.*,
                                                             CASE 
@@ -591,14 +600,16 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                                 ELSE ''
                                                             END AS `sex`,  
                                                             `countries`.`name` AS `country_name`,
+                                                            `countries`.`name_ar` AS `country_name_ar`,
                                                             `department`.`dep_nme`,
                                                             `department`.`dep_nme_ar`,
-                                                            `sponsorship`.`sponsor` AS `emp_sup_type`
+                                                            `sponsorship`.`sponsor`,
+                                                            `sponsorship`.`sponsor_ar`
                                                             FROM `employees` `emp`
                                                             LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
                                                             LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
                                                             LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
-                                                            WHERE `emp`.`status`=1 AND `emp`.`fly`=0 ";
+                                                            WHERE `emp`.`status`=1 AND `emp`.`fly`=0" . $company_filter . " ";
                                                 }
                                                 $query = mysqli_query($conDB, $sql);
 
@@ -619,9 +630,11 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                     $dept = $rec["dep_nme"];
                                                     $dept_ar = $rec["dep_nme_ar"];
                                                     $blood_type = $rec["blood_type"];
-                                                    $emp_sup_type = $rec["emp_sup_type"];
+                                                    $emp_sup_type = $rec["sponsor"];
+                                                    $emp_sup_type_ar = $rec["sponsor_ar"];
                                                     $date_dob_get = $rec["dob"];
                                                     $country_get = $rec["country_name"];
+                                                    $country_get_ar = $rec["country_name_ar"];
                                                     $sex_get = $rec["sex"];
                                                     $mar_status_get = $rec["mar_status"];
 
@@ -642,16 +655,16 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                         <td><?= $emp_id; ?></td>
                                                         <td>
                                                             <img src="<?= $emp_avatar; ?>" class="rounded-circle bx-shadow-lg" width="50">
-                                                             <span class='copyToClipboard'><?= translate_name(parseName($rec["name"]), $current_lang ?? 'en'); ?></span> <i class='fa fa-clipboard'></i>
+                                                             <span class='copyToClipboard'><?= getDisplayName(parseName($rec["name"])); ?></span> <i class='fa fa-clipboard'></i>
                                                         </td>
                                                         <td><?= ($is_rtl ?? false) ? $dept_ar : $dept ?></td>
                                                         <td><span class='copyToClipboard'><?= $iqama; ?></span> <i class='fa fa-clipboard'></i></td>
                                                         <td><span class='copyToClipboard'><?= $mobile; ?></span> <i class='fa fa-clipboard'></i></td>
                                                         <td><?= $date_dob_get; ?></td>
-                                                        <td><?= $emp_sup_type; ?></td>
+                                                        <td><?= ($is_rtl ?? false) ? $emp_sup_type_ar : $emp_sup_type; ?></td>
                                                         <td><?= $blood_type; ?></td>
                                                         <td><?= __($sex_get); ?></td>
-                                                        <td><?= $country_get; ?></td>
+                                                        <td><?= ($is_rtl ?? false) ? $country_get_ar : $country_get; ?></td>
                                                         <td><?= $joining_date; ?></td>
                                                         <td>
                                                             <div class='btn-group dropdown'>
@@ -803,7 +816,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                             var column = this;
                             // The text from the <tfoot> is used as a placeholder initially.
                             var title = $(column.footer()).text();
-                            var select = $('<select class="form-control form-control-sm"><option value="">' + title + ' (All)</option></select>')
+                            var select = $('<select class="form-control form-control-sm"><option value="">' + title + ' (' + __('all') + ')</option></select>')
                                 .appendTo($(column.footer()).empty()) // Clears the footer cell and adds the select dropdown.
                                 .on('change', function() {
                                     // Perform an exact-match search on column change.

@@ -26,6 +26,7 @@ $GLOBALS['translations'] = [];
  *
  * @param string $lang_code The language code (e.g., 'en', 'ar').
  */
+if (!function_exists('load_language')) {
 function load_language(string $lang_code = 'en') {
     global $conDB; // Use the existing global connection from your project
     static $is_loaded = false;
@@ -68,6 +69,7 @@ function load_language(string $lang_code = 'en') {
     
     $is_loaded = true; // Mark as loaded for this request.
 }
+}
 
 /**
  * Translates a given key into the currently loaded language.
@@ -76,13 +78,14 @@ function load_language(string $lang_code = 'en') {
  * @param string $default An optional default value to return if the key is not found.
  * @return string The translated string, or the key/default value if not found.
  */
+if (!function_exists('__')) {
 function __(string $key, string $default = ''): string {
     if (isset($GLOBALS['translations'][$key]) && !empty($GLOBALS['translations'][$key])) {
         return $GLOBALS['translations'][$key];
     }
-    
     // If a default is provided, use it. Otherwise, return the key itself.
     return $default !== '' ? $default : $key;
+}
 }
 
 /**
@@ -94,21 +97,19 @@ function __(string $key, string $default = ''): string {
  * @param string $current_lang Current language code
  * @return string Translated or original name (returns empty string if null)
  */
+if (!function_exists('translate_name')) {
 function translate_name(?string $name, string $current_lang = 'en'): string {
     global $is_rtl;
-    
     // Handle NULL or empty names
     if ($name === null || trim($name) === '') {
         return '';
     }
-    
     // Only translate if Arabic language is selected
     if ($current_lang === 'ar' || $is_rtl === true) {
         // Ensure session is started for caching
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        
         // Include the translateText.php file to use its auto_translate_text function
         $translateFile = __DIR__ . '/ajaxFile/translateText.php';
         if (file_exists($translateFile)) {
@@ -118,7 +119,7 @@ function translate_name(?string $name, string $current_lang = 'en'): string {
             }
         }
     }
-    
     return $name;
+}
 }
 

@@ -2532,6 +2532,108 @@ $(document).on('click', '.cardAddAttr', function (e) {
 ////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////
+////////////          Company Access Control Functions            //////////////
+////////////////////////////////////////////////////////////////////
+
+/**
+ * Load companies and set up company access UI for user editing
+ * @param {int} userId - The admin_login.id of the user
+ * @param {string} userType - The user's current type
+ */
+function loadCompanyAccess(userId, userType) {
+    // Check if user is system admin
+    var isSystemAdmin = (userType === 'administrator' || userType === 'gm');
+    
+    $.ajax({
+        url: './includes/ajaxFile/getCompanyAccess.php',
+        type: 'POST',
+        data: { user_id: userId },
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                // Destroy any existing Select2 instance
+                if ($('#allowed_companies').data('select2')) {
+                    $('#allowed_companies').select2('destroy');
+                }
+                
+                // Populate company options
+                var companyHTML = '';
+                $.each(response.companies, function(index, company) {
+                    companyHTML += '<option value="' + company.id + '">' + company.name + '</option>';
+                });
+                $('#allowed_companies').html(companyHTML);
+                
+                // Initialize Select2 with search functionality
+                $('#allowed_companies').select2({
+                    placeholder: __('select_companies') || 'Search and select companies...',
+                    allowClear: false,
+                    width: '100%',
+                    dropdownParent: $('.swal2-container'),
+                    language: {
+                        searching: function () { return __('searching') || 'Searching...'; },
+                        noResults: function () { return __('no_results_found') || 'No results found'; }
+                    }
+                });
+                
+                // Set current selections
+                if (response.allowed_companies && response.allowed_companies.length > 0) {
+                    $('#allowed_companies').val(response.allowed_companies).trigger('change');
+                    $('#fullAccessCheckbox').prop('checked', false);
+                    $('#allowed_companies').prop('disabled', false);
+                } else {
+                    // No restrictions = full access
+                    $('#fullAccessCheckbox').prop('checked', true);
+                    $('#allowed_companies').val([]).trigger('change');
+                    $('#allowed_companies').prop('disabled', true);
+                }
+                
+                // Handle full access checkbox
+                $('#fullAccessCheckbox').off('change').on('change', function() {
+                    if ($(this).is(':checked')) {
+                        $('#allowed_companies').prop('disabled', true);
+                        $('#allowed_companies').val([]).trigger('change');
+                        $('#allowed_companies').closest('.form-group').addClass('opacity-50');
+                    } else {
+                        $('#allowed_companies').prop('disabled', false);
+                        $('#allowed_companies').closest('.form-group').removeClass('opacity-50');
+                        $('#allowed_companies').focus();
+                    }
+                });
+                
+                // Show/hide company access section based on user type
+                toggleCompanyAccessSection(userType);
+                
+                // Toggle when user type changes
+                $('#user_type').off('change').on('change', function() {
+                    toggleCompanyAccessSection($(this).val());
+                });
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading company access:', error);
+        }
+    });
+}
+
+/**
+ * Toggle visibility of company access section based on user type
+ * @param {string} userType - The selected user type
+ */
+function toggleCompanyAccessSection(userType) {
+    // Hide for system admins and employees
+    var isSystemAdmin = (userType === 'administrator' || userType === 'gm');
+    var isEmployee = (userType === 'employee');
+    
+    if (isSystemAdmin || isEmployee) {
+        $('#company-access-group').hide();
+        $('#fullAccessCheckbox').removeAttr('required');
+    } else {
+        $('#company-access-group').show();
+        $('#fullAccessCheckbox').attr('required', 'required');
+    }
+}
+
+////////////////////////////////////////////////////////////////////
 ////////////             End Users Handling           //////////////
 ////////////////////////////////////////////////////////////////////
 
@@ -2557,6 +2659,9 @@ $(document).on('click', '.updateUserAjax', function (e) {
             $('#email').val(e_email);
             $('#user_type option[value="'+user_type+'"]').prop("selected", "selected");
             
+            // Load companies and set current user's allowed companies
+            loadCompanyAccess(e_iduser, user_type);
+            
             // Function to toggle email field visibility
             function toggleEmailField() {
                 var selectedType = $('#user_type').val();
@@ -2577,8 +2682,16 @@ $(document).on('click', '.updateUserAjax', function (e) {
                 toggleEmailField();
                 allowOutsideClick:false});
         },
+        didClose: function() {
+            // Destroy Select2 instance when modal closes
+            if ($('#allowed_companies').data('select2')) {
+                $('#allowed_companies').select2('destroy');
+            }
+        },
         preConfirm: function() {
             var selectedType = $('#user_type').val();
+            var fullAccess = $('#fullAccessCheckbox').is(':checked');
+            var selectedCompanies = $('#allowed_companies').val();
             
             // Validate user type
             if($('#user_type').val() == "") {
@@ -2592,12 +2705,41 @@ $(document).on('click', '.updateUserAjax', function (e) {
                 return false;
             }
             
+            // Validate company access (only for non-admin, non-employee users)
+            if($('#company-access-group').is(':visible')) {
+                if(!fullAccess && (!selectedCompanies || selectedCompanies.length === 0)) {
+                    Swal.showValidationMessage(__("select_at_least_one_company") || "Please select at least one company or grant full access");
+                    return false;
+                }
+            }
+            
             return new Promise(function(reject) {
+                // Build form data with proper company handling
+                var formData = new FormData($('#submitEditUserForm')[0]);
+                
+                // Remove allowed_companies field if full access is checked
+                if(fullAccess) {
+                    formData.delete('allowed_companies');
+                    formData.append('full_access', '1');
+                } else if(selectedCompanies && selectedCompanies.length > 0) {
+                    // Remove default serialized companies and rebuild as array
+                    formData.delete('allowed_companies');
+                    selectedCompanies.forEach(function(companyId) {
+                        formData.append('allowed_companies[]', companyId);
+                    });
+                    formData.append('full_access', '0');
+                }
+                
+                // Add AJAX action type
+                formData.append('ajaxType', 'user_upate');
+                
                 $.ajax({
                         url: './includes/ajaxFile/ajaxUser.php',
                         type: 'POST',
-                        data: $('#submitEditUserForm').serialize()+'&'+$.param({ajaxType: "user_upate"}),
+                        data: formData,
                         cache: false,
+                        contentType: false,
+                        processData: false,
                         dataType: "json",
                 })
                 .done(function(response){
@@ -7042,6 +7184,23 @@ function edit_user_HTML(){
             <input type="email" id="email" name="email" class="form-control" required>
             <small class="form-text text-muted">${__('admin_email_note') || 'Email is optional for regular employees. Required for administrative roles.'}</small>
         </div>
+        
+        <!-- Company Access Control Section -->
+        <div class="form-group col-md-12" id="company-access-group">
+            <label for="allowed_companies">${__('allowed_companies') || 'Allowed Companies'}<span class="text-danger">*</span></label>
+            <div id="company-select-container">
+                <div class="d-flex align-items-center mb-3">
+                    <input type="checkbox" id="fullAccessCheckbox" name="full_access" value="1">
+                    <label class="ml-2 mb-0" for="fullAccessCheckbox">${__('full_access_to_all_companies') || 'Full Access to All Companies'}</label>
+                </div>
+                <small class="form-text text-muted d-block mb-2">${__('full_access_note') || 'Check this to grant access to all companies (system admins only)'}</small>
+            </div>
+            <select class="form-control select2-multi" name="allowed_companies" id="allowed_companies" multiple="multiple" style="width: 100%">
+                <!-- Companies will be loaded dynamically -->
+            </select>
+            <small class="form-text text-muted d-block mt-2">${__('company_access_note') || 'Type to search and select companies. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
+        </div>
+        
         <input type="hidden" id="iduser" name="id">
     </div>
     </form>

@@ -1,5 +1,11 @@
 <?php
 
+// Include guard to prevent duplicate inclusions
+if (defined('HELPER_FUNCTIONS_INCLUDED')) {
+    return;
+}
+define('HELPER_FUNCTIONS_INCLUDED', true);
+
 // Ensure PHP error logging is configured so we can capture exceptions from this module
 try {
     $errorLogDir = __DIR__ . '/../../logs';
@@ -4202,3 +4208,275 @@ if (!function_exists('computeContractExpiry')) {
     }
 }
 
+/**
+ * Global helper function to translate/display employee or text names
+ * Automatically handles Arabic translation if language is set to Arabic
+ * Uses multi-level caching: session cache + database cache for performance
+ * Safe fallback to original name if translation fails or is not available
+ * Works in both HTML pages and AJAX JSON responses
+ *
+ * Usage:
+ *   - In HTML: <?= getDisplayName($empName) ?>
+ *   - In JSON: 'emp_name' => getDisplayName($row['name'])
+ *   - With explicit lang: getDisplayName($text, 'ar')
+ *
+ * @param string|null $name The name/text to translate (can be null)
+ * @param string|null $lang Language code ('en', 'ar'). If null, uses current system language.
+ * @return string The translated or original name; empty string if null input
+ */
+if (!function_exists('getDisplayName')) {
+    function getDisplayName(?string $name, ?string $lang = null): string {
+        global $current_lang, $is_rtl, $conDB;
+        
+        // Handle NULL or empty names
+        if ($name === null || trim($name) === '') {
+            return '';
+        }
+        
+        // Determine target language
+        // Priority: explicit param > global $current_lang > global $is_rtl > default 'en'
+        if ($lang === null) {
+            if (isset($current_lang) && in_array($current_lang, ['en', 'ar'])) {
+                $lang = $current_lang;
+            } elseif (isset($is_rtl) && $is_rtl === true) {
+                $lang = 'ar';
+            } else {
+                $lang = 'en';
+            }
+        }
+        
+        // For non-Arabic language: return as-is
+        if ($lang !== 'ar') {
+            return $name;
+        }
+        
+        // ===== MULTI-LEVEL CACHING FOR ARABIC TRANSLATION =====
+        
+        // 1. Check session cache (fastest - in-memory)
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        $cache_key = 'display_name_' . md5($name . '_ar');
+        if (isset($_SESSION[$cache_key]) && !empty($_SESSION[$cache_key])) {
+            return $_SESSION[$cache_key];
+        }
+        
+        // 2. Check database cache (persistent across sessions)
+        if ($conDB) {
+            $text_hash = md5($name);
+            $db_check = mysqli_query($conDB, 
+                "SELECT translated_text FROM translation_cache 
+                 WHERE text_hash = '" . mysqli_real_escape_string($conDB, $text_hash) . "' 
+                 AND source_lang = 'en'
+                 AND target_lang = 'ar' 
+                 LIMIT 1"
+            );
+            
+            if ($db_check && $db_row = mysqli_fetch_assoc($db_check)) {
+                $translated = $db_row['translated_text'];
+                // Store in session cache for this request
+                $_SESSION[$cache_key] = $translated;
+                return $translated;
+            }
+        }
+        
+        // 3. Attempt translation via available functions
+        $translated = null;
+        
+        // Try translate_name() first (from translation_functions.php)
+        if (function_exists('translate_name')) {
+            $translated = @translate_name($name);
+            if (!empty($translated) && $translated !== $name) {
+                // Cache in session immediately
+                $_SESSION[$cache_key] = $translated;
+                
+                // Save to database cache for future use
+                if ($conDB) {
+                    $text_hash = md5($name);
+                    $name_safe = mysqli_real_escape_string($conDB, substr($name, 0, 500));
+                    $translated_safe = mysqli_real_escape_string($conDB, $translated);
+                    
+                    $insert_sql = "INSERT INTO translation_cache 
+                                  (text_hash, source_text, source_lang, target_lang, translated_text, created_at) 
+                                  VALUES (
+                                     '" . $text_hash . "',
+                                     '" . $name_safe . "',
+                                     'en',
+                                     'ar',
+                                     '" . $translated_safe . "',
+                                     NOW()
+                                  )
+                                  ON DUPLICATE KEY UPDATE 
+                                     translated_text = VALUES(translated_text), 
+                                     updated_at = NOW()";
+                    
+                    @mysqli_query($conDB, $insert_sql);
+                }
+                
+                return $translated;
+            }
+        }
+        
+        // Fallback to auto_translate_text() (from translateText.php)
+        if (function_exists('auto_translate_text')) {
+            $translated = @auto_translate_text($name, 'en', 'ar');
+            if (!empty($translated) && $translated !== $name) {
+                // Cache in session immediately
+                $_SESSION[$cache_key] = $translated;
+                
+                // auto_translate_text() already saves to database, so no need to duplicate
+                return $translated;
+            }
+        }
+        
+        // Return original name if translation fails or functions unavailable
+        return $name;
+    }
+}
+
+
+/**
+ * Check if user has access to a specific company
+ * 
+ * Returns true if:
+ * 1. User has no company restrictions (allowed_companies = NULL)
+ * 2. User's allowed_companies includes the specified company_id
+ * 
+ * @param int|string $company_id The company ID to check
+ * @param bool $use_session Use session values instead of global variables (default: true)
+ * @return bool True if user can access the company, false otherwise
+ */
+if (!function_exists('canAccessCompany')) {
+    function canAccessCompany($company_id, $use_session = true) {
+        global $allowed_companies_array, $has_company_restrictions;
+        
+        $company_id = (int)$company_id;
+        
+        // Use session if available
+        if ($use_session && isset($_SESSION['allowed_companies_array'])) {
+            $companies = $_SESSION['allowed_companies_array'];
+            
+            // No restrictions = full access
+            if (empty($companies)) {
+                return true;
+            }
+            
+            // Check if company_id is in allowed list
+            return in_array($company_id, $companies, true);
+        }
+        
+        // Fallback to global variables
+        if (empty($allowed_companies_array)) {
+            return true;
+        }
+        
+        return in_array($company_id, $allowed_companies_array, true);
+    }
+}
+
+/**
+ * Get SQL WHERE clause for company filtering based on user restrictions
+ * 
+ * Usage: 
+ *   $where = getCompanyFilterSQL('comp_no');
+ *   $query = "SELECT * FROM employees WHERE $where AND other_condition = 1";
+ * 
+ * @param string $column_name The column name to filter on (e.g., 'comp_no', 'company_id')
+ * @param bool $use_session Use session values (default: true)
+ * @return string SQL WHERE clause fragment, or empty string if no restrictions
+ */
+if (!function_exists('getCompanyFilterSQL')) {
+    function getCompanyFilterSQL($column_name, $use_session = true) {
+        global $conDB, $allowed_companies_array;
+        
+        $companies = $use_session && isset($_SESSION['allowed_companies_array']) 
+            ? $_SESSION['allowed_companies_array'] 
+            : $allowed_companies_array;
+        
+        // No restrictions = no WHERE clause needed
+        if (empty($companies)) {
+            return "";
+        }
+        
+        // Create IN clause for allowed companies with AND prefix for WHERE clause compatibility
+        $companies_list = implode(',', array_map('intval', $companies));
+        return " AND $column_name IN ($companies_list)";
+    }
+}
+
+/**
+ * Get array of company IDs user can access
+ * 
+ * @param bool $use_session Use session values (default: true)
+ * @return array Array of company IDs, or empty array if no restrictions (full access)
+ */
+if (!function_exists('getAccessibleCompanies')) {
+    function getAccessibleCompanies($use_session = true) {
+        global $allowed_companies_array;
+        
+        $companies = $use_session && isset($_SESSION['allowed_companies_array']) 
+            ? $_SESSION['allowed_companies_array'] 
+            : $allowed_companies_array;
+        
+        return !empty($companies) ? $companies : [];
+    }
+}
+
+/**
+ * Translate specific keywords in a mixed string using regex and translation table
+ * 
+ * Usage:
+ *   $text = "2 Years - 30";
+ *   $translated = translatePartialString($text, ['Years', 'Months', 'Days']);
+ *   Result: "2 سنوات - 30" (if Arabic)
+ * 
+ * @param string $text The text with keywords to translate
+ * @param array $keywords Array of keywords to look for (e.g., ['Years', 'Months', 'Days'])
+ * @return string Text with keywords translated using __() function, rest unchanged
+ */
+if (!function_exists('translatePartialString')) {
+    function translatePartialString($text, $keywords = ['Years', 'Months', 'Days']) {
+        if (empty($text) || empty($keywords)) {
+            return $text;
+        }
+        
+        // Build regex pattern from keywords (case-insensitive word boundary)
+        $pattern = '\\b(' . implode('|', array_map('preg_quote', $keywords)) . ')\\b';
+        
+        // Use preg_replace_callback to replace each keyword with translated version
+        return preg_replace_callback(
+            '/' . $pattern . '/i',
+            function($matches) {
+                $keyword = $matches[1];
+                $translation_key = strtolower($keyword); // 'Years' -> 'years'
+                return __($translation_key);
+            },
+            $text
+        );
+    }
+}
+
+/**
+ * Translate contract period string (e.g., "2 Years - 30")
+ * Translates time unit keywords while keeping numbers and separators unchanged
+ * 
+ * Usage:
+ *   $period = "2 Years - 30";
+ *   $translated = translateContractPeriod($period);
+ *   Result: "2 سنوات - 30" (if Arabic)
+ * 
+ * @param string $period_str The contract period string
+ * @return string Translated period string
+ */
+if (!function_exists('translateContractPeriod')) {
+    function translateContractPeriod($period_str) {
+        if (empty($period_str)) {
+            return $period_str;
+        }
+        
+        // Common time unit keywords in contract periods
+        $keywords = ['Years', 'Months', 'Days', 'Year', 'Month', 'Day'];
+        return translatePartialString($period_str, $keywords);
+    }
+}

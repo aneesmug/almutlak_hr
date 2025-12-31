@@ -1,8 +1,20 @@
 <?php
 	require_once __DIR__ . '/includes/db.php';
+	require_once __DIR__ . '/includes/session_check.php';
 	
-$sql = "SELECT * FROM `employees` WHERE `emp_id`='".$_GET['emp_id']."' ";
+$company_filter = getCompanyFilterSQL('comp_no', true);
+$emp_id_get = mysqli_real_escape_string($conDB, $_GET['emp_id']);
+$sql = "SELECT * FROM `employees` WHERE `emp_id`='" . $emp_id_get . "'" . $company_filter;
 	$getquery = mysqli_query($conDB, $sql);
+
+// Check company access before processing
+if (mysqli_num_rows($getquery) == 0 || !canAccessCompany(mysqli_fetch_assoc($getquery)['comp_no'] ?? 1)) {
+    header('Location: all_employee_list.php');
+    exit;
+}
+
+// Reset result set
+$getquery = mysqli_query($conDB, $sql);
 while($rec = mysqli_fetch_assoc($getquery)){
 			$id_get = $rec["id"];
 			$name_get = $rec["name"];
@@ -128,12 +140,13 @@ if(isset($_POST['submit'])){
 	/*********************************/
 	
 	if($vac_strt_date_po && $replacement_per_po){
-		
-		mysqli_query($conDB, "INSERT INTO `vac_sch` (`emp_id`,`name`,`dept`,`replacement_per`,`vac_strt_date`,`last_vac_date`,`next_vac_date`,`note`,`vacation_days`,`date_reg`) VALUES ('".$emp_id_get."','".$name_get."','".$dept_get."','".$replacement_per_po."','".$vac_strt_date_po."','".$last_vac_datevac."','".$next_vac_date_po."','".$note_po."','".$vacation_days_get."','".date("c")."' )") or die (mysqli_error());
+		$insert_sql = "INSERT INTO `vac_sch` (`emp_id`,`name`,`dept`,`replacement_per`,`vac_strt_date`,`last_vac_date`,`next_vac_date`,`note`,`vacation_days`,`date_reg`) VALUES ('".$emp_id_get."','".$name_get."','".$dept_get."','".$replacement_per_po."','".$vac_strt_date_po."','".$last_vac_datevac."','".$next_vac_date_po."','".$note_po."','".$vacation_days_get."','".date("c")."')";
+		mysqli_query($conDB, $insert_sql) or die ();
 		
 //		mysqli_query($conDB, "UPDATE `employees` SET `fly`='yes' WHERE `emp_id`='".$_GET['emp_id']."' ") or die (mysqli_error());
 		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')") or die (mysqli_error());
+		$log_sql = "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')";
+		mysqli_query($conDB, $log_sql) or die ();
 		/************log************/
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Added Seccssfully!</div>
 		";		
@@ -305,7 +318,9 @@ if(isset($_POST['submit'])){
 											<div class="form-group col-md-3">
                                                 <label for="last_vac_date" class="col-form-label">Replacement Person<span class="text-danger">*</span></label>
                                             <?php
-												$sqlcodes = "SELECT * FROM `employees` WHERE `emp_sup_type`='mocha' AND `note`!='terminat' AND `dept`<>'' ORDER BY `dept` ASC";
+												// Add company filter for replacement person selection
+												$company_filter_rep = getCompanyFilterSQL('comp_no', true);
+												$sqlcodes = "SELECT * FROM `employees` WHERE `emp_sup_type`='mocha' AND `note`!='terminat' AND `dept`<>''" . $company_filter_rep . " ORDER BY `dept` ASC";
     											$resultcodes = mysqli_query($conDB, $sqlcodes);
 												echo "<select class='form-control select2' name='replacement_per' required>";
 												echo "<option value=''>Select a Person...</option>";

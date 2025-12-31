@@ -8640,3 +8640,30 @@ i.fa-clipboard {
     grid-template-columns: 1fr;
   }
 }
+
+/* Select2 in SweetAlert Modal Styling */
+.swal2-container .select2-container {
+    z-index: 10000 !important;
+    display: block !important;
+    width: 100% !important;
+}
+
+.swal2-container .select2-container .select2-selection {
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    background-color: #fff;
+}
+
+.swal2-container .select2-container--focus .select2-selection {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.swal2-container .select2-dropdown {
+    z-index: 10001 !important;
+}
+
+.swal2-container .select2-container--disabled .select2-selection {
+    opacity: 0.6;
+    background-color: #e9ecef;
+}

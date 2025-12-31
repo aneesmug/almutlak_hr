@@ -19,7 +19,7 @@ $pdo = getDbConnection();
 
 try {
     // 1. Fetch employee details
-    $stmtEmployee = $pdo->prepare("SELECT id, name, emp_id, salary, dept, country, gosi
+    $stmtEmployee = $pdo->prepare("SELECT id, name, emp_id, salary, dept, country, gosi, payment_type
         FROM employees
         WHERE emp_id = :emp_id
     ");

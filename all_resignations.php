@@ -128,6 +128,14 @@ if (!empty($where_clauses)) {
     $where_sql = " WHERE " . implode(" AND ", $where_clauses);
 }
 
+// Add company filter to WHERE clause
+$company_filter = getCompanyFilterSQL('e.comp_no', true);
+if (strpos($where_sql, 'WHERE') === false) {
+    $where_sql = " WHERE 1=1" . $company_filter;
+} else {
+    $where_sql .= $company_filter;
+}
+
 // Main query to select *which* resignations to show (for count and main data)
 $base_query = "FROM emp_resignations r 
                JOIN employees e ON r.emp_id = e.emp_id 

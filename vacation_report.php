@@ -63,6 +63,14 @@ if (mysqli_num_rows($query) == 1) {
         $where_sql = " WHERE " . implode(" AND ", $where_clauses);
     }
 
+    // Add company filter to WHERE clause
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (strpos($where_sql, 'WHERE') === false) {
+        $where_sql = " WHERE 1=1" . $company_filter;
+    } else {
+        $where_sql .= $company_filter;
+    }
+
     // 3. Get total item count
     $count_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id" . $where_sql;
     $stmt_count = $conDB->prepare($count_sql);

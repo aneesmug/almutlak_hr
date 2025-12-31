@@ -81,6 +81,13 @@ if (strlen($search_term) > 1) {
         $params[] = $user_dept;
         $types .= "i";
     }
+    
+    // COMPANY-BASED ACCESS CONTROL
+    // Restrict to accessible companies
+    $company_filter = getCompanyFilterSQL('comp_no', false);
+    if (!empty($company_filter)) {
+        $construct .= $company_filter;
+    }
 }
 
 if (!empty($construct)) {

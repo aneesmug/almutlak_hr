@@ -17,9 +17,23 @@ if (mysqli_num_rows($query) == 1) {
 	require("./includes/emp_query.php");
 
 
-	
-	
 
+// COMPANY-BASED ACCESS CONTROL (NEW)
+	// Check if user has permission to access this employee's company
+	// Allow: System admin, administrator, or users with access to this company
+	$employee_company = $emprow['comp_no'] ?? 1;
+	if (!canAccessCompany($employee_company)) {
+		$_SESSION['error_msg'] = sprintf(
+			'<div class="col-xl-12">
+				<div class="alert alert-danger bg-danger text-white border-0" role="alert">
+					<b>Access Denied!</b> 
+					<h4>You don\'t have access to this company.</h4>
+				</div>
+			</div>'
+		);
+		header("Location: ./all_employee_list.php");
+		exit;
+	}
 
 	// DEPARTMENT-BASED ACCESS CONTROL
 	// Check if user has permission to view this department's employees
@@ -972,7 +986,7 @@ if (mysqli_num_rows($query) == 1) {
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('name_of_employee') ?></div>
 																<div class="profile-field-value">
-																	<span class="copyToClipboard"><?= translate_name($emprow['name'], $current_lang ?? 'en'); ?></span>
+																	<span class="copyToClipboard"><?= getDisplayName($emprow['name']); ?></span>
 																	<i class="fa fa-clipboard"></i>
 																</div>
 															</div>
@@ -1079,11 +1093,11 @@ if (mysqli_num_rows($query) == 1) {
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('section_area') ?></div>
-																<div class="profile-field-value"><?= translate_name($emprow["sectin_nme"], $current_lang ?? 'en') ?></div>
+																<div class="profile-field-value"><?= getDisplayName($emprow["sectin_nme"]) ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('employee_type') ?? "Employee Type" ?></div>
-																<div class="profile-field-value"><?= translate_name($emprow['emptype'], $current_lang ?? 'en') ?? 'N/A' ?></div>
+																<div class="profile-field-value"><?= __(strtolower($emprow['emptype'])) ?? 'N/A' ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('actual_job') ?></div>
@@ -1103,7 +1117,7 @@ if (mysqli_num_rows($query) == 1) {
 																		$supervisor = mysqli_fetch_assoc($supervisor_query);
 																		if ($supervisor) {
 																			echo '<a href="view_employee.php?emp_id=' . $supervisor['emp_id'] . '" class="text-primary">' .
-																				translate_name($supervisor['name'], $current_lang ?? 'en') . ' (' . $supervisor['emp_id'] . ')</a>';
+																				getDisplayName($supervisor['name']) . ' (' . $supervisor['emp_id'] . ')</a>';
 																		} else {
 																			echo '<span class="text-muted">' . (__('not_assigned') ?? 'Not Assigned') . '</span>';
 																		}
@@ -1119,11 +1133,11 @@ if (mysqli_num_rows($query) == 1) {
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('sponsorship_label') ?></div>
-																<div class="profile-field-value"><?= translate_name($emprow['sponsor'], $current_lang ?? 'en') ?></div>
+																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow['sponsor_ar'] : $emprow['sponsor'] ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('contract_period') ?></div>
-																<div class="profile-field-value"><?= formatPeriod($emprow["period"]) ?></div>
+																<div class="profile-field-value"><?= translateContractPeriod($emprow["period"]) ?></div>
 															</div>
 														</div>
 													</div>
@@ -1160,7 +1174,7 @@ if (mysqli_num_rows($query) == 1) {
 															</div>
 															<div class="profile-field full-width">
 																<div class="profile-field-label"><?= __('address') ?></div>
-																<div class="profile-field-value"><?= translate_name(ucfirst($emprow['address']), $current_lang ?? 'en') ?></div>
+																<div class="profile-field-value"><?= getDisplayName(ucfirst($emprow['address'])) ?></div>
 															</div>
 														</div>
 													</div>
@@ -1653,7 +1667,7 @@ if (mysqli_num_rows($query) == 1) {
 													while ($asset_rec = mysqli_fetch_array($query_assets)) {
 													?>
 														<tr>
-															<td><?= htmlspecialchars($asset_rec['asset_name']); ?></td>
+															<td><?= getDisplayName($asset_rec['asset_name']); ?></td>
 															<td><?= htmlspecialchars($asset_rec['serial_number']); ?></td>
 															<td><?= date('d, M Y', strtotime($asset_rec['assigned_date'])); ?></td>
 															<td>
@@ -1661,7 +1675,7 @@ if (mysqli_num_rows($query) == 1) {
 																	<?= __(strtolower($asset_rec['status'])); ?>
 																</span>
 															</td>
-															<td><?= $asset_rec['return_date'] ? date('d, M Y', strtotime($asset_rec['return_date'])) : 'N/A'; ?></td>
+															<td><?= $asset_rec['return_date'] ? date('d, M Y', strtotime($asset_rec['return_date'])) : __(strtolower('N/A')); ?></td>
 															<td>
 																<?php if ($asset_rec['status'] == 'Assigned'): ?>
 																	<div class="btn-group">
@@ -1739,7 +1753,7 @@ if (mysqli_num_rows($query) == 1) {
 																			<i class="fa <?= $file_info['icon'] ?> text-<?= $file_info['color'] ?>"></i>
 																		</div>
 																		<div class="doc-item-info">
-																			<h6 class="doc-item-name"><?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?></h6>
+																			<h6 class="doc-item-name"><?= getDisplayName($file_info['label']) ?></h6>
 																			<small class="doc-item-meta">
 																				<span class="badge badge-<?= $file_info['color'] ?> badge-sm"><?= strtoupper($docu_ext_get) ?></span>
 																				<span class="text-muted ml-2"><i class="fa fa-calendar"></i> <?= $doc_date_formatted ?></span>
@@ -1894,7 +1908,7 @@ if (mysqli_num_rows($query) == 1) {
 															<tr>
 																<td><?= htmlspecialchars($eval['id']) ?></td>
 																<td><?= htmlspecialchars($eval['eval_date']) ?></td>
-																<td><?= translate_name($eval['manager_name'], $current_lang ?? 'en') ?></td>
+																<td><?= getDisplayName($eval['manager_name']) ?></td>
 																<td><?= ($is_rtl ?? false ? $eval['dep_nme_ar'] : $eval['dep_nme']) ?></td>
 																<td>
 																	<span class="badge badge-<?= $score_class ?>" style="font-size: 14px;">
@@ -1930,7 +1944,7 @@ if (mysqli_num_rows($query) == 1) {
 																				<?php endif; ?>
 																			</span>
 																			<?php if (!empty($eval['acknowledged_by_name'])): ?>
-																				<small class="text-muted ml-2"><?= __('by', 'by') ?> <?= translate_name($eval['acknowledged_by_name'], $current_lang ?? 'en') ?></small>
+																				<small class="text-muted ml-2"><?= __('by', 'by') ?> <?= getDisplayName($eval['acknowledged_by_name']) ?></small>
 																			<?php endif; ?>
 																		<?php endif; ?>
 																	</div>
@@ -1946,7 +1960,7 @@ if (mysqli_num_rows($query) == 1) {
 																			<small class="text-muted">
 																				<i class="mdi mdi-clock-outline"></i> <?= __('objected_on', 'Objected on') ?>: <?= htmlspecialchars($eval['acknowledgment_date']) ?>
 																				<?php if (!empty($eval['acknowledged_by_name'])): ?>
-																					<?= __('by', 'by') ?> <?= translate_name($eval['acknowledged_by_name'], $current_lang ?? 'en') ?>
+																					<?= __('by', 'by') ?> <?= getDisplayName($eval['acknowledged_by_name']) ?>
 																				<?php endif; ?>
 																			</small>
 																		<?php endif; ?>
@@ -1960,7 +1974,7 @@ if (mysqli_num_rows($query) == 1) {
 														?>
 															<tr>
 																<td colspan="7" class="text-center">
-																	<em><?= __('no_evaluations_found', 'No performance evaluations found for this employee.') ?></em>
+																	<?= __('no_evaluations_found', 'No performance evaluations found for this employee.') ?>
 																</td>
 															</tr>
 														<?php endif; ?>

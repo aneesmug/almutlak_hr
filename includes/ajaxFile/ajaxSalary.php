@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
 
 $ajaxType = $_POST['ajaxType'];
 if($ajaxType == 'add_salary'){
@@ -17,8 +17,10 @@ if($ajaxType == 'add_salary'){
         $successCount = 0;
         $errorMessages = [];
         foreach ($counter as $chk_id) {
-            // Get employee details
-            $query = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='$chk_id'") or die(mysqli_error($conDB));
+            // Get employee details with company filter
+            $company_filter = getCompanyFilterSQL('comp_no', true);
+            $chk_id_safe = (int)$chk_id;
+            $query = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='$chk_id_safe'" . $company_filter) or die(mysqli_error($conDB));
             if (mysqli_num_rows($query) > 0) {
                 $row = mysqli_fetch_array($query);
                 $name = $row['name'];

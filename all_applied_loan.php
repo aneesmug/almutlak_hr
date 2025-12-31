@@ -131,6 +131,14 @@ if (!empty($where_clauses)) {
     $where_sql = " WHERE " . implode(" AND ", $where_clauses);
 }
 
+// Add company filter to WHERE clause
+$company_filter = getCompanyFilterSQL('e.comp_no', true);
+if (strpos($where_sql, 'WHERE') === false) {
+    $where_sql = " WHERE 1=1" . $company_filter;
+} else {
+    $where_sql .= $company_filter;
+}
+
 $base_query = "FROM emp_loan l 
                JOIN employees e ON l.emp_id = e.emp_id 
                $join_sql 

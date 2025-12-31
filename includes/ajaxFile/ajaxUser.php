@@ -24,22 +24,55 @@ if ($ajaxType == 'add_customer') {
     $fullname_up = $emp_data['emp_name'] ?? '';
     $emp_type_up = $emp_data['emp_type'] ?? '';
     
-    // Update admin_login with user_type and emp_type
+    // Handle Company Access Control
+    $allowed_companies_json = null;
+    $full_access = isset($_POST['full_access']) && $_POST['full_access'] === '1';
+    
+    if (!$full_access) {
+        $allowed_companies_input = isset($_POST['allowed_companies']) ? $_POST['allowed_companies'] : [];
+        
+        // Validate and sanitize company IDs
+        $company_ids = [];
+        if (is_array($allowed_companies_input)) {
+            foreach ($allowed_companies_input as $comp_id) {
+                $comp_id = (int)$comp_id;
+                if ($comp_id > 0) {
+                    $company_ids[] = $comp_id;
+                }
+            }
+        }
+        
+        // Store as JSON array if there are validated company IDs
+        if (!empty($company_ids)) {
+            $allowed_companies_json = json_encode($company_ids);
+        }
+    }
+    
+    // Prepare allowed_companies column value
+    $allowed_companies_sql = ($allowed_companies_json !== null) 
+        ? "'" . mysqli_real_escape_string($conDB, $allowed_companies_json) . "'"
+        : "NULL";
+    
+    // Update admin_login with user_type, email, and company access
     $sql = "UPDATE `admin_login` SET 
             `fullname` = '".$fullname_up."', 
             `user_type` = '".$user_type_up."', 
             `emp_type` = '".$emp_type_up."', 
             `email` = '".$email_up."', 
+            `allowed_companies` = " . $allowed_companies_sql . ",
             `updated_at` = '".date('Y-m-d H:i:s')."' 
             WHERE `id` = '".$user_id."'";
     
     if(mysqli_query($conDB, $sql)){
         // Log user update
-        ActivityLogger::logUpdate('User', 'ajaxUser.php', $user_id, $old_user, [
+        $new_values = [
             'user_type' => $user_type_up,
             'email' => $email_up,
-            'emp_type' => $emp_type_up
-        ], "Updated user: {$fullname_up}, Role: {$user_type_up}", 'admin_login');
+            'emp_type' => $emp_type_up,
+            'allowed_companies' => $allowed_companies_json ? json_decode($allowed_companies_json, true) : null
+        ];
+        
+        ActivityLogger::logUpdate('User', 'ajaxUser.php', $user_id, $old_user, $new_values, "Updated user: {$fullname_up}, Role: {$user_type_up}", 'admin_login');
         
         $data = [
             'title'   => "Updated!",

@@ -73,6 +73,7 @@
 		`ac_jobs`.`job_ar` AS `jobname_ar`,
 		`ac_jobs`.`id` AS `jobid`,
 		`sponsorship`.`sponsor` AS `sponsor`,
+		`sponsorship`.`sponsor_ar` AS `sponsor_ar`,
 		`admin_login`.`dept` AS `av_dept`,
 		`admin_login`.`user_type`,
 		`emp_eos`.`leaving_reason`,

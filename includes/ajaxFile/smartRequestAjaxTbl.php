@@ -1,8 +1,7 @@
 <?php
 
 
-include './../../includes/db.php';
-include './../../includes/init.php';
+include './../../includes/session_check.php';
 
 // Parameters sent by DataTables
 $draw = $_POST['draw'];

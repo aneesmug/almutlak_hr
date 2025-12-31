@@ -20,7 +20,7 @@
     }
     /****************Employee Allow Page*****************/
 
-// DEPARTMENT-BASED ACCESS CONTROL FOR DASHBOARD COUNTS
+// DEPARTMENT & COMPANY-BASED ACCESS CONTROL FOR DASHBOARD COUNTS
 // Determine if user can see all employees or only their department
 $can_see_all_employees = (
     $is_system_admin || 
@@ -37,28 +37,32 @@ if (!$can_see_all_employees && isset($user_dept)) {
 	$dept_filter = " AND `dept`='".$user_dept."' ";
 }
 
+// Add company filter if user has company restrictions
+// Use 'comp_no' directly since simple queries don't alias the table
+$company_filter = getCompanyFilterSQL('comp_no', true);
+
 // Count Active Employees (Status=1, Not on vacation)
-$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) AS `activeusr`, `id` FROM `employees` WHERE `status`=1 AND `fly`=0 ".$dept_filter);
+$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) AS `activeusr`, `id` FROM `employees` WHERE `status`=1 AND `fly`=0 ".$dept_filter.$company_filter);
 while($rec = mysqli_fetch_assoc($sql_count_active)){$status_cont_active = $rec["activeusr"];}
 
 // Count Terminated Employees
-$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter`, `id` FROM `employees` WHERE `status`=0 ".$dept_filter);
+$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter`, `id` FROM `employees` WHERE `status`=0 ".$dept_filter.$company_filter);
 while($rec = mysqli_fetch_assoc($sql_count_ter)){$status_cont_ter = $rec["ter"];}
 
 // Count Employees on Departed Vacation (approved, latest vacation vac_type='Fly', employee fly=1)
-$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type='Fly' ".$dept_filter);
+$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type='Fly' ".$dept_filter.$company_filter);
 while($rec = mysqli_fetch_assoc($sql_count_fly)){$status_cont_fly = $rec["flying"];}
 
 // Count Employees on Local Vacation (approved, latest vacation vac_type IN ('Local Vacation','Encashed'), employee fly=1)
-$sql_count_local_vac = mysqli_query($conDB, "SELECT COUNT(*) AS `local_vac` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type IN ('Local Vacation','Encashed') ".$dept_filter);
+$sql_count_local_vac = mysqli_query($conDB, "SELECT COUNT(*) AS `local_vac` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type IN ('Local Vacation','Encashed') ".$dept_filter.$company_filter);
 while($rec = mysqli_fetch_assoc($sql_count_local_vac)){$status_cont_local_vac = $rec["local_vac"];}
 
 // Count Total Employees
-$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) AS `tot`, `id` FROM `employees` WHERE 1=1 ".$dept_filter);
+$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) AS `tot`, `id` FROM `employees` WHERE 1=1 ".$dept_filter.$company_filter);
 while($rec = mysqli_fetch_assoc($sql_count_tot)){$status_cont_tot = $rec["tot"];}
 
 // Count Man Power Employees
-$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr`, `id` FROM `employees` WHERE `emp_sup_type`='man_power' AND `status`=1 ".$dept_filter);
+$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr`, `id` FROM `employees` WHERE `emp_sup_type`='man_power' AND `status`=1 ".$dept_filter.$company_filter);
 while($rec = mysqli_fetch_assoc($sql_count_man_power)){$status_cont_man_power = $rec["manpwr"];}
 
 // Percentages for dashboard progress bars
@@ -619,7 +623,7 @@ if(isset($_POST['submit'])){
 									
 								<tr class="<?=$color; ?>">
 									<td><?=$row['emp_id']; ?></td>
-									<td><?=translate_name($row['name'], $current_lang ?? 'en'); ?></td>
+									<td><?=getDisplayName($row['name']); ?></td>
 									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
 									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
 									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>
@@ -689,7 +693,7 @@ if(isset($_POST['submit'])){
 									?>
 								<tr>
 									<td><?=$row['emp_id']; ?></td>
-									<td><?=translate_name($row['name'], $current_lang ?? 'en'); ?></td>
+									<td><?=getDisplayName($row['name']); ?></td>
 									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
 									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
 									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>

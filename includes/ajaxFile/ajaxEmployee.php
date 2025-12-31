@@ -14,7 +14,10 @@
 $ajaxType = $_POST['ajaxType'];
 
 if($ajaxType == 'emp_search') {
-    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('comp_no', true);
+    
+    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
     $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -26,12 +29,15 @@ if($ajaxType == 'emp_search') {
     ];
     echo json_encode($data);
 } elseif($ajaxType == 'emp_data') {
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`emp_id`=".(int)$_POST['empid']." "); // Cast to int
+    WHERE `e`.`status`=1 AND `e`.`emp_id`=".(int)$_POST['empid']." ".$company_filter); // Cast to int
     $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -80,7 +86,10 @@ if($ajaxType == 'emp_search') {
     $dept = (int)$_POST['dept'];
     $exclude_emp_id = isset($_POST['exclude_emp_id']) ? mysqli_real_escape_string($conDB, $_POST['exclude_emp_id']) : '';
     
-    $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept";
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    
+    $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept".$company_filter;
     if (!empty($exclude_emp_id)) {
         $where_clause .= " AND `e`.`emp_id` != '$exclude_emp_id'";
     }
@@ -101,7 +110,7 @@ if($ajaxType == 'emp_search') {
         'status'    => 200
     ];
     echo json_encode($data);
-} 
+}
 // =================================================================
 // == NEW BLOCK TO FETCH ASSIGNED ASSETS FOR AN EMPLOYEE
 // =================================================================
@@ -189,10 +198,13 @@ elseif($ajaxType == 'get_hr_assistants') {
 // =================================================================
 elseif($ajaxType == 'get_hr_senior_bp') {
     // Get all HR Senior BP users for simple leave approval
+    // Add company filter
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    
     $sql = "SELECT e.emp_id, e.name, al.user_type 
             FROM employees e 
             JOIN admin_login al ON e.emp_id = al.emp_id 
-            WHERE al.user_type = 'hr_senior_bp' AND e.status = 1
+            WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 ".$company_filter."
             ORDER BY e.name ASC";
     
     $result = mysqli_query($conDB, $sql);
@@ -215,12 +227,15 @@ elseif($ajaxType == 'get_hr_senior_bp') {
 elseif($ajaxType == 'get_hr_team_members') {
     // Get all HR team members (ALL employees in HR department - dept_id = 5)
     // These are employees who can receive CC notifications
+    // Add company filter
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    
     $sql = "SELECT DISTINCT e.emp_id, e.name, e.email, d.dep_nme, al.user_type 
             FROM employees e 
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
             WHERE e.status = 1 
-            AND e.dept = 5
+            AND e.dept = 5 ".$company_filter."
             ORDER BY e.name ASC";
     
     $result = mysqli_query($conDB, $sql);

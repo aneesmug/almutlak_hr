@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/evaluation_acknowledgment_handler.php';
 
@@ -29,11 +28,13 @@ if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'is_system_ad
 $has_full_access = in_array($user_role, [
     'Administrator', 
     'GM', 
-    'Auditor', 
+    'Auditor',
+    'HR_Manager',
     'HR_Senior_BP', 
     'HR_Operations', 
     'HR_Supervisor',
-    'HR_Recruitment'
+    'HR_Recruitment',
+    'Finance_Officer'
     ]) || $user_type === 'is_system_admin';
 
 // Get user's department for filtering
@@ -339,6 +340,123 @@ if (mysqli_num_rows($query) == 1) {
                 margin-left: 8px;
                 box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
             }
+
+            /* DataTables Responsive Hidden Columns */
+            .dtr-hidden {
+                display: none !important;
+            }
+
+            /* DataTables Control Column Styling */
+            td.dt-control {
+                cursor: pointer;
+                padding: 5px 12px !important;
+                text-align: center;
+                user-select: none;
+            }
+
+            td.dt-control:before {
+                content: "▶";
+                display: inline-block;
+                padding: 4px 8px;
+                font-size: 11px;
+                color: #007bff;
+                transition: all 0.3s ease;
+                background-color: #e7f3ff;
+                border-radius: 3px;
+                font-weight: bold;
+                min-width: 24px;
+            }
+
+            tr.shown td.dt-control:before {
+                content: "▼";
+                background-color: #e8f5e9;
+                color: #28a745;
+            }
+
+            tr.shown {
+                background-color: #f0f8ff !important;
+            }
+
+            /* Detail Row Styling */
+            .details-content {
+                padding: 15px;
+                background-color: #f9f9f9;
+                border-radius: 4px;
+                margin: 10px 0;
+                border-left: 3px solid #007bff;
+            }
+
+            .details-content table {
+                margin-bottom: 0 !important;
+            }
+
+            /* Horizontal Column Layout for Details */
+            .details-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+                margin-top: 10px;
+            }
+
+            .detail-column {
+                background-color: white;
+                padding: 10px 12px;
+                border-radius: 3px;
+                border: 1px solid #e0e0e0;
+            }
+
+            .detail-label {
+                font-size: 12px;
+                font-weight: 600;
+                color: #555;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 5px;
+                white-space: nowrap;
+            }
+
+            .detail-value {
+                font-size: 14px;
+                color: #333;
+                word-wrap: break-word;
+                font-weight: 500;
+            }
+
+            .details-content table td {
+                padding: 8px 0 !important;
+            }
+
+            .dtr-data {
+                padding: 12px 0 !important;
+            }
+
+            .dtr-title {
+                font-weight: 600;
+                color: #333;
+                padding: 5px 0;
+                min-width: 150px;
+            }
+
+            @media (max-width: 768px) {
+                td.dt-control {
+                    display: table-cell !important;
+                }
+
+                .dtr-hidden {
+                    display: none !important;
+                }
+
+                .details-content {
+                    background-color: #f5f5f5;
+                    border-left: 3px solid #007bff;
+                    padding: 12px 15px;
+                }
+
+                .details-content table tr:last-child td {
+                    border-bottom: none;
+                }
+            }
+            
             <?php if ($is_rtl): ?>
             /* RTL overrides */
             body { direction: rtl; text-align: right; }
@@ -442,7 +560,8 @@ if (mysqli_num_rows($query) == 1) {
                                                     <option value="evaluation"><?= __('evaluation_report') ?></option>
                                                 <?php endif; ?>
                                                 <option value="resignation"><?= __('resignation_report') ?></option>
-                                                <option value="eos"><?= __('eos_report') ?></option>
+                                                <option value="terminated_employees"><?= __('terminated_employees') ?></option>
+                                                <option value="eos"><?= __('calculate_end_of_service') ?></option>
                                                 <option value="dept_comparison"><?= __('dept_comparison_report') ?></option>
                                                 <option value="custom"><?= __('custom_report') ?></option>
                                             </select>
@@ -970,14 +1089,54 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
+                            id: 'iqama_exp',
+                            label: (typeof __ === 'function') ? __('iqama_exp') : 'Iqama Expiry',
+                            default: false
+                        },
+                        {
+                            id: 'passport_number',
+                            label: (typeof __ === 'function') ? __('passport_number') : 'Passport Number',
+                            default: false
+                        },
+                        {
+                            id: 'passport_exp',
+                            label: (typeof __ === 'function') ? __('passport_exp') : 'Passport Expiry',
+                            default: false
+                        },
+                        {
                             id: 'mobile',
                             label: (typeof __ === 'function') ? __('mobile') : 'Mobile',
                             default: true
                         },
                         {
+                            id: 'emg_mobile',
+                            label: (typeof __ === 'function') ? __('emg_mobile') : 'Emergency Mobile',
+                            default: false
+                        },
+                        {
+                            id: 'emg_name',
+                            label: (typeof __ === 'function') ? __('emg_name') : 'Emergency Contact Name',
+                            default: false
+                        },
+                        {
                             id: 'email',
                             label: (typeof __ === 'function') ? __('email') : 'Email',
                             default: false
+                        },
+                        {
+                            id: 'c_email',
+                            label: (typeof __ === 'function') ? __('c_email') : 'Corporate Email',
+                            default: false
+                        },
+                        {
+                            id: 'address',
+                            label: (typeof __ === 'function') ? __('address') : 'Address',
+                            default: false
+                        },
+                        {
+                            id: 'comp_no',
+                            label: (typeof __ === 'function') ? __('comp_no') : 'Company',
+                            default: true
                         },
                         {
                             id: 'dept',
@@ -1007,6 +1166,16 @@ if (mysqli_num_rows($query) == 1) {
                         {
                             id: 'joining_date',
                             label: (typeof __ === 'function') ? __('joining_date') : 'Joining Date',
+                            default: true
+                        },
+                        {
+                            id: 'contract_expiry',
+                            label: (typeof __ === 'function') ? __('contract_expiry') : 'Contract Expiry',
+                            default: true
+                        },
+                        {
+                            id: 'ter_date',
+                            label: (typeof __ === 'function') ? __('ter_date') : 'Termination Date',
                             default: true
                         },
                         {
@@ -1067,6 +1236,41 @@ if (mysqli_num_rows($query) == 1) {
                         {
                             id: 'insurance_no',
                             label: (typeof __ === 'function') ? __('insurance_no') : 'Insurance No',
+                            default: false
+                        },
+                        {
+                            id: 'insurance_class',
+                            label: (typeof __ === 'function') ? __('insurance_class') : 'Insurance Class',
+                            default: false
+                        },
+                        {
+                            id: 'insurance_exp',
+                            label: (typeof __ === 'function') ? __('insurance_exp') : 'Insurance Expiry',
+                            default: false
+                        },
+                        {
+                            id: 'emp_sup_type',
+                            label: (typeof __ === 'function') ? __('emp_sup_type') : 'Sponsorship Type',
+                            default: false
+                        },
+                        {
+                            id: 'vac_period',
+                            label: (typeof __ === 'function') ? __('vac_period') : 'Vacation Period',
+                            default: false
+                        },
+                        {
+                            id: 't_shirt_size',
+                            label: (typeof __ === 'function') ? __('t_shirt_size') : 'T-Shirt Size',
+                            default: false
+                        },
+                        {
+                            id: 'probation',
+                            label: (typeof __ === 'function') ? __('probation') : 'Probation',
+                            default: false
+                        },
+                        {
+                            id: 'payment_type',
+                            label: (typeof __ === 'function') ? __('payment_type') : 'Payment Type',
                             default: false
                         },
                         {
@@ -1468,7 +1672,7 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         }
                     ],
-                    eos: [{
+                    terminated_employees: [{
                             id: 'emp_id',
                             label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
                             default: true
@@ -1506,11 +1710,77 @@ if (mysqli_num_rows($query) == 1) {
                         {
                             id: 'vacation_balance',
                             label: (typeof __ === 'function') ? __('vacation_balance') : 'Vacation Balance',
-                            default: false
+                            default: true
                         },
                         {
                             id: 'total_amount',
                             label: (typeof __ === 'function') ? __('total_amount') : 'Total Amount',
+                            default: true
+                        },
+                        {
+                            id: 'leaving_reason',
+                            label: (typeof __ === 'function') ? __('leaving_reason') : 'Leaving Reason',
+                            default: false
+                        }
+                    ],
+                    eos: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'joining_date',
+                            label: (typeof __ === 'function') ? __('joining_date') : 'Joining Date',
+                            default: true
+                        },
+                        {
+                            id: 'termination_date',
+                            label: (typeof __ === 'function') ? __('termination_date') : 'Termination Date',
+                            default: true
+                        },
+                        {
+                            id: 'service_duration',
+                            label: (typeof __ === 'function') ? __('service_duration') : 'Service Duration',
+                            default: true
+                        },
+                        {
+                            id: 'basic_salary',
+                            label: (typeof __ === 'function') ? __('basic_salary') : 'Basic Salary',
+                            default: true
+                        },
+                        {
+                            id: 'total_salary',
+                            label: (typeof __ === 'function') ? __('total_salary') : 'Total Salary',
+                            default: true
+                        },
+                        {
+                            id: 'eos_amount',
+                            label: (typeof __ === 'function') ? __('eos_amount') : 'EOS Amount',
+                            default: true
+                        },
+                        {
+                            id: 'vacation_days',
+                            label: (typeof __ === 'function') ? __('vacation_days') : 'Vacation Days',
+                            default: true
+                        },
+                        {
+                            id: 'vacation_salary',
+                            label: (typeof __ === 'function') ? __('vacation_salary') : 'Vacation Salary',
+                            default: true
+                        },
+                        {
+                            id: 'total_settlement',
+                            label: (typeof __ === 'function') ? __('total_settlement') : 'Total Settlement',
                             default: true
                         }
                     ],
@@ -1619,6 +1889,21 @@ if (mysqli_num_rows($query) == 1) {
                     $('#selectByTableContainer').hide();
                     $('#selectByTable').empty().append('<option value="">Select by Table...</option>');
 
+                    // Update date labels based on report type
+                    if (reportType === 'eos') {
+                        // For EOS report, change labels to match emp_end_of_service.php
+                        $('label[for="dateFrom"]').html('<?= __('date_from') ?>');
+                        $('label[for="dateTo"]').html('<?= __('last_working_day') ?> <span class="text-danger">*</span>');
+                        $('#dateTo').attr('placeholder', '<?= __('select_last_working_day') ?>');
+                        $('#dateFrom').closest('.col-md-4').hide(); // Hide date from for EOS
+                    } else {
+                        // Reset to default labels
+                        $('label[for="dateFrom"]').html('<?= __('date_from') ?>');
+                        $('label[for="dateTo"]').html('<?= __('date_to') ?>');
+                        $('#dateTo').attr('placeholder', '<?= __('select_end_date') ?>');
+                        $('#dateFrom').closest('.col-md-4').show(); // Show date from for other reports
+                    }
+
                     // Update status filter based on report type
                     if (reportType === 'evaluation') {
                         // For evaluation report, show objection status filter
@@ -1658,8 +1943,14 @@ if (mysqli_num_rows($query) == 1) {
                         $('#customDateFromFilter').hide();
                         $('#customDateToFilter').hide();
                         // Show global date filters for non-custom reports
-                        $('#dateFrom').closest('.col-md-4, .form-group').show();
-                        $('#dateTo').closest('.col-md-4, .form-group').show();
+                        // For EOS report, only show dateTo (Last Working Day)
+                        if (reportType === 'eos') {
+                            $('#dateFrom').closest('.col-md-4, .form-group').hide();
+                            $('#dateTo').closest('.col-md-4, .form-group').show();
+                        } else {
+                            $('#dateFrom').closest('.col-md-4, .form-group').show();
+                            $('#dateTo').closest('.col-md-4, .form-group').show();
+                        }
 
                         // Hide column selection first
                         $('#columnSelectionRow').hide();
@@ -1669,8 +1960,14 @@ if (mysqli_num_rows($query) == 1) {
                         if (reportType) {
                             $('#singleDeptFilter').hide();
                             $('#multiDeptFilter').show(); // show only after report type selected
-                            $('#dateFrom').closest('.col-md-4, .form-group').show();
-                            $('#dateTo').closest('.col-md-4, .form-group').show();
+                            // For EOS report, only show dateTo (Last Working Day)
+                            if (reportType === 'eos') {
+                                $('#dateFrom').closest('.col-md-4, .form-group').hide();
+                                $('#dateTo').closest('.col-md-4, .form-group').show();
+                            } else {
+                                $('#dateFrom').closest('.col-md-4, .form-group').show();
+                                $('#dateTo').closest('.col-md-4, .form-group').show();
+                            }
                             initDeptSelect2();
                             updateDeptSelectionCount();
 
@@ -1711,7 +2008,7 @@ if (mysqli_num_rows($query) == 1) {
                                 // Update reportColumns.custom with fetched columns from all tables
                                 reportColumns.custom = response.columns.map(col => ({
                                     id: col,
-                                    label: col.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+                                    label: col.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
                                     default: true
                                 }));
 
@@ -1774,7 +2071,7 @@ if (mysqli_num_rows($query) == 1) {
 
                                     // Add options for each table
                                     Object.keys(tables).forEach(table => {
-                                        const displayName = table.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                                        const displayName = table.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
                                         $selectByTable.append(`<option value="${table}">${displayName}</option>`);
                                     });
 
@@ -2158,6 +2455,11 @@ if (mysqli_num_rows($query) == 1) {
                             // console.log('======================');
 
                             if (response.success) {
+                                console.log('=== AJAX RESPONSE RECEIVED ===');
+                                console.log('Selected Columns (filterData.columns):', filterData.columns);
+                                console.log('Response headers:', response.headers);
+                                console.log('Response data row 0 keys:', response.data && response.data.length > 0 ? Object.keys(response.data[0]) : 'No data');
+                                console.log('Response data row 0:', response.data && response.data.length > 0 ? response.data[0] : 'No data');
                                 displayReport(response.data, response.headers, reportType, selectedColumns, filterData.columns);
                                 $('#exportExcelBtn, #exportPdfBtn').show();
                             } else {
@@ -2223,11 +2525,15 @@ if (mysqli_num_rows($query) == 1) {
 
                     // Build table headers (store, apply later after cleanup)
                     let headerHtml = '<tr>';
-                    headers.forEach(function(header) {
-                        // Remove underscores from header display
-                        var cleanHeader = String(header).replace(/_/g, ' ');
-                        headerHtml += `<th>${(typeof __ === 'function') ? __(header.toLowerCase().replace(/\s+/g, '_')) || cleanHeader : cleanHeader}</th>`;
-                    });
+                    
+                    // Add expand control header
+                    headerHtml += '<th></th>';
+                    
+                    // Add ALL column headers (including hidden ones)
+                    for (let i = 0; i < headers.length; i++) {
+                        var cleanHeader = String(headers[i]);
+                        headerHtml += `<th>${(typeof __ === 'function') ? __(headers[i].toLowerCase().replace(/\s+/g, '_')) || cleanHeader : cleanHeader}</th>`;
+                    }
                     headerHtml += '</tr>';
 
                     // Build table rows (store, apply later)
@@ -2235,28 +2541,21 @@ if (mysqli_num_rows($query) == 1) {
 
                     if (!data || data.length === 0) {
                         console.warn('No data returned for report');
-                        bodyHtml = '<tr><td colspan="' + headers.length + '" class="text-center text-muted py-4">' + ((typeof __ === 'function') ? __('no_records_found') : 'No records found') + '</td></tr>';
+                        bodyHtml = '<tr><td colspan="' + (headers.length + 1) + '" class="text-center text-muted py-4">' + ((typeof __ === 'function') ? __('no_records_found') : 'No records found') + '</td></tr>';
                     } else {
                         // console.log('Processing', data.length, 'rows...');
                         data.forEach(function(row, rowIndex) {
                             if (rowIndex < 3) { // Log first 3 rows for debugging
                                 // console.log('Row', rowIndex, ':', row);
                             }
-                            bodyHtml += '<tr>';
+                            // Store row index as data attribute for reliable detail row retrieval
+                            bodyHtml += '<tr data-row-index="' + rowIndex + '">';
+                            
+                            // Add blank cell for expand control
+                            bodyHtml += '<td></td>';
 
-                            // Build column array - add 'actions' if this is evaluation report with Actions column
-                            let columnsToRender = columnIds.slice();
-                            if (reportType === 'evaluation' && headers.length > columnIds.length) {
-                                columnsToRender.push('actions');
-                            }
-                            if (reportType === 'document' && headers.length > columnIds.length) {
-                                columnsToRender.push('attachment');
-                            }
-
-                            // IMPORTANT: Use the same number of columns as headers
-                            const columnsToUse = columnsToRender.slice(0, headers.length);
-
-                            columnsToUse.forEach(function(columnId, colIndex) {
+                            // Build ALL columns in row (visible + hidden)
+                            columnIds.forEach(function(columnId, colIndex) {
                                 // Try to find the column in the row data
                                 let cell = '';
 
@@ -2318,7 +2617,7 @@ if (mysqli_num_rows($query) == 1) {
                                         // Translate status text via __('key'), fallback to formatted text
                                         const translated = translateStatusKey(lowerCell);
                                         const formattedText = String(translated)
-                                            .replace(/_/g, ' ')
+                                            
                                             .replace(/\b\w/g, char => char.toUpperCase());
 
                                         cell = `<span class="badge badge-${badgeClass}">${formattedText}</span>`;
@@ -2402,7 +2701,77 @@ if (mysqli_num_rows($query) == 1) {
                         // Use setTimeout to ensure DOM is fully rendered
                         setTimeout(function() {
                             try {
-                                $('#reportTable').DataTable({
+                                // Store headers and column IDs globally for detail formatting
+                                window.reportHeaders = headers;
+                                window.reportColumnIds = columnIds;
+                                window.reportData = data;
+                                window.reportTable = null;
+
+                                // Create column definitions
+                                var columnDefsArray = [];
+                                
+                                // Control column (expand/collapse button)
+                                columnDefsArray.push({
+                                    targets: 0,
+                                    orderable: false,
+                                    searchable: false,
+                                    className: 'dt-control',
+                                    width: '40px'
+                                });
+
+                                // Hide columns beyond the first 5 (visible ones are in the expanded detail view)
+                                // Column indices: 0 = control, 1-5 = visible columns, 6+ = hidden
+                                const hiddenColumnIndices = [];
+                                for (let i = 6; i <= headers.length; i++) {
+                                    hiddenColumnIndices.push(i);
+                                }
+                                
+                                if (hiddenColumnIndices.length > 0) {
+                                    columnDefsArray.push({
+                                        targets: hiddenColumnIndices,
+                                        visible: false,
+                                        searchable: true  // Still searchable even if hidden
+                                    });
+                                }
+
+                                // Format function for details - show ALL columns in COLUMN (horizontal) layout
+                                function formatDetailRow(d, idx) {
+                                    // Debug: log the row data structure (only for first row)
+                                    if (idx === 0) {
+                                        console.log('=== ROW DATA FOR DETAIL FORMATTER ===');
+                                        console.log('Row data keys:', Object.keys(d));
+                                        console.log('Headers:', window.reportHeaders);
+                                        console.log('Column IDs:', window.reportColumnIds);
+                                        console.log('Row data sample:', d);
+                                    }
+                                    
+                                    let detailHtml = `<div class="details-content">`;
+                                    detailHtml += `<div class="details-grid">`;
+                                    
+                                    if (window.reportHeaders && window.reportColumnIds) {
+                                        window.reportHeaders.forEach(function(label, colIdx) {
+                                            if (colIdx < window.reportColumnIds.length) {
+                                                const colId = window.reportColumnIds[colIdx];
+                                                
+                                                // Get value from row data - should match keys from data object
+                                                let value = d[colId] || '-';
+                                                
+                                                // Create column-based layout
+                                                detailHtml += `
+                                                    <div class="detail-column">
+                                                        <div class="detail-label">${label}</div>
+                                                        <div class="detail-value">${value}</div>
+                                                    </div>
+                                                `;
+                                            }
+                                        });
+                                    }
+                                    
+                                    detailHtml += `</div></div>`;
+                                    return detailHtml;
+                                }
+
+                                const table = $('#reportTable').DataTable({
                                     dom: 'Bfrtip',
                                     buttons: [
                                         'copy',
@@ -2446,14 +2815,9 @@ if (mysqli_num_rows($query) == 1) {
                                         },
                                         'print'
                                     ],
-                                    responsive: true,
+                                    responsive: false,
                                     pageLength: 50,
-                                    columnDefs: (reportType === 'evaluation' || reportType === 'document') ? [{
-                                            targets: -1,
-                                            orderable: false,
-                                            searchable: false
-                                        } // Actions/Attachment column
-                                    ] : [],
+                                    columnDefs: columnDefsArray,
                                     language: {
                                         search: `<span>${__('search')}:</span> _INPUT_`,
                                         searchPlaceholder: `${__('search')}...`,
@@ -2472,6 +2836,24 @@ if (mysqli_num_rows($query) == 1) {
                                         processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
                                     }
                                 });
+
+                                // Handle detail row click
+                                $('#reportTable').on('click', 'td.dt-control', function() {
+                                    var tr = $(this).closest('tr');
+                                    var row = table.row(tr);
+                                    var rowIndex = parseInt(tr.data('row-index'), 10);
+                                    
+                                    if (row.child.isShown()) {
+                                        row.child.hide();
+                                        tr.removeClass('shown');
+                                    } else {
+                                        // Use original data from window.reportData using the row index
+                                        var rowData = window.reportData && rowIndex < window.reportData.length ? window.reportData[rowIndex] : {};
+                                        row.child(formatDetailRow(rowData, rowIndex)).show();
+                                        tr.addClass('shown');
+                                    }
+                                });
+
                                 // console.log('DataTable initialized successfully');
                             } catch (e) {
                                 console.error('Error initializing DataTable:', e);

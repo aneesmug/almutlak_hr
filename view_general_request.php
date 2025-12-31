@@ -16,10 +16,11 @@ if(mysqli_num_rows($query) == 1){
 
 // Fetch potential approvers (not 'employee' user_type) AND INCLUDE user_type AND dept ID
 $potential_approvers = [];
+$company_filter = getCompanyFilterSQL('e.comp_no', true);
 $approver_query = mysqli_query($conDB, "SELECT e.`emp_id`, e.`name`, al.`user_type`, e.`dept`
                                         FROM `employees` e
                                         JOIN `admin_login` al ON e.`emp_id` = al.`emp_id`
-                                        WHERE al.`user_type` != 'employee' AND e.`status` = 1
+                                        WHERE al.`user_type` != 'employee' AND e.`status` = 1" . $company_filter . "
                                         ORDER BY e.`name`");
 if ($approver_query) {
     while ($row_approver = mysqli_fetch_assoc($approver_query)) {
@@ -125,7 +126,8 @@ while ($item = mysqli_fetch_assoc($items_query)) {
 
 // Fetch delivery info if exists
 $delivery_info = null;
-$delivery_query = mysqli_query($conDB, "SELECT d.*, e.name as received_employee_name FROM general_request_deliveries d LEFT JOIN employees e ON e.emp_id = d.received_by WHERE d.request_inv_no = '$inv_no' LIMIT 1");
+$company_filter_delivery = getCompanyFilterSQL('e.comp_no', true);
+$delivery_query = mysqli_query($conDB, "SELECT d.*, e.name as received_employee_name FROM general_request_deliveries d LEFT JOIN employees e ON e.emp_id = d.received_by WHERE d.request_inv_no = '$inv_no'" . (strpos($delivery_query, 'WHERE') !== false ? " AND " : " WHERE ") . $company_filter_delivery . " LIMIT 1");
 if ($delivery_query && mysqli_num_rows($delivery_query) > 0) {
     $delivery_info = mysqli_fetch_assoc($delivery_query);
 }

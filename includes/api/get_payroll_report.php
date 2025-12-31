@@ -18,6 +18,7 @@ require_once("./../../includes/session_check.php"); // Include session to get us
 $pdo = getDbConnection();
 
 $monthYear = $_GET['month'] ?? null;
+$companyFilter = $_GET['company'] ?? null; // Get optional company filter
 
 if (!$monthYear) {
     echo json_encode(['status' => 'error', 'message' => 'Month parameter is required.']);
@@ -36,11 +37,18 @@ $can_see_all_employees = (
 
 // Build department filter condition
 $dept_filter = "";
+$company_filter = "";
 $params = [':month_year_param' => $monthYear];
 
 if (!$can_see_all_employees && isset($user_dept)) {
     $dept_filter = " AND e.dept = :user_dept";
     $params[':user_dept'] = $user_dept;
+}
+
+// Add company filter if specified
+if (!empty($companyFilter)) {
+    $company_filter = " AND c.comp_name = :company_name";
+    $params[':company_name'] = $companyFilter;
 }
 
 try {
@@ -51,6 +59,7 @@ try {
                 e.iqama,
                 e.name AS employee_name,
                 e.iban,
+                e.payment_type,
                 e.dept,
                 d.dep_nme AS department_name,
                 c.comp_name,
@@ -78,7 +87,7 @@ try {
             LEFT JOIN companies c ON e.comp_no = c.comp_id
             LEFT JOIN bank_list bl ON bl.bnk_id = e.bank_name
             LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
-            WHERE gp.month_year = :month_year_param" . $dept_filter . "
+            WHERE gp.month_year = :month_year_param" . $dept_filter . $company_filter . "
             ORDER BY c.comp_name ASC, d.dep_nme ASC, e.name ASC";
 
     $stmt = $pdo->prepare($sql);

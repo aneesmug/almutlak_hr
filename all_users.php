@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
+
 require_once __DIR__ . '/includes/session_check.php';
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
@@ -33,19 +33,15 @@ if (mysqli_num_rows($query) == 1) {
         <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link href="./plugins/datatables/buttons.dataTables.min.css" rel="stylesheet" type="text/css" />
 
-        <!-- <link href="./plugins/datatables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/select.dataTables.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/editor.dataTables.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/dataTables.dateTime.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/dataTables.dateTime.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" /> -->
-
         <!-- Responsive datatable examples -->
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
         <!-- Multi Item Selection examples -->
         <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+
+        <!-- Select2 CSS -->
+        <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+        <link href="./plugins/select2/css/select2-bootstrap.min.css" rel="stylesheet" type="text/css" />
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -132,9 +128,10 @@ if (mysqli_num_rows($query) == 1) {
                                     <div id="response"></div>
 
                                     <div class="d-flex justify-content-between align-items-center row pb-2 gap-3 gap-md-0">
-                                        <div class="col-md-4 user_status mb-2"></div>
-                                        <div class="col-md-4 user_department mb-2"></div>
-                                        <div class="col-md-4 user_role mb-2"></div>
+                                        <div class="col-md-3 user_status mb-2"></div>
+                                        <div class="col-md-3 user_department mb-2"></div>
+                                        <div class="col-md-3 user_role mb-2"></div>
+                                        <div class="col-md-3 user_company mb-2"></div>
                                     </div>
 
 
@@ -147,23 +144,23 @@ if (mysqli_num_rows($query) == 1) {
                                                 <th>Department</th>
                                                 <th>Mobile</th>
                                                 <th>User Type</th>
+                                                <th>Allowed Companies</th>
                                                 <th>Status</th>
                                                 <th style="width: 30px">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <?php
-                                            // $sql_emp_vac = "SELECT * FROM `admin_login` WHERE `id` > 1 ORDER BY `id` DESC";
                                             $sql_emp_vac = "SELECT 
     `employees`.*, 
     `admin_login`.* ,
     `employees`.`name` AS `efullname`, 
     `admin_login`.`id` AS `lid`, 
-    `department`.`dep_nme` AS `deptnme`
+    `department`.`dep_nme` AS `deptnme`,
+    `admin_login`.`allowed_companies`
     FROM `admin_login` 
     LEFT JOIN `employees` ON `employees`.`emp_id` = `admin_login`.`emp_id`
     LEFT JOIN `department` ON `department`.`id` = `admin_login`.`dept`
-    -- WHERE `admin_login`.`status` = 1
     ORDER BY `admin_login`.`id` DESC";
 
                                             $query_emp_vac = mysqli_query($conDB, $sql_emp_vac);
@@ -177,6 +174,20 @@ if (mysqli_num_rows($query) == 1) {
                                                 $status_usr = $rec["status"];
                                                 $password_usr = $rec["password"];
                                                 $avatar_usr = $rec["avatar"];
+                                                $allowed_companies = $rec["allowed_companies"];
+                                                
+                                                // Convert JSON allowed_companies to company names
+                                                $company_names = "All Companies";
+                                                if (!empty($allowed_companies)) {
+                                                    $companies_array = json_decode($allowed_companies, true);
+                                                    if (is_array($companies_array) && !empty($companies_array)) {
+                                                        $company_ids = implode(',', array_map('intval', $companies_array));
+                                                        $comp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(`comp_name` SEPARATOR ', ') AS `names` FROM `companies` WHERE `id` IN ($company_ids)");
+                                                        if ($comp_query && $comp_row = mysqli_fetch_assoc($comp_query)) {
+                                                            $company_names = $comp_row['names'] ?: $allowed_companies;
+                                                        }
+                                                    }
+                                                }
                                             ?>
                                                 <tr>
                                                     <th><?= $id_user_usr; ?></th>
@@ -185,12 +196,13 @@ if (mysqli_num_rows($query) == 1) {
                                                     <th><?= $dept_usr; ?></th>
                                                     <th><?= $mobile_usr; ?></th>
                                                     <th><?= $usrty_usr; ?></th>
+                                                    <th><?= $company_names; ?></th>
                                                     <th><?= $status_usr; ?></th>
                                                     <th>
                                                         <div class='btn-group dropdown'>
                                                             <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                                             <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                                                <a href='javascript:void(0);' class='dropdown-item text-custom editUserAttr updateUserAjax' data-id="<?= $rec['id'] ?>" data-fullname="<?= $rec['efullname'] ?>" data-dept="<?= $rec['deptnme'] ?>" data-email="<?= $rec['email'] ?>" data-user_type="<?= $rec['user_type'] ?>"><i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit</a>
+                                                                <a href='javascript:void(0);' class='dropdown-item text-custom editUserAttr updateUserAjax' data-id="<?= $rec['id'] ?>" data-fullname="<?= $rec['efullname'] ?>" data-dept="<?= $rec['deptnme'] ?>" data-email="<?= $rec['email'] ?>" data-user_type="<?= $rec['user_type'] ?>" data-allowed_companies="<?= htmlspecialchars($rec['allowed_companies'] ?? '') ?>"><i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit</a>
                                                                 <?php if ($user_type == $access1) { ?>
                                                                     <a href='javascript:void(0);' class='dropdown-item  text-danger deleteAjax' data-id='<?= $id_user_usr ?>' data-tbl='admin_login' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>Delete</a>
                                                                 <?php } ?>
@@ -263,6 +275,8 @@ if (mysqli_num_rows($query) == 1) {
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.js"></script>
 
+        <!-- Select2 JS -->
+        <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
 
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
@@ -410,9 +424,12 @@ if (mysqli_num_rows($query) == 1) {
                         },
                         {
                             // User Status
-                            targets: 6,
+                            targets: 7,
                             render: function(data, type, row, meta) {
-                                return (`<span class="badge-border ${statusObj[data].class}" text-capitalized>${statusObj[data].title}</span>`);
+                                if (statusObj[data]) {
+                                    return (`<span class="badge-border ${statusObj[data].class}" text-capitalized>${statusObj[data].title}</span>`);
+                                }
+                                return data;
                             }
                         },
                         {
@@ -431,14 +448,16 @@ if (mysqli_num_rows($query) == 1) {
                     initComplete: function() {
                         var selectOpt = `<select class="custom-select form-select input-sm"><option value=""> All </option></select>`;
                         // Adding status filter once table initialized
-                        this.api().columns(6).every(function() {
+                        this.api().columns(7).every(function() {
                             var column = this;
                             var select = $(selectOpt).appendTo('.user_status').on('change', function() {
                                 var val = $.fn.dataTable.util.escapeRegex($(this).val());
                                 column.search(val ? '^' + val + '$' : '', true, false).draw();
                             });
                             column.data().unique().sort().each(function(d, j) {
-                                select.append(`<option value="${statusObj[d].title}" class="text-capitalize">${statusObj[d].title}</option>`);
+                                if (statusObj[d]) {
+                                    select.append(`<option value="${statusObj[d].title}" class="text-capitalize">${statusObj[d].title}</option>`);
+                                }
                             });
                         });
                         // Adding department filter once table initialized
@@ -461,6 +480,33 @@ if (mysqli_num_rows($query) == 1) {
                             });
                             column.data().unique().sort().each(function(d, j) {
                                 select.append(`<option value="${d}">${d}</option>`);
+                            });
+                        });
+                        // Adding company filter once table initialized
+                        this.api().columns(6).every(function() {
+                            var column = this;
+                            var select = $(selectOpt).appendTo('.user_company').on('change', function() {
+                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
+                                column.search(val ? '(^|, )' + val + '($|, )' : '', true, true).draw();
+                            });
+                            column.data().unique().sort().each(function(d, j) {
+                                if (d) {
+                                    // Handle multiple companies separated by comma
+                                    var companies = d.split(',').map(c => c.trim()).filter(c => c);
+                                    companies.forEach(function(company) {
+                                        select.append(`<option value="${company}">${company}</option>`);
+                                    });
+                                }
+                            });
+                            // Remove duplicate options
+                            var seen = {};
+                            select.find('option').each(function() {
+                                var val = $(this).val();
+                                if (val && seen[val]) {
+                                    $(this).remove();
+                                } else if (val) {
+                                    seen[val] = true;
+                                }
                             });
                         });
                     }

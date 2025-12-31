@@ -59,7 +59,10 @@ function get_current_vacation_balance($conDB, $emp_id)
 $ajaxType = $_POST['ajaxType'] ?? null; // Use null coalescing
 
 if ($ajaxType == 'emp_search') {
-    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('comp_no', true);
+    
+    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
     $name = [];
     while ($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -71,12 +74,15 @@ if ($ajaxType == 'emp_search') {
     ];
     echo json_encode($data);
 } elseif ($ajaxType == 'emp_data') {
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`emp_id`=" . (int)$_POST['empid'] . " "); // Cast to int
+    WHERE `e`.`status`=1 AND `e`.`emp_id`=" . (int)$_POST['empid'] . " ".$company_filter); // Cast to int
     $name = [];
     while ($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;

@@ -1946,8 +1946,12 @@ function search_employee() {
         return;
     }
     
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('comp_no', false);
+    
     $param = "%{$searchTerm}%";
-    $stmt = $conDB->prepare("SELECT `emp_id`, `name` FROM `employees` WHERE (`name` LIKE ? OR `emp_id` LIKE ?) AND `status`=1 LIMIT 10");
+    $sql = "SELECT `emp_id`, `name` FROM `employees` WHERE (`name` LIKE ? OR `emp_id` LIKE ?) AND `status`=1 {$company_filter} LIMIT 10";
+    $stmt = $conDB->prepare($sql);
     $stmt->bind_param("ss", $param, $param);
     $stmt->execute();
     $result = $stmt->get_result();

@@ -179,8 +179,8 @@ if ($isEmployee !== true) {
 
 				<!-- Employee Info -->
 				<div class="profile-header-info">
-					<h1><?= translate_name($emprow['name'], $current_lang ?? 'en') ?></h1>
-					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . translate_name($emprow["sectin_nme"], $current_lang ?? 'en')) ?></p>
+					<h1><?= getDisplayName($emprow['name']) ?></h1>
+					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . getDisplayName($emprow["sectin_nme"])) ?></p>
 					<p><i class="fa fa-passport"></i> <?= __('iqama_id_label') ?>: <?= htmlspecialchars($emprow['iqama']) ?></p>
 					<p><i class="fa fa-phone-laptop"></i> <?= __('mobile') ?>: <?= htmlspecialchars($emprow['mobile']) ?></p>
 					<p><i class="fa fa-globe-asia"></i> <?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>

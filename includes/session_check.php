@@ -105,6 +105,34 @@ $fname = $emprow['efullname'];
 $avatar = $emprow['eavatar'];
 $empid = $emprow['emp_id'];
 
+// --- 4a. Company Access Control (Company-Level Restrictions) ---
+// Get allowed companies from admin_login.allowed_companies JSON column
+// NULL = full access to all companies
+// JSON array = restricted access to specified company IDs only
+$allowed_companies = null;  // Default: all companies
+$allowed_companies_array = [];  // Default: empty array
+
+if (isset($emprow['allowed_companies']) && !empty($emprow['allowed_companies'])) {
+    try {
+        $decoded_companies = json_decode($emprow['allowed_companies'], true);
+        if (is_array($decoded_companies) && count($decoded_companies) > 0) {
+            $allowed_companies = $decoded_companies;
+            $allowed_companies_array = array_map('intval', $decoded_companies);
+        }
+    } catch (Exception $e) {
+        // JSON decode error - treat as full access
+        $allowed_companies = null;
+        $allowed_companies_array = [];
+    }
+}
+
+// Store in session for use throughout application
+$_SESSION['allowed_companies'] = $allowed_companies;
+$_SESSION['allowed_companies_array'] = $allowed_companies_array;
+
+// Determine if user has company restrictions
+$has_company_restrictions = !empty($allowed_companies_array) && count($allowed_companies_array) > 0;
+
 // --- 5. Log User Activity (First login only) ---
 if (!isset($_SESSION['activity_logged'])) {
     require_once __DIR__ . '/user_activity_logger.php';
@@ -292,3 +320,5 @@ function update_employee_fly_status_on_session($conDB) {
         // error_log("update_employee_fly_status: Exception - " . $e->getMessage());
     }
 }
+
+?>

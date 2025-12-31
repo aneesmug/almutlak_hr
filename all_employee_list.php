@@ -114,7 +114,10 @@
     </thead>
     <tbody>
 <?php
-    $sql = "SELECT * FROM `employees` WHERE `status`=1 AND `emp_sup_type`='mocha' "; 
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('comp_no', true);
+    
+    $sql = "SELECT * FROM `employees` WHERE `status`=1 AND `emp_sup_type`='mocha' ".$company_filter; 
     $query = mysqli_query($conDB, $sql);
 
     while ($rec = mysqli_fetch_array($query)) {
