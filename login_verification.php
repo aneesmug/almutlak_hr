@@ -17,6 +17,28 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
+// --- Email Masking Utility Function ---
+if (!function_exists('mask_email_for_display')) {
+    /**
+     * Mask an email address for display (e.g. ane****@****lak.com)
+     * @param string $email
+     * @return string
+     */
+    function mask_email_for_display($email) {
+        $at_pos = strpos($email, '@');
+        $dot_pos = strrpos($email, '.');
+        if ($at_pos !== false && $dot_pos !== false && $dot_pos > $at_pos) {
+            $name_part = substr($email, 0, $at_pos);
+            $domain_part = substr($email, $at_pos + 1, $dot_pos - $at_pos - 1);
+            $tld_part = substr($email, $dot_pos);
+            $masked_name = substr($name_part, 0, 3) . str_repeat('*', max(0, strlen($name_part) - 3));
+            $masked_domain = str_repeat('*', max(0, strlen($domain_part) - 2)) . substr($domain_part, -2);
+            return $masked_name . '@' . $masked_domain . $tld_part;
+        }
+        return '****';
+    }
+}
+
 // --- START: Custom Language Logic for OTP Page ---
 // We cannot use init.php here because the user is not fully logged in.
 // We must determine the language based on the user ID stored in the OTP session.
@@ -186,7 +208,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 <img src="assets/images/logo_color_sm.png" class="w-24 h-24 rounded-full mx-auto mb-6 ring-4 ring-gray-200 p-1" alt="Logo">
                 
                 <h2 class="text-2xl font-bold text-gray-800 mb-2"><?=__('email_verification') ?></h2>
-                <p class="text-gray-500 mb-6"><?=__('enter_the_6digit_code_sent_to_your_registered_email_address') ?></p>
+                <?php
+                // Mask email for display using reusable function
+                $masked_email = '';
+                if (isset($_SESSION['otp_verification']['user_id'])) {
+                    $user_id = $_SESSION['otp_verification']['user_id'];
+                    $stmt = mysqli_prepare($conDB, "SELECT `email` FROM `admin_login` WHERE `id_iqama` = ?");
+                    if ($stmt) {
+                        mysqli_stmt_bind_param($stmt, "s", $user_id);
+                        mysqli_stmt_execute($stmt);
+                        $result = mysqli_stmt_get_result($stmt);
+                        if ($row = mysqli_fetch_assoc($result)) {
+                            $masked_email = mask_email_for_display($row['email']);
+                        }
+                        mysqli_stmt_close($stmt);
+                    }
+                }
+                ?>
+                <p class="text-gray-500 mb-6">
+                    <?=sprintf(__('enter_the_6digit_code_sent_to_your_registered_email_address_masked'), $masked_email) ?>
+                </p>
                 
                 <div id="message-container" class="mb-4">
                     <?php if(!empty($error_message)): ?>

@@ -416,18 +416,18 @@ if (!function_exists('salert')) {
         <script>
             document.addEventListener('DOMContentLoaded', function() { // Wait for DOM
                 Swal.fire({
-                    title: "$title",
-                    text: "$message",
-                    icon: "$type",
+                    title: '{$title}',
+                    text: '{$message}',
+                    icon: '{$type}',
                     allowOutsideClick: false, // Prevent dismissal by clicking outside
-                    confirmButtonText: "$btn",
+                    confirmButtonText: '{$btn}',
                     customClass: {
                         confirmButton: 'btn btn-lg btn-primary' // Bootstrap class
                     },
                     buttonsStyling: false,
                 }).then((result) => {
-                    if (result.isConfirmed && "$redirectUrl" !== "") {
-                        window.location.href = "$redirectUrl";
+                    if (result.isConfirmed && '{$redirectUrl}' !== "") {
+                        window.location.href = '{$redirectUrl}';
                     } else if (result.isConfirmed) {
                         // Optional: Go back if no redirect URL is provided
                         // if (window.history.length > 1) { window.history.back(); }
@@ -1237,10 +1237,14 @@ if (!function_exists('append_approval_chain')) {
 if (!function_exists('send_approval_email')) {
     function send_approval_email($conDB, $to_email, $to_name, $subject, $request_type = 'smart_request', $template_data = [], $cc_emails = [])
     {
+        error_log("SEND_EMAIL_DEBUG: Starting for email=$to_email, type=$request_type");
+        
         if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+            error_log("SEND_EMAIL_DEBUG: PHPMailer class not found");
             return false;
         }
         if (empty($to_email) || !filter_var($to_email, FILTER_VALIDATE_EMAIL)) {
+            error_log("SEND_EMAIL_DEBUG: Invalid email: $to_email");
             return false;
         }
 
@@ -1253,7 +1257,10 @@ if (!function_exists('send_approval_email')) {
         $smtp_from_name = get_setting($conDB, 'from_name', 'Al Mutlak HR System'); // [FIX] Use dedicated from_name setting with fallback
         $smtp_secure = get_setting($conDB, 'smtp_encryption');   // [FIX] Changed from 'smtp_secure'
 
+        error_log("SEND_EMAIL_DEBUG: SMTP config - host=$smtp_host, port=$smtp_port, user=$smtp_user, from=$smtp_from_email, secure=$smtp_secure");
+
         if (empty($smtp_host) || empty($smtp_port) || empty($smtp_user) || empty($smtp_pass) || empty($smtp_from_email) || empty($smtp_from_name)) {
+            error_log("SEND_EMAIL_DEBUG: Missing SMTP settings!");
             return false;
         }
         // --- End Fetch SMTP settings ---
@@ -1261,6 +1268,7 @@ if (!function_exists('send_approval_email')) {
         // Load and populate email template
         $body_html = load_email_template($request_type, $template_data);
         if ($body_html === false) {
+            error_log("SEND_EMAIL_DEBUG: Template not found, using fallback");
             // Fallback: build a minimal HTML body so final approvals still notify
             $reqId = htmlspecialchars($template_data['REQUEST_ID'] ?? 'N/A', ENT_QUOTES, 'UTF-8');
             $reqType = htmlspecialchars($template_data['REQUEST_TYPE'] ?? ucfirst(str_replace('_',' ', $request_type)), ENT_QUOTES, 'UTF-8');
@@ -1272,11 +1280,14 @@ if (!function_exists('send_approval_email')) {
                        . '<p style="margin:0 0 12px;">' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '</p>'
                        . '<p style="margin:14px 0 0;"><a href="' . htmlspecialchars($reqUrl, ENT_QUOTES, 'UTF-8') . '" style="background:#007bff;color:#fff;padding:8px 12px;border-radius:4px;text-decoration:none;">Open in Portal</a></p>'
                        . '</div>';
+        } else {
+            error_log("SEND_EMAIL_DEBUG: Template loaded successfully");
         }
 
         $mail = new PHPMailer(true);
 
         try {
+            error_log("SEND_EMAIL_DEBUG: Initializing PHPMailer connection");
             // Server settings
             $mail->isSMTP();
             $mail->Host       = $smtp_host;
@@ -1322,9 +1333,14 @@ if (!function_exists('send_approval_email')) {
             $mail->Body    = $body_html;
             $mail->AltBody = strip_tags($body_html); // Plain text version
 
+            error_log("SEND_EMAIL_DEBUG: About to send email with subject: $subject");
             $mail->send();
+            error_log("SEND_EMAIL_DEBUG: Email sent successfully to $to_email");
             return true;
         } catch (Exception $e) {
+            error_log("SEND_EMAIL_DEBUG: Exception caught - " . $e->getMessage());
+            error_log("SEND_EMAIL_DEBUG: Exception code - " . $e->getCode());
+            error_log("SEND_EMAIL_DEBUG: Exception trace - " . $e->getTraceAsString());
             return false;
         }
     }
@@ -1349,7 +1365,8 @@ if (!function_exists('load_email_template')) {
             'loan_request' => 'loan_request_email_template.html',
             'resignation_request' => 'resignation_request_email_template.html',
             'modification_request' => 'modification_request_email_template.html',
-            'rejoin_request' => 'rejoin_request_email_template.html'
+            'rejoin_request' => 'rejoin_request_email_template.html',
+            'new_employee' => 'new_employee_email_template.html'
         ];
 
         $template_file = $template_map[$request_type] ?? 'smart_request_email_template.html';
@@ -1369,7 +1386,7 @@ if (!function_exists('load_email_template')) {
         $defaults = [
             // 'LOGO_URL' => $base_url . '/assets/logo/logo_color_sm.png',
             'LOGO_URL' => 'https://hr.almutlaksystem.com/assets/logo/logo_color_sm.png',
-            'APPROVER_NAME' => 'Approver',
+            'APPROVER_NAME' => 'Team Member',
             'REQUEST_ID' => 'N/A',
             'REQUEST_TITLE' => 'N/A',
             'REQUESTER_NAME' => 'N/A',
@@ -1391,7 +1408,19 @@ if (!function_exists('load_email_template')) {
             'SUBMISSION_DATE' => 'N/A',
             'UPDATE_TYPE' => 'N/A',
             'CURRENT_VALUE' => 'N/A',
-            'NEW_VALUE' => 'N/A'
+            'NEW_VALUE' => 'N/A',
+            // New employee email template fields
+            'EMPLOYEE_NAME' => 'N/A',
+            'EMPLOYEE_ID' => 'N/A',
+            'IQAMA_NUMBER' => 'N/A',
+            'EMPLOYEE_EMAIL' => 'N/A',
+            'EMPLOYEE_MOBILE' => 'N/A',
+            'DEPARTMENT_NAME' => 'N/A',
+            'JOB_TITLE' => 'N/A',
+            'JOINING_DATE' => 'N/A',
+            'SALARY' => 'N/A',
+            'COMPANY_NAME' => 'N/A',
+            'ALL_EMPLOYEES_URL' => $base_url . '/all_employee_list.php'
         ];
 
         // Merge so passed data overrides defaults
@@ -1412,14 +1441,20 @@ if (!function_exists('load_email_template')) {
         }
 
         // Replace template placeholders
+        error_log("TEMPLATE_DEBUG: Template data before merge: " . json_encode($data));
         foreach ($data as $key => $value) {
             // Skip already processed rejection info and HTML content
             if ($key === 'REJECTION_INFO' || $key === 'REJECTION_BORDER' || $key === 'REJECTION_BORDER_INST' || $key === 'EXIT_INTERVIEW_SECTION') {
                 $html = str_replace('{{' . $key . '}}', $value, $html);
             } else {
-                $html = str_replace('{{' . $key . '}}', htmlspecialchars($value, ENT_QUOTES, 'UTF-8'), $html);
+                $escaped_value = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+                $html = str_replace('{{' . $key . '}}', $escaped_value, $html);
+                if (strpos($html, '{{' . $key . '}}') === false) {
+                    error_log("TEMPLATE_DEBUG: Replaced {{$key}} with: " . substr($escaped_value, 0, 50));
+                }
             }
         }
+        error_log("TEMPLATE_DEBUG: Template processing complete");
 
         return $html;
     }
@@ -3161,8 +3196,8 @@ if (!function_exists('update_vacation_balance_on_approval')) {
 
         $vac_id_safe = (int)$vacation_id;
 
-        // 1. Get the approved vacation details
-        $sql_vac = "SELECT `emp_id`, `vacdays`, `is_deductible`, `vac_type`, `fly_type`, `remarks` FROM `emp_vacation` WHERE `id` = ?";
+        // 1. Get the approved vacation details (INCLUDING DATES FOR HOLIDAY CALCULATION)
+        $sql_vac = "SELECT `emp_id`, `vacdays`, `is_deductible`, `vac_type`, `fly_type`, `remarks`, `start_date`, `return_date` FROM `emp_vacation` WHERE `id` = ?";
         $stmt_vac = mysqli_prepare($conDB, $sql_vac);
         if (!$stmt_vac) {
             return false;
@@ -3186,23 +3221,54 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $days_to_deduct = (float)$vac_details['vacdays'];
         $remarks = trim(strtolower($vac_details['remarks'] ?? ''));
         $vac_type_lower = trim(strtolower($vac_details['vac_type'] ?? ''));
+        
+        // ===== NEW: HOLIDAY CALCULATION =====
+        // Get vacation start and end dates to check for holidays
+        $vacation_start = $vac_details['start_date'] ?? null;
+        $vacation_end = $vac_details['return_date'] ?? null;
+        $holiday_days = 0;
+        
+        if (!empty($vacation_start) && !empty($vacation_end)) {
+            // Get all active holidays that fall within the vacation period
+            $active_holidays = get_active_holidays_in_range($conDB, $vacation_start, $vacation_end);
+            
+            // Calculate how many holiday days fall within the vacation period
+            $holiday_days = calculate_holiday_days_in_vacation($active_holidays, $vacation_start, $vacation_end);
+            
+            // Adjust days to deduct by subtracting holiday days
+            if ($holiday_days > 0) {
+                $days_to_deduct = max(0, $days_to_deduct - $holiday_days); // Don't go below 0
+                error_log("DEBUG: Vacation ID {$vac_id_safe} has {$holiday_days} holiday days. Adjusted deduction from {$vac_details['vacdays']} to {$days_to_deduct} days.");
+            }
+        }
+        // ===== END HOLIDAY CALCULATION =====
 
         // [NEW] Check if this is an ENCASHMENT request
-        $is_encashment = ($remarks === 'encashment') || ($vac_type_lower === 'encashed');        // 2. CHECK IF THIS VACATION TYPE SHOULD BE DEDUCTED FROM BALANCE
-        // We only deduct 'Fly' (annual/emergency) and 'Local Vacation'.
-        // We do NOT deduct 'Sick Leave', 'Business Trip', etc.
-        // `is_deductible` = 1 means deduct from salary (e.g. Casual), 0 = no salary deduction
-        // Your logic seems to be: 'Fly' and 'Local Vacation' *should* be deducted from balance.
-        // Your old `is_deductible` flag seems to be for *salary* deduction, not balance deduction.
-        // Let's rely on `vac_type` and `fly_type`.
+        $is_encashment = ($remarks === 'encashment') || ($vac_type_lower === 'encashed');
+        
+        // [NEW] Check if this is a DEDUCTIBLE vacation
+        // ONLY these types will deduct from balance:
+        // - Fly with fly_type = 'annual'
+        // - Fly with fly_type = 'emergency' 
+        // - Local Vacation with fly_type = 'emergency'
+        // ALL OTHER types (including Local Vacation without emergency) are NON-DEDUCTIBLE (unpaid/emergency leave)
+        $is_deductible_type = false;
+        
+        // These specific combinations ARE deductible
+        if (($vac_details['vac_type'] == 'Fly' && $vac_details['fly_type'] == 'emergency') 
+            || ($vac_details['vac_type'] == 'Local Vacation' && $vac_details['fly_type'] == 'emergency')) {
+            $is_deductible_type = true;  // These are deductible
+        }
+        // Annual vacation is also deductible
+        elseif ($vac_details['vac_type'] == 'Fly' && $vac_details['fly_type'] == 'annual') {
+            $is_deductible_type = true;
+        }
 
-        $is_balance_deductible = false;
-        if ($vac_details['vac_type'] == 'Fly' && ($vac_details['fly_type'] == 'annual' || $vac_details['fly_type'] == 'emergency')) {
-            $is_balance_deductible = true;
-        }
-        if ($vac_details['vac_type'] == 'Local Vacation') {
-            $is_balance_deductible = true;
-        }
+        // 2. CHECK IF THIS VACATION TYPE SHOULD BE DEDUCTED FROM BALANCE
+        // Only the specific types determined above are deductible
+        // All other types (Business Trip, Sick Leave, Local Vacation without emergency, etc.) are NON-DEDUCTIBLE
+
+        $is_balance_deductible = $is_deductible_type;
 
         // [NEW] Encashment is ALWAYS balance deductible
         if ($is_encashment) {
@@ -3210,6 +3276,8 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         }
 
         if (!$is_balance_deductible) {
+            // Non-deductible leave types simply return true (no action needed)
+            error_log("DEBUG: Vacation ID {$vac_id_safe} is NON-DEDUCTIBLE (unpaid leave) - NO BALANCE DEDUCTION");
             return true; // Not an error, just no action needed.
         }
 
@@ -3240,9 +3308,12 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         mysqli_stmt_close($stmt_emp);
 
         $contract_id = (int)$emp_details['contract_id']; // This will now correctly get the ID from `e.vac_period`
-        $total_contract_days = (float)$emp_details['vac_period']; // e.g., 30
+        $total_contract_days_original = (float)$emp_details['vac_period']; // e.g., 30 (Original annual allocation - reference only)
+        $total_contract_days = 0; // Will be set from emp_vacation_balance.available_balance
 
         // 4. Get the *latest* balance row for this employee
+        // ✅ CRITICAL: Use available_balance from emp_vacation_balance as the opening balance
+        // This is the ACTUAL current balance the employee has, NOT from calculations
         $sql_latest_balance = "SELECT * FROM `emp_vacation_balance` WHERE `emp_id` = ? ORDER BY `id` DESC LIMIT 1";
         $stmt_latest = mysqli_prepare($conDB, $sql_latest_balance);
         if (!$stmt_latest) {
@@ -3255,71 +3326,56 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         }
         $res_latest = mysqli_stmt_get_result($stmt_latest);
         $latest_balance = mysqli_fetch_assoc($res_latest);
-        mysqli_free_result($res_latest); // ADDED
+        mysqli_free_result($res_latest);
         mysqli_stmt_close($stmt_latest);
 
         // 5. Calculate new values
         $old_used_days = 0.0;
-        $old_remaining_balance = $total_contract_days;
         $carryover_days = 0.0;
         $period_start = date('Y-m-d'); // Default
         $period_end = date('Y-m-d', strtotime('+1 year')); // Default
 
         if ($latest_balance) {
-            // Found a previous record, use it as the baseline
+            // ✅ CRITICAL: Use available_balance as the opening balance for this vacation deduction
+            // available_balance is the ACTUAL current balance
+            $total_contract_days = (float)$latest_balance['available_balance'];
             $old_used_days = (float)$latest_balance['used_days'];
-            $old_remaining_balance = (float)$latest_balance['remaining_balance'];
             $carryover_days = (float)$latest_balance['carryover_days'];
-            // We assume the total days and period start/end are the same,
-            // as this is just an update *within* the current period.
-            $total_contract_days = (float)$latest_balance['total_days'];
             $period_start = $latest_balance['period_start'];
             $period_end = $latest_balance['period_end'];
+            
+            error_log("DEBUG: Vacation ID {$vac_id_safe} - Found latest balance. Opening balance (available_balance)={$total_contract_days}, used_days={$old_used_days}");
         } else {
-            // No previous record. This is the first deduction.
-            // We need to create a period. Let's assume it starts from contract_id (if it's a date)
-            // This part is tricky. Your schema for `addManualHistory` implies period_start/end are set manually.
-            // For now, let's assume a manual record *must* exist.
-            // A more robust system would fetch contract start/end dates.
-            // For now, if no record, let's just use the contract total.
-            // We are missing period_start and period_end if no manual record exists.
-            // This is a potential flaw in the logic if manual history isn't added first.
-            // Let's default to today's date for the period if missing, but this should be reviewed.
-            // $period_start = $latest_balance['period_start'] ?? date('Y-m-d');
-            // $period_end = $latest_balance['period_end'] ?? date('Y-m-d', strtotime('+1 year'));
+            // No balance record exists yet, use annual allocation as opening balance
+            $total_contract_days = $total_contract_days_original;
+            
+            error_log("DEBUG: Vacation ID {$vac_id_safe} - No balance record exists. Using annual allocation: {$total_contract_days}");
         }
 
-        // [NEW] Encashment logic: Deduct the encashed days from available balance
-        if ($is_encashment) {
-            // For encashment, deduct the specific number of days from available_balance
-            // and add to used_days
-            $new_used_days = $old_used_days + $days_to_deduct;
-            $max_allowable = ($total_contract_days + $carryover_days);
-            
-            // Ensure we don't exceed total available days
-            if ($new_used_days > $max_allowable) {
-                $new_used_days = $max_allowable;
-            }
-            
-            // Calculate remaining and available balances
-            $new_remaining_balance = $max_allowable - $new_used_days;
-            $new_available_balance = $new_remaining_balance;
-            // SYNC: Keep total_days synchronized with available_balance to prevent balance discrepancies
-            $total_contract_days = $new_available_balance;
-        } else {
-            // Normal vacation deduction logic
-            $new_used_days = $old_used_days + $days_to_deduct;
-            $max_allowable = ($total_contract_days + $carryover_days);
-            if ($new_used_days > $max_allowable) {
-                // Prevent negative balances: cap used_days at total available
-                $new_used_days = $max_allowable;
-            }
-            $new_remaining_balance = $max_allowable - $new_used_days;
-            // Available balance should probably be the same as remaining
-            $new_available_balance = $new_remaining_balance;
-            // SYNC: Keep total_days synchronized with available_balance to prevent balance discrepancies
-            $total_contract_days = $new_available_balance;
+        // ✅ CRITICAL FIX: total_days represents OPENING BALANCE for the current period, NOT annual allocation
+        // When vacation is applied, total_days DECREASES by the days_to_deduct amount
+        // This is the KEY requirement: total_days = current available balance (not fixed)
+        
+        // Deduct the applied vacation days from total_days (opening balance)
+        $new_total_days = $total_contract_days - $days_to_deduct;
+        
+        // Prevent negative balances
+        if ($new_total_days < 0) {
+            $new_total_days = 0;
         }
+        
+        // Add to cumulative used_days
+        $new_used_days = $old_used_days + $days_to_deduct;
+        
+        // Remaining balance should equal the new total_days
+        // (since total_days now represents the remaining opening balance)
+        $new_remaining_balance = $new_total_days;
+        $new_available_balance = $new_total_days;
+        
+        error_log("DEBUG: Vacation ID {$vac_id_safe} - Deduction Calculation: old_total_days={$total_contract_days}, days_to_deduct={$days_to_deduct}, new_total_days={$new_total_days}, new_used_days={$new_used_days}, new_remaining={$new_remaining_balance}");
+        
+        // Update the tracking variable so UPDATE statement uses new total_days
+        $total_contract_days = $new_total_days;
 
         // 6. Check if a balance record ALREADY EXISTS FOR THIS SPECIFIC VACATION
         // This prevents updating a balance record for a different vacation in the same period
@@ -3336,7 +3392,18 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         mysqli_stmt_close($stmt_check_vac);
 
         if ($row_check_vac) {
-            // This vacation already has a balance record, UPDATE it
+            // This vacation already has a balance record
+            // ✅ CRITICAL FIX: ALWAYS UPDATE the balance record with correct calculations
+            // The columns are synchronized as follows:
+            // - total_days = opening balance for current period (DECREASES when vacation taken)
+            // - used_days = cumulative days used (old_used_days + new vacation days)
+            // - remaining_balance = total_days (always matches opening balance after deduction)
+            // - available_balance = remaining_balance (same value)
+            // Example: 17.83 opening → apply 10 days → total_days becomes 7.83, used_days becomes 11
+            
+            error_log("INFO: Vacation ID {$vac_id_safe} - Updating balance record with new_total_days={$total_contract_days}, new_used_days={$new_used_days}, new_remaining_balance={$new_remaining_balance}");
+            
+            // Update the existing balance record with synchronized values
             $sql_update = "UPDATE `emp_vacation_balance` SET 
                 `period_end` = ?,
                 `total_days` = ?,
@@ -3350,7 +3417,6 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             if (!$stmt_update) {
                 return false;
             }
-            $id_int = (int)$row_check_vac['id'];
             mysqli_stmt_bind_param(
                 $stmt_update,
                 "sdddddi",
@@ -3364,7 +3430,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             );
             if (mysqli_stmt_execute($stmt_update)) {
                 mysqli_stmt_close($stmt_update);
-                error_log("DEBUG: Updated existing balance record for vacation ID {$vac_id_safe}");
+                error_log("SUCCESS: Updated balance record for vacation ID {$vac_id_safe} - total_days={$total_contract_days}, used_days={$new_used_days}, remaining_balance={$new_remaining_balance}, available_balance={$new_available_balance}");
                 return true;
             } else {
                 mysqli_stmt_close($stmt_update);
@@ -3372,9 +3438,12 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             }
         } else {
             // No existing record for this vacation, INSERT a new one
-            // Use INSERT ... ON DUPLICATE KEY UPDATE to handle race condition:
-            // If a balance record for this (emp_id, contract_id, period_start) already exists
-            // from another approval stage, UPDATE it instead of failing
+            // ✅ The columns are synchronized as follows:
+            // - total_days = opening balance for current period (DECREASES when vacation taken)
+            // - used_days = cumulative days used (old_used_days + new vacation days)
+            // - remaining_balance = total_days (always matches opening balance after deduction)
+            // - available_balance = remaining_balance (same value)
+            // Example: 17.83 opening → apply 10 days → total_days becomes 7.83, used_days becomes 11
             $sql_insert_balance = "INSERT INTO `emp_vacation_balance` 
                                     (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, 
                                      `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `last_updated`) 
@@ -3390,6 +3459,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
                                    `last_updated` = NOW()";
             $stmt_insert = mysqli_prepare($conDB, $sql_insert_balance);
             if (!$stmt_insert) {
+                error_log("ERROR: Failed to prepare INSERT statement for vacation ID {$vac_id_safe}");
                 return false;
             }
             // Bind for INSERT values
@@ -3417,11 +3487,11 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             );
             if (mysqli_stmt_execute($stmt_insert)) {
                 mysqli_stmt_close($stmt_insert);
-                error_log("DEBUG: Inserted or updated balance record for vacation ID {$vac_id_safe}");
+                error_log("SUCCESS: Inserted balance record for vacation ID {$vac_id_safe} - emp_id={$emp_id}, total_days={$total_contract_days}, used_days={$new_used_days}, remaining_balance={$new_remaining_balance}, available_balance={$new_available_balance}");
                 return true;
             } else {
                 $error = mysqli_stmt_error($stmt_insert);
-                error_log("DEBUG: INSERT/UPDATE failed for vacation ID {$vac_id_safe}: {$error}");
+                error_log("ERROR: INSERT/UPDATE failed for vacation ID {$vac_id_safe}: {$error}");
                 mysqli_stmt_close($stmt_insert);
                 return false;
             }
@@ -4478,5 +4548,459 @@ if (!function_exists('translateContractPeriod')) {
         // Common time unit keywords in contract periods
         $keywords = ['Years', 'Months', 'Days', 'Year', 'Month', 'Day'];
         return translatePartialString($period_str, $keywords);
+    }
+}
+
+/*=============================================
+=      Holiday Management Functions          =
+=============================================*/
+
+/**
+ * Get all active holidays for a specific date range
+ * Used to identify holidays within a vacation period
+ * 
+ * @param mysqli $conDB Database connection
+ * @param string $start_date Start date (YYYY-MM-DD)
+ * @param string $end_date End date (YYYY-MM-DD)
+ * @return array Array of active holidays within the date range
+ */
+if (!function_exists('get_active_holidays_in_range')) {
+    function get_active_holidays_in_range($conDB, $start_date, $end_date)
+    {
+        $holidays = [];
+        
+        if (!$conDB || empty($start_date) || empty($end_date)) {
+            return $holidays;
+        }
+        
+        try {
+            // Find all active holidays that overlap with the vacation period
+            // Overlap condition: holiday_start <= vacation_end AND holiday_end >= vacation_start
+            $sql = "SELECT * FROM emp_holidays 
+                    WHERE is_active = 1 
+                    AND start_date <= ? 
+                    AND end_date >= ? 
+                    ORDER BY start_date ASC";
+            
+            $stmt = mysqli_prepare($conDB, $sql);
+            if (!$stmt) {
+                return $holidays;
+            }
+            
+            mysqli_stmt_bind_param($stmt, "ss", $end_date, $start_date);
+            if (!mysqli_stmt_execute($stmt)) {
+                mysqli_stmt_close($stmt);
+                return $holidays;
+            }
+            
+            $result = mysqli_stmt_get_result($stmt);
+            while ($row = mysqli_fetch_assoc($result)) {
+                $holidays[] = $row;
+            }
+            
+            if ($result) mysqli_free_result($result);
+            mysqli_stmt_close($stmt);
+            
+        } catch (Exception $e) {
+            // Log error but don't stop vacation processing
+            error_log("Error fetching holidays: " . $e->getMessage());
+        }
+        
+        return $holidays;
+    }
+}
+
+/**
+ * Calculate the number of holiday days within a vacation period
+ * Takes into account overlapping holidays
+ * 
+ * @param array $holidays Array of holiday records with start_date and end_date
+ * @param string $vacation_start_date Vacation start date (YYYY-MM-DD)
+ * @param string $vacation_end_date Vacation end date (YYYY-MM-DD)
+ * @return int Number of holiday days within the vacation period
+ */
+if (!function_exists('calculate_holiday_days_in_vacation')) {
+    function calculate_holiday_days_in_vacation($holidays, $vacation_start_date, $vacation_end_date)
+    {
+        $holiday_days = 0;
+        
+        if (empty($holidays)) {
+            return $holiday_days;
+        }
+        
+        try {
+            // IMPORTANT: Count ALL holiday days in active holidays during the vacation period
+            // NOT just the overlap with vacation dates
+            // This is the business rule: if holidays exist during vacation period, subtract full holiday days
+            
+            foreach ($holidays as $holiday) {
+                $holiday_total = (float)($holiday['total_days'] ?? 0);
+                
+                // Use the holiday's total_days field directly
+                // This represents the full holiday duration regardless of vacation start/end
+                if ($holiday_total > 0) {
+                    $holiday_days += $holiday_total;
+                } else {
+                    // Fallback: calculate from dates if total_days not provided
+                    try {
+                        $holiday_start = new DateTime($holiday['start_date']);
+                        $holiday_end = new DateTime($holiday['end_date']);
+                        
+                        $interval = $holiday_start->diff($holiday_end);
+                        $days_in_holiday = $interval->days + 1; // +1 to include both start and end dates
+                        $holiday_days += $days_in_holiday;
+                    } catch (Exception $e) {
+                        error_log("Error calculating holiday days from dates: " . $e->getMessage());
+                    }
+                }
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error calculating holiday days: " . $e->getMessage());
+        }
+        
+        return max(0, $holiday_days); // Ensure non-negative value
+    }
+}
+
+/**
+ * Calculate working vacation days (total days minus holiday days)
+ * 
+ * @param int $total_vacation_days Total vacation days requested
+ * @param int $holiday_days Number of holiday days within vacation period
+ * @return int Working vacation days to deduct from balance
+ */
+if (!function_exists('calculate_working_vacation_days')) {
+    function calculate_working_vacation_days($total_vacation_days, $holiday_days)
+    {
+        $working_days = $total_vacation_days - $holiday_days;
+        return max(0, $working_days); // Ensure non-negative value
+    }
+}
+
+/**
+ * Get holiday details for display
+ * Returns formatted information about holidays in a vacation period
+ * 
+ * @param array $holidays Array of holiday records
+ * @return array Formatted holiday information with details
+ */
+if (!function_exists('format_holiday_details')) {
+    function format_holiday_details($holidays)
+    {
+        $formatted = [];
+        
+        if (empty($holidays)) {
+            return $formatted;
+        }
+        
+        foreach ($holidays as $holiday) {
+            $formatted[] = [
+                'name' => $holiday['holiday_name'],
+                'start' => $holiday['start_date'],
+                'end' => $holiday['end_date'],
+                'days' => $holiday['total_days'],
+                'type' => $holiday['holiday_type']
+            ];
+        }
+        
+        return $formatted;
+    }
+}
+
+/*=====  End of Holiday Management Functions ======*/
+
+/**
+ * Check if a user can view/access an employee profile
+ * 
+ * Access is allowed ONLY if:
+ * 1. User is a system admin or administrator - can view anyone
+ * 2. User is in HR department (dept 5) - can view anyone
+ * 3. User is a department manager in the SAME department AND same company - can view employees in their department only
+ * 4. User is the DIRECT SUPERVISOR of the employee AND same company AND same department
+ * 5. User is viewing their own profile
+ * 6. User is a regular employee in the SAME department AND same company - can view colleagues in their department
+ * 
+ * @param array $employee_data Array with keys: emp_id, supervisor_id, dept, comp_no
+ * @param array $user_data Array with keys: emp_id, dept, comp_no, user_type
+ * @param string $user_role User's role (e.g., 'DPT_Manager')
+ * @return bool True if access is allowed, false otherwise
+ */
+if (!function_exists('canEmployeeSupervisorAccess')) {
+    function canEmployeeSupervisorAccess($employee_data, $user_data, $user_role = '') {
+        global $is_system_admin, $isHR, $isDeptHr;
+        
+        // Extract data safely and ensure integers for comparisons
+        $emp_id = isset($employee_data['emp_id']) ? (int)$employee_data['emp_id'] : 0;
+        $supervisor_id = isset($employee_data['supervisor_id']) ? (int)$employee_data['supervisor_id'] : 0;
+        $emp_dept = isset($employee_data['dept']) ? (int)$employee_data['dept'] : 0;
+        $emp_company = isset($employee_data['comp_no']) ? (int)$employee_data['comp_no'] : 0;
+
+        $user_emp_id = isset($user_data['emp_id']) ? (int)$user_data['emp_id'] : 0;
+        $user_dept = isset($user_data['dept']) ? (int)$user_data['dept'] : 0;
+        $user_company = isset($user_data['comp_no']) ? (int)$user_data['comp_no'] : 0;
+        $user_type = $user_data['user_type'] ?? null;
+
+        // DEBUG LOG - Log access attempt for troubleshooting
+        error_log("ACCESS_CONTROL: emp_id={$emp_id}, supervisor_id={$supervisor_id}, emp_dept={$emp_dept}, emp_company={$emp_company} | user_emp_id={$user_emp_id}, user_dept={$user_dept}, user_company={$user_company}, user_type={$user_type}, user_role={$user_role}");
+        if ($emp_dept !== $user_dept) error_log("ACCESS_CONTROL: Department mismatch: emp_dept={$emp_dept} vs user_dept={$user_dept}");
+        if ($emp_company !== $user_company) error_log("ACCESS_CONTROL: Company mismatch: emp_company={$emp_company} vs user_company={$user_company}");
+        
+        // 1. System admin or administrator - full access
+        if ($is_system_admin || $user_type === 'administrator') {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 1 (system admin/administrator)");
+            return true;
+        }
+        
+        // 2. HR Department only (NOT IT, Finance, or other departments) - full access
+        if ($isHR || $isDeptHr) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 2 (HR department)");
+            return true;
+        }
+        
+        // 3. Department manager in SAME department AND same company - can view all employees in that department only
+        // Allow any role ending with _Manager (e.g., IT_Team_Manager, HR_Team_Manager, Finance_Team_Manager, DPT_Manager)
+        if (
+            $user_dept === $emp_dept &&
+            $user_company === $emp_company &&
+            (
+                (is_string($user_role) && preg_match('/_Manager$/', $user_role)) ||
+                $user_role === 'DPT_Manager' ||
+                $user_type === 'dept_manager'
+            )
+        ) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 3 (department manager or *_Manager role)");
+            return true;
+        }
+        
+        // 4. Direct supervisor: must be supervisor AND same company AND same department
+        if ($supervisor_id > 0 && $supervisor_id === $user_emp_id && $emp_company === $user_company && $emp_dept === $user_dept) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 4 (direct supervisor). supervisor_id=$supervisor_id, user_emp_id=$user_emp_id");
+            return true;
+        }
+        
+        // 5. Viewing own profile
+        if ($emp_id === $user_emp_id) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 5 (viewing own profile)");
+            return true;
+        }
+        
+        // 6. Regular employee in SAME department AND same company - can view colleagues in their department
+        if ($emp_dept > 0 && $user_dept === $emp_dept && $user_company === $emp_company) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 6 (colleague in same dept+company)");
+            return true;
+        }
+        
+        // DEFAULT: Deny access for all other cases
+        error_log("ACCESS_CONTROL: DENIED - no matching rules");
+        return false;
+    }
+}
+
+/**
+ * =================================================================
+ * NEW EMPLOYEE NOTIFICATION FUNCTION
+ * =================================================================
+ * Sends email and browser notifications to HR and GR staff when a new employee is registered.
+ * @param mysqli $conDB Database connection
+ * @param array $employee_data Array containing new employee information
+ *              [
+ *                  'emp_id' => employee ID,
+ *                  'name' => employee name,
+ *                  'email' => employee email,
+ *                  'mobile' => employee mobile,
+ *                  'iqama' => iqama number,
+ *                  'department' => dept ID,
+ *                  'department_name' => dept name,
+ *                  'actual_job' => job ID,
+ *                  'job_title' => job title,
+ *                  'joining_date' => joining date,
+ *                  'salary' => salary,
+ *                  'comp_no' => company ID,
+ *                  'comp_name' => company name,
+ *              ]
+ * @return array ['success' => bool, 'email_count' => int, 'message' => string]
+ */
+if (!function_exists('notify_hr_gr_new_employee')) {
+    function notify_hr_gr_new_employee($conDB, $employee_data = [])
+    {
+        $result = [
+            'success' => false,
+            'email_count' => 0,
+            'message' => 'Notification system not ready'
+        ];
+
+        if (!$conDB) {
+            $result['message'] = 'Database connection error';
+            return $result;
+        }
+
+        // Validate required data
+        $required_fields = ['emp_id', 'name', 'department_name', 'joining_date'];
+        foreach ($required_fields as $field) {
+            if (empty($employee_data[$field])) {
+                $result['message'] = "Missing required field: $field";
+                return $result;
+            }
+        }
+
+        // Get all HR and GR staff who should be notified
+        try {
+            // Query for HR staff and GR officers with active status and valid emails
+            $notification_user_types = ['hr_payroll', 'administrator', 'hr_recruitment', 'hr_operations', 'hr_senior_bp', 'gr_officer','hr', 'finance_officer'];  // Add new types here
+            
+            // Build the IN clause with escaped values
+            $escaped_types = array_map(function($type) use ($conDB) {
+                return "'" . mysqli_real_escape_string($conDB, $type) . "'";
+            }, $notification_user_types);
+            $in_clause = implode(',', $escaped_types);
+            
+            $query = "SELECT 
+                al.id, al.fullname, e.name, al.email, al.user_type, al.emp_id
+                FROM admin_login al
+                LEFT JOIN employees e ON al.emp_id = e.emp_id
+                WHERE al.status = 1 
+                AND al.user_type IN ($in_clause)
+                AND al.email IS NOT NULL
+                AND al.email != ''
+                AND al.email REGEXP '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$'
+                ORDER BY al.user_type ASC, COALESCE(e.name, al.fullname) ASC
+            ";
+            
+            $result_query = mysqli_query($conDB, $query);
+            if (!$result_query) {
+                error_log("NOTIFY_HR_GR: Query failed - " . mysqli_error($conDB) . " Query: " . $query);
+                $result['message'] = 'Database query failed: ' . mysqli_error($conDB);
+                return $result;
+            }
+
+            $email_count = 0;
+            $notification_recipients = [];
+
+            while ($recipient = mysqli_fetch_assoc($result_query)) {
+                $notification_recipients[] = $recipient;
+            }
+
+            if (empty($notification_recipients)) {
+                $result['message'] = 'No HR/GR staff found to notify';
+                return $result;
+            }
+
+            // Prepare email data
+            $base_url = get_base_url();
+            $employee_id = intval($employee_data['emp_id']);
+            $view_profile_url = $base_url . '/view_employee.php?id=' . $employee_id;
+            $all_employees_url = $base_url . '/reg_employee.php';
+
+            // Format salary with thousands separator
+            $formatted_salary = isset($employee_data['salary']) ? 
+                number_format($employee_data['salary'], 2, '.', ',') : 'N/A';
+
+            // Send email to each recipient
+            foreach ($notification_recipients as $recipient) {
+                // Use name from employees table if available, otherwise fall back to admin_login.fullname
+                $staff_name = !empty($recipient['name']) ? $recipient['name'] : $recipient['fullname'];
+                
+                $template_data = [
+                    'APPROVER_NAME' => htmlspecialchars($staff_name, ENT_QUOTES, 'UTF-8'),
+                    'EMPLOYEE_NAME' => htmlspecialchars($employee_data['name'], ENT_QUOTES, 'UTF-8'),
+                    'EMPLOYEE_ID' => htmlspecialchars($employee_data['emp_id'], ENT_QUOTES, 'UTF-8'),
+                    'IQAMA_NUMBER' => htmlspecialchars($employee_data['iqama'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
+                    'EMPLOYEE_EMAIL' => htmlspecialchars($employee_data['email'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
+                    'EMPLOYEE_MOBILE' => htmlspecialchars($employee_data['mobile'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
+                    'DEPARTMENT_NAME' => htmlspecialchars($employee_data['department_name'], ENT_QUOTES, 'UTF-8'),
+                    'JOB_TITLE' => htmlspecialchars($employee_data['job_title'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
+                    'JOINING_DATE' => htmlspecialchars($employee_data['joining_date'], ENT_QUOTES, 'UTF-8'),
+                    'SALARY' => $formatted_salary,
+                    'COMPANY_NAME' => htmlspecialchars($employee_data['comp_name'] ?? 'N/A', ENT_QUOTES, 'UTF-8'),
+                    'REQUEST_URL' => $view_profile_url,
+                    'ALL_EMPLOYEES_URL' => $all_employees_url
+                ];
+
+                $subject = "New Employee Registered: " . $employee_data['name'];
+                
+                // Send email using existing send_approval_email function
+                $email_sent = send_approval_email(
+                    $conDB,
+                    $recipient['email'],
+                    $recipient['fullname'],
+                    $subject,
+                    'new_employee',
+                    $template_data
+                );
+
+                if ($email_sent) {
+                    $email_count++;
+
+                    // Create browser notification for GR staff
+                    if ($recipient['user_type'] === 'hr_payroll' || $recipient['user_type'] === 'administrator') {
+                        $notification_title = "New Employee Registered";
+                        $notification_message = "Employee: {$employee_data['name']} (ID: {$employee_data['emp_id']}) has been registered in the system";
+                        $notification_url = $view_profile_url;
+                        
+                        create_browser_notification(
+                            $conDB,
+                            $recipient['emp_id'],
+                            $notification_title,
+                            $notification_message,
+                            $notification_url
+                        );
+                    }
+
+                    // Log the notification
+                    try {
+                        $log_query = "
+                            INSERT INTO activity_log 
+                            (emp_id, action, description, details, created_by, created_at) 
+                            VALUES 
+                            (?, ?, ?, ?, ?, NOW())
+                        ";
+                        $stmt = $conDB->prepare($log_query);
+                        if ($stmt) {
+                            $action = 'new_employee_notification_sent';
+                            $description = 'Notification sent to HR/GR staff for new employee';
+                            $details = json_encode([
+                                'new_emp_id' => $employee_data['emp_id'],
+                                'new_emp_name' => $employee_data['name'],
+                                'recipient_id' => $recipient['emp_id'],
+                                'recipient_name' => $recipient['fullname'],
+                                'recipient_type' => $recipient['user_type'],
+                                'sent_at' => date('Y-m-d H:i:s')
+                            ]);
+                            $created_by_val = isset($_SESSION['auth_user']['emp_id']) ? intval($_SESSION['auth_user']['emp_id']) : 0;
+
+                            $stmt->bind_param(
+                                "isssi",
+                                $employee_id,
+                                $action,
+                                $description,
+                                $details,
+                                $created_by_val
+                            );
+                            $stmt->execute();
+                            $stmt->close();
+                        }
+                    } catch (\Throwable $e) {
+                        // Log error but don't fail the notification process
+                        error_log("Activity log failed for new employee notification: " . $e->getMessage());
+                    }
+                }
+            }
+
+            // Set result based on how many emails were sent
+            if ($email_count > 0) {
+                $result['success'] = true;
+                $result['email_count'] = $email_count;
+                $result['message'] = "Successfully notified $email_count HR/GR staff members";
+            } else {
+                $result['message'] = 'Failed to send emails to any staff members';
+            }
+
+            return $result;
+
+        } catch (\Exception $e) {
+            $result['message'] = 'Exception: ' . $e->getMessage();
+            return $result;
+        }
     }
 }

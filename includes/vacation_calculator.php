@@ -125,8 +125,14 @@ class VacationCalculator {
             // Calculate final balance figures (baseline full-period method)
             $remaining_balance = $total_vac_days - $used_days;
             $available_balance = $earned_days + $carryover - $used_days;
+            
+            if ($emp_id === '5160') {
+                error_log("DEBUG emp_5160: earned_days=$earned_days, carryover=$carryover, used_days=$used_days, baseline_available_balance=$available_balance");
+            }
 
-            // --- Snapshot logic using last_updated as anchor ---
+            // --- Snapshot logic using last_updated as anchor for DAILY ACCRUAL ---
+            // This calculates: stored_available + fresh_accrual_from_last_updated
+            // Used to show live balance with today's accrual included
             $snap = null;
             $snap_q_latest = "SELECT available_balance, used_days, period_end, carryover_days, last_updated, created_at
                                FROM emp_vacation_balance
@@ -142,141 +148,127 @@ class VacationCalculator {
             }
 
             // Add fresh accrual from snapshot last_updated to snapshot available_balance
-            if ($snap && isset($snap['available_balance'])) {
-                $snapshot_available = (float)$snap['available_balance'];
-                // Anchor to last_updated (when balance was last refreshed)
-                $anchor = null;
-                if (!empty($snap['last_updated'])) {
-                    $anchor = new DateTime($snap['last_updated']);
-                    $anchor->setTime(0, 0, 0);
-                } elseif (!empty($snap['created_at'])) {
-                    $anchor = new DateTime($snap['created_at']);
-                    $anchor->setTime(0, 0, 0);
-                } else {
-                    // Fallback to Nov 1st if both are missing
-                    $anchor = new DateTime('2025-11-01');
-                    $anchor->setTime(0, 0, 0);
+            try {
+                error_log("getCalculatedBalance START for emp_id=$emp_id");
+                $emp_data = $this->getEmployeeData($emp_id);
+                error_log("getEmployeeData result: " . json_encode($emp_data));
+                if (!$emp_data) {
+                    error_log("ERROR: Employee contract data not found for emp_id: $emp_id");
+                    throw new Exception("Employee contract data not found for emp_id: $emp_id");
                 }
 
-                $today_live = new DateTime();
-                $today_live->setTime(0, 0, 0);
+                $contract_info = $this->parseContractPeriod($emp_data['vac_period']);
+                error_log("parseContractPeriod result: " . json_encode($contract_info));
+                if (!$contract_info || !isset($contract_info['total_days'])) {
+                    error_log("ERROR: Contract info missing or invalid for emp_id: $emp_id");
+                    throw new Exception("Contract info missing or invalid for emp_id: $emp_id");
+                }
+                $total_vac_days = $contract_info['total_days'];
 
-                // ** MODIFIED to use 360-day logic **
-                $days_elapsed = 0;
-                if ($today_live > $anchor) {
-                    $days_elapsed = $this->calculate360DayDiff($anchor, $today_live);
+                $period_dates = $this->calculateContractPeriod($emp_data['joining_date'], $contract_info['years']);
+                if (!$period_dates || !isset($period_dates['start']) || !isset($period_dates['end'])) {
+                    error_log("ERROR: Period dates missing or invalid for emp_id: $emp_id");
+                    throw new Exception("Period dates missing or invalid for emp_id: $emp_id");
+                }
+                error_log("calculateContractPeriod result: start=" . $period_dates['start']->format('Y-m-d') . " end=" . $period_dates['end']->format('Y-m-d'));
+
+                $used_days = $this->getUsedVacationDays($emp_id, $period_dates['start'], $period_dates['end']);
+                error_log("getUsedVacationDays result: $used_days");
+
+                $carryover = $this->calculateCarryover($emp_id, $emp_data['vac_period'], $total_vac_days, $period_dates['start'], $contract_info['years']);
+                error_log("calculateCarryover result: $carryover");
+
+                // AS400-style cumulative rounding accrual
+                $today = new DateTime();
+                $today->setTime(0, 0, 0);
+                $earned_days = $this->calculateEarnedDays($total_vac_days, $period_dates['start'], $period_dates['end']);
+                error_log("calculateEarnedDays (360-day) result: $earned_days");
+
+                $remaining_balance = $total_vac_days - $used_days;
+                $available_balance = $earned_days + $carryover - $used_days;
+
+                // --- Snapshot logic using last_updated as anchor for DAILY ACCRUAL ---
+                $snap = null;
+                $snap_q_latest = "SELECT available_balance, used_days, period_end, carryover_days, last_updated, created_at FROM emp_vacation_balance WHERE emp_id = ? ORDER BY id DESC LIMIT 1";
+                if ($stmtSnap = $this->conDB->prepare($snap_q_latest)) {
+                    $stmtSnap->bind_param("s", $emp_id);
+                    if ($stmtSnap->execute()) {
+                        $snap = $stmtSnap->get_result()->fetch_assoc();
+                    }
+                    $stmtSnap->close();
                 }
 
-                $cp = $this->parseContractPeriod($emp_data['vac_period']);
-                $yrs = $cp['years'];
-                $annual_rate = ($yrs == 2) ? ($total_vac_days / 2) : $total_vac_days;
+                if ($snap && isset($snap['available_balance'])) {
+                    $snapshot_available = (float)$snap['available_balance'];
+                    $anchor = null;
+                    if (!empty($snap['last_updated'])) {
+                        $anchor = new DateTime($snap['last_updated']);
+                        $anchor->setTime(0, 0, 0);
+                    } elseif (!empty($snap['created_at'])) {
+                        $anchor = new DateTime($snap['created_at']);
+                        $anchor->setTime(0, 0, 0);
+                    } else {
+                        $anchor = new DateTime('2025-11-01');
+                        $anchor->setTime(0, 0, 0);
+                    }
 
-                // ** MODIFIED to use 360-day rate **
-                $daily_rate_360 = $annual_rate / 360.0; 
+                    $today_live = new DateTime();
+                    $today_live->setTime(0, 0, 0);
 
-                $accrued_raw = $days_elapsed * $daily_rate_360;
-                $accrued_days = floor($accrued_raw * 100) / 100; // floor to 2 decimals
+                    $days_elapsed = 0;
+                    if ($today_live > $anchor) {
+                        $days_elapsed = self::calculate360DayDiff($anchor, $today_live);
+                    }
 
-                // Final: stored_available + fresh_accrual_from last_updated
-                // This logic OVERWRITES the baseline calculation.
-                $available_balance = round($snapshot_available + $accrued_days, 2);
-                error_log("360-day last_updated-accrual for emp $emp_id: opening_available={$snapshot_available}, anchor=" . $anchor->format('Y-m-d') . ", days_360={$days_elapsed}, daily_rate_360={$daily_rate_360}, accrued_floor={$accrued_days}, final={$available_balance}");
+                    $cp = $this->parseContractPeriod($emp_data['vac_period']);
+                    $yrs = $cp['years'];
+                    $annual_rate = ($yrs == 2) ? ($total_vac_days / 2) : $total_vac_days;
+                    $daily_rate_360 = $annual_rate / 360.0; 
+                    $accrued_raw = $days_elapsed * $daily_rate_360;
+                    $accrued_days = round($accrued_raw, 2);
+                    $available_balance = round($snapshot_available + $accrued_days, 2);
+                    error_log("360-day last_updated-accrual for emp $emp_id: opening_available={$snapshot_available}, anchor=" . $anchor->format('Y-m-d') . ", days_360={$days_elapsed}, daily_rate_360={$daily_rate_360}, accrued_days={$accrued_days}, final={$available_balance}");
+                }
+
+                error_log("Final calculations: remaining=$remaining_balance, available=$available_balance");
+
+                $final_available = max(0, $available_balance);
+                return [
+                    'emp_id' => $emp_id,
+                    'contract_id' => $emp_data['vac_period'],
+                    'period_start' => $period_dates['start'],
+                    'period_end' => $period_dates['end'],
+                    'total_days' => $final_available,
+                    'used_days' => $used_days,
+                    'remaining_balance' => $remaining_balance,
+                    'available_balance' => $final_available,
+                    'carryover_days' => $carryover
+                ];
+            } catch (Exception $e) {
+                error_log("getCalculatedBalance EXCEPTION for emp_id $emp_id: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+                return null;
             }
-
-            error_log("Final calculations: remaining=$remaining_balance, available=$available_balance");
-
-            // Return the calculated data as an array.
-            return [
-                'emp_id' => $emp_id,
-                'contract_id' => $emp_data['vac_period'],
-                'period_start' => $period_dates['start'],
-                'period_end' => $period_dates['end'],
-                'total_days' => $total_vac_days,
-                'used_days' => $used_days,
-                'remaining_balance' => $remaining_balance,
-                'available_balance' => max(0, $available_balance), // Available balance cannot be negative.
-                'carryover_days' => $carryover
-            ];
-
         } catch (Exception $e) {
             error_log("getCalculatedBalance EXCEPTION for emp_id $emp_id: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
             return null;
         }
     }
-    
-    // --- Private Helper Methods ---
 
     /**
-     * Gets the total number of used vacation days that are fully approved by the GM.
-     * It excludes emergency fly vacations from the total.
+     * Gets the sum of all GM-approved vacation days for an employee within a given date range.
+     *
+     * @param string $emp_id The employee's ID.
+     * @param DateTime $period_start The start of the period.
+     * @param DateTime $period_end The end of the period.
+     * @return float The total vacation days used.
      */
-    private function getUsedVacationDays($emp_id, $period_start, $period_end) {
-        // Normalize dates once
-        $start_str = $period_start instanceof DateTime ? $period_start->format('Y-m-d') : (string)$period_start;
-        $end_str = $period_end instanceof DateTime ? $period_end->format('Y-m-d') : (string)$period_end;
-
-        // 1) Prefer persisted balance within current period
-        $persist_q = "SELECT used_days, period_end, created_at 
-                      FROM emp_vacation_balance 
-                      WHERE emp_id = ? 
-                        AND period_start >= ? 
-                        AND period_end   <= ? 
-                      ORDER BY period_end DESC, id DESC 
-                      LIMIT 1";
-        $persist_stmt = $this->conDB->prepare($persist_q);
-        if ($persist_stmt) {
-            $persist_stmt->bind_param("sss", $emp_id, $start_str, $end_str);
-            if ($persist_stmt->execute()) {
-                $persist_res = $persist_stmt->get_result()->fetch_assoc();
-                if ($persist_res && isset($persist_res['used_days'])) {
-                    $persist_val = (float)$persist_res['used_days'];
-                    $anchor_str = null;
-                    if (!empty($persist_res['created_at'])) {
-                        try {
-                            $anchor_dt = new DateTime($persist_res['created_at']);
-                            $anchor_dt->setTime(0, 0, 0);
-                            $anchor_str = $anchor_dt->format('Y-m-d');
-                        } catch (Exception $e) {
-                            $anchor_str = null;
-                        }
-                    }
-                    if (!$anchor_str && !empty($persist_res['period_end'])) {
-                        $anchor_str = $persist_res['period_end'];
-                    }
-                    if ($persist_val > 0) {
-                        // Add used since anchor (created_at or period_end)
-                        $delta = 0.0;
-                        if (!empty($anchor_str)) {
-                            $delta_q = "SELECT COALESCE(SUM(`vacdays`), 0) AS addl
-                                        FROM `emp_vacation`
-                                        WHERE `emp_id` = ?
-                                          AND `current_status` IN ('approved', 'gm_approved')
-                                          AND ((`vac_type` = 'Fly' AND `fly_type` IN ('annual','emergency')) OR (`vac_type` = 'Local Vacation'))
-                                          AND `start_date` > ? AND `start_date` <= ?";
-                            $delta_stmt = $this->conDB->prepare($delta_q);
-                            if ($delta_stmt) {
-                                $delta_stmt->bind_param("sss", $emp_id, $anchor_str, $end_str);
-                                if ($delta_stmt->execute()) {
-                                    $delta_res = $delta_stmt->get_result()->fetch_assoc();
-                                    $delta = (float)($delta_res['addl'] ?? 0);
-                                }
-                                $delta_stmt->close();
-                            }
-                        }
-                        $persist_stmt->close();
-                        return $persist_val + $delta;
-                    }
-                }
-            } else {
-                error_log("getUsedVacationDays persisted query execute failed: " . $persist_stmt->error);
-            }
-            $persist_stmt->close();
-        } else {
-            error_log("getUsedVacationDays persisted query prepare failed: " . $this->conDB->error);
-        }
+    private function getUsedVacationDays($emp_id, DateTime $period_start, DateTime $period_end) {
+        $start_str = $period_start->format('Y-m-d');
+        $end_str = $period_end->format('Y-m-d');
 
         // 2) Fallback: Sum approved vacations within the current period
-        $query = "SELECT COALESCE(SUM(`vacdays`), 0) AS `used_days`
+        // IMPORTANT: Must subtract ALL holiday days from the vacation period to avoid over-deduction
+        $query = "SELECT `id`, `vacdays`, `start_date`, `return_date`
                   FROM `emp_vacation`
                   WHERE `emp_id` = ?
                     AND `current_status` IN ('approved', 'gm_approved')
@@ -294,9 +286,51 @@ class VacationCalculator {
             $stmt->close();
             return 0;
         }
-        $result = $stmt->get_result()->fetch_assoc();
+        
+        // === FIX: Calculate total with full holiday deduction ===
+        $result = $stmt->get_result();
+        $total_used_days = 0.0;
+        
+        while ($vacation_row = $result->fetch_assoc()) {
+            $vac_days = (float)$vacation_row['vacdays'];
+            $vac_start = $vacation_row['start_date'];
+            $vac_end = $vacation_row['return_date'];
+            
+            // Get ALL active holidays that exist during this vacation period
+            // Business rule: subtract ALL holiday days, not just overlap
+            $holiday_query = "SELECT total_days FROM emp_holidays 
+                            WHERE is_active = 1 
+                            AND start_date <= ? 
+                            AND end_date >= ? ";
+            $h_stmt = $this->conDB->prepare($holiday_query);
+            if ($h_stmt) {
+                $h_stmt->bind_param("ss", $vac_end, $vac_start);
+                $h_stmt->execute();
+                $h_result = $h_stmt->get_result();
+                
+                $total_holiday_days = 0;
+                while ($holiday_row = $h_result->fetch_assoc()) {
+                    // Use the total_days field directly - this is the full holiday period
+                    $holiday_total = (float)($holiday_row['total_days'] ?? 0);
+                    $total_holiday_days += $holiday_total;
+                }
+                
+                $h_result->free();
+                $h_stmt->close();
+                
+                // Deductible days = vacation days - total holiday days
+                $deductible_days = max(0, $vac_days - $total_holiday_days);
+                $total_used_days += $deductible_days;
+            } else {
+                // If holiday query fails, use full vacation days (safer fallback)
+                $total_used_days += $vac_days;
+            }
+        }
+        
+        $result->free();
         $stmt->close();
-        return (float)($result['used_days'] ?? 0);
+        
+        return $total_used_days;
     }
     
     /**
@@ -368,13 +402,23 @@ class VacationCalculator {
         $today = new DateTime();
         $today->setTime(0, 0, 0);
         
-        $years_employed = $today->diff($joining)->y;
-        $contracts_completed = floor($years_employed / $contract_years);
+        // FIXED: Use day-based calculation instead of year difference to avoid losing days
+        // This ensures we don't miss any days at the contract boundary
+        $interval = $joining->diff($today);
+        $days_employed = $interval->days;  // Total days employed
+        $days_per_contract = $contract_years * 360;  // Using 360-day contract
+        $contracts_completed = floor($days_employed / $days_per_contract);
         
         $current_start = (clone $joining)->add(new DateInterval("P" . ($contracts_completed * $contract_years) . "Y"));
         $current_start->setTime(0, 0, 0);
         $current_end = (clone $current_start)->add(new DateInterval("P" . $contract_years . "Y"));
         $current_end->setTime(0, 0, 0);
+        
+        // VALIDATION: Ensure today falls within the calculated period
+        if ($today < $current_start || $today >= $current_end) {
+            error_log("WARNING: Date validation failed for emp_id calculation. today=" . $today->format('Y-m-d') . 
+                     ", current_start=" . $current_start->format('Y-m-d') . ", current_end=" . $current_end->format('Y-m-d'));
+        }
         
         return ['start' => $current_start, 'end' => $current_end];
     }
@@ -414,6 +458,11 @@ class VacationCalculator {
      * Calculates the difference between two dates using the 30/360 day-count basis.
      * This matches the AS400/financial calculation shown in the screenshots.
      *
+     * VALIDATION: For full contract periods:
+     * - 1-year contract (Jan 1 to Dec 31) = 360 days
+     * - 2-year contract = 720 days
+     * - Period boundaries are checked to prevent day loss
+     *
      * @param DateTime $date_start
      * @param DateTime $date_end
      * @return int
@@ -430,7 +479,16 @@ class VacationCalculator {
         // This is the key formula for the 30/360 method that matches your screenshots
         // (e.g., May 18 to Nov 17 = 179 days)
         // (e.g., Oct 15 to Nov 17 = 32 days)
-        return (($y2 - $y1) * 360) + (($m2 - $m1) * 30) + ($d2 - $d1);
+        $diff = (($y2 - $y1) * 360) + (($m2 - $m1) * 30) + ($d2 - $d1);
+        
+        // VALIDATION: Warn if calculating a full year boundary with unexpected result
+        $interval = $date_start->diff($date_end);
+        if ($interval->y > 0 && $diff < 0) {
+            error_log("WARNING: calculate360DayDiff returned negative value: " . 
+                     $date_start->format('Y-m-d') . " to " . $date_end->format('Y-m-d') . " = " . $diff . " days");
+        }
+        
+        return $diff;
     }
 
     /**

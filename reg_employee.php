@@ -132,6 +132,11 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 	<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 	<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
 	<script src="assets/js/modernizr.min.js"></script>
+    
+    <!-- SweetAlert2 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 	<?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
@@ -267,6 +272,21 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
         document.getElementById('searchFilter').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { applyFilters(); }
         });
+        // Check for SweetAlert message from session (after edit redirect)
+        <?php if (isset($_SESSION['swal_alert'])): ?>
+            Swal.fire({
+                title: '<?= addslashes($_SESSION['swal_alert']['title']) ?>',
+                text: '<?= addslashes($_SESSION['swal_alert']['message']) ?>',
+                icon: '<?= $_SESSION['swal_alert']['type'] ?>',
+                confirmButtonText: '<?= __("ok") ?>',
+                allowOutsideClick: false,
+                customClass: {
+                    confirmButton: 'btn btn-primary'
+                },
+                buttonsStyling: false
+            });
+            <?php unset($_SESSION['swal_alert']); ?>
+        <?php endif; ?>
     </script>
 </body>
 

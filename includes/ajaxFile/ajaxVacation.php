@@ -145,14 +145,15 @@ elseif ($ajaxType == 'canApplyVacation') {
         }
         
         // ALSO check for any active/approved vacation (for Emergency vacation date restriction)
-        // If there's an approved vacation that hasn't ended yet, get its return_date
-        // Also check if there's an active vacation with review = 'A' to show its approval chain
+        // FIX: Get the MOST RECENT approved/completed vacation (past or future)
+        // to ensure proper date restriction for next vacation application
         $active_vacation_inv = null;
         if (empty($active_return_date)) {
+            // Get the most recent approved/completed vacation (regardless of past/future)
             $sql_active = "SELECT `return_date`, `request_inv_no` FROM `emp_vacation` 
                           WHERE `emp_id` = ? 
                           AND `current_status` IN ('approved', 'completed') 
-                          AND `return_date` >= CURDATE() 
+                          AND `review` IN ('A')
                           ORDER BY `return_date` DESC LIMIT 1";
             $stmt_active = mysqli_prepare($conDB, $sql_active);
             if ($stmt_active) {
@@ -773,7 +774,17 @@ elseif ($ajaxType == 'applyVacation') {
 
         // 6. Check balance before proceeding (use live calculated balance)
         // EXCEPTION: Emergency vacation does NOT require balance check (it is unpaid)
-        $is_emergency_vacation = ($vac_type === 'Fly' && $fly_type === 'emergency') || ($vac_type === 'Local Vacation' && $fly_type === 'emergency');
+        // Emergency vacation can be applied as:
+        // 1. vac_type === 'Fly' with fly_type === 'emergency'
+        // 2. vac_type === 'Local Vacation' with fly_type === 'emergency'  
+        // 3. vac_type === 'Emergency Vacation' (direct selection)
+        // Also check remarks for 'Emergency vacation' as indicator
+        $remarks_lower = strtolower(trim($notes ?? ''));
+        $is_emergency_vacation = ($vac_type === 'Fly' && $fly_type === 'emergency') 
+                              || ($vac_type === 'Local Vacation' && $fly_type === 'emergency')
+                              || ($vac_type === 'Emergency Vacation')
+                              || ($vac_type === 'Emergency vacation')
+                              || (strpos($remarks_lower, 'emergency') !== false && $vac_type === 'Local Vacation');
         
         $remaining_balance = get_current_vacation_balance($conDB, $emp_id);
 
@@ -840,6 +851,24 @@ elseif ($ajaxType == 'applyVacation') {
         // If still unknown, default to 0 remaining to be safe
         if ($effective_remaining === false || $effective_remaining === null) {
             $effective_remaining = 0.0;
+        }
+
+        // [NEW VALIDATION] Emergency Vacation can ONLY be applied when available_balance < 1
+        // Emergency Vacation is a PAID leave for employees with no balance remaining
+        if ($is_emergency_vacation) {
+            if ($effective_remaining >= 1) {
+                // Employee has sufficient balance - they cannot use emergency vacation
+                send_json_response(
+                    __('emergency_vacation_not_eligible', 'Not Eligible for Emergency Vacation'),
+                    sprintf(
+                        __('emergency_vacation_requires_zero_balance', 'Emergency Vacation is only available when you have insufficient balance. Your current balance is %s days. Please use regular vacation.'),
+                        round($effective_remaining, 2)
+                    ),
+                    "error",
+                    400
+                );
+                exit;
+            }
         }
 
         // [NEW] If this is an Encashment request, force today's dates and use the user-entered encash_days
@@ -962,11 +991,16 @@ elseif ($ajaxType == 'applyVacation') {
         $request_inv_no_esc = mysqli_real_escape_string($conDB, $request_inv_no);
 
         // Determine is_deductible flag
-        // If vacation type is "Fly" OR "Local Vacation" with fly_type "annual", set is_deductible = 0
-        // This means the employee stays active in payroll with full salary (no deductions)
+        // Emergency vacation is unpaid - does NOT deduct from balance (set is_deductible = 0)
+        // Annual vacation does NOT deduct from balance either (set is_deductible = 0)
+        // Regular/Normal vacation DOES deduct from balance (is_deductible = 1)
         $is_deductible = 1; // Default: deductible (affects payroll)
-        if (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual') {
-            $is_deductible = 0; // Not deductible: employee remains in full payroll
+        
+        // Set is_deductible = 0 for:
+        // 1. Emergency vacation (any form)
+        // 2. Annual vacation ("Fly" or "Local Vacation" with fly_type "annual")
+        if ($is_emergency_vacation || (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual')) {
+            $is_deductible = 0; // Not deductible: does NOT reduce vacation balance, HR_Payroll will handle deduction on approval
         }
 
 

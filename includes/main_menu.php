@@ -42,6 +42,7 @@ $allEmployeeEvaluationsLink = 'all_employee_evaluations.php';
 $userActivityLink = 'user_activity.php';
 $activityLoggerLink = 'view_activity_logs.php';
 $manageEmployeeSupervisorsLink = 'manage_employee_supervisors.php';
+$manageHolidaysLink = 'manage_holidays.php?status=1';
 
 
 // =================================================================================
@@ -83,6 +84,7 @@ $page_roles = [
     'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager','HR_Recruitment'],
     'manage_employee_supervisors.php' => ['Administrator'],
+    'manage_holidays.php' => ['Administrator', 'HR_Senior_BP', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -235,8 +237,9 @@ if ($loan_type_id > 0) {
         if ($res_loan_admin && ($rla = mysqli_fetch_assoc($res_loan_admin))) {
             $loan_pending_count = (int)$rla['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
         // Department Manager: count all loan requests from their department employees
+        // Also applies to GM and HR Managers
                 $loan_pending_query_dept = "SELECT COUNT(DISTINCT l.inv_no) AS count
                                                                      FROM emp_loan l
                                                                      JOIN employees e ON l.emp_id = e.emp_id
@@ -373,8 +376,9 @@ if ($vacation_type_id > 0) {
         if ($res_vac_admin && ($rva = mysqli_fetch_assoc($res_vac_admin))) {
             $vacation_pending_count = (int)$rva['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
         // Department Manager: count all vacation requests from their department employees
+        // Also applies to GM and HR Managers
                 $vacation_pending_query_dept = "SELECT COUNT(DISTINCT v.request_inv_no) AS count
                                                                              FROM emp_vacation v
                                                                              JOIN employees e ON v.emp_id = e.emp_id
@@ -421,8 +425,9 @@ if ($rejoin_type_id > 0) {
         if ($res_rejoin_admin && ($rra = mysqli_fetch_assoc($res_rejoin_admin))) {
             $rejoin_pending_count = (int)$rra['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
         // Department Manager: count all rejoin requests from their department employees
+        // Also applies to GM and HR Managers
                 $rejoin_pending_query_dept = "SELECT COUNT(DISTINCT rr.id) AS count
                                                                            FROM rejoin_requests rr
                                                                            JOIN employees e ON rr.emp_id = e.emp_id
@@ -471,8 +476,9 @@ if ($resignation_type_id > 0) {
         if ($res_resig_admin && ($rra = mysqli_fetch_assoc($res_resig_admin))) {
             $resignation_pending_count = (int)$rra['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
         // Department Manager: count all resignation requests from their department employees
+        // Also applies to GM and HR Managers
                 $resignation_pending_query_dept = "SELECT COUNT(DISTINCT r.request_inv_no) AS count
                                                                                     FROM emp_resignations r
                                                                                     JOIN employees e ON r.emp_id = e.emp_id
@@ -601,6 +607,10 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
                 <?php if ($is_system_admin): ?>
                     <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa fa-users-gear"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
+                <?php endif; ?>
+
+                <?php if ($isHR || $is_system_admin): ?>
+                    <li><a href="<?= $manageHolidaysLink ?>"><i class="fa fa-calendar-days"></i><span>Holiday Management</span></a></li>
                 <?php endif; ?>
 
                 <?php /* 

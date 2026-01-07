@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Team Member Notification</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <style>
+        body { margin: 0; padding: 0; word-spacing: normal; background-color: #121212; }
+        table, td, th { border-collapse: collapse; }
+        td, a, span { mso-line-height-rule: exactly; }
+        .ExternalClass { width: 100%; }
+        .ExternalClass, .ExternalClass p, .ExternalClass span, .ExternalClass font, .ExternalClass td, .ExternalClass div { line-height: 100%; }
+
+        @media screen and (max-width: 600px) {
+            .container { width: 100% !important; max-width: 100% !important; }
+            .content { padding: 25px !important; }
+            .info-box { padding: 15px !important; }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #121212; font-family: Arial, sans-serif;">
+    <center style="width: 100%; table-layout: fixed; background-color: #121212;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #1e1e1e;">
+            <!--[if mso]>
+            <table align="center" border="0" cellspacing="0" cellpadding="0" width="600" style="width:600px;">
+            <tr>
+            <td align="center" valign="top" width="600" style="width:600px;">
+            <![endif]-->
+            <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #1e1e1e; border: 1px solid #333333;" class="container">
+                <!-- LOGO -->
+                <tr>
+                    <td align="center" style="padding: 30px 20px; border-bottom: 1px solid #333333;">
+                        <img src="{{LOGO_URL}}" alt="Company Logo" height="90" style="display: block; height: 90px; max-width: 130px; border: 0;">
+                    </td>
+                </tr>
+                <!-- CONTENT -->
+                <tr>
+                    <td style="padding: 40px;" class="content">
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" style="width: 100%;">
+                            <tr>
+                                <td align="center">
+                                    <h1 style="margin: 0 0 20px 0; font-size: 26px; font-weight: bold; color: #ffffff;">New Team Member</h1>
+                                    <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #e0e0e0;">Dear {{APPROVER_NAME}},</p>
+                                    <p style="margin: 0 0 30px 0; font-size: 16px; line-height: 1.6; color: #e0e0e0;">A new employee has been registered and assigned to your team. Please review their information below and contact HR if you have any questions.</p>
+                                </td>
+                            </tr>
+                            <!-- REQUEST INFO BOX -->
+                            <tr>
+                                <td align="center" style="padding: 20px 0;">
+                                    <table border="0" cellspacing="0" cellpadding="0" style="width: 100%; background-color: #2a2a2a; border-radius: 8px; border: 1px solid #404040;" class="info-box">
+                                        <tr>
+                                            <td style="padding: 25px;">
+                                                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Employee Name:</span>
+                                                            <span style="color: #ffffff; font-size: 16px; font-weight: 600;">{{EMPLOYEE_NAME}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Employee ID:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{EMPLOYEE_ID}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Iqama / ID Number:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{IQAMA_NUMBER}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Email:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{EMPLOYEE_EMAIL}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Mobile:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{EMPLOYEE_MOBILE}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Department:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{DEPARTMENT_NAME}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Position / Job Title:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{JOB_TITLE}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Joining Date:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{JOINING_DATE}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0; border-bottom: 1px solid #404040;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Salary:</span>
+                                                            <span style="color: #4CAF50; font-size: 16px; font-weight: 600;">{{SALARY}}</span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style="padding: 8px 0;">
+                                                            <span style="color: #a0a0a0; font-size: 14px;">Company:</span>
+                                                            <span style="color: #ffffff; font-size: 14px;">{{COMPANY_NAME}}</span>
+                                                        </td>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            <!-- ACTION BUTTON -->
+                            <tr>
+                                <td align="center" style="padding: 30px 0;">
+                                    <table border="0" cellspacing="0" cellpadding="0">
+                                        <tr>
+                                            <td align="center" style="border-radius: 6px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                                                <a href="{{REQUEST_URL}}" target="_blank" style="font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px; padding: 14px 40px; border: 1px solid #28a745; display: inline-block;">View Employee Profile</a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            <!-- SECONDARY ACTION -->
+                            <tr>
+                                <td align="center" style="padding: 0 0 30px 0;">
+                                    <table border="0" cellspacing="0" cellpadding="0">
+                                        <tr>
+                                            <td align="center">
+                                                <a href="{{ALL_EMPLOYEES_URL}}" target="_blank" style="font-size: 14px; font-weight: 600; color: #20c997; text-decoration: none; border-bottom: 2px solid #20c997; padding: 5px 0; display: inline-block;">View All Employees</a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            <!-- INFO MESSAGE -->
+                            <tr>
+                                <td align="center" style="padding: 20px 0;">
+                                    <table border="0" cellspacing="0" cellpadding="0" style="width: 100%; background-color: #2a2a2a; border-left: 4px solid #20c997; border-radius: 4px;">
+                                        <tr>
+                                            <td style="padding: 15px 20px;">
+                                                <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #e0e0e0;"><strong style="color: #20c997;">ℹ️ Important:</strong> As the direct supervisor, please ensure the new employee is properly onboarded. Schedule an introduction meeting, provide necessary resources, and configure access permissions as needed. Contact HR for any assistance.</p>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                <!-- FOOTER -->
+                <tr>
+                    <td style="padding: 30px; background-color: #1a1a1a; border-top: 1px solid #333333;">
+                        <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                            <tr>
+                                <td align="center">
+                                    <p style="margin: 0 0 10px 0; font-size: 12px; color: #808080;">This is an automated email from Al-Mutlak HR Management System.</p>
+                                    <p style="margin: 0 0 5px 0; font-size: 11px; color: #666666;">© 2025 Al-Mutlak Co. All rights reserved.</p>
+                                    <p style="margin: 0; font-size: 11px; color: #666666;">For support, please contact: <a href="mailto:hr@almutlak.com" style="color: #28a745; text-decoration: none;">hr@almutlak.com</a></p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+            <!--[if mso]>
+            </td>
+            </tr>
+            </table>
+            <![endif]-->
+        </div>
+    </center>
+</body>
+</html>

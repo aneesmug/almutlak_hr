@@ -30,7 +30,7 @@ if (mysqli_num_rows($query) == 1) {
         die("Invalid request parameters.");
     }
 
-    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note, accommodation_provided, transportation_provided)
+    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note, accommodation_provided, transportation_provided, contract_period)
     $sql = "SELECT 
                 v.*, 
                 v.fly_type as raw_fly_type,
@@ -56,6 +56,7 @@ if (mysqli_num_rows($query) == 1) {
                 c.name AS `country_name`,
                 re.name AS `replacement_person_name`,
                 cp.vac_period AS contract_vacation_days,
+                cp.period AS contract_period,
                 CASE 
                     WHEN `v`.`fly_type` = 'annual' THEN 'Annual Vacation' 
                     WHEN `v`.`fly_type` = 'emergency' THEN 'Emergency Vacation'
@@ -113,7 +114,10 @@ if (mysqli_num_rows($query) == 1) {
     $permit_fee = 0;
     $overtime_amount = 0;
     $deduction_amount = 0;
-    $applied_days = (float)($request['vacdays'] ?? 0);
+    
+    // Get approved vacation days from the request (vacdays = approved days)
+    $approved_days = (float)($request['vacdays'] ?? 0);
+    $applied_days = $approved_days; // Use approved days for calculations
     
     // Get payroll overtime/deduction values
     $overtime_hours = (float)($request['overtime_hours'] ?? 0);
@@ -183,12 +187,31 @@ if (mysqli_num_rows($query) == 1) {
         // Only for Fly + Annual AND vacation_salary_type = 'payroll'
         // NOT for Local Vacation + Annual (stays in payroll)
         // NOT for Encashment (handled separately)
+        // IMPORTANT: Calculation is based on APPROVED DAYS (vacdays field)
+        // Formula: floor(approved_days / contract_days) * period_years * total_monthly_salary
+        // E.g. 21 days/year contract + 21 approved days = 1 salary
+        //      42 days/2 years contract + 42 approved days = 2 salaries
+        //      60 days/2 years contract (30 days/year) + 60 approved days = 2 salaries
         if ($is_fly_annual && $vacation_salary_type === 'payroll') {
             $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
-            if ($contract_days > 0 && $applied_days == $contract_days) {
-                $vacation_salary = $total_monthly_salary;
+            
+            if ($contract_days > 0) {
+                // Extract period years from contract_period string (e.g., "2 Years - 60" → 2)
+                $contract_period_str = $request['contract_period'] ?? '';
+                $period_years = 1; // default to 1 year
+                
+                if (!empty($contract_period_str) && preg_match('/(\d+)\s+Years?/', $contract_period_str, $matches)) {
+                    $period_years = (int)$matches[1];
+                }
+                
+                // Calculate how many full salaries to pay based on APPROVED days used
+                // Formula: (approved_days / contract_days) * period_years
+                // Example: 60 approved days / 30 days contract * 2 years = 2 salaries
+                $salaries_earned = floor($approved_days / $contract_days) * $period_years;
+                $vacation_salary = $salaries_earned * $total_monthly_salary;
             } else {
-                $vacation_salary = $daily_rate * $applied_days;
+                // Fallback: use daily rate if no contract days defined
+                $vacation_salary = $daily_rate * $approved_days;
             }
         }
 
@@ -219,7 +242,8 @@ if (mysqli_num_rows($query) == 1) {
         $total_payable = 0;
     } elseif ($is_fly_annual) {
         // Fly + Annual: Working days + vacation salary + fees - deductions
-        $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee + $overtime_amount - $gosi_deduction - $deduction_amount;
+        // $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee + $overtime_amount - $gosi_deduction - $deduction_amount;
+        $total_payable = ($vacation_salary + $working_days_salary) + $overtime_amount - $gosi_deduction - $deduction_amount;
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
         $total_payable = 0;
@@ -469,7 +493,7 @@ if (mysqli_num_rows($query) == 1) {
                                         <?php if (!empty($request['arrival_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
                                             <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['arrival_date']) ? date('d M Y', strtotime($request['arrival_date'])) : null); ?></small></span></div>
                                         <?php endif; ?>
-                                        <?php if ($flight_days > 0): ?>
+                                        <?php if ($flight_days > 0 && $ticket_fee > 0): ?>
                                             <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?= display_or_na($flight_days); ?> <?= __('days') ?></small></span></div>
                                         <?php endif; ?>
                                         <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?= parseName(($request['replacement_person_name'] ?? '') !== '' ? $request['replacement_person_name'] : __('not_available')); ?></small></span></div>
@@ -624,7 +648,7 @@ if (mysqli_num_rows($query) == 1) {
                                             </li>
                                             <li>
                                                 <div>
-                                                    <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?></span>
+                                                    <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?><?php if ($salaries_earned > 1): ?> <span style="color: #28a745; font-weight: 700;">x<?= (int)$salaries_earned ?></span><?php endif; ?></span>
                                                     <small class="text-muted d-block"><?= __('calculated_for_days') ?? 'Calculated for {days} days' ?> (<?= htmlspecialchars($applied_days); ?> <?= __('days') ?? 'days' ?>)</small>
                                                 </div>
                                                 <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>

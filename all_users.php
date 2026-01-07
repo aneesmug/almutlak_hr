@@ -31,8 +31,6 @@ if (mysqli_num_rows($query) == 1) {
         <!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/buttons.dataTables.min.css" rel="stylesheet" type="text/css" />
-
         <!-- Responsive datatable examples -->
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
@@ -41,7 +39,6 @@ if (mysqli_num_rows($query) == 1) {
 
         <!-- Select2 CSS -->
         <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/select2/css/select2-bootstrap.min.css" rel="stylesheet" type="text/css" />
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -123,15 +120,32 @@ if (mysqli_num_rows($query) == 1) {
                             <div class="col-12">
                                 <?//= $msg ?>
                                 <div class="card-box table-responsive">
-                                    <h4 class="m-t-0 header-title">All Registerd Users</h4>
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h4 class="m-t-0 header-title">All Registerd Users</h4>
+                                        <button type="button" class="btn btn-primary btn-sm waves-effect waves-light createUserDeptAjax">
+                                            <i class="mdi mdi-plus-circle mr-2"></i>Add User
+                                        </button>
+                                    </div>
 
                                     <div id="response"></div>
 
-                                    <div class="d-flex justify-content-between align-items-center row pb-2 gap-3 gap-md-0">
-                                        <div class="col-md-3 user_status mb-2"></div>
-                                        <div class="col-md-3 user_department mb-2"></div>
-                                        <div class="col-md-3 user_role mb-2"></div>
-                                        <div class="col-md-3 user_company mb-2"></div>
+                                    <div class="row pb-3 border-bottom">
+                                        <div class="col-md-3 mb-2">
+                                            <label for="filterStatus" class="form-label small font-weight-bold d-block mb-1">Filter by Status</label>
+                                            <div class="user_status"></div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label for="filterDept" class="form-label small font-weight-bold d-block mb-1">Filter by Department</label>
+                                            <div class="user_department"></div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label for="filterRole" class="form-label small font-weight-bold d-block mb-1">Filter by Role</label>
+                                            <div class="user_role"></div>
+                                        </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label for="filterCompany" class="form-label small font-weight-bold d-block mb-1">Filter by Company</label>
+                                            <div class="user_company"></div>
+                                        </div>
                                     </div>
 
 
@@ -140,6 +154,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <tr>
                                                 <th>ID</th>
                                                 <th></th>
+                                                <th>Employee ID</th>
                                                 <th>Employee Name</th>
                                                 <th>Department</th>
                                                 <th>Mobile</th>
@@ -150,67 +165,6 @@ if (mysqli_num_rows($query) == 1) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php
-                                            $sql_emp_vac = "SELECT 
-    `employees`.*, 
-    `admin_login`.* ,
-    `employees`.`name` AS `efullname`, 
-    `admin_login`.`id` AS `lid`, 
-    `department`.`dep_nme` AS `deptnme`,
-    `admin_login`.`allowed_companies`
-    FROM `admin_login` 
-    LEFT JOIN `employees` ON `employees`.`emp_id` = `admin_login`.`emp_id`
-    LEFT JOIN `department` ON `department`.`id` = `admin_login`.`dept`
-    ORDER BY `admin_login`.`id` DESC";
-
-                                            $query_emp_vac = mysqli_query($conDB, $sql_emp_vac);
-                                            while ($rec = mysqli_fetch_array($query_emp_vac)) {
-                                                $id_user_usr = $rec["lid"];
-                                                $firstnme_usr = $rec["efullname"];
-                                                $usrty_usr = $rec["user_type"];
-                                                $dept_usr = $rec["deptnme"];
-                                                $email_usr = $rec["email"];
-                                                $mobile_usr = $rec["mobile"];
-                                                $status_usr = $rec["status"];
-                                                $password_usr = $rec["password"];
-                                                $avatar_usr = $rec["avatar"];
-                                                $allowed_companies = $rec["allowed_companies"];
-                                                
-                                                // Convert JSON allowed_companies to company names
-                                                $company_names = "All Companies";
-                                                if (!empty($allowed_companies)) {
-                                                    $companies_array = json_decode($allowed_companies, true);
-                                                    if (is_array($companies_array) && !empty($companies_array)) {
-                                                        $company_ids = implode(',', array_map('intval', $companies_array));
-                                                        $comp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(`comp_name` SEPARATOR ', ') AS `names` FROM `companies` WHERE `id` IN ($company_ids)");
-                                                        if ($comp_query && $comp_row = mysqli_fetch_assoc($comp_query)) {
-                                                            $company_names = $comp_row['names'] ?: $allowed_companies;
-                                                        }
-                                                    }
-                                                }
-                                            ?>
-                                                <tr>
-                                                    <th><?= $id_user_usr; ?></th>
-                                                    <th><input type="checkbox" name="status" id="id" value="<?= $id_user_usr ?>" <?= ($status_usr == 1) ? "checked" : "" ?> /></th>
-                                                    <th><?= $firstnme_usr ?></th>
-                                                    <th><?= $dept_usr; ?></th>
-                                                    <th><?= $mobile_usr; ?></th>
-                                                    <th><?= $usrty_usr; ?></th>
-                                                    <th><?= $company_names; ?></th>
-                                                    <th><?= $status_usr; ?></th>
-                                                    <th>
-                                                        <div class='btn-group dropdown'>
-                                                            <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-                                                            <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                                                <a href='javascript:void(0);' class='dropdown-item text-custom editUserAttr updateUserAjax' data-id="<?= $rec['id'] ?>" data-fullname="<?= $rec['efullname'] ?>" data-dept="<?= $rec['deptnme'] ?>" data-email="<?= $rec['email'] ?>" data-user_type="<?= $rec['user_type'] ?>" data-allowed_companies="<?= htmlspecialchars($rec['allowed_companies'] ?? '') ?>"><i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit</a>
-                                                                <?php if ($user_type == $access1) { ?>
-                                                                    <a href='javascript:void(0);' class='dropdown-item  text-danger deleteAjax' data-id='<?= $id_user_usr ?>' data-tbl='admin_login' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>Delete</a>
-                                                                <?php } ?>
-                                                            </div>
-                                                        </div>
-                                                    </th>
-                                                </tr>
-                                            <?php } ?>
                                         </tbody>
                                     </table>
                                 </div>
@@ -249,10 +203,7 @@ if (mysqli_num_rows($query) == 1) {
 
         <!-- Required datatable js -->
         <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
-        <script src="./plugins/datatables/dataTables.editor.min.js"></script>
         <script src="./plugins/datatables/dataTables.select.min.js"></script>
-        <script src="./plugins/datatables/dataTables.dateTime.min.js"></script>
-        <script src="./plugins/datatables/dataTables.colReorder.min.js"></script>
         <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
         <script src="./plugins/datatables/jszip.min.js"></script>
         <script src="./plugins/datatables/pdfmake.min.js"></script>
@@ -298,7 +249,8 @@ if (mysqli_num_rows($query) == 1) {
 
         <script type="text/javascript">
             $(document).ready(function() {
-                $('input[type="checkbox"]').click(function() {
+                // Use event delegation for dynamically created checkboxes
+                $(document).on('change', 'input[type="checkbox"].user-status-checkbox', function() {
                     var status = ($(this).is(':checked')) ? '1' : '0';
                     var id = $(this).val();
                     $.ajax({
@@ -405,6 +357,13 @@ if (mysqli_num_rows($query) == 1) {
                 var table = $('#employee_vac').DataTable({
                     lengthChange: false,
                     dom: 'Bfrtip',
+                    processing: true,
+                    serverSide: true,
+                    ajax: {
+                        url: './includes/ajaxFile/getAllUsersData.php',
+                        type: 'POST',
+                        dataType: 'json'
+                    },
                     buttons: [{
                         extend: 'collection',
                         className: 'btn-dark',
@@ -423,8 +382,15 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         },
                         {
+                            // Checkbox column
+                            targets: 1,
+                            render: function(data, type, row, meta) {
+                                return `<input type="checkbox" name="status" class="user-status-checkbox" value="${row[0]}" />`;
+                            }
+                        },
+                        {
                             // User Status
-                            targets: 7,
+                            targets: 8,
                             render: function(data, type, row, meta) {
                                 if (statusObj[data]) {
                                     return (`<span class="badge-border ${statusObj[data].class}" text-capitalized>${statusObj[data].title}</span>`);
@@ -434,7 +400,7 @@ if (mysqli_num_rows($query) == 1) {
                         },
                         {
                             // User Type/Role
-                            targets: 5,
+                            targets: 6,
                             render: function(data, type, row, meta) {
                                 // Check if user type exists in our mapping, otherwise show the raw value
                                 if (employeeTypeObj[data]) {
@@ -444,70 +410,158 @@ if (mysqli_num_rows($query) == 1) {
                                 return data.charAt(0).toUpperCase() + data.slice(1).replace(/_/g, ' ');
                             }
                         },
+                        {
+                            // Action column
+                            targets: 9,
+                            render: function(data, type, row, meta) {
+                                var recordData = row[10];  // Already an object, no need to JSON.parse
+                                var html = `<div class='btn-group dropdown'>
+                                    <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
+                                    <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
+                                        <a href='javascript:void(0);' class='dropdown-item text-custom editUserAttr updateUserAjax' 
+                                            data-id="${recordData.lid}" 
+                                            data-fullname="${recordData.efullname || ''}" 
+                                            data-dept="${recordData.deptnme || ''}" 
+                                            data-email="${recordData.email || ''}" 
+                                            data-user_type="${recordData.user_type}" 
+                                            data-allowed_companies="${(recordData.allowed_companies || '').replace(/"/g, '&quot;')}">
+                                            <i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit
+                                        </a>`;
+                                
+                                // Add delete option if user is admin
+                                var userType = '<?= $user_type ?>';
+                                var accessLevel = '<?= $access1 ?>';
+                                if (userType == accessLevel) {
+                                    html += `<a href='javascript:void(0);' class='dropdown-item text-danger deleteAjax' 
+                                        data-id='${row[0]}' 
+                                        data-tbl='admin_login' 
+                                        data-file='0'>
+                                        <i class='fa fa-trash mr-2 font-18 vertical-middle'></i>Delete
+                                    </a>`;
+                                }
+                                
+                                html += `</div></div>`;
+                                return html;
+                            }
+                        }
                     ],
                     initComplete: function() {
-                        var selectOpt = `<select class="custom-select form-select input-sm"><option value=""> All </option></select>`;
-                        // Adding status filter once table initialized
-                        this.api().columns(7).every(function() {
-                            var column = this;
-                            var select = $(selectOpt).appendTo('.user_status').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val ? '^' + val + '$' : '', true, false).draw();
-                            });
-                            column.data().unique().sort().each(function(d, j) {
-                                if (statusObj[d]) {
-                                    select.append(`<option value="${statusObj[d].title}" class="text-capitalize">${statusObj[d].title}</option>`);
-                                }
-                            });
+                        var table = this.api();
+                        var selectOpt = `<select class="form-control select2-single" style="width: 100%;"><option value=""></option></select>`;
+                        
+                        // Get unique values for filters from server-side data
+                        var statusOptions = ['Active', 'Inactive'];
+                        var roleOptions = Object.keys(employeeTypeObj);
+                        var deptOptions = new Set();
+                        var companyOptions = new Set();
+                        
+                        // Adding status filter - Column 8
+                        var statusSelect = $(selectOpt).appendTo('.user_status').on('change', function() {
+                            var val = $(this).val();
+                            table.column(8).search(val, true, false).draw();
                         });
-                        // Adding department filter once table initialized
-                        this.api().columns(2).every(function() {
-                            var column = this;
-                            var select = $(selectOpt).appendTo('.user_department').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val ? '^' + val + '$' : '', true, false).draw();
-                            });
-                            column.data().unique().sort().each(function(d, j) {
-                                select.append(`<option value="${d}">${d}</option>`);
-                            });
+                        statusOptions.forEach(function(status) {
+                            statusSelect.append(`<option value="${status}">${status}</option>`);
                         });
-                        // Adding role filter once table initialized
-                        this.api().columns(5).every(function() {
-                            var column = this;
-                            var select = $(selectOpt).appendTo('.user_role').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val ? '^' + val + '$' : '', true, false).draw();
-                            });
-                            column.data().unique().sort().each(function(d, j) {
-                                select.append(`<option value="${d}">${d}</option>`);
-                            });
+                        statusSelect.select2({
+                            placeholder: 'Select Status',
+                            allowClear: true,
+                            width: '100%'
                         });
-                        // Adding company filter once table initialized
-                        this.api().columns(6).every(function() {
-                            var column = this;
-                            var select = $(selectOpt).appendTo('.user_company').on('change', function() {
-                                var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                column.search(val ? '(^|, )' + val + '($|, )' : '', true, true).draw();
-                            });
-                            column.data().unique().sort().each(function(d, j) {
-                                if (d) {
-                                    // Handle multiple companies separated by comma
-                                    var companies = d.split(',').map(c => c.trim()).filter(c => c);
-                                    companies.forEach(function(company) {
-                                        select.append(`<option value="${company}">${company}</option>`);
+                        
+                        // Adding department filter - Column 4
+                        var deptSelect = $(selectOpt).appendTo('.user_department').on('change', function() {
+                            var val = $(this).val();
+                            table.column(4).search(val, true, false).draw();
+                        });
+                        
+                        // Adding role filter - Column 6
+                        var roleSelect = $(selectOpt).appendTo('.user_role').on('change', function() {
+                            var val = $(this).val();
+                            table.column(6).search(val, true, false).draw();
+                        });
+                        roleOptions.forEach(function(role) {
+                            var displayText = employeeTypeObj[role].title;
+                            roleSelect.append(`<option value="${role}">${displayText}</option>`);
+                        });
+                        roleSelect.select2({
+                            placeholder: 'Select User Type',
+                            allowClear: true,
+                            width: '100%'
+                        });
+                        
+                        // Adding company filter - Column 7
+                        var companySelect = $(selectOpt).appendTo('.user_company').on('change', function() {
+                            var val = $(this).val();
+                            table.column(7).search(val, false, false).draw();
+                        });
+                        
+                        // Fetch all data to populate departments and companies
+                        $.ajax({
+                            url: './includes/ajaxFile/getAllUsersData.php',
+                            type: 'POST',
+                            data: {
+                                draw: 1,
+                                start: 0,
+                                length: 5000,
+                                search: { value: '' },
+                                columns: [
+                                    {data: 'id', search: {value: ''}},
+                                    {data: 'checkbox', search: {value: ''}},
+                                    {data: 'emp_id', search: {value: ''}},
+                                    {data: 'name', search: {value: ''}},
+                                    {data: 'dept', search: {value: ''}},
+                                    {data: 'mobile', search: {value: ''}},
+                                    {data: 'user_type', search: {value: ''}},
+                                    {data: 'company', search: {value: ''}},
+                                    {data: 'status', search: {value: ''}},
+                                    {data: 'action', search: {value: ''}}
+                                ]
+                            },
+                            dataType: 'json',
+                            success: function(response) {
+                                if (response.data && response.data.length > 0) {
+                                    response.data.forEach(function(row) {
+                                        // Collect unique departments from column 4
+                                        if (row[4] && row[4].trim()) {
+                                            deptOptions.add(row[4].trim());
+                                        }
+                                        // Collect unique companies from column 7
+                                        if (row[7] && row[7].trim()) {
+                                            var companies = row[7].split(',').map(c => c.trim()).filter(c => c);
+                                            companies.forEach(function(company) {
+                                                companyOptions.add(company);
+                                            });
+                                        }
                                     });
                                 }
-                            });
-                            // Remove duplicate options
-                            var seen = {};
-                            select.find('option').each(function() {
-                                var val = $(this).val();
-                                if (val && seen[val]) {
-                                    $(this).remove();
-                                } else if (val) {
-                                    seen[val] = true;
-                                }
-                            });
+                                
+                                // Populate department select
+                                Array.from(deptOptions).sort().forEach(function(dept) {
+                                    if (dept) {
+                                        deptSelect.append(`<option value="${dept}">${dept}</option>`);
+                                    }
+                                });
+                                
+                                // Initialize Select2 for department (after options added)
+                                deptSelect.select2({
+                                    placeholder: 'Select Department',
+                                    allowClear: true,
+                                    width: '100%'
+                                });
+                                
+                                // Populate company select
+                                Array.from(companyOptions).sort().forEach(function(company) {
+                                    companySelect.append(`<option value="${company}">${company}</option>`);
+                                });
+                                
+                                // Initialize Select2 for company (after options added)
+                                companySelect.select2({
+                                    placeholder: 'Select Company',
+                                    allowClear: true,
+                                    width: '100%'
+                                });
+                            }
                         });
                     }
                 });

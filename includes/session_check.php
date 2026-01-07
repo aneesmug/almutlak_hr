@@ -77,6 +77,7 @@ $query = "SELECT
             al.*, 
             e.name AS efullname, 
             e.avatar AS eavatar,
+            e.comp_no,
             e.sex
           FROM `admin_login` al
           LEFT JOIN `employees` e ON al.emp_id = e.emp_id
@@ -104,6 +105,11 @@ $user_dept = $emprow['dept'];
 $fname = $emprow['efullname'];
 $avatar = $emprow['eavatar'];
 $empid = $emprow['emp_id'];
+$user_company = $emprow['comp_no'] ?? 1;
+
+// Store in session for consistency across all pages
+$_SESSION['auth_user']['dept'] = $user_dept;
+$_SESSION['auth_user']['comp_no'] = $user_company;
 
 // --- 4a. Company Access Control (Company-Level Restrictions) ---
 // Get allowed companies from admin_login.allowed_companies JSON column

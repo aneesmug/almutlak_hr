@@ -171,15 +171,25 @@ $(document).on('click', '.applyLoan', async function(e) {
 
             function validateAmount() {
                 const amt = Number(amountInput.val());
+                const type = $('input[name="loan_type"]:checked').val();
                 let ok = true;
                 if (isNaN(amt) || amt <= 0) ok = false;
                 if (maxAmount && amt > maxAmount) ok = false;
                 if (minAmount && amt < minAmount) ok = false;
                 
+                // --- EOS 20K CAP ENFORCEMENT: For EOS loans, check if amount exceeds 20K ---
+                let eosCapExceeded = false;
+                if (type === 'end_of_service' && amt > 20000) {
+                    eosCapExceeded = true;
+                    ok = false;
+                }
+
                 // Show different messages based on user type
                 if (user_type === 'employee') {
                     // For employees: generic message without revealing limits
-                    if (!ok && amt > maxAmount) {
+                    if (eosCapExceeded) {
+                        $('#loan_feedback').text('EOS loans cannot exceed 20,000 SAR. Please enter a lower amount.');
+                    } else if (!ok && amt > maxAmount) {
                         $('#loan_feedback').text(__('entered_amount_exceeds_allowed_limit') || 'The entered amount exceeds the allowed limit for this loan type.');
                     } else if (!ok) {
                         $('#loan_feedback').text(__('please_enter_valid_amount') || 'Please enter a valid amount.');
@@ -188,7 +198,11 @@ $(document).on('click', '.applyLoan', async function(e) {
                     }
                 } else {
                     // For non-employees: detailed message with limits
-                    $('#loan_feedback').text(!ok ? `${__('amount_must_be_between') || 'Amount must be between'} ${minAmount.toFixed(2)} - ${maxAmount.toFixed(2)}` : '');
+                    if (eosCapExceeded) {
+                        $('#loan_feedback').text('EOS loans cannot exceed 20,000 SAR');
+                    } else {
+                        $('#loan_feedback').text(!ok ? `${__('amount_must_be_between') || 'Amount must be between'} ${minAmount.toFixed(2)} - ${maxAmount.toFixed(2)}` : '');
+                    }
                 }
                 confirmButton.disabled = !ok;
                 updateDeduction();
@@ -221,7 +235,18 @@ $(document).on('click', '.applyLoan', async function(e) {
                         }
 
                         if (!resp.eligible) {
-                            eligibilityInfo.addClass('alert-danger').text(message || __('not_eligible')).show();
+                            // Special handling for EOS cumulative cap
+                            if (resp.message_key === 'loan_eos_cumulative_cap_reached') {
+                                eligibilityInfo.addClass('alert-danger').html(
+                                    `<b>${__('eos_cumulative_cap_reached_title') || 'EOS Loan Cap Reached'}</b><br>` +
+                                    (message || __('not_eligible')) + '<br>' +
+                                    `${__('active_eos_total_label') || 'Your active EOS loans total'}: <b>` +
+                                    (resp.message_data && resp.message_data.active_eos_total ? resp.message_data.active_eos_total.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }) : '-') +
+                                    `</b> / <b>20,000 SAR</b>`
+                                ).show();
+                            } else {
+                                eligibilityInfo.addClass('alert-danger').text(message || __('not_eligible')).show();
+                            }
                             confirmButton.disabled = true;
                             amountInput.prop('disabled', true);
                             installmentsGroup.hide();
@@ -248,6 +273,12 @@ $(document).on('click', '.applyLoan', async function(e) {
                             const eosMax = Number(resp.max_amount) || (eosTotal * 0.4);
                             $('#eos_total_span').text(eosTotal.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
                             $('#eos_max_span').text(eosMax.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
+                            
+                            // If EOS is more than 20,000, cap the loan to 20,000
+                            if (eosTotal > 20000) {
+                                maxAmount = Math.min(maxAmount, 20000);
+                                amountInput.prop('max', 20000);
+                            }
                         } else {
                             eosCard.hide();
                         }
@@ -309,6 +340,12 @@ $(document).on('click', '.applyLoan', async function(e) {
             loanTypeInputs.on('change', function(){ 
                 const selectedType = $(this).val();
                 fetchEligibility(selectedType);
+                
+                // --- EOS 20K CAP: Set max attribute to 20000 for EOS loans ---
+                if (selectedType === 'end_of_service') {
+                    amountInput.prop('max', 20000);
+                }
+                
                 // Disable housing radio if no allowance available
                 if (selectedType === 'housing' && housingAllowance <= 0) {
                     $('#loan_type_housing').prop('disabled', true);

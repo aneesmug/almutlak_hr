@@ -14,36 +14,65 @@
  * 6.  ADDED EOS DETAILS TO GM MODAL: The `modifyAndApproveLoan` function for the GM has been updated to fetch and display the End of Service and max loan amount details, and validates the new loan amount against this limit.
  */
 
-function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLevel, payerEmpId, currentUserId) {
+function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLevel, payerEmpId, currentUserId, currentInstallments = 1) {
+    // Check if this is GM (user_type = 'gm')
+    const isGM = (userType === 'gm');
+    
     // Check if this is Finance Manager (user_type = 'finance')
     const isFinanceManager = (userType === 'finance');
     
     // Check if current user is the assigned payer
     const isPayer = (payerEmpId > 0 && payerEmpId === currentUserId);
     
-    if (isPayer) {
+    if (isGM) {
+        // Get employee ID from database for EOS details
+        // We need to fetch the loan details to get employee ID
+        $.ajax({
+            url: './includes/ajaxFile/ajaxLoan.php',
+            type: 'POST',
+            data: { 
+                ajaxType: 'get_loan_details_for_modification',
+                loan_id: loanId
+            },
+            dataType: 'JSON',
+        }).done(function(response) {
+            if (response.status === 'success' && response.emp_id) {
+                // Call the modify and approve function for GM with employee ID and correct installments
+                modifyAndApproveLoan(loanId, requestedAmount, currentInstallments, response.emp_id);
+            } else {
+                Swal.fire({
+                    title: __('error_title') || 'Error',
+                    text: __('failed_to_load_employee_details') || 'Failed to load employee details',
+                    icon: 'error'
+                });
+            }
+        }).fail(function() {
+            Swal.fire({
+                title: __('error_title') || 'Error',
+                text: __('failed_to_load_loan_details') || 'Failed to load loan details',
+                icon: 'error'
+            });
+        });
+    } else if (isPayer) {
         // Show payment proof upload modal for assigned payer
         Swal.fire({
             title: __('process_payment_upload_proof') || 'Process Payment & Upload Proof',
             html: `
                 <form id="payerApprovalForm" class="text-left" enctype="multipart/form-data">
                     <p class="alert alert-warning text-center"><i class="fa fa-exclamation-triangle"></i> ${__('payer_notice') || 'You have been assigned to process this payment. Please enter the final amount and upload payment proof.'}</p>
-                    
                     <div class="form-group">
                         <label for="final_approved_amount">${__('final_approved_amount_sar') || 'Final Approved Amount (SAR)'} <span class="text-danger">*</span></label>
                         <input type="number" step="0.01" id="final_approved_amount" name="final_approved_amount" class="form-control" placeholder="${__('enter_amount_actually_paid') || 'Enter amount actually paid'}" value="${requestedAmount}" required>
                         <small class="form-text text-muted">${__('requested_amount') || 'Requested Amount'}: ${parseFloat(requestedAmount).toFixed(2)} SAR</small>
                     </div>
-                    
                     <div class="form-group">
                         <label for="payment_proof">${__('payment_proof_document') || 'Payment Proof Document'} <span class="text-danger">*</span></label>
                         <input type="file" id="payment_proof" name="payment_proof" class="form-control-file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required>
                         <small class="form-text text-muted">${__('accepted_formats') || 'Accepted: PDF, JPG, PNG, DOC, DOCX'}</small>
                     </div>
-                    
                     <div class="form-group">
-                        <label for="approval_comment">${__('payment_notes') || 'Payment Notes'} <span class="text-muted">(${__('optional')})</span></label>
-                        <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_payment_notes') || 'Write any notes about the payment...'}" maxlength="5000"></textarea>
+                        <label for="approval_comment">${__('payment_notes') || 'Payment Notes'} <span class="text-danger">*</span></label>
+                        <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_payment_notes') || 'Please provide notes for this payment processing...'}" maxlength="5000" required></textarea>
                         <small class="form-text text-muted"><span id="char-count">0</span>/5000 ${__('characters')}</small>
                     </div>
                 </form>
@@ -61,6 +90,23 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                 $('#approval_comment').on('input', function() {
                     $('#char-count').text($(this).val().length);
                 });
+                // Confirm button enabled by default, disables only if value changes
+                const $amount = $('#final_approved_amount');
+                function toggleConfirmBtn() {
+                    const confirmBtn = Swal.getConfirmButton();
+                    let val = $amount.val();
+                    if (typeof val === 'string') val = val.trim();
+                    val = parseFloat(val);
+                    const approved = parseFloat(`${requestedAmount}`);
+                    if (!isNaN(val) && !isNaN(approved) && Math.abs(val - approved) < 0.01) {
+                        confirmBtn.disabled = false;
+                    } else {
+                        confirmBtn.disabled = true;
+                    }
+                }
+                $amount.on('input keyup change focus blur', toggleConfirmBtn);
+                // Initial state after modal open
+                setTimeout(toggleConfirmBtn, 200);
             },
             preConfirm: () => {
                 const form = document.getElementById('payerApprovalForm');
@@ -71,17 +117,28 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
 
                 const approvedAmount = formData.get('final_approved_amount');
                 const paymentProof = document.getElementById('payment_proof').files[0];
+                const approvalComment = formData.get('approval_comment').trim();
 
                 if (!approvedAmount || parseFloat(approvedAmount) <= 0) {
                     Swal.showValidationMessage(__('approved_amount_required') || 'Final amount is required and must be greater than zero');
                     return false;
                 }
-                
+                if (parseFloat(approvedAmount) !== parseFloat(`${requestedAmount}`)) {
+                    Swal.showValidationMessage(__('amount_must_match_approved') || 'Amount must match the approved amount.');
+                    return false;
+                }
                 if (!paymentProof) {
                     Swal.showValidationMessage(__('payment_proof_document_is_required') || 'Payment proof document is required');
                     return false;
                 }
-
+                if (!approvalComment) {
+                    Swal.showValidationMessage(__('approval_comment_required') || 'Payment notes are required. Please provide notes for this payment.');
+                    return false;
+                }
+                if (approvalComment.length < 5) {
+                    Swal.showValidationMessage(__('approval_comment_min_length') || 'Payment notes must be at least 5 characters long.');
+                    return false;
+                }
                 return $.ajax({
                     url: './includes/ajaxFile/ajaxLoan.php',
                     type: 'POST',
@@ -147,15 +204,15 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                         </div>
                         
                         <div class="form-group">
-                            <label for="approval_comment">${__('approval_comment') || 'Approval Comment'} <span class="text-muted">(${__('optional')})</span></label>
-                            <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Write your comment...'}" maxlength="5000"></textarea>
+                            <label for="approval_comment">${__('approval_comment') || 'Approval Comment'} <span class="text-danger">*</span></label>
+                            <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Please provide your approval reasoning...'}" maxlength="5000" required></textarea>
                             <small class="form-text text-muted"><span id="char-count">0</span>/5000 ${__('characters')}</small>
                         </div>
                     </form>
                 `,
                 width: '40%',
                 showCancelButton: true,
-                confirmButtonText: __('approve_and_assign_button') || 'Approve & Assign Payer',
+                confirmButtonText: __('approve_assign_payer') || 'Approve & Assign Payer',
                 confirmButtonColor: '#28a745',
                 cancelButtonColor: '#dc3545',
                 cancelButtonText: __('cancel'),
@@ -171,8 +228,8 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                     // Show custom loader when confirmed
                     if (result.isConfirmed) {
                         Swal.fire({
-                            title: 'Processing...',
-                            html: 'Assigning payer and sending notification emails...',
+                            title: __('processing'),
+                            html: __('assigning_payer_and_sending_notifications') || 'Assigning payer and sending notification emails...',
                             icon: 'info',
                             allowOutsideClick: false,
                             allowEscapeKey: false,
@@ -184,10 +241,20 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                 },
                 preConfirm: () => {
                     const payerEmpId = document.getElementById('payer_emp_id').value;
-                    const approvalComment = document.getElementById('approval_comment').value;
+                    const approvalComment = document.getElementById('approval_comment').value.trim();
 
                     if (!payerEmpId) {
                         Swal.showValidationMessage(__('payer_required') || 'Please select who will process the payment');
+                        return false;
+                    }
+
+                    if (!approvalComment) {
+                        Swal.showValidationMessage(__('approval_comment_required') || 'Approval notes are required. Please explain your decision.');
+                        return false;
+                    }
+
+                    if (approvalComment.length < 5) {
+                        Swal.showValidationMessage(__('approval_comment_min_length') || 'Approval notes must be at least 5 characters long.');
                         return false;
                     }
 
@@ -240,10 +307,10 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                 <hr>
                 <h6 class="text-primary mb-3">
                     <i class="fa fa-comment"></i> ${__('approval_comment') || 'Approval Comment'}
-                    <span class="text-muted">(${__('optional')})</span>
+                    <span class="text-danger">*</span>
                 </h6>
                 <div class="form-group">
-                    <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Write your comment or review for this approval (optional)...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;"></textarea>
+                    <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Please explain your decision and any relevant observations...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;" required></textarea>
                     <small class="form-text text-muted">
                         <span id="char-count">0</span>/5000 ${__('characters')}
                     </small>
@@ -275,8 +342,20 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
             });
         },
         preConfirm: () => {
-            const approvalComment = $('#swal_approval_comment').val() || '';
-            return approvalComment.trim();
+            const approvalComment = $('#swal_approval_comment').val().trim();
+            
+            // Validate notes are provided and minimum 5 characters
+            if (!approvalComment) {
+                Swal.showValidationMessage(__('approval_comment_required') || 'Approval notes are required. Please explain your decision.');
+                return false;
+            }
+            
+            if (approvalComment.length < 5) {
+                Swal.showValidationMessage(__('approval_comment_min_length') || 'Approval notes must be at least 5 characters long.');
+                return false;
+            }
+            
+            return approvalComment;
         }
     }).then((result) => {
         if (result.isConfirmed) {
@@ -502,6 +581,11 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                             <label for="monthly_deduction_display">${__('monthly_deduction_label')}</label>
                             <input type="text" id="monthly_deduction_display" class="form-control" readonly style="font-weight: bold; background-color: #e9ecef;">
                         </div>
+                        <div class="form-group">
+                            <label for="approval_comment_gm">${__('approval_comment') || 'Approval Comment'}</label>
+                            <textarea id="approval_comment_gm" class="form-control" rows="3" placeholder="${__('write_comment') || 'Please provide your approval notes and reason for any modifications...'}" maxlength="5000"></textarea>
+                            <small class="form-text text-muted"><span id="char-count-gm">0</span>/5000 ${__('characters')}</small>
+                        </div>
                     </form>
                 `,
                 showCancelButton: true,
@@ -515,6 +599,12 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                     const deductionDisplay = $('#monthly_deduction_display');
                     const feedback = $('#loan_feedback_gm');
                     const confirmButton = Swal.getConfirmButton();
+                    const commentField = $('#approval_comment_gm');
+
+                    // Character counter
+                    commentField.on('input', function() {
+                        $('#char-count-gm').text($(this).val().length);
+                    });
 
                     function calculateAndDisplayDeduction() {
                         const amount = parseFloat(amountInput.val());
@@ -553,6 +643,7 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                 preConfirm: () => {
                     const newAmount = $('#new_loan_amount').val();
                     const newInstallments = $('#new_installments').val();
+                    const approvalComment = $('#approval_comment_gm').val().trim();
 
                     if (!newAmount || !newInstallments || parseFloat(newAmount) <= 0 || parseInt(newInstallments) <= 0) {
                         Swal.showValidationMessage(__('valid_amount_installments_validation'));
@@ -571,7 +662,8 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                             ajaxType: 'modify_and_approve_loan',
                             loan_id: loanId,
                             loan_amount: newAmount,
-                            installments: newInstallments
+                            installments: newInstallments,
+                            approval_comment: approvalComment
                         }
                     }).fail((jqXHR, textStatus) => {
                         const error = handleAjaxFailure(jqXHR, textStatus);

@@ -37,7 +37,7 @@ if ($user_id <= 0) {
 try {
     // 1. Fetch all companies from database
     $companies = [];
-    $company_query = "SELECT DISTINCT comp_id as id, comp_name as name FROM companies ORDER BY comp_id ASC";
+    $company_query = "SELECT DISTINCT `id`, `comp_name` as name FROM `companies` ORDER BY `id` ASC";
     $result = mysqli_query($conDB, $company_query);
     
     if ($result) {

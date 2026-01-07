@@ -5513,4 +5513,43 @@ h3.timeline-title {
   .hidden-xxs {
     display: none;
   }
-}/*# sourceMappingURL=style.css.map */
+}
+
+/* =============
+   Datepicker RTL Fix
+============= */
+/* Global RTL datepicker positioning */
+html[dir="rtl"] .datepicker-dropdown,
+body[dir="rtl"] .datepicker-dropdown {
+  left: auto !important;
+  right: auto !important;
+  margin: 0 !important;
+  transform: none !important;
+  z-index: 99999 !important;
+}
+
+html[dir="rtl"] .datepicker.datepicker-dropdown.dropdown-menu,
+body[dir="rtl"] .datepicker.datepicker-dropdown.dropdown-menu {
+  left: auto !important;
+  right: auto !important;
+  margin: 0 !important;
+  transform: none !important;
+  z-index: 99999 !important;
+}
+
+html[dir="rtl"] .datepicker-dropdown.datepicker-orient-left,
+body[dir="rtl"] .datepicker-dropdown.datepicker-orient-left {
+  left: auto !important;
+}
+
+html[dir="rtl"] .datepicker-dropdown.datepicker-orient-right,
+body[dir="rtl"] .datepicker-dropdown.datepicker-orient-right {
+  right: auto !important;
+}
+/* Force datepicker to appear near the input field in RTL */
+body[dir="rtl"] .datepicker.dropdown-menu,
+html[dir="rtl"] .datepicker.dropdown-menu {
+  left: auto !important;
+  right: auto !important;
+}
+/*# sourceMappingURL=style.css.map */

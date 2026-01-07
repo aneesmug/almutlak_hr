@@ -94,6 +94,7 @@ $departments = isset($_POST['departments']) ? $_POST['departments'] : [];
 $dateFrom = isset($_POST['dateFrom']) ? $_POST['dateFrom'] : '';
 $dateTo = isset($_POST['dateTo']) ? $_POST['dateTo'] : '';
 $status = isset($_POST['status']) ? $_POST['status'] : '';
+$vacationType = isset($_POST['vacationType']) ? trim($_POST['vacationType']) : '';
 $hasFullAccess = isset($_POST['hasFullAccess']) && $_POST['hasFullAccess'] === 'true';
 $userDept = isset($_POST['userDept']) ? $_POST['userDept'] : '';
 
@@ -116,22 +117,22 @@ try {
             $result = generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept);
             break;
         case 'vacation':
-            $result = generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept);
+            $result = generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType);
             break;
         case 'loan':
             $result = generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept);
             break;
         case 'salary':
-            $result = generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept);
+            $result = generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status);
             break;
         case 'payroll':
-            $result = generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAccess, $userDept);
+            $result = generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
             break;
         case 'attendance':
             $result = generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
             break;
         case 'document':
-            $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept);
+            $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status);
             break;
         case 'evaluation':
             // Check if user can acknowledge evaluations (managers only)
@@ -141,7 +142,7 @@ try {
             $result = generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
             break;
         case 'resignation':
-            $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
+            $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
             break;
         case 'terminated_employees':
             $result = generateTerminatedEmployeesReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
@@ -482,7 +483,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
 }
 
 // Vacation Report
-function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept) {
+function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType = '') {
     // Build SELECT clause
     $selectCols = ['v.id'];
     $needsEmpName = in_array('emp_name', $columns);
@@ -529,6 +530,11 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
     // Status filter
     if ($status !== '') {
         $where[] = "v.current_status = '" . mysqli_real_escape_string($conDB, $status) . "'";
+    }
+
+    // Vacation type filter
+    if (!empty($vacationType)) {
+        $where[] = "v.vac_type = '" . mysqli_real_escape_string($conDB, $vacationType) . "'";
     }
     
     $whereClause = implode(' AND ', $where);
@@ -660,7 +666,7 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
 }
 
 // Salary Report
-function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept) {
+function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '') {
     // Build SELECT clause
     $selectCols = [];
     
@@ -680,7 +686,7 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
     $selectClause = implode(', ', $selectCols);
     
     // Build WHERE clause
-    $where = ['s.status = 1'];
+    $where = ['1=1'];
     
     // Department filter
     if (!$hasFullAccess) {
@@ -696,6 +702,11 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
+    // Status filter
+    if ($status !== '') {
+        $where[] = "s.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
+    }
+
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -731,25 +742,22 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
 }
 
 // Payroll Report
-function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAccess, $userDept) {
+function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
     // Build SELECT clause with column mapping aligned to actual schema
-    // payrolls columns: id, emp_id, month_year, total_gross_salary, total_deductions, net_salary, status, generated_at
     $selectCols = [];
-    
+
     foreach ($columns as $col) {
         switch ($col) {
             case 'payroll_id':
                 $selectCols[] = 'p.id AS payroll_id';
                 break;
             case 'month':
-                // Numeric month (01-12) derived directly from string to avoid date mode issues
                 $selectCols[] = "SUBSTRING(p.month_year, 6, 2) AS month";
                 break;
             case 'year':
                 $selectCols[] = "SUBSTRING(p.month_year, 1, 4) AS year";
                 break;
             case 'total_employees':
-                // Count of payroll records for the same month_year
                 $selectCols[] = '(SELECT COUNT(*) FROM payrolls p2 WHERE p2.month_year = p.month_year) AS total_employees';
                 break;
             case 'total_salary':
@@ -762,21 +770,17 @@ function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAcc
                 $selectCols[] = 'p.net_salary AS net_salary';
                 break;
             case 'generated_by':
-                // No column available; expose status as a proxy
                 $selectCols[] = 'p.status AS generated_by';
                 break;
             case 'created_at':
                 $selectCols[] = 'p.generated_at AS created_at';
                 break;
             default:
-                // Skip unknown requested columns to avoid SQL errors
-                // Alternatively include raw if exists
-                // $selectCols[] = 'p.' . $col;
                 break;
         }
     }
+
     if (empty($selectCols)) {
-        // Fallback minimum columns
         $selectCols = [
             'p.id AS payroll_id',
             "SUBSTRING(p.month_year, 6, 2) AS month",
@@ -788,11 +792,10 @@ function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAcc
         ];
     }
     $selectClause = implode(', ', $selectCols);
-    
+
     // Build WHERE clause
     $where = ['1=1'];
-    
-    // Date filter using month_year (YYYY-MM) via string compare
+
     if (!empty($dateFrom)) {
         $fromYm = substr($dateFrom, 0, 7);
         $where[] = "p.month_year >= '" . mysqli_real_escape_string($conDB, $fromYm) . "'";
@@ -801,31 +804,30 @@ function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAcc
         $toYm = substr($dateTo, 0, 7);
         $where[] = "p.month_year <= '" . mysqli_real_escape_string($conDB, $toYm) . "'";
     }
-    
+    if ($status !== '') {
+        $where[] = "p.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
+    }
+
     $whereClause = implode(' AND ', $where);
-    
-    // Build and execute query
-        $sql = "SELECT $selectClause 
+
+    $sql = "SELECT $selectClause 
             FROM payrolls p
             WHERE $whereClause
             ORDER BY p.month_year DESC, p.id DESC";
-    
+
     $query = mysqli_query($conDB, $sql);
     if (!$query) {
         throw new Exception('Payroll query error: ' . mysqli_error($conDB));
     }
-    
+
     $data = [];
     $headers = [];
-    
-    // Get headers
+
     foreach ($columns as $col) {
         $headers[] = getColumnLabel($col);
     }
-    
-    // Get data
+
     while ($row = mysqli_fetch_assoc($query)) {
-        // Format month name if numeric
         if (isset($row['month'])) {
             $monthNames = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
             $monthIndex = (int)$row['month'];
@@ -833,7 +835,7 @@ function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAcc
         }
         $data[] = $row;
     }
-    
+
     return ['data' => $data, 'headers' => $headers];
 }
 
@@ -920,7 +922,7 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
 }
 
 // Document Report
-function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept) {
+function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '') {
     // Build SELECT clause - always include d.id and d.path for attachment button
     $selectCols = ['d.id AS document_id', 'd.path AS file_path', 'd.docu_ext AS file_extension'];
     
@@ -960,6 +962,11 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
     $company_filter = getCompanyFilterSQL('e.comp_no', false);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
+    // Status filter
+    if ($status !== '') {
+        $where[] = "d.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
     
     $whereClause = implode(' AND ', $where);
@@ -1129,7 +1136,7 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
 }
 
 // Resignation Report
-function generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept) {
+function generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
     // Build SELECT clause
     $selectCols = [];
     
@@ -1175,6 +1182,11 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
     $company_filter = getCompanyFilterSQL('e.comp_no', false);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
+    // Status filter
+    if ($status !== '') {
+        $where[] = "r.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
     
     $whereClause = implode(' AND ', $where);

@@ -208,26 +208,40 @@ class ApprovalChainManager {
      */
     public function resolveApprover($userType, $empId = null, $deptId = null) {
         $approverId = null;
+        $debugLog = [];
         
         if ($userType === 'direct_supervisor') {
             // Get supervisor from employee record
+            $debugLog[] = "Resolving direct_supervisor for empId: $empId";
+            
             if (!empty($empId)) {
                 $stmt = $this->pdo->prepare("
-                    SELECT supervisor_id 
+                    SELECT supervisor_id, name 
                     FROM employees 
                     WHERE emp_id = :emp_id 
                     LIMIT 1
                 ");
                 $stmt->execute([':emp_id' => $empId]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                $debugLog[] = "Employee found: " . json_encode($row);
+                
                 if ($row && !empty($row['supervisor_id'])) {
-                    $approverId = $row['supervisor_id'];
+                    $approverId = (int)$row['supervisor_id'];  // Cast to INT for consistency
+                    $debugLog[] = "Supervisor ID resolved to: $approverId (type: " . gettype($approverId) . ")";
+                } else {
+                    $debugLog[] = "ERROR: No supervisor_id found for employee $empId";
                 }
+            } else {
+                $debugLog[] = "ERROR: Empty empId provided";
             }
+            
+            // Log to file for debugging
+            error_log("RESOLVER: " . implode(" | ", $debugLog));
         } elseif ($userType === 'dept_manager') {
             // Get department manager
             if (!empty($deptId) && function_exists('getDeptManager')) {
-                $approverId = getDeptManager($this->conDB, $deptId);
+                $approverId = (int)getDeptManager($this->conDB, $deptId);  // Cast to INT
             }
         } else {
             // Find first active user with matching user_type
@@ -241,7 +255,7 @@ class ApprovalChainManager {
             $stmt->execute([':user_type' => $userType]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($row) {
-                $approverId = $row['emp_id'];
+                $approverId = (int)$row['emp_id'];  // Cast to INT
             }
         }
         
@@ -265,6 +279,9 @@ class ApprovalChainManager {
         // Get request type ID
         $requestTypeId = $this->getRequestTypeId($requestType);
         
+        // Log chain creation start
+        error_log("CREATE_CHAIN: Starting for $requestType, inv_no: $requestInvNo, emp_id: $empId, dept_id: $deptId");
+        
         // Build approval chain
         $chainToInsert = [];
         $firstApproverId = null;
@@ -273,11 +290,16 @@ class ApprovalChainManager {
             $level = (int)$step['level'];
             $userType = $step['user_type'];
             
+            error_log("CREATE_CHAIN: Processing level $level with user_type: $userType");
+            
             // Resolve approver
             $approverId = $this->resolveApprover($userType, $empId, $deptId);
             
+            error_log("CREATE_CHAIN: Level $level, user_type $userType resolved to approver_id: " . ($approverId ?? 'NULL'));
+            
             if (empty($approverId)) {
                 // Skip this level if approver cannot be resolved
+                error_log("CREATE_CHAIN: Skipping level $level - no approver found");
                 continue;
             }
             
@@ -291,6 +313,8 @@ class ApprovalChainManager {
                 $firstApproverId = $approverId;
             }
         }
+        
+        error_log("CREATE_CHAIN: Total approvers resolved: " . count($chainToInsert));
         
         if (empty($chainToInsert)) {
             throw new Exception("Could not resolve any approvers for '{$requestType}' approval chain.");
@@ -352,6 +376,22 @@ class ApprovalChainManager {
      */
     public function verifyApprover($requestInvNo, $currentUserId) {
         // Include both 'pending' (first level) and 'awaiting' (subsequent levels) so first approvers are authorized
+        error_log("VERIFY_APPROVER_START: Checking inv_no=$requestInvNo, currentUserId=$currentUserId (type: " . gettype($currentUserId) . ")");
+        
+        // First, let's see ALL approvers for debugging
+        $debug_stmt = $this->pdo->prepare("
+            SELECT approver_id, approval_level, status 
+            FROM request_approvers 
+            WHERE request_inv_no = :inv_no 
+            ORDER BY approval_level ASC
+        ");
+        $debug_stmt->execute([':inv_no' => $requestInvNo]);
+        $all_rows = $debug_stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log("VERIFY_APPROVER_DEBUG: Found " . count($all_rows) . " total approvers for inv_no=$requestInvNo");
+        foreach ($all_rows as $debug_row) {
+            error_log("  Level {$debug_row['approval_level']}: approver_id={$debug_row['approver_id']}, status={$debug_row['status']}");
+        }
+        
         $stmt = $this->pdo->prepare("
             SELECT approver_id, approval_level 
             FROM request_approvers 
@@ -363,17 +403,36 @@ class ApprovalChainManager {
         $stmt->execute([':inv_no' => $requestInvNo]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         
+        $debugInfo = "verifyApprover: inv_no=$requestInvNo, currentUserId=$currentUserId (type: " . gettype($currentUserId) . ")";
+        
         if (!$row) {
+            error_log($debugInfo . " => NO PENDING/AWAITING APPROVALS FOUND");
+            error_log("VERIFY_APPROVER_FAILED: No approvers with status pending/awaiting");
             return ['authorized' => false, 'level' => null, 'message' => 'No pending approvals found'];
         }
         
-        if ($row['approver_id'] != $currentUserId) {
+        $approver_id = $row['approver_id'];
+        $approval_level = $row['approval_level'];
+        $debugInfo .= ", approver_id=$approver_id (type: " . gettype($approver_id) . "), level=$approval_level";
+        error_log($debugInfo);
+        
+        // Compare as integers for consistency
+        $approver_id_int = (int)$approver_id;
+        $currentUserId_int = (int)$currentUserId;
+        
+        error_log("VERIFY_APPROVER_COMPARISON: approver_id_int=$approver_id_int vs currentUserId_int=$currentUserId_int");
+        
+        if ($approver_id_int !== $currentUserId_int) {
+            error_log($debugInfo . " => MISMATCH: approver_id_int($approver_id_int) !== currentUserId_int($currentUserId_int)");
+            error_log("VERIFY_APPROVER_FAILED: User not authorized");
             return ['authorized' => false, 'level' => null, 'message' => 'You are not authorized to approve this request'];
         }
         
+        error_log($debugInfo . " => AUTHORIZED: approver_id_int($approver_id_int) === currentUserId_int($currentUserId_int)");
+        error_log("VERIFY_APPROVER_SUCCESS: User authorized at level $approval_level");
         return [
             'authorized' => true,
-            'level' => (int)$row['approval_level'],
+            'level' => (int)$approval_level,
             'message' => 'Authorized'
         ];
     }
@@ -462,10 +521,23 @@ class ApprovalChainManager {
             if ($nextRow) {
                 // More approvals needed
                 $nextApproverId = $nextRow['approver_id'];
+                $nextLevel = $nextRow['approval_level'];
+                
+                // Update next approver status from 'awaiting' to 'pending'
+                $stmt = $this->pdo->prepare("
+                    UPDATE request_approvers 
+                    SET status = 'pending'
+                    WHERE request_inv_no = :inv_no 
+                    AND approval_level = :level
+                ");
+                $stmt->execute([
+                    ':inv_no' => $requestInvNo,
+                    ':level' => $nextLevel
+                ]);
                 
                 // Get next approver details
                 $stmt = $this->pdo->prepare("
-                    SELECT al.email, e.name 
+                    SELECT al.email, e.name, al.emp_id
                     FROM admin_login al
                     JOIN employees e ON al.emp_id = e.emp_id
                     WHERE al.emp_id = :approver_id
@@ -480,8 +552,11 @@ class ApprovalChainManager {
                     'is_final' => false,
                     'next_approver' => [
                         'approver_id' => $nextApproverId,
+                        'emp_id' => $approverRow['emp_id'] ?? $nextApproverId,
                         'email' => $approverRow['email'] ?? null,
-                        'name' => $approverRow['name'] ?? null
+                        'name' => $approverRow['name'] ?? null,
+                        'fullname' => $approverRow['name'] ?? null,
+                        'approval_level' => $nextLevel
                     ]
                 ];
             } else {

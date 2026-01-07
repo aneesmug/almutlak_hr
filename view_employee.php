@@ -16,53 +16,6 @@ if (mysqli_num_rows($query) == 1) {
 	$format = "YYYY-MM-DD";
 	require("./includes/emp_query.php");
 
-
-
-// COMPANY-BASED ACCESS CONTROL (NEW)
-	// Check if user has permission to access this employee's company
-	// Allow: System admin, administrator, or users with access to this company
-	$employee_company = $emprow['comp_no'] ?? 1;
-	if (!canAccessCompany($employee_company)) {
-		$_SESSION['error_msg'] = sprintf(
-			'<div class="col-xl-12">
-				<div class="alert alert-danger bg-danger text-white border-0" role="alert">
-					<b>Access Denied!</b> 
-					<h4>You don\'t have access to this company.</h4>
-				</div>
-			</div>'
-		);
-		header("Location: ./all_employee_list.php");
-		exit;
-	}
-
-	// DEPARTMENT-BASED ACCESS CONTROL
-	// Check if user has permission to view this department's employees
-	// Allow: System admin, administrator, HR department users, HR roles, IT team, and same department managers
-	$can_see_all_employees = (
-		$is_system_admin || 
-		$user_type == 'administrator' ||
-		$user_dept == 5 || // HR Department
-		$isHR || 
-		$isDeptHr ||
-		$isItTeam ||
-		($user_dept == $emprow['dept'] && ($user_role == 'DPT_Manager' || $user_type == 'dept_manager')) // Same department manager
-	);
-	
-	if (!$can_see_all_employees) {
-		$_SESSION['error_msg'] = sprintf(
-			'<div class="col-xl-12">
-				<div class="alert alert-danger bg-danger text-white border-0" role="alert">
-					<b>Access Denied!</b> 
-					<h4>You don\'t have access for ( %s ) Department.</h4>
-				</div>
-			</div>',
-			$emprow["deptnme"]
-		);
-		header("Location: ./dashboard.php");
-		exit;
-	}
-	// If we get here, access is granted
-
 	if (!isset($_GET['emp_id']) || empty($_GET['emp_id'])) {
 		header("Location: ./reg_employee.php");
 		exit;
@@ -73,6 +26,36 @@ if (mysqli_num_rows($query) == 1) {
 		foreach ($allRecords as $rec) {
 			$emprow = $rec;
 		}
+
+		// UNIFIED ACCESS CONTROL - Use centralized function only
+		// This function checks all permissions: admin, HR, IT, department manager, direct supervisor, self
+		$user_data = [
+			'emp_id' => $_SESSION['auth_user']['emp_id'] ?? $empid,
+			'dept' => $_SESSION['auth_user']['dept'] ?? $user_dept,
+			'comp_no' => $_SESSION['auth_user']['comp_no'] ?? 1,
+			'user_type' => $user_type
+		];
+		
+		$employee_data = [
+			'emp_id' => $emprow['emp_id'] ?? $emprow['empid'],
+			'supervisor_id' => $emprow['supervisor_id'] ?? null,
+			'dept' => $emprow['dept'] ?? null,
+			'comp_no' => $emprow['comp_no'] ?? 1
+		];
+		
+		if (!canEmployeeSupervisorAccess($employee_data, $user_data, $user_role)) {
+			$_SESSION['error_msg'] = sprintf(
+				'<div class="col-xl-12">
+					<div class="alert alert-danger bg-danger text-white border-0" role="alert">
+						<b>Access Denied!</b> 
+						<h4>You don\'t have access to view this employee. Your access is limited to employees in your department and company.</h4>
+					</div>
+				</div>'
+			);
+			header("Location: ./dashboard.php");
+			exit;
+		}
+		// If we get here, access is granted
 
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
@@ -111,7 +94,6 @@ if (mysqli_num_rows($query) == 1) {
 		}
 		// --- END: Loan Summary Calculation ---
 		// debug($emprow);
-
 
 		$salary_get = str_replace(',', '', ($emprow['basic'] + $emprow['housing'] + $emprow['transport'] + $emprow["food"] + $emprow["misc"] + $emprow["cashier"] + $emprow["fuel"] + $emprow["tel"] + $emprow["other"] + $emprow["guard"]));
 
@@ -2183,12 +2165,31 @@ if (mysqli_num_rows($query) == 1) {
 					cancelButtonColor: '#dc3545',
 					allowOutsideClick: false,
 					willOpen: () => {
+						var isRTL = $('html').attr('dir') === 'rtl' || $('body').attr('dir') === 'rtl';
 						jQuery('#rejoinDate').datepicker({
 							format: "yyyy-mm-dd",
 							todayHighlight: true,
 							autoclose: true,
-							startDate: parsedDate // Can't select before planned date
+							startDate: parsedDate, // Can't select before planned date
+							orientation: isRTL ? 'bottom auto' : 'bottom auto'
 						}).datepicker('setDate', parsedDate);
+						
+						if (isRTL) {
+							$('#rejoinDate').on('show', function(e) {
+								var input = $(e.target);
+								var datepicker = input.data('datepicker').picker;
+								var offset = input.offset();
+								var inputWidth = input.outerWidth();
+								var pickerWidth = datepicker.outerWidth();
+								
+								setTimeout(function() {
+									datepicker.css({
+										'left': (offset.left + inputWidth - pickerWidth) + 'px',
+										'top': (offset.top + input.outerHeight()) + 'px'
+									});
+								}, 0);
+							});
+						}
 					},
 					preConfirm: () => {
 						const rejoinDate = document.getElementById('rejoinDate').value;
@@ -2203,12 +2204,12 @@ if (mysqli_num_rows($query) == 1) {
 						const planned = new Date(returndate);
 						const rejoin = new Date(rejoinDate);
 						const maxDate = new Date(planned);
-						maxDate.setDate(maxDate.getDate() + 3);
+						maxDate.setDate(maxDate.getDate() + 7);
 
 						if (rejoin > maxDate) {
 							Swal.showValidationMessage(
 								__('rejoin_date_range_validation', 
-									'Rejoin date cannot be more than 3 days after the planned return date. ' +
+									'Rejoin date cannot be more than 7 days after the planned return date. ' +
 									'Please contact HR for special cases.')
 							);
 							return false;
@@ -2593,6 +2594,7 @@ if (mysqli_num_rows($query) == 1) {
 						text: '<?= addslashes($_SESSION['swal_alert']['message']) ?>',
 						icon: '<?= $_SESSION['swal_alert']['type'] ?>',
 						confirmButtonText: '<?= __("ok") ?>',
+						allowOutsideClick: false,
 						customClass: {
 							confirmButton: 'btn btn-primary'
 						},
@@ -2636,11 +2638,30 @@ if (mysqli_num_rows($query) == 1) {
 						cancelButtonText: __('cancel'),
 						allowOutsideClick: false,
 						willOpen: function() {
+							var isRTL = $('html').attr('dir') === 'rtl' || $('body').attr('dir') === 'rtl';
 							$('#view-emp-return-date-input').datepicker({
 								format: "yyyy-mm-dd",
 								todayHighlight: true,
-								autoclose: true
+								autoclose: true,
+								orientation: isRTL ? 'bottom auto' : 'bottom auto'
 							});
+							
+							if (isRTL) {
+								$('#view-emp-return-date-input').on('show', function(e) {
+									var input = $(e.target);
+									var datepicker = input.data('datepicker').picker;
+									var offset = input.offset();
+									var inputWidth = input.outerWidth();
+									var pickerWidth = datepicker.outerWidth();
+									
+									setTimeout(function() {
+										datepicker.css({
+											'left': (offset.left + inputWidth - pickerWidth) + 'px',
+											'top': (offset.top + input.outerHeight()) + 'px'
+										});
+									}, 0);
+								});
+							}
 						},
 						preConfirm: () => {
 							const selectedDate = $('#view-emp-return-date-input').val();

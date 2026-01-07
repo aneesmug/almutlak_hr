@@ -91,13 +91,18 @@ function log_message($message, $type = 'info', $emp_id = null, $old_val = null, 
 
 log_message("========== CRON: Vacation Balance Update Started ==========", 'info');
 
+// Check for bypass flag:
+// CLI: php script.php --force
+// Browser: script.php?force=1
+$force_run = (isset($argv) && in_array('--force', $argv)) || (isset($_GET['force']) && $_GET['force'] == '1');
+
 try {
     // Include database connection
     require_once __DIR__ . '/includes/db.php';
     
     // Check if already updated today (to prevent JSON overwrite)
     $already_updated_today = false;
-    if (file_exists($report_file)) {
+    if (!$force_run && file_exists($report_file)) {
         $report_data = json_decode(file_get_contents($report_file), true);
         if ($report_data && isset($report_data['timestamp'])) {
             $report_date = substr($report_data['timestamp'], 0, 10);
@@ -113,11 +118,17 @@ try {
                 echo "Records Updated: " . ($report_data['updated_count'] ?? 0) . "\n";
                 echo "Balances Changed: " . ($report_data['changed_count'] ?? 0) . "\n";
                 echo "Errors: " . ($report_data['error_count'] ?? 0) . "\n";
+                echo "To force re-run, use: php cron_update_vacation_balances.php --force\n";
+                echo "To force re-run, use: /cron_update_vacation_balances.php?force=1\n";
                 echo "JSON file preserved from first run.\n";
                 echo "===========================================\n\n";
                 exit(0);
             }
         }
+    }
+    
+    if ($force_run) {
+        log_message("FORCE RUN enabled: Bypassing once-per-day restriction", 'info');
     }
     
     // Make connection available globally
@@ -179,7 +190,7 @@ try {
 
             $last_updated = $last_row ? $last_row['last_updated'] : null;
             $today_str = date('Y-m-d');
-            if ($last_updated && substr($last_updated, 0, 10) === $today_str) {
+            if (!$force_run && $last_updated && substr($last_updated, 0, 10) === $today_str) {
                 log_message("  [emp_id: $emp_id] SKIPPED: Already updated today ($last_updated)", 'warning');
                 continue;
             }
@@ -195,6 +206,11 @@ try {
 
             $live_balance = (float)$live_balance;
             $balance_changed = (abs($old_balance - $live_balance) > 0.001);
+            
+            // DEBUG: Log calculation details
+            if ($emp_id === '1061') {
+                error_log("DEBUG emp_1061: old_balance={$old_balance}, live_balance={$live_balance}, diff=" . abs($old_balance - $live_balance) . ", threshold=0.001, changed={$balance_changed}");
+            }
 
             // Update the record with new balance and track when it was last updated
             // CRITICAL FIX: Also update total_days to keep it synchronized with available_balance

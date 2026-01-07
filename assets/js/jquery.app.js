@@ -77,6 +77,9 @@ function __(key, defaultText = '') {
 
 // --- Main Script Logic (Your existing functions) ---
 $(document).ready(function() {
+    // Initialize global RTL datepicker support
+    setupGlobalRTLDatepicker();
+    
     // Use event delegation for dynamically created modal elements
     $(document).on('click', '.addnote', function(e) {
         e.preventDefault();
@@ -96,6 +99,123 @@ $(document).ready(function() {
     }
 });
 
+/**
+ * Global RTL Datepicker Setup
+ * Call this function once to apply RTL positioning to ALL datepickers automatically
+ * Works for existing and dynamically created datepicker instances
+ */
+function setupGlobalRTLDatepicker() {
+    var isRTL = $('html').attr('dir') === 'rtl' || $('body').attr('dir') === 'rtl';
+    
+    if (!isRTL) return; // Exit if not RTL mode
+    
+    // Function to position picker correctly in RTL
+    function positionPickerRTL($input) {
+        var datepickerData = $input.data('datepicker');
+        if (!datepickerData || !datepickerData.picker) return;
+        var $picker = datepickerData.picker;
+        var $modal = $input.closest('.modal:visible');
+        var inputWidth = $input.outerWidth();
+        var pickerWidth = $picker.outerWidth();
+        var inputHeight = $input.outerHeight();
+        var leftPos, topPos;
+        if ($modal.length > 0) {
+            // Input is inside a modal
+            var inputPos = $input.position(); // relative to modal
+            // Append picker to modal if not already
+            if (!$picker.parent().is($modal)) {
+                $picker.appendTo($modal);
+            }
+            leftPos = inputPos.left + inputWidth - pickerWidth;
+            topPos = inputPos.top + inputHeight + 5;
+            // Ensure picker doesn't go off left edge
+            if (leftPos < 0) leftPos = inputPos.left;
+        } else {
+            // Not in modal, use offset and append to body
+            var inputOffset = $input.offset();
+            if (!$picker.parent().is('body')) {
+                $picker.appendTo('body');
+            }
+            leftPos = inputOffset.left + inputWidth - pickerWidth;
+            topPos = inputOffset.top + inputHeight + 5;
+            if (leftPos < 0) leftPos = inputOffset.left;
+        }
+        $picker.css({
+            'position': 'absolute',
+            'left': leftPos + 'px',
+            'top': topPos + 'px',
+            'z-index': '99999',
+            'margin': '0',
+            'transform': 'none'
+        });
+    }
+    
+    // Override datepicker show event for all inputs
+    $(document).on('show.datepicker', '.datepicker', function() {
+        var $input = $(this);
+        
+        // Position on first show
+        setTimeout(function() {
+            positionPickerRTL($input);
+        }, 0);
+        
+        // Keep repositioning while picker is visible
+        var intervalId = setInterval(function() {
+            var datepickerData = $input.data('datepicker');
+            if (!datepickerData || !datepickerData.picker || !datepickerData.picker.is(':visible')) {
+                clearInterval(intervalId);
+                return;
+            }
+            positionPickerRTL($input);
+        }, 100);
+    });
+    
+    // Watch for dynamically created inputs
+    var observer = new MutationObserver(function(mutations) {
+        $(mutations).each(function() {
+            $(this.addedNodes).find('input.datepicker, input[data-datepicker="true"]').each(function() {
+                var $input = $(this);
+                // Attach event listener if datepicker is already initialized
+                if ($input.data('datepicker')) {
+                    $input.off('show.datepicker').on('show.datepicker', function() {
+                        setTimeout(function() {
+                            positionPickerRTL($input);
+                        }, 0);
+                        
+                        var intervalId = setInterval(function() {
+                            var datepickerData = $input.data('datepicker');
+                            if (!datepickerData || !datepickerData.picker || !datepickerData.picker.is(':visible')) {
+                                clearInterval(intervalId);
+                                return;
+                            }
+                            positionPickerRTL($input);
+                        }, 100);
+                    });
+                }
+            });
+        });
+    });
+    
+    // Start observing
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+// Alias for backward compatibility - initializes datepicker with RTL support
+function initializeDatepickerRTL() {
+    // Initialize all elements with class 'datepicker'
+    $('.datepicker').datepicker({
+        format: "yyyy-mm-dd",
+        autoclose: true,
+        todayHighlight: true,
+        orientation: 'auto'
+    });
+    
+    // Then apply RTL positioning
+    setupGlobalRTLDatepicker();
+}
 
 $(document).on('click', '.deleteAjax', function (e) {
     e.preventDefault();
@@ -419,7 +539,7 @@ function addItemFunc(){
                     Swal.showValidationMessage(__("enter_small_calories_validation"))
                 }
                 if(file.length == 1){
-                    var filesiz = 1048576 * 5;
+                    var filesiz = 1048576 * 8;
                     var isValidExt = validExtensions.indexOf(file[0].type) > -1;
                     var extCheck = ( isValidExt == false );
                     var sizCheck = ( file[0].size >= filesiz );
@@ -430,7 +550,7 @@ function addItemFunc(){
                 } else if(isValidExt == false){
                     Swal.showValidationMessage(__("upload_jpg_png_only_validation"))
                 } else if(file[0].size >= filesiz){
-                    Swal.showValidationMessage(__("upload_size_limit_5mb_validation"))
+                    Swal.showValidationMessage(__("upload_size_limit_5mb_validation").replace('%s', (filesiz / 1048576).toFixed(0)))
                 }
             }
 
@@ -1330,7 +1450,7 @@ $(document).on('click', '.addDocuAtter', function (e) {
 
             if ($('input[name=attach]:checked').val() == 'yes') {
                 if(file.length == 1){
-                    var filesiz = 1048576 * 5;
+                    var filesiz = 1048576 * 8;
                     var isValidExt = validExtensions.indexOf(file[0].type) > -1;
                     var extCheck = ( isValidExt == false );
                     var sizCheck = ( file[0].size >= filesiz );
@@ -1341,7 +1461,7 @@ $(document).on('click', '.addDocuAtter', function (e) {
                 } else if(isValidExt == false){
                     Swal.showValidationMessage(__("upload_pdf_jpg_only_validation"))
                 } else if(file[0].size >= filesiz){
-                    Swal.showValidationMessage(__("upload_size_limit_5mb_validation"))
+                    Swal.showValidationMessage(__("upload_size_limit_5mb_validation").replace('%s', (filesiz / 1048576).toFixed(0)))
                 }
             }
 
@@ -2826,7 +2946,6 @@ $(document).on('click', '.showPasswordAjax', function (e) {
     })
 });
 
-// Main function to handle user creation
 $(document).on('click', '.createUserDeptAjax', function(e) {
     e.preventDefault();
     var emp_id = $(this).data('emp_id');
@@ -2848,6 +2967,70 @@ $(document).on('click', '.createUserDeptAjax', function(e) {
         didOpen: () => {
             setupInputValidations();
             
+            // Function to update button state
+            function updateButtonState() {
+                var empIdVal = $('#emp_id').val();
+                var userTypeVal = $('#user_type').val();
+                var confirmBtn = Swal.getConfirmButton();
+                
+                // Enable button only if both fields have values
+                if (empIdVal && userTypeVal) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.style.opacity = '1';
+                } else {
+                    confirmBtn.disabled = true;
+                    confirmBtn.style.opacity = '0.5';
+                }
+            }
+            
+            // Load available employees (those not in admin_login)
+            $.ajax({
+                url: './includes/ajaxFile/getAvailableEmployees.php',
+                type: 'GET',
+                dataType: 'json',
+                success: function(response) {
+                    if (response.status === 'success' && response.data.length > 0) {
+                        let empOptions = '<option value="">' + (__('select_employee') || 'Select Employee') + '</option>';
+                        
+                        response.data.forEach(function(emp) {
+                            empOptions += `<option value="${emp.emp_id}">${emp.display_text}</option>`;
+                        });
+                        
+                        $('#emp_id').html(empOptions);
+                        
+                        // If emp_id is passed, select it
+                        if (emp_id) {
+                            $('#emp_id').val(emp_id);
+                        }
+                        
+                        // Initialize Select2 for employee dropdown
+                        $('#emp_id').select2({
+                            placeholder: __('select_employee') || 'Select Employee',
+                            allowClear: true,
+                            width: '100%'
+                        });
+                        
+                        // Add change listener for employee selection
+                        $('#emp_id').on('change', function() {
+                            updateButtonState();
+                        });
+                        
+                        // Initial button state check
+                        updateButtonState();
+                    } else {
+                        $('#emp_id').html('<option value="">' + (__('no_available_employees') || 'No available employees') + '</option>');
+                        $('#emp_id').prop('disabled', true);
+                        Swal.getConfirmButton().disabled = true;
+                        Swal.showValidationMessage(__('no_available_employees') || 'No employees available for user creation');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error loading employees:', error);
+                    $('#emp_id').html('<option value="">' + (__('error_loading_employees') || 'Error loading employees') + '</option>');
+                    Swal.getConfirmButton().disabled = true;
+                }
+            });
+            
             // Function to toggle email field requirement based on user type
             function toggleEmailField() {
                 var selectedType = $('#user_type').val();
@@ -2861,18 +3044,31 @@ $(document).on('click', '.createUserDeptAjax', function(e) {
             // Initial toggle on load
             toggleEmailField();
             
-            // Toggle on change
+            // Toggle on change and update button state
             $('#user_type').on('change', function() {
                 toggleEmailField();
+                updateButtonState();
             });
             
             const onFirstInteraction = () => { hasUserInteracted = true; };
             setupDynamicValidation([
+                { id: 'emp_id', event: 'change', validation: (value) => value !== "", requiredMessage: __('select_employee') },
                 { id: 'user_type', event: 'change', validation: (value) => value !== "", requiredMessage: __('select_employee_type') }
             ], onFirstInteraction);
+            
+            // Disable button initially
+            Swal.getConfirmButton().disabled = true;
+            Swal.getConfirmButton().style.opacity = '0.5';
         },
         preConfirm: () => {
+            var selectedEmpId = $('#emp_id').val();
             var selectedType = $('#user_type').val();
+            
+            // Validate employee selection (always required)
+            if(!selectedEmpId || selectedEmpId == "") {
+                Swal.showValidationMessage(__('select_employee') || 'Please select an employee');
+                return false;
+            }
             
             // Validate user type (always required)
             if(!selectedType || selectedType == "") {
@@ -2896,9 +3092,9 @@ $(document).on('click', '.createUserDeptAjax', function(e) {
                 url: './includes/ajaxFile/ajaxUser.php',
                 type: 'POST',
                 data: {
-                    emp_id: emp_id,
+                    emp_id: selectedEmpId,
                     email: $('#email').val(),
-                    user_type: $('#user_type').val(),
+                    user_type: selectedType,
                     ajaxType: 'create_user'
                 },
                 cache: false,
@@ -3432,7 +3628,7 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
                 Swal.showValidationMessage(__("select_documents_type_validation"))
             }
             if(file.length == 1){
-                var filesiz = 1048576 * 5;
+                var filesiz = 1048576 * 8;
                 var isValidExt = validExtensions.indexOf(file[0].type) > -1;
                 var extCheck = ( isValidExt == false );
                 var sizCheck = ( file[0].size >= filesiz );
@@ -3443,7 +3639,7 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
             } else if(isValidExt == false){
                 Swal.showValidationMessage(__("upload_pdf_jpg_only_validation"))
             } else if(file[0].size >= filesiz){
-                Swal.showValidationMessage(__("upload_size_limit_5mb_validation"))
+                Swal.showValidationMessage(__("upload_size_limit_5mb_validation").replace('%s', (filesiz / 1048576).toFixed(0)))
             }
             
             return new Promise(function(reject, resolve) {
@@ -4347,7 +4543,7 @@ function addVoucherFunc(empid){
             } 
             if ($('input[name=attach]:checked').val() == 'yes') {
                 if(file.length == 1){
-                    var filesiz = 1048576 * 5;
+                    var filesiz = 1048576 * 8;
                     var isValidExt = validExtensions.indexOf(file[0].type) > -1;
                     var extCheck = ( isValidExt == false );
                     var sizCheck = ( file[0].size >= filesiz );
@@ -4358,7 +4554,7 @@ function addVoucherFunc(empid){
                 } else if(isValidExt == false){
                     Swal.showValidationMessage(__("upload_pdf_jpg_only_validation"))
                 } else if(file[0].size >= filesiz){
-                    Swal.showValidationMessage(__("upload_size_limit_5mb_validation"))
+                    Swal.showValidationMessage(__("upload_size_limit_5mb_validation").replace('%s', (filesiz / 1048576).toFixed(0)))
                 }
             }
             return new Promise(function(reject, resolve) {
@@ -4789,6 +4985,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
             });
         },
         didOpen: () => {
+            setupGlobalRTLDatepicker();
             // Initialize Select2
             $('#leave_type_select').select2({
                 placeholder: __("select_leave_type_placeholder"),
@@ -5363,54 +5560,95 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         willOpen: () => {
             const swalModal = Swal.getHtmlContainer();
             
-            // Helper function to get the minimum start date based on active return date
-            const getMinStartDate = () => {
-                if (activeReturnDate) {
-                    const parts = activeReturnDate.split('-');
-                    const returnDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                    returnDate.setDate(returnDate.getDate() + 1);
-                    console.log('Emergency vacation: Active vacation return date:', activeReturnDate);
-                    console.log('Emergency vacation: Minimum start/end date (return_date + 1):', returnDate.toISOString().split('T')[0]);
-                    return returnDate;
+            // [NEW] Hide/Show vacation options based on balance
+            // If balance >= 1: Hide Emergency Vacation, Show Annual Vacation and Encashed
+            // If balance < 1: Hide Annual Vacation and Encashed, Show Emergency Vacation
+            if (swalModal) {
+                if (currentBalance >= 1) {
+                    // Employee has sufficient balance - hide Emergency Vacation, show Annual and Encashed
+                    console.log('Current Balance:', currentBalance, '- Hiding Emergency Vacation, showing Annual and Encashed');
+                    $(swalModal).find('*').each(function() {
+                        const text = $(this).text().trim();
+                        if (text === 'Emergency vacation') {
+                            $(this).hide();
+                            console.log('Hidden Emergency vacation element');
+                            return false; // break
+                        }
+                    });
+                } else {
+                    // Employee has insufficient balance (< 1 day) - hide Annual and Encashed, show Emergency
+                    console.log('Current Balance:', currentBalance, '- Hiding Annual Vacation and Encashed, showing Emergency');
+                    $(swalModal).find('*').each(function() {
+                        const text = $(this).text().trim();
+                        if (text === 'Annual vacation' || text === 'Encashed') {
+                            $(this).hide();
+                            console.log('Hidden:', text);
+                        }
+                    });
                 }
-                return null;
-            };
+            }
             
             // Helper function to check if Emergency vacation is currently selected
             const isEmergencySelected = () => {
                 const flyType = $('input[name="fly_type"]:checked').val();
                 return flyType === 'emergency';
             };
+
+            setupGlobalRTLDatepicker();
             
             // Helper function to initialize date pickers with proper restrictions
             const initializeDatePickers = () => {
                 const isEmergency = isEmergencySelected();
-                const minDate = isEmergency ? getMinStartDate() : null;
                 
-                console.log('🔄 initializeDatePickers called - isEmergency:', isEmergency, 'minDate:', minDate);
+                // Helper to format date as YYYY-MM-DD
+                const formatDateToString = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+                
+                // Determine the minimum start date
+                let minStartDate = null;
+                
+                // If there's an active return date, start from day after return
+                if (activeReturnDate) {
+                    const parts = activeReturnDate.split('-');
+                    minStartDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    minStartDate.setDate(minStartDate.getDate() + 1); // Day AFTER return date
+                    const formattedDate = formatDateToString(minStartDate);
+                    console.log('✅ Active vacation found - Return date:', activeReturnDate, '- Min start date for 2nd vacation:', formattedDate);
+                } else {
+                    // No active vacation - allow from tomorrow onwards
+                    minStartDate = new Date();
+                    minStartDate.setDate(minStartDate.getDate() + 1); // Tomorrow
+                    const formattedDate = formatDateToString(minStartDate);
+                    console.log('✅ No active vacation - Min start date:', formattedDate);
+                }
+                
+                const minStartDateString = formatDateToString(minStartDate);
+                console.log('🔄 initializeDatePickers called - activeReturnDate:', activeReturnDate, 'minStartDate:', minStartDateString);
                 
                 const startDateConfig = {
                     format: "yyyy-mm-dd",
                     todayHighlight: false,
                     autoclose: true,
-                    startDate: '+1d' // Start from tomorrow
+                    startDate: minStartDateString
                 };
                 
                 const endDateConfig = {
                     format: "yyyy-mm-dd",
                     todayHighlight: false,
                     autoclose: true,
-                    startDate: '+1d' // Start from tomorrow
+                    startDate: minStartDateString
                 };
                 
-                // Apply minimum date restriction ONLY if Emergency is selected AND activeReturnDate exists
-                if (isEmergency && minDate) {
-                    startDateConfig.startDate = minDate;
-                    endDateConfig.startDate = minDate;
-                    console.log('✅ Date picker restriction applied for Emergency vacation - Min date:', minDate.toISOString().split('T')[0]);
-                } else {
-                    console.log('⚠️ No restriction applied - isEmergency:', isEmergency, 'activeReturnDate:', activeReturnDate);
-                }
+                console.log('📅 Date picker configuration - startDate (string):', minStartDateString);
+                console.log('📅 Date picker configuration - startDate (object):', minStartDate);
+                
+                // Try both string and Date object formats for better compatibility
+                startDateConfig.startDate = minStartDate;  // Use Date object
+                endDateConfig.startDate = minStartDate;    // Use Date object
                 
                 // Remove existing datepicker instances before creating new ones
                 try {
@@ -5420,7 +5658,10 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     console.log('Date pickers not yet initialized');
                 }
                 
-                $('#start_date').datepicker(startDateConfig).on('changeDate', function (e) {
+                $('#start_date').datepicker(startDateConfig);
+                // Use setStartDate method to ensure proper restriction even for past dates
+                $('#start_date').datepicker('setStartDate', minStartDate);
+                $('#start_date').on('changeDate', function (e) {
                     var startDate = e.date;
                     $('#end_date').datepicker('setStartDate', startDate);
                     $('#departure_date').datepicker('setStartDate', startDate);
@@ -5428,7 +5669,10 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     calculateVacationDays();
                 });
 
-                $('#end_date').datepicker(endDateConfig).on('changeDate', function (e) {
+                $('#end_date').datepicker(endDateConfig);
+                // Use setStartDate method to ensure proper restriction even for past dates
+                $('#end_date').datepicker('setStartDate', minStartDate);
+                $('#end_date').on('changeDate', function (e) {
                     var endDate = e.date;
                     $('#start_date').datepicker('setEndDate', endDate);
                     $('#departure_date').datepicker('setEndDate', endDate);
@@ -7086,6 +7330,13 @@ function create_user_HTML() {
     <form class="contact-input" id="createUserForm" style="text-align: left;">
         <div class="modal-body">
             <div class="form-row">
+                <div class="form-group col-md-12">
+                    <label for="emp_id">${__('employee') || 'Select Employee'}<span class="text-danger">*</span></label>
+                    <select id="emp_id" name="emp_id" class="form-control select2-single">
+                        <option value="">${__('loading_employees') || 'Loading employees...'}</option>
+                    </select>
+                    <small class="form-text text-muted">${__('select_employee_note') || 'Note: Only employees without existing system access are shown.'}</small>
+                </div>
                 <div class="form-group col-md-12">
                     <label for="user_type">${__('type_of_permission') || 'User Role / Permission'}<span class="text-danger">*</span></label>
                     <select id="user_type" name="user_type" class="form-control">

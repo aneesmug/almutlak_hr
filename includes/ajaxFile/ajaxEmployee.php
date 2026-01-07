@@ -1,7 +1,8 @@
 <?php
     header('Content-Type: application/json');
 	require_once __DIR__ . '/../../includes/db.php';
-	require_once __DIR__ . '/../../includes/session_check.php';
+    require_once __DIR__ . '/../../includes/session_check.php';
+    require_once __DIR__ . '/../../includes/role_check.php'; // Ensure $user_role is set
     include("./../../includes/helper_functions.php"); // --- Helper Function ---
 
 /****************************************************************
@@ -32,15 +33,52 @@ if($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     
+    $emp_id_requested = (int)$_POST['empid'];
+    
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`emp_id`=".(int)$_POST['empid']." ".$company_filter); // Cast to int
+    WHERE `e`.`status`=1 AND `e`.`emp_id`=".$emp_id_requested." ".$company_filter);
     $name = []; // Initialize
-    while($row = mysqli_fetch_assoc($stmt)) {
-        $name[] = $row;
+    
+    if ($stmt && mysqli_num_rows($stmt) > 0) {
+        while($row = mysqli_fetch_assoc($stmt)) {
+            // CHECK ACCESS CONTROL before returning employee data
+            $employee_data = [
+                'emp_id' => $row['emp_id'],
+                'supervisor_id' => $row['supervisor_id'] ?? null,
+                'dept' => $row['dept'] ?? null,
+                'comp_no' => $row['comp_no'] ?? 1
+            ];
+            
+            // Get current user's data from session/globals set by session_check.php
+            // These variables are set by session_check.php: $user_dept, $user_type, $empid, $user_role
+            $current_user_emp_id = $_SESSION['auth_user']['emp_id'] ?? $empid ?? null;
+            $current_user_dept = $user_dept ?? null;  // Set by session_check.php
+            $current_user_company = $_SESSION['auth_user']['comp_no'] ?? 1;
+            $current_user_type = $user_type ?? null;  // Set by session_check.php
+            
+            $user_data = [
+                'emp_id' => $current_user_emp_id,
+                'dept' => $current_user_dept,
+                'comp_no' => $current_user_company,
+                'user_type' => $current_user_type
+            ];
+            // Always use computed $user_role from role_check.php
+            if (canEmployeeSupervisorAccess($employee_data, $user_data, $user_role)) {
+                $name[] = $row;
+            } else {
+                mysqli_free_result($stmt);
+                echo json_encode([
+                    'data'      => [],
+                    'status'    => 403,
+                    'message'   => 'Access Denied: You do not have permission to view this employee.'
+                ]);
+                exit;
+            }
+        }
     }
     mysqli_free_result($stmt); // <-- FIX
     $data = [
@@ -198,13 +236,12 @@ elseif($ajaxType == 'get_hr_assistants') {
 // =================================================================
 elseif($ajaxType == 'get_hr_senior_bp') {
     // Get all HR Senior BP users for simple leave approval
-    // Add company filter
-    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    // NOTE: NO company filter here - approvers must be searchable across all companies for cross-company approval chain
     
     $sql = "SELECT e.emp_id, e.name, al.user_type 
             FROM employees e 
             JOIN admin_login al ON e.emp_id = al.emp_id 
-            WHERE al.user_type = 'hr_senior_bp' AND e.status = 1 ".$company_filter."
+            WHERE al.user_type = 'hr_senior_bp' AND e.status = 1
             ORDER BY e.name ASC";
     
     $result = mysqli_query($conDB, $sql);
@@ -227,15 +264,14 @@ elseif($ajaxType == 'get_hr_senior_bp') {
 elseif($ajaxType == 'get_hr_team_members') {
     // Get all HR team members (ALL employees in HR department - dept_id = 5)
     // These are employees who can receive CC notifications
-    // Add company filter
-    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    // NOTE: NO company filter here - HR team members must be accessible across all companies for notifications
     
     $sql = "SELECT DISTINCT e.emp_id, e.name, e.email, d.dep_nme, al.user_type 
             FROM employees e 
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
             WHERE e.status = 1 
-            AND e.dept = 5 ".$company_filter."
+            AND e.dept = 5
             ORDER BY e.name ASC";
     
     $result = mysqli_query($conDB, $sql);

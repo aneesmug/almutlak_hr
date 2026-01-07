@@ -34,6 +34,7 @@ $has_full_access = in_array($user_role, [
     'HR_Operations', 
     'HR_Supervisor',
     'HR_Recruitment',
+    'HR_Payroll',
     'Finance_Officer'
     ]) || $user_type === 'is_system_admin';
 
@@ -602,13 +603,26 @@ if (mysqli_num_rows($query) == 1) {
                                             <input type="text" class="form-control datepicker" id="dateTo" placeholder="<?= __('select_end_date') ?>">
                                         </div>
 
-                                        <!-- Status Filter -->
-                                        <div class="col-md-4 mb-3">
+                                        <!-- Status Filter (contextual per report) -->
+                                        <div class="col-md-4 mb-3" id="statusFilterWrapper">
                                             <label for="statusFilter"><?= __('status') ?></label>
                                             <select class="form-control" id="statusFilter">
                                                 <option value=""><?= __('all_status') ?></option>
-                                                <option value="1" selected><?= __('active') ?></option>
-                                                <option value="0"><?= __('inactive') ?></option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Vacation Type Filter -->
+                                        <div class="col-md-4 mb-3" id="vacationTypeFilterWrapper" style="display:none;">
+                                            <label for="vacationTypeFilter"><?= __('vac_type') ?></label>
+                                            <select class="form-control" id="vacationTypeFilter">
+                                                <option value=""><?= __('all_types') ?></option>
+                                                <?php
+                                                $vacTypeQuery = mysqli_query($conDB, "SELECT DISTINCT vac_type FROM emp_vacation WHERE vac_type <> '' ORDER BY vac_type");
+                                                while ($vacType = mysqli_fetch_assoc($vacTypeQuery)) {
+                                                    $value = htmlspecialchars($vacType['vac_type'], ENT_QUOTES, 'UTF-8');
+                                                    echo '<option value="' . $value . '">' . __(strtolower(str_replace(' ', '_', ucfirst($value)))) . '</option>';
+                                                }
+                                                ?>
                                             </select>
                                         </div>
 
@@ -628,9 +642,18 @@ if (mysqli_num_rows($query) == 1) {
                                                     'emp_vacation' => __('employee_vacations'),
                                                     'emp_loan' => __('employee_loans'),
                                                     'emp_loan_payments' => __('loan_payments'),
+                                                    'emp_loan_approvals' => __('loan_approvals'),
+                                                    'emp_loan_monthly_status' => __('loan_monthly_status'),
                                                     'emp_salary' => __('employee_salaries'),
                                                     'emp_docu' => __('employee_documents'),
                                                     'emp_eos' => __('end_of_service'),
+                                                    'emp_vacation_balance' => __('vacation_balance'),
+                                                    'emp_notice' => __('employee_notices'),
+                                                    'emp_resignations' => __('resignations'),
+                                                    'emp_resignation_history' => __('resignation_history'),
+                                                    'emp_resignation_attachments' => __('resignation_attachments'),
+                                                    'emp_resignation_clearance' => __('resignation_clearance'),
+                                                    'emp_exit_interviews' => __('exit_interviews'),
                                                     'payrolls' => __('payrolls'),
                                                     'attendance' => __('attendance_records'),
                                                     'gender' => __('gender'),
@@ -638,7 +661,8 @@ if (mysqli_num_rows($query) == 1) {
                                                     'locations' => __('locations'),
                                                     'machines' => __('machines'),
                                                     'cars' => __('vehicles'),
-                                                    'brands' => __('brands')
+                                                    'brands' => __('brands'),
+                                                    'activity_log' => __('activity_log')
                                                 ];
 
                                                 // Add emp_evaluations only for authorized users
@@ -804,12 +828,9 @@ if (mysqli_num_rows($query) == 1) {
                 $('#multiDeptFilter').hide();
                 $('#dateFrom').closest('.col-md-4, .form-group').hide();
                 $('#dateTo').closest('.col-md-4, .form-group').hide();
-                // Initialize date pickers
-                $('.datepicker').datepicker({
-                    format: 'yyyy-mm-dd',
-                    autoclose: true,
-                    todayHighlight: true
-                });
+                
+                // Initialize date pickers with RTL support (using global function)
+                initializeDatepickerRTL();
 
                 // Format function for dropdown options with checkmarks
                 function formatDeptOption(data) {
@@ -1009,10 +1030,130 @@ if (mysqli_num_rows($query) == 1) {
                     }
                 }
 
+                // Status filter options per report type
+                const statusOptionsConfig = {
+                    default: {
+                        options: [{ value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' }],
+                        defaultValue: ''
+                    },
+                    employee: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: '1', label: (typeof __ === 'function') ? __('active') : 'Active' },
+                            { value: '0', label: (typeof __ === 'function') ? __('inactive') : 'Inactive' }
+                        ],
+                        defaultValue: '1'
+                    },
+                    salary: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: '1', label: (typeof __ === 'function') ? __('active') : 'Active' },
+                            { value: '0', label: (typeof __ === 'function') ? __('inactive') : 'Inactive' }
+                        ],
+                        defaultValue: '1'
+                    },
+                    vacation: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'draft', label: (typeof __ === 'function') ? __('draft') : 'Draft' },
+                            { value: 'pending_approval', label: (typeof __ === 'function') ? __('pending_approval') : 'Pending Approval' },
+                            { value: 'approved', label: (typeof __ === 'function') ? __('approved') : 'Approved' },
+                            { value: 'rejected', label: (typeof __ === 'function') ? __('rejected') : 'Rejected' },
+                            { value: 'completed', label: (typeof __ === 'function') ? __('completed') : 'Completed' }
+                        ],
+                        defaultValue: ''
+                    },
+                    loan: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'pending_level_1', label: (typeof __ === 'function') ? __('pending_level_1') : 'Pending Level 1' },
+                            { value: 'pending_level_2', label: (typeof __ === 'function') ? __('pending_level_2') : 'Pending Level 2' },
+                            { value: 'pending_level_3', label: (typeof __ === 'function') ? __('pending_level_3') : 'Pending Level 3' },
+                            { value: 'pending_level_4', label: (typeof __ === 'function') ? __('pending_level_4') : 'Pending Level 4' },
+                            { value: 'pending_level_5', label: (typeof __ === 'function') ? __('pending_level_5') : 'Pending Level 5' },
+                            { value: 'pending_level_6', label: (typeof __ === 'function') ? __('pending_level_6') : 'Pending Level 6' },
+                            { value: 'approved', label: (typeof __ === 'function') ? __('approved') : 'Approved' },
+                            { value: 'rejected', label: (typeof __ === 'function') ? __('rejected') : 'Rejected' },
+                            { value: 'paid', label: (typeof __ === 'function') ? __('paid') : 'Paid' }
+                        ],
+                        defaultValue: ''
+                    },
+                    payroll: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'generated', label: (typeof __ === 'function') ? __('generated') : 'Generated' },
+                            { value: 'updated', label: (typeof __ === 'function') ? __('updated') : 'Updated' }
+                        ],
+                        defaultValue: ''
+                    },
+                    document: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'A', label: (typeof __ === 'function') ? __('active') : 'Active' },
+                            { value: 'I', label: (typeof __ === 'function') ? __('inactive') : 'Inactive' }
+                        ],
+                        defaultValue: ''
+                    },
+                    evaluation: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'objected', label: (typeof __ === 'function') ? __('objected_evaluations') : 'Objected Evaluations' }
+                        ],
+                        defaultValue: ''
+                    },
+                    resignation: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'pending', label: (typeof __ === 'function') ? __('pending') : 'Pending' },
+                            { value: 'approved', label: (typeof __ === 'function') ? __('approved') : 'Approved' },
+                            { value: 'rejected', label: (typeof __ === 'function') ? __('rejected') : 'Rejected' },
+                            { value: 'cancelled', label: (typeof __ === 'function') ? __('cancelled') : 'Cancelled' },
+                            { value: 'withdrawn', label: (typeof __ === 'function') ? __('withdrawn') : 'Withdrawn' }
+                        ],
+                        defaultValue: ''
+                    },
+                    attendance: { hide: true },
+                    terminated_employees: { hide: true },
+                    eos: { hide: true },
+                    dept_comparison: { hide: true },
+                    custom: { hide: true }
+                };
+
+                function renderStatusFilter(reportType) {
+                    const cfg = statusOptionsConfig[reportType] || statusOptionsConfig.default;
+                    const $wrapper = $('#statusFilterWrapper');
+                    const $select = $('#statusFilter');
+
+                    if (cfg.hide) {
+                        $wrapper.hide();
+                        $select.val('');
+                        return;
+                    }
+
+                    $wrapper.show();
+                    $select.empty();
+
+                    (cfg.options || []).forEach(function(opt) {
+                        $select.append(`<option value="${opt.value}">${opt.label}</option>`);
+                    });
+
+                    $select.val(cfg.defaultValue || '');
+                }
+
+                function toggleVacationTypeFilter(reportType) {
+                    if (reportType === 'vacation') {
+                        $('#vacationTypeFilterWrapper').show();
+                    } else {
+                        $('#vacationTypeFilter').val('');
+                        $('#vacationTypeFilterWrapper').hide();
+                    }
+                }
+
                 initDeptSelect2();
 
-                // Set default status filter to "Active" (value="1")
-                $('#statusFilter').val('1');
+                // Initialize status filter and vacation type visibility
+                renderStatusFilter('');
+                toggleVacationTypeFilter('');
 
                 // Client-side translation for custom column selector labels
                 function normalizeKey(str) {
@@ -1904,21 +2045,9 @@ if (mysqli_num_rows($query) == 1) {
                         $('#dateFrom').closest('.col-md-4').show(); // Show date from for other reports
                     }
 
-                    // Update status filter based on report type
-                    if (reportType === 'evaluation') {
-                        // For evaluation report, show objection status filter
-                        $('#statusFilter').html(`
-                            <option value=""><?= __('all_status') ?></option>
-                            <option value="objected"><?= __('objected_evaluations') ?></option>
-                        `);
-                    } else {
-                        // For other reports, show active/inactive filter
-                        $('#statusFilter').html(`
-                            <option value=""><?= __('all_status') ?></option>
-                            <option value="1" selected><?= __('active') ?></option>
-                            <option value="0"><?= __('inactive') ?></option>
-                        `);
-                    }
+                    // Update status and vacation-type filters based on report type
+                    renderStatusFilter(reportType);
+                    toggleVacationTypeFilter(reportType);
 
                     // Show/hide custom table selector
                     if (reportType === 'custom') {
@@ -2388,16 +2517,23 @@ if (mysqli_num_rows($query) == 1) {
                     }
 
                     // Prepare filter data
+                    const statusValue = $('#statusFilterWrapper').is(':visible') ? $('#statusFilter').val() : '';
+                    const vacationTypeValue = $('#vacationTypeFilterWrapper').is(':visible') ? $('#vacationTypeFilter').val() : '';
+
                     const filterData = {
                         reportType: reportType,
                         columns: selectedColumns,
                         departments: departments,
                         dateFrom: $('#dateFrom').val(),
                         dateTo: $('#dateTo').val(),
-                        status: $('#statusFilter').val(),
+                        status: statusValue,
                         hasFullAccess: <?= $has_full_access ? 'true' : 'false' ?>,
                         userDept: '<?= $user_dept ?>'
                     };
+
+                    if (reportType === 'vacation') {
+                        filterData.vacationType = vacationTypeValue;
+                    }
 
                     // Add custom table name if custom report
                     if (reportType === 'custom') {
@@ -3141,6 +3277,9 @@ if (mysqli_num_rows($query) == 1) {
                     $('#dateFrom').val('');
                     $('#dateTo').val('');
                     $('#statusFilter').val('');
+                    $('#vacationTypeFilter').val('');
+                    renderStatusFilter('');
+                    toggleVacationTypeFilter('');
                     // Show global date filters after reset
                     $('#dateFrom').closest('.col-md-4, .form-group').show();
                     $('#dateTo').closest('.col-md-4, .form-group').show();

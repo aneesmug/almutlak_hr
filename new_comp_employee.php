@@ -1,8 +1,7 @@
 <?php
-	require_once __DIR__ . '/includes/db.php';
-
+	// Start output buffering to allow header redirects
+	ob_start();
 	require_once __DIR__ . '/includes/session_check.php';
-
 	include("./includes/Hijri_GregorianConvert.php");
 	$DateConv=new Hijri_GregorianConvert;
 	$format="DD/MM/YYYY";
@@ -21,7 +20,7 @@ if(isset($_POST['submit'])){
 	$allowedColumns = [
 		'name', 'emp_id', 'iqama', 'iqama_exp', 'passport_number',
 		'passport_exp', 'mobile', 'emg_mobile', 'emg_name', 'country', 'dept',
-		'sectin_nme', 'emptype', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
+		'sectin_nme', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
 		'sex', 'mar_status', 'blood_type', 'emp_sup_type', 'actual_Job', 'vac_period',
 		'vacation_days', 'salary', 'bank_name', 'iban', 'email', 'address',
 		'insurance_no', 'insurance_class', 'insurance_exp', 'iqama_exp_g', 'gosi',
@@ -47,6 +46,7 @@ if(isset($_POST['submit'])){
 	$data['dept'] = $data['department'] ?? null;
 	unset($data['department']);
 	$data['avatar'] = ($data['sex'] == 1)?"./assets/emp_pics/defult.png":"./assets/emp_pics/defultFemale.jpg";
+
 	try {
 		// Prepare data for insertion
 		$columns = [];
@@ -82,23 +82,151 @@ if(isset($_POST['submit'])){
 		$stmt = $pdo->prepare($sql);
 		$stmt->execute($values);
 		
+		// Get the actual inserted employee's ID
+		$select_stmt = $pdo->prepare("SELECT `id` FROM `employees` WHERE `emp_id` = ? ORDER BY `id` DESC LIMIT 1");
+		$select_stmt->execute([$values[':emp_id']]);
+		$inserted_employee = $select_stmt->fetch(PDO::FETCH_ASSOC);
+		$inserted_emp_id = $inserted_employee['id'] ?? $newEmpId;
+		
 		// LOG EMPLOYEE CREATE ACTION
 		ActivityLogger::logCreate(
 			'Employee',
 			'new_comp_employee.php',
-			$newEmpId,
+			$inserted_emp_id,
 			$values,
 			"Created new company employee: " . $values[':name'],
 			'employees'
 		);
 		
-		// Success response
-		salert(__('success_title'), __('employee_created_successfully'), "success" ,"view_employee.php?emp_id=".$newEmpId, __('ok'));
-	} catch (PDOException $e) {
+		// SEND NOTIFICATIONS TO HR AND GR STAFF
+		// Gather employee data for notification
+		$employee_notification_data = [
+			'emp_id' => $values[':emp_id'],
+			'name' => $values[':name'],
+			'email' => $values[':email'] ?? '',
+			'mobile' => $values[':mobile'] ?? '',
+			'iqama' => $values[':iqama'] ?? '',
+			'department_name' => '',
+			'job_title' => '',
+			'joining_date' => $values[':joining_date'] ?? date('Y-m-d'),
+			'salary' => $values[':salary'] ?? 0,
+			'comp_name' => ''
+		];
 
-		salert(__('error_title'), __('database_error').': ' . $e->getMessage(), "error" ,"new_comp_employee.php", __('ok') );
+		// Get department name
+		if (!empty($values[':dept'])) {
+			$dept_query = "SELECT dep_nme_ar FROM `department` WHERE `id` = ? LIMIT 1";
+			$dept_stmt = $pdo->prepare($dept_query);
+			$dept_stmt->execute([$values[':dept']]);
+			$dept_row = $dept_stmt->fetch(PDO::FETCH_ASSOC);
+			if ($dept_row) {
+				$employee_notification_data['department_name'] = $dept_row['dep_nme_ar'] ?? $dept_row['dep_nme'] ?? '';
+			}
+		}
+
+		// Get job title
+		if (!empty($values[':actual_Job'])) {
+			$job_query = "SELECT job_ar FROM `ac_jobs` WHERE `id` = ? LIMIT 1";
+			$job_stmt = $pdo->prepare($job_query);
+			$job_stmt->execute([$values[':actual_Job']]);
+			$job_row = $job_stmt->fetch(PDO::FETCH_ASSOC);
+			if ($job_row) {
+				$employee_notification_data['job_title'] = $job_row['job_ar'] ?? $job_row['job'] ?? '';
+			}
+		}
+
+		// Get company name
+		if (!empty($values[':comp_no'])) {
+			$comp_query = "SELECT comp_name FROM `companies` WHERE `comp_id` = ? LIMIT 1";
+			$comp_stmt = $pdo->prepare($comp_query);
+			$comp_stmt->execute([$values[':comp_no']]);
+			$comp_row = $comp_stmt->fetch(PDO::FETCH_ASSOC);
+			if ($comp_row) {
+				$employee_notification_data['comp_name'] = $comp_row['comp_name'] ?? '';
+			}
+		}
+		// Call notification function
+		$notification_result = notify_hr_gr_new_employee($conDB, $employee_notification_data);
+		
+		// Send email to direct supervisor if assigned
+		if (!empty($values[':supervisor_id'])) {
+			// Get supervisor email from admin_login and name from employees
+			$supervisor_query = "SELECT al.email, e.name FROM `employees` e 
+								JOIN `admin_login` al ON e.emp_id = al.emp_id 
+								WHERE e.`emp_id` = ? LIMIT 1";
+			$supervisor_stmt = $pdo->prepare($supervisor_query);
+			if (!$supervisor_stmt) {
+				error_log("SUPERVISOR_EMAIL: Failed to prepare statement - " . implode(", ", $pdo->errorInfo()));
+			} else {
+				$supervisor_stmt->execute([$values[':supervisor_id']]);
+				$supervisor_row = $supervisor_stmt->fetch(PDO::FETCH_ASSOC);
+				error_log("SUPERVISOR_EMAIL: Query result - " . json_encode($supervisor_row));
+
+				if ($supervisor_row && !empty($supervisor_row['email'])) {
+					// Prepare supervisor notification data - DO NOT apply htmlspecialchars here, let the template function do it
+					$supervisor_template_data = [
+						'APPROVER_NAME' => $supervisor_row['name'] ?? 'Unknown Supervisor',
+						'EMPLOYEE_NAME' => $values[':name'],
+						'EMPLOYEE_ID' => $values[':emp_id'],
+						'IQAMA_NUMBER' => $values[':iqama'] ?? 'N/A',
+						'EMPLOYEE_EMAIL' => $values[':email'] ?? 'N/A',
+						'EMPLOYEE_MOBILE' => $values[':mobile'] ?? 'N/A',
+						'DEPARTMENT_NAME' => $employee_notification_data['department_name'],
+						'JOB_TITLE' => $employee_notification_data['job_title'] ?? 'N/A',
+						'JOINING_DATE' => $values[':joining_date'] ?? date('Y-m-d'),
+						'SALARY' => number_format($values[':salary'] ?? 0, 2, '.', ','),
+						'COMPANY_NAME' => $employee_notification_data['comp_name'] ?? 'N/A',
+						'REQUEST_URL' => get_base_url() . '/view_employee.php?emp_id=' . $inserted_emp_id,
+						'ALL_EMPLOYEES_URL' => get_base_url() . '/reg_employee.php'
+					];
+					$supervisor_subject = "New Team Member: " . $values[':name'];
+					$supervisor_email_sent = send_approval_email(
+						$conDB,
+						$supervisor_row['email'],
+						$supervisor_row['name'],
+						$supervisor_subject,
+						'new_employee',
+						$supervisor_template_data
+					);
+					
+					if ($supervisor_email_sent) {
+						error_log("SUPERVISOR_EMAIL: Successfully sent to " . $supervisor_row['email']);
+					} else {
+						error_log("SUPERVISOR_EMAIL: FAILED to send to " . $supervisor_row['email']);
+					}
+				} else {
+					error_log("SUPERVISOR_EMAIL: Supervisor not found or has no email. supervisor_id=" . $values[':supervisor_id']);
+					if (!$supervisor_row) {
+						error_log("SUPERVISOR_EMAIL: Query returned no results");
+					} elseif (empty($supervisor_row['email'])) {
+						error_log("SUPERVISOR_EMAIL: Supervisor found but email is empty. Name: " . $supervisor_row['name']);
+					}
+				}
+			}
+		}
+		// Store alert data in session for display on the view page
+		$_SESSION['swal_alert'] = [
+			'title' => __("success"),
+			'message' => __('employee_created_successfully'),
+			'type' => 'success'
+		];
+		ob_end_clean();
+		header("Location: view_employee.php?emp_id=" . str_replace(',','',$data['emp_id']));
+
+	} catch (PDOException $e) {
+		$_SESSION['swal_alert'] = [
+			'title' => __("error_title"),
+			'message' => __('database_error').': ' . $e->getMessage(),
+			'type' => 'error'
+		];
+		header("Location: reg_employee.php");
 	} catch (Exception $e) {
-		salert(__('error_title'), $e->getMessage(), "error" ,"new_comp_employee.php" , __('ok'));
+		$_SESSION['swal_alert'] = [
+			'title' => __("error_title"),
+			'message' => __('database_error').': ' . $e->getMessage(),
+			'type' => 'error'
+		];
+		header("Location: reg_employee.php");
 	}
 
 	
@@ -302,8 +430,18 @@ if(isset($_POST['submit'])){
 													<option value="Supporter"><?=__('supporter_option') ?></option>
 												</select>
                                             </div>
-											<div class="form-group col-md-2">
-                                                <label for="joining_date" class="col-form-label"><?=__('joining_date') ?><span class="text-danger">*</span></label>
+											<div class="form-group col-md-2">                                                <label for="supervisor_id" class="col-form-label">Direct Supervisor</label>
+												<select class="form-control select2" name="supervisor_id" id="supervisor_id" >
+													<option value=""><?=__('select_option')?></option>
+													<?php
+														$query_supervisors = mysqli_query($conDB, "SELECT DISTINCT e.id, e.emp_id, e.name, e.emptype FROM `employees` e WHERE e.status = 1 AND (e.emptype = 'Manager' OR e.emptype = 'Supervisor') ORDER BY e.name");
+														while($supervisor = mysqli_fetch_assoc($query_supervisors)){
+													?>
+														<option value="<?= $supervisor['emp_id'] ?>"><?= htmlspecialchars($supervisor['name'], ENT_QUOTES) ?> (<?= $supervisor['emptype'] ?>)</option>
+													<?php } ?>
+												</select>
+                                            </div>
+										<div class="form-group col-md-2">                                                <label for="joining_date" class="col-form-label"><?=__('joining_date') ?><span class="text-danger">*</span></label>
                                                 <input type="text" name="joining_date" parsley-trigger="change" class="form-control" id="joining_date"  required />
                                             </div>
 											<div class="form-group col-md-2">
@@ -439,6 +577,16 @@ if(isset($_POST['submit'])){
                                                 <label for="email" class="col-form-label"><?=__('email') ?></label>
                                                 <input type="email" name="email" parsley-trigger="change" class="form-control" id="email">
                                             </div>
+											<div class="form-group col-md-2">
+                                                <label for="payment_type" class="col-form-label">
+                                                	<?=__('salary_payment_type_label') ?><span class="text-danger">*</span>
+												</label>
+												<select class="form-control" name="payment_type" required>
+													<option value=""><?=__('select_option')?></option>
+													<option value="1"><?=__('bank_option')?></option>
+													<option value="2"><?=__('cash_option')?></option>
+												</select>
+                                            </div>
 											<div class="form-group col-md-4">
                                                 <label for="address" class="col-form-label"><?=__('address') ?><span class="text-danger">*</span></label>
                                                 <input type="text" name="address" parsley-trigger="change" class="form-control" id="address" required />
@@ -485,16 +633,7 @@ if(isset($_POST['submit'])){
 												</select>
                                             </div>
 											
-											<div class="form-group col-md-2">
-                                                <label for="payment_type" class="col-form-label">
-                                                	<?=__('salary_payment_type_label') ?><span class="text-danger">*</span>
-												</label>
-												<select class="form-control" name="payment_type" required>
-													<option value=""><?=__('select_option')?></option>
-													<option value="1"><?=__('bank_option')?></option>
-													<option value="2"><?=__('cash_option')?></option>
-												</select>
-                                            </div>
+											
 
 											<div class="form-group col-md-12">
                                                 <div class="btn-group" role="group" aria-label="Edit Button">
