@@ -51,6 +51,8 @@ if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
 }
 
 $lastVac = lastVacIdGet($emprow['empid']);
+$allActiveVacations = getAllActiveVacations($emprow['empid']);
+$activeVacCount = count($allActiveVacations);
 
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
@@ -62,7 +64,8 @@ if ($emprow['status'] == 1) {
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
     if (!empty($lastVac['vacid'])) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitRejoinRequest text-warning\" data-vacation-id=\"{$lastVac['vacid']}\" data-emp-id=\"{$emprow['empid']}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "</span></a>";
+        $badgeText = $activeVacCount > 1 ? " ({$activeVacCount})" : '';
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
     }
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
 } else {
@@ -2626,6 +2629,29 @@ RTL Support
                             }, 100);
                         });
 
+                        // Apply Loan
+                        modalContainer.find('.applyLoan').on('click', function(e) {
+                            e.preventDefault();
+                            var emp_id = $(this).data('emp_id');
+                            var user_type = $(this).data('user_type');
+                            Swal.close();
+                            setTimeout(function() {
+                                openLoanWizard(emp_id, user_type);
+                            }, 100);
+                        });
+
+                        // Multiple Rejoin Request Handler
+                        modalContainer.find('.submitMultipleRejoinRequest').on('click', function(e) {
+                            e.preventDefault();
+                            var empId = $(this).data('emp-id');
+                            var empName = $(this).data('emp-name');
+                            var totalVacations = $(this).data('total-vacations');
+                            Swal.close();
+                            setTimeout(function() {
+                                handleMultipleRejoinProcess(empId, empName, totalVacations);
+                            }, 100);
+                        });
+
                         // Logout/Signout
                         modalContainer.find('.signout').on('click', function(e) {
                             e.preventDefault();
@@ -2776,6 +2802,344 @@ RTL Support
 
             // Do not auto-load any document; wait for user selection
         });
+
+        /**
+         * Handle Multiple Vacation Rejoin Process
+         * Shows all active vacations and forces sequential rejoin
+         */
+        function handleMultipleRejoinProcess(empId, empName, totalVacations) {
+            // Show loading
+            Swal.fire({
+                title: '<?= __('loading') ?>',
+                html: '<?= __('fetching_active_vacations', 'Fetching active vacations...') ?>',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            // Get all active vacations
+            $.ajax({
+                url: './includes/ajaxFile/ajaxVacation.php',
+                type: 'POST',
+                data: {
+                    ajaxType: 'getAllActiveVacationsForRejoin',
+                    emp_id: empId
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.ok && response.vacations && response.vacations.length > 0) {
+                        showVacationsList(empId, empName, response.vacations);
+                    } else {
+                        Swal.fire({
+                            icon: 'info',
+                            title: '<?= __('no_active_vacations') ?>',
+                            text: '<?= __('no_active_vacations_found', 'No active vacations found that require rejoin.') ?>',
+                            confirmButtonText: '<?= __('ok') ?>'
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    var errorMsg = '<?= __('error_fetching_vacations', 'Error fetching vacations.') ?>';
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        if (response.message) errorMsg = response.message;
+                    } catch(e) {}
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: '<?= __('error') ?>',
+                        text: errorMsg,
+                        confirmButtonText: '<?= __('ok') ?>'
+                    });
+                }
+            });
+        }
+
+        /**
+         * Show all active vacations list with sequential rejoin enforcement
+         */
+        function showVacationsList(empId, empName, vacations) {
+            const totalCount = vacations.length;
+            const firstVacation = vacations[0]; // Must rejoin this one first
+            
+            // Build vacation cards HTML
+            let vacationsHtml = '<div class=\"vacations-list-container\" style=\"max-height: 400px; overflow-y: auto; padding: 10px;\">';
+            
+            vacations.forEach((vac, index) => {
+                const isFirst = (index === 0);
+                const vacType = vac.fly_type ? `${vac.vac_type} (${vac.fly_type})` : vac.vac_type;
+                const startDate = new Date(vac.start_date).toLocaleDateString();
+                const returnDate = vac.return_date ? new Date(vac.return_date).toLocaleDateString() : 'N/A';
+                
+                // Check if rejoin request already submitted
+                const hasRejoinRequest = vac.rejoin_request_id && vac.rejoin_status;
+                const isRejoinPending = hasRejoinRequest && vac.rejoin_status === 'pending';
+                const isRejoinApproved = hasRejoinRequest && vac.rejoin_status === 'approved';
+                
+                // Determine card styling based on status
+                let borderColor = '#e9ecef';
+                let backgroundColor = '#f8f9fa';
+                let statusBadge = '';
+                
+                if (isFirst && !hasRejoinRequest) {
+                    borderColor = '#ffc107';
+                    backgroundColor = '#fffbf0';
+                    statusBadge = '<div style=\"position: absolute; top: 10px; right: 10px; background: #ffc107; color: #000; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold;\">⚠️ REJOIN FIRST</div>';
+                } else if (isRejoinPending) {
+                    borderColor = '#17a2b8';
+                    backgroundColor = '#e7f6f8';
+                    statusBadge = '<div style=\"position: absolute; top: 10px; right: 10px; background: #17a2b8; color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold;\">⏳ PENDING APPROVAL</div>';
+                } else if (isRejoinApproved) {
+                    borderColor = '#28a745';
+                    backgroundColor = '#e8f5e9';
+                    statusBadge = '<div style=\"position: absolute; top: 10px; right: 10px; background: #28a745; color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold;\">✓ APPROVED</div>';
+                }
+                
+                vacationsHtml += `
+                    <div class=\"vacation-card\" style=\"
+                        border: 2px solid ${borderColor}; 
+                        border-radius: 8px; 
+                        padding: 15px; 
+                        margin-bottom: 10px;
+                        background: ${backgroundColor};
+                        position: relative;
+                    \">
+                        ${statusBadge}
+                        <div style=\"display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;\">
+                            <div>
+                                <div style=\"font-weight: 600; font-size: 16px; color: #212529;\">#${index + 1} - ${vac.request_inv_no}</div>
+                                <div style=\"color: #6c757d; font-size: 13px; margin-top: 4px;\">
+                                    <i class=\"fa fa-calendar\"></i> ${vacType} 
+                                    <span style=\"margin-left: 10px;\"><i class=\"fa fa-clock\"></i> ${vac.vacdays} ${vac.vacdays > 1 ? '<?= __('days') ?>' : '<?= __('day') ?>'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div style=\"display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;\">
+                            <div>
+                                <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('start_date') ?></div>
+                                <div style=\"font-weight: 500;\">${startDate}</div>
+                            </div>
+                            <div>
+                                <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('return_date') ?></div>
+                                <div style=\"font-weight: 500;\">${returnDate}</div>
+                            </div>
+                        </div>
+                        ${isRejoinPending ? '<div style=\"margin-top: 10px; padding: 8px; background: #d1ecf1; border-radius: 4px; font-size: 12px; color: #0c5460;\"><i class=\"fa fa-hourglass-half\"></i> <?= __('rejoin_request_submitted_waiting', 'Rejoin request submitted and waiting for approval') ?></div>' : ''}
+                        ${isRejoinApproved ? '<div style=\"margin-top: 10px; padding: 8px; background: #d4edda; border-radius: 4px; font-size: 12px; color: #155724;\"><i class=\"fa fa-check-circle\"></i> <?= __('rejoin_request_approved', 'Rejoin request has been approved') ?></div>' : ''}
+                        ${!isFirst && !hasRejoinRequest ? '<div style=\"margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 12px; color: #856404;\"><i class=\"fa fa-lock\"></i> <?= __('locked_rejoin_first_vacation', 'Complete rejoin for previous vacation first') ?></div>' : ''}
+                    </div>
+                `;
+            });
+            
+            vacationsHtml += '</div>';
+            
+            // Determine if we can show rejoin button
+            const canRejoin = firstVacation && !firstVacation.rejoin_request_id;
+            
+            // Show the list with rejoin button for first vacation (if not already submitted)
+            Swal.fire({
+                title: `<i class=\"fa fa-plane-arrival\"></i> <?= __('active_vacations') ?>`,
+                html: `
+                    <div style=\"text-align: left; margin-bottom: 20px;\">
+                        <div style=\"background: #e7f3ff; border-left: 4px solid #0066cc; padding: 12px; border-radius: 4px; margin-bottom: 15px;\">
+                            <div style=\"font-weight: 600; color: #0066cc; margin-bottom: 4px;\">
+                                <i class=\"fa fa-info-circle\"></i> <?= __('sequential_rejoin_required', 'Sequential Rejoin Required') ?>
+                            </div>
+                            <div style=\"font-size: 13px; color: #495057;\">
+                                <?= __('rejoin_order_message', 'You have {count} active vacation(s). Please rejoin them in order starting from the oldest.') ?>
+                            </div>
+                        </div>
+                        <div style=\"text-align: center; margin-bottom: 15px;\">
+                            <div style=\"display: inline-block; background: #28a745; color: white; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600;\">
+                                ${empName}
+                            </div>
+                        </div>
+                    </div>
+                    ${vacationsHtml}
+                `.replace('{count}', totalCount),
+                showCancelButton: true,
+                confirmButtonText: canRejoin ? `<i class=\"fa fa-check\"></i> <?= __('rejoin_first_vacation', 'Rejoin First Vacation') ?>` : `<i class=\"fa fa-times\"></i> <?= __('close') ?>`,
+                cancelButtonText: `<i class=\"fa fa-times\"></i> <?= __('cancel') ?>`,
+                confirmButtonColor: canRejoin ? '#ffc107' : '#6c757d',
+                cancelButtonColor: '#6c757d',
+                showCancelButton: canRejoin,
+                allowOutsideClick: false,
+                width: '650px',
+                customClass: {
+                    confirmButton: canRejoin ? 'btn btn-warning' : 'btn btn-secondary',
+                    cancelButton: 'btn btn-secondary'
+                }
+            }).then((result) => {
+                if (result.isConfirmed && canRejoin) {
+                    // Start rejoin process for first vacation
+                    startRejoinProcess(firstVacation, empId, empName, totalCount);
+                }
+            });
+        }
+
+        /**
+         * Start rejoin process for a specific vacation
+         */
+        function startRejoinProcess(vacation, empId, empName, remainingCount) {
+            const vacType = vacation.fly_type ? `${vacation.vac_type} (${vacation.fly_type})` : vacation.vac_type;
+            const returnDate = vacation.returndate || vacation.return_date || vacation.returnDate || '';
+            const todayIso = new Date().toISOString().split('T')[0];
+            const normalizedReturn = returnDate ? moment(returnDate).format('YYYY-MM-DD') : '';
+            const defaultRejoinDate = normalizedReturn || todayIso;
+            
+            Swal.fire({
+                title: `<i class=\"fa fa-plane-arrival\"></i> <?= __('rejoin_request') ?>`,
+                html: `
+                    <div style=\"text-align: left;\">
+                        <div style=\"background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;\">
+                            <div style=\"display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;\">
+                                <div>
+                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('request_number') ?></div>
+                                    <div style=\"font-weight: 600;\">${vacation.request_inv_no}</div>
+                                </div>
+                                <div>
+                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('vacation_type') ?></div>
+                                    <div style=\"font-weight: 600;\">${vacType}</div>
+                                </div>
+                                <div>
+                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('days') ?></div>
+                                    <div style=\"font-weight: 600;\">${vacation.vacdays}</div>
+                                </div>
+                                <div>
+                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('expected_return') ?></div>
+                                    <div style=\"font-weight: 600;\">${returnDate || 'N/A'}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${remainingCount > 1 ? `
+                            <div style=\"background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 20px;\">
+                                <div style=\"font-size: 13px; color: #856404;\">
+                                    <i class=\"fa fa-exclamation-triangle\"></i> 
+                                    <?= __('more_vacations_pending', 'You have {count} more vacation(s) pending after this one.') ?>
+                                </div>
+                            </div>
+                        `.replace('{count}', remainingCount - 1) : ''}
+                        
+                        <div class="form-group">
+                            <label for="rejoinDate" style="font-weight: 600; color: #212529; margin-bottom: 8px; display: block;">
+                                <i class="fa fa-calendar"></i> <?= __('actual_rejoin_date') ?> <span style="color: red;">*</span>
+                            </label>
+                            <input type="text" id="rejoinDate" class="form-control" value="${defaultRejoinDate}" placeholder="YYYY-MM-DD" required style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+                            <small class="text-muted" style="display:block; margin-top:6px;">
+                                <?= __('expected_return') ?>: ${normalizedReturn || '—'}
+                            </small>
+                        </div>
+                        
+                        <div class=\"form-group\" style=\"margin-top: 15px;\">
+                            <label for=\"rejoinReason\" style=\"font-weight: 600; color: #212529; margin-bottom: 8px; display: block;\">
+                                <i class=\"fa fa-comment\"></i> <?= __('reason_notes') ?>
+                            </label>
+                            <textarea id=\"rejoinReason\" class=\"form-control\" rows=\"3\" placeholder=\"<?= __('optional_notes', 'Optional notes...') ?>\" style=\"width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;\"></textarea>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: `<i class=\"fa fa-paper-plane\"></i> <?= __('submit_rejoin') ?>`,
+                cancelButtonText: `<i class=\"fa fa-times\"></i> <?= __('cancel') ?>`,
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d',
+                allowOutsideClick: false,
+                width: '600px',
+                didOpen: () => {
+                    const $rejoin = $('#rejoinDate');
+                    $rejoin.datepicker({
+                        format: 'yyyy-mm-dd',
+                        autoclose: true,
+                        todayHighlight: true
+                    }).datepicker('update', defaultRejoinDate);
+                },
+                preConfirm: () => {
+                    const rejoinDate = document.getElementById('rejoinDate').value;
+                    const rejoinReason = document.getElementById('rejoinReason').value;
+                    
+                    if (!rejoinDate) {
+                        Swal.showValidationMessage('<?= __('rejoin_date_required', 'Please select actual rejoin date') ?>');
+                        return false;
+                    }
+                    
+                    return { rejoinDate, rejoinReason };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    submitRejoinRequest(vacation.id, result.value.rejoinDate, result.value.rejoinReason, empId, empName, remainingCount);
+                }
+            });
+        }
+
+        /**
+         * Submit rejoin request via AJAX
+         */
+        function submitRejoinRequest(vacationId, rejoinDate, rejoinReason, empId, empName, remainingCount) {
+            Swal.fire({
+                title: '<?= __('submitting') ?>',
+                html: '<?= __('please_wait') ?>',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            $.ajax({
+                url: './includes/ajaxFile/ajaxVacation.php',
+                type: 'POST',
+                data: {
+                    ajaxType: 'submitRejoinRequest',
+                    vacation_id: vacationId,
+                    emp_id: empId,
+                    rejoin_date: rejoinDate,
+                    rejoin_reason: rejoinReason
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.ok || response.type === 'success') {
+                        const isLastVacation = (remainingCount <= 1);
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: '<?= __('rejoin_submitted') ?>',
+                            html: response.message || '<?= __('rejoin_request_submitted_successfully') ?>',
+                            confirmButtonText: isLastVacation ? '<?= __('done') ?>' : '<?= __('next_vacation', 'Next Vacation') ?>',
+                            confirmButtonColor: isLastVacation ? '#28a745' : '#ffc107',
+                            allowOutsideClick: false
+                        }).then(() => {
+                            if (!isLastVacation) {
+                                // Reload the list to show next vacation
+                                setTimeout(() => {
+                                    handleMultipleRejoinProcess(empId, empName, remainingCount - 1);
+                                }, 300);
+                            } else {
+                                // All done - reload page
+                                window.location.reload();
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: '<?= __('error') ?>',
+                            text: response.message || '<?= __('rejoin_submission_failed') ?>',
+                            confirmButtonText: '<?= __('ok') ?>'
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    var errorMsg = '<?= __('rejoin_submission_error', 'Error submitting rejoin request.') ?>';
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        if (response.message) errorMsg = response.message;
+                    } catch(e) {}
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: '<?= __('error') ?>',
+                        text: errorMsg,
+                        confirmButtonText: '<?= __('ok') ?>'
+                    });
+                }
+            });
+        }
     </script>
 </body>
 

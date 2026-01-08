@@ -149,14 +149,21 @@ if (mysqli_num_rows($query) == 1) {
     // Determine if this vacation gets any payment calculation
     $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
     
+    // Calculate actual days in the vacation month
+    $days_in_month = 30; // Default fallback
+    if (!empty($request['start_date'])) {
+        $start_date_obj = new DateTime($request['start_date']);
+        $days_in_month = (int)$start_date_obj->format('t'); // Actual days in month (28-31)
+    }
+    
     if ($calculate_payments && $salary) {
         $basic_salary = (float)($salary['basic'] ?? 0);
         $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
-        $daily_rate = $total_monthly_salary / 30;
+        $daily_rate = $total_monthly_salary / $days_in_month;
         
         // --- CALCULATE OVERTIME AND DEDUCTIONS (EOS Logic) ---
         $DEDUCTION_BASE = $total_monthly_salary;
-        $dailyRateDeduction = $DEDUCTION_BASE / 30;
+        $dailyRateDeduction = $DEDUCTION_BASE / $days_in_month;
         $hourlyRateDeduction = $dailyRateDeduction / 8;
         
         // OVERTIME CALCULATION (per EOS file):
@@ -188,12 +195,14 @@ if (mysqli_num_rows($query) == 1) {
         // NOT for Local Vacation + Annual (stays in payroll)
         // NOT for Encashment (handled separately)
         // IMPORTANT: Calculation is based on APPROVED DAYS (vacdays field)
-        // Formula: floor(approved_days / contract_days) * period_years * total_monthly_salary
-        // E.g. 21 days/year contract + 21 approved days = 1 salary
-        //      42 days/2 years contract + 42 approved days = 2 salaries
-        //      60 days/2 years contract (30 days/year) + 60 approved days = 2 salaries
+        // Formula: (daily rate × vacation days) = (total_monthly_salary / 30) × approved_days
         if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+            // Calculate vacation salary as daily rate × vacation days
+            $vacation_salary = $daily_rate * $approved_days;
+            
+            // Track salaries_earned for display purposes (how many full contract periods)
             $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
+            $salaries_earned = 1; // Default to 1 for display
             
             if ($contract_days > 0) {
                 // Extract period years from contract_period string (e.g., "2 Years - 60" → 2)
@@ -204,14 +213,10 @@ if (mysqli_num_rows($query) == 1) {
                     $period_years = (int)$matches[1];
                 }
                 
-                // Calculate how many full salaries to pay based on APPROVED days used
+                // Calculate how many full salaries represented (for display only)
                 // Formula: (approved_days / contract_days) * period_years
-                // Example: 60 approved days / 30 days contract * 2 years = 2 salaries
                 $salaries_earned = floor($approved_days / $contract_days) * $period_years;
-                $vacation_salary = $salaries_earned * $total_monthly_salary;
-            } else {
-                // Fallback: use daily rate if no contract days defined
-                $vacation_salary = $daily_rate * $approved_days;
+                if ($salaries_earned < 1) $salaries_earned = 1; // Always show at least 1
             }
         }
 
@@ -241,9 +246,8 @@ if (mysqli_num_rows($query) == 1) {
         // Encashment: Total is handled in encashment section
         $total_payable = 0;
     } elseif ($is_fly_annual) {
-        // Fly + Annual: Working days + vacation salary + fees - deductions
-        // $total_payable = ($vacation_salary + $working_days_salary) + $ticket_fee + $permit_fee + $overtime_amount - $gosi_deduction - $deduction_amount;
-        $total_payable = ($vacation_salary + $working_days_salary) + $overtime_amount - $gosi_deduction - $deduction_amount;
+        // Fly + Annual: Working days + vacation salary + ticket + permit + overtime - deductions - GOSI
+        $total_payable = ($working_days_salary + $vacation_salary) + $ticket_fee + $permit_fee + $overtime_amount - $deduction_amount - $gosi_deduction;
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
         $total_payable = 0;
@@ -642,14 +646,14 @@ if (mysqli_num_rows($query) == 1) {
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
-                                                    <small class="text-muted d-block"><?= __('calculated_for_days_before_vacation') ?? 'Calculated for {days} days before vacation' ?> (<?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?>)</small>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <?= number_format($daily_rate, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $days_in_month; ?> days)</small>
                                                 </div>
                                                 <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
                                             </li>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?><?php if ($salaries_earned > 1): ?> <span style="color: #28a745; font-weight: 700;">x<?= (int)$salaries_earned ?></span><?php endif; ?></span>
-                                                    <small class="text-muted d-block"><?= __('calculated_for_days') ?? 'Calculated for {days} days' ?> (<?= htmlspecialchars($applied_days); ?> <?= __('days') ?? 'days' ?>)</small>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($applied_days); ?> <?= __('days') ?? 'days' ?> × <?= number_format($daily_rate, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $days_in_month; ?> days)</small>
                                                 </div>
                                                 <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>
                                             </li>

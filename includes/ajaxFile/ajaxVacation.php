@@ -56,6 +56,28 @@ function get_current_vacation_balance($conDB, $emp_id)
     return ($dynamicBalance !== null ? $dynamicBalance : $finalvacd);
 }
 
+/**
+ * Check if employee has any remaining active vacations (not yet rejoined)
+ * Returns true if there are vacation records with review = 'A' for the employee.
+ * We do NOT filter by current_status here to avoid missing edge cases;
+ * any vacation not marked reviewed ('C') still counts as active.
+ */
+function hasRemainingActiveVacations($conDB, $emp_id) {
+    $query = "SELECT COUNT(*) AS active_count
+              FROM emp_vacation
+              WHERE emp_id = ?
+              AND review = 'A'";
+    $stmt = $conDB->prepare($query);
+    $stmt->bind_param('s', $emp_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : ['active_count' => 0];
+    if ($result) { $result->free(); }
+    $stmt->close();
+
+    return ((int)$row['active_count'] > 0);
+}
+
 $ajaxType = $_POST['ajaxType'] ?? null; // Use null coalescing
 
 if ($ajaxType == 'emp_search') {
@@ -392,6 +414,7 @@ elseif ($ajaxType == 'applyVacation') {
         $approver_chain = [];
         $is_annual_vacation = (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual');
         $is_encashed_vacation = ($vac_type === 'Encashed');
+        $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual'); // NEW: Track if Fly | Annual specifically
 
         if ($is_annual_vacation) {
             // Fetch employee context (supervisor + department) for role resolution
@@ -438,6 +461,24 @@ elseif ($ajaxType == 'applyVacation') {
                     return ($dept_mgr && !empty($dept_mgr['emp_id'])) ? (int)$dept_mgr['emp_id'] : null;
                 }
 
+                // [NEW] GR Officer - find user with user_type = 'gr_officer'
+                if ($role === 'gr_officer') {
+                    $stmt = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = 'gr_officer' AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
+                    if ($stmt) {
+                        mysqli_stmt_execute($stmt);
+                        $res = mysqli_stmt_get_result($stmt);
+                        if ($res && ($row = mysqli_fetch_assoc($res))) {
+                            $empId = (int)$row['emp_id'];
+                            mysqli_free_result($res);
+                            mysqli_stmt_close($stmt);
+                            return $empId > 0 ? $empId : null;
+                        }
+                        if ($res) mysqli_free_result($res);
+                        mysqli_stmt_close($stmt);
+                    }
+                    return null;
+                }
+
                 // Default: first active employee with matching user_type
                 $stmt = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = ? AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
                 if ($stmt) {
@@ -463,6 +504,15 @@ elseif ($ajaxType == 'applyVacation') {
                     if ($approverId && !in_array($approverId, $approver_chain, true)) {
                         $approver_chain[] = $approverId;
                     }
+                }
+            }
+
+            // [NEW] For Fly | Annual vacations, ensure GR Officer is in the chain (after HR Payroll if exists)
+            // This is required for visa/exit re-entry fee processing
+            if ($is_fly_annual) {
+                $gr_officer_id = $resolveApprover('gr_officer');
+                if ($gr_officer_id && !in_array($gr_officer_id, $approver_chain, true)) {
+                    $approver_chain[] = $gr_officer_id; // Append at end to ensure it's after HR Payroll
                 }
             }
 
@@ -608,33 +658,62 @@ elseif ($ajaxType == 'applyVacation') {
             throw new Exception(__("invalid_vacation_salary_type_selected"));
         }
 
-        // 3. Guard: prevent multiple applications while a request is pending final approval
-        // EXCEPTION: Allow emergency vacation applications even with pending requests (date overlap check below)
+        // 3. Guard: prevent overlapping vacation dates
+        // Check for any pending/approved requests with date conflicts
+        // EXCEPTION: Encashed vacations don't have real dates, so skip date overlap check for them
+        $is_encashed = ($vac_type === 'Encashed');
         $is_emergency = ($vac_type === 'Fly' && $fly_type === 'emergency');
         
-        if (!$is_emergency) {
-            $pending_inv = null;
-            $sql_pending = "SELECT `request_inv_no` FROM `emp_vacation` WHERE `emp_id` = ? AND `current_status` = 'pending_approval' ORDER BY `id` DESC LIMIT 1";
-            $stmt_pending = mysqli_prepare($conDB, $sql_pending);
-            if ($stmt_pending) {
-                mysqli_stmt_bind_param($stmt_pending, "s", $emp_id);
-                if (mysqli_stmt_execute($stmt_pending)) {
-                    $res_pending = mysqli_stmt_get_result($stmt_pending);
-                    if ($rowp = mysqli_fetch_assoc($res_pending)) {
-                        $pending_inv = $rowp['request_inv_no'] ?? null;
+        if (!$is_encashed && !empty($start_date) && !empty($return_date)) {
+            // Check for overlapping vacation dates in pending_approval or approved status
+            $sql_overlap = "SELECT `request_inv_no`, `start_date`, `return_date`, `vac_type`, `current_status` 
+                           FROM `emp_vacation` 
+                           WHERE `emp_id` = ? 
+                           AND `current_status` IN ('pending_approval', 'approved')
+                           AND `vac_type` != 'Encashed'
+                           AND (
+                               -- New vacation starts during existing vacation
+                               (? BETWEEN `start_date` AND `return_date`)
+                               OR 
+                               -- New vacation ends during existing vacation
+                               (? BETWEEN `start_date` AND `return_date`)
+                               OR
+                               -- New vacation completely encompasses existing vacation
+                               (`start_date` BETWEEN ? AND ? AND `return_date` BETWEEN ? AND ?)
+                           )
+                           ORDER BY `start_date` ASC LIMIT 1";
+            $stmt_overlap = mysqli_prepare($conDB, $sql_overlap);
+            if ($stmt_overlap) {
+                mysqli_stmt_bind_param($stmt_overlap, "sssssss", $emp_id, $start_date, $return_date, $start_date, $return_date, $start_date, $return_date);
+                if (mysqli_stmt_execute($stmt_overlap)) {
+                    $res_overlap = mysqli_stmt_get_result($stmt_overlap);
+                    if ($row_overlap = mysqli_fetch_assoc($res_overlap)) {
+                        $conflicting_inv = $row_overlap['request_inv_no'] ?? '';
+                        $conflict_start = $row_overlap['start_date'] ?? '';
+                        $conflict_end = $row_overlap['return_date'] ?? '';
+                        $conflict_type = $row_overlap['vac_type'] ?? '';
+                        $conflict_status = $row_overlap['current_status'] ?? '';
+                        
+                        send_json_response(
+                            __("vacation_date_conflict"),
+                            sprintf(
+                                __("vacation_dates_overlap_with_existing_request") . " (%s). " . 
+                                __("existing_vacation") . ": %s - %s (%s, %s). " . 
+                                __("please_choose_different_dates"),
+                                htmlspecialchars($conflicting_inv),
+                                $conflict_start,
+                                $conflict_end,
+                                $conflict_type,
+                                $conflict_status
+                            ),
+                            "warning",
+                            400
+                        );
+                        exit;
                     }
-                    if ($res_pending) mysqli_free_result($res_pending);
+                    if ($res_overlap) mysqli_free_result($res_overlap);
                 }
-                mysqli_stmt_close($stmt_pending);
-            }
-            if (!empty($pending_inv)) {
-                send_json_response(
-                    __("pending_request_exists"),
-                    __("you_already_have_a_vacation_request_pending_approval") . " (" . htmlspecialchars($pending_inv) . "). " . __("please_wait_until_it_is_finalized_before_applying_again"),
-                    "info",
-                    400
-                );
-                exit;
+                mysqli_stmt_close($stmt_overlap);
             }
         }
 
@@ -1120,6 +1199,67 @@ elseif ($ajaxType == 'applyVacation') {
             }
         }
 
+        // FLY | ANNUAL: ensure GR Officer is appended at the end of the approval chain (for visa/exit re-entry fee)
+        if ($is_fly_annual) {
+            // Resolve GR Officer (user_type = 'gr_officer')
+            $gr_officer_id = null;
+            $stmt_gr = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = 'gr_officer' AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
+            if ($stmt_gr) {
+                mysqli_stmt_execute($stmt_gr);
+                $res_gr = mysqli_stmt_get_result($stmt_gr);
+                if ($res_gr && ($row_gr = mysqli_fetch_assoc($res_gr))) {
+                    $gr_officer_id = (int)$row_gr['emp_id'];
+                }
+                if ($res_gr) mysqli_free_result($res_gr);
+                mysqli_stmt_close($stmt_gr);
+            }
+
+            if ($gr_officer_id) {
+                // Determine request_type_id for vacation_request
+                $request_type_id = 3; // default fallback
+                $type_q = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name='vacation_request' LIMIT 1");
+                if ($type_q && ($type_row = mysqli_fetch_assoc($type_q))) {
+                    $request_type_id = (int)$type_row['id'];
+                    mysqli_free_result($type_q);
+                }
+
+                // Skip if GR Officer already present
+                $exists_stmt = mysqli_prepare($conDB, "SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? LIMIT 1");
+                $already_present = false;
+                if ($exists_stmt) {
+                    mysqli_stmt_bind_param($exists_stmt, "sii", $request_inv_no, $request_type_id, $gr_officer_id);
+                    mysqli_stmt_execute($exists_stmt);
+                    mysqli_stmt_store_result($exists_stmt);
+                    $already_present = mysqli_stmt_num_rows($exists_stmt) > 0;
+                    mysqli_stmt_close($exists_stmt);
+                }
+
+                if (!$already_present) {
+                    // Find current max approval level
+                    $max_level = 1;
+                    $max_stmt = mysqli_prepare($conDB, "SELECT MAX(approval_level) as max_lvl FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ?");
+                    if ($max_stmt) {
+                        mysqli_stmt_bind_param($max_stmt, "si", $request_inv_no, $request_type_id);
+                        mysqli_stmt_execute($max_stmt);
+                        $max_res = mysqli_stmt_get_result($max_stmt);
+                        if ($max_res && ($max_row = mysqli_fetch_assoc($max_res))) {
+                            $max_level = (int)($max_row['max_lvl'] ?? 1);
+                        }
+                        if ($max_res) mysqli_free_result($max_res);
+                        mysqli_stmt_close($max_stmt);
+                    }
+
+                    $insert_stmt = mysqli_prepare($conDB, "INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')");
+                    if ($insert_stmt) {
+                        $next_level = $max_level + 1;
+                        mysqli_stmt_bind_param($insert_stmt, "siii", $request_inv_no, $request_type_id, $gr_officer_id, $next_level);
+                        mysqli_stmt_execute($insert_stmt);
+                        mysqli_stmt_close($insert_stmt);
+                    }
+                }
+            }
+        }
+
         // 10. Send success response with next approver name (where it will wait)
         $pending_with_text = '';
         if ($first_approver && !empty($first_approver['approver_id'])) {
@@ -1182,10 +1322,11 @@ elseif ($ajaxType == 'approveVacation') {
         $approver_chain = (array)($_POST['approver_chain'] ?? []);
         $asset_checker_emp_id = (int)($_POST['asset_checker_emp_id'] ?? 0);
 
-        // Payment and travel details (sent by HR Assistant or GR Officer)
+        // Payment and travel details (sent by HR Assistant, GR Officer, or HR Payroll)
         $departure_date = trim($_POST['departure_date'] ?? '');
         $arrival_date = trim($_POST['arrival_date'] ?? '');
         $ticket_pay = (float)($_POST['ticket_pay'] ?? 0);
+        // [UPDATED] permit_fee is now used for GR Officer's exit/re-entry visa fees
         $permit_fee = (float)($_POST['permit_fee'] ?? 0);
 
         // Approval comment (optional)
@@ -1599,7 +1740,7 @@ elseif ($ajaxType == 'approveVacation') {
         }
         if ($vacation_details) mysqli_free_result($vacation_details);
 
-        // 3. Always update travel dates if provided (by HR Assistant or GR Officer), regardless of payment amounts
+        // 3. Always update travel dates if provided (by HR Assistant, GR Officer or HR Payroll), regardless of payment amounts
         // This ensures arrival_date gets saved even if there are no payments
         // Update BOTH dates and payments in ONE query to ensure atomicity
         $needs_update = false;
@@ -1630,6 +1771,7 @@ elseif ($ajaxType == 'approveVacation') {
             $needs_update = true;
         }
 
+        // [UPDATED] permit_fee is used for GR Officer's exit/re-entry visa fees (Fly | Annual vacations)
         if ($permit_fee > 0) {
             $update_fields[] = "`permit_fee` = ?";
             $update_values[] = $permit_fee;
@@ -4650,6 +4792,65 @@ elseif ($ajaxType == 'checkActiveRejoinRequest') {
 }
 
 // ============================================================================
+// GET ALL ACTIVE VACATIONS FOR SEQUENTIAL REJOIN
+// ============================================================================
+elseif ($ajaxType == 'getAllActiveVacationsForRejoin') {
+    try {
+        $emp_id = (int)($_POST['emp_id'] ?? 0);
+        
+        if (empty($emp_id)) {
+            send_json_response(__('error'), __('employee_id_required'), 'error', 400);
+            exit;
+        }
+        
+        // Get ALL active vacations ordered by start date (oldest first)
+        // Include rejoin request status if it exists
+        $query = "SELECT 
+            v.id,
+            v.request_inv_no,
+            v.emp_id,
+            v.start_date,
+            v.return_date,
+            v.vacdays,
+            v.vac_type,
+            v.fly_type,
+            v.created_at,
+            e.name as emp_name,
+            rr.id as rejoin_request_id,
+            rr.status as rejoin_status,
+            rr.requested_at as rejoin_submitted_at
+        FROM emp_vacation v
+        LEFT JOIN employees e ON v.emp_id = e.emp_id
+        LEFT JOIN rejoin_requests rr ON v.id = rr.vacation_id AND rr.status IN ('pending', 'approved')
+        WHERE v.emp_id = ? 
+        AND v.current_status IN ('approved', 'completed')
+        AND v.review = 'A'
+        ORDER BY v.start_date ASC, v.id ASC";
+        
+        $stmt = $conDB->prepare($query);
+        $stmt->bind_param('s', $emp_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $vacations = [];
+        while ($row = $result->fetch_assoc()) {
+            $vacations[] = $row;
+        }
+        $stmt->close();
+        
+        echo json_encode([
+            'ok' => true,
+            'vacations' => $vacations,
+            'total_count' => count($vacations)
+        ]);
+        
+    } catch (Exception $e) {
+        send_json_response(__('error'), $e->getMessage(), 'error', 500);
+    }
+    exit;
+}
+
+// ============================================================================
 // REJOIN REQUEST HANDLER
 // ============================================================================
 elseif ($ajaxType == 'submitRejoinRequest') {
@@ -5062,14 +5263,6 @@ elseif ($ajaxType == 'processRejoinApproval') {
                         ':id' => $rejoin_request_id
                     ]);
 
-                    // Set employee fly status to 0 (employee has rejoined)
-                    $stmt = $pdo->prepare("
-                        UPDATE employees 
-                        SET fly = 0
-                        WHERE emp_id = :emp_id
-                    ");
-                    $stmt->execute([':emp_id' => $employee_id]);
-
                     // Mark vacation as reviewed/completed
                     $stmt = $pdo->prepare("
                         UPDATE emp_vacation 
@@ -5077,6 +5270,16 @@ elseif ($ajaxType == 'processRejoinApproval') {
                         WHERE id = :vacation_id
                     ");
                     $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+                    // Set employee fly status to 0 ONLY if NO remaining active vacations
+                    // Use PDO within the same transaction to avoid stale reads
+                    $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM emp_vacation WHERE emp_id = :emp_id AND review = 'A'");
+                    $stmtCnt->execute([':emp_id' => $employee_id]);
+                    $activeCount = (int)$stmtCnt->fetchColumn();
+                    if ($activeCount === 0) {
+                        $stmt = $pdo->prepare("UPDATE employees SET fly = 0 WHERE emp_id = :emp_id");
+                        $stmt->execute([':emp_id' => $employee_id]);
+                    }
 
                     $message = __("rejoin_request_approved_text", "Rejoin request has been approved");
                 } else {
@@ -5193,14 +5396,6 @@ elseif ($ajaxType == 'processRejoinApproval') {
                     ':inv_no' => $request['request_inv_no']
                 ]);
 
-                // Set employee fly status to 0 (employee has rejoined)
-                $stmt = $pdo->prepare("
-                    UPDATE employees 
-                    SET fly = 0
-                    WHERE emp_id = :emp_id
-                ");
-                $stmt->execute([':emp_id' => $employee_id]);
-
                 // Mark vacation as reviewed/completed
                 $stmt = $pdo->prepare("
                     UPDATE emp_vacation 
@@ -5208,6 +5403,15 @@ elseif ($ajaxType == 'processRejoinApproval') {
                     WHERE id = :vacation_id
                 ");
                 $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+                // Set employee fly status to 0 ONLY if NO remaining active vacations
+                $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM emp_vacation WHERE emp_id = :emp_id AND review = 'A'");
+                $stmtCnt->execute([':emp_id' => $employee_id]);
+                $activeCount = (int)$stmtCnt->fetchColumn();
+                if ($activeCount === 0) {
+                    $stmt = $pdo->prepare("UPDATE employees SET fly = 0 WHERE emp_id = :emp_id");
+                    $stmt->execute([':emp_id' => $employee_id]);
+                }
 
                 $message = __("rejoin_request_adjusted_and_approved_text", "Rejoin request has been adjusted and approved");
             } else {
@@ -5415,14 +5619,6 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
             ':inv_no' => $request['request_inv_no']
         ]);
 
-        // Set employee fly status to 0 (employee has rejoined)
-        $stmt = $pdo->prepare("
-            UPDATE employees 
-            SET fly = 0
-            WHERE emp_id = :emp_id
-        ");
-        $stmt->execute([':emp_id' => $emp_id]);
-
         // Mark vacation as reviewed/completed
         $stmt = $pdo->prepare("
             UPDATE emp_vacation 
@@ -5430,6 +5626,15 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
             WHERE id = :vacation_id
         ");
         $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+        // Set employee fly status to 0 ONLY if NO remaining active vacations
+        $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM emp_vacation WHERE emp_id = :emp_id AND review = 'A'");
+        $stmtCnt->execute([':emp_id' => $emp_id]);
+        $activeCount = (int)$stmtCnt->fetchColumn();
+        if ($activeCount === 0) {
+            $stmt = $pdo->prepare("UPDATE employees SET fly = 0 WHERE emp_id = :emp_id");
+            $stmt->execute([':emp_id' => $emp_id]);
+        }
 
         $pdo->commit();
 

@@ -1780,7 +1780,7 @@ if ($can_see_all_depts) {
             const isHR_Assistant = (userRole === 'assistant');
             const isHR_SeniorBP = (userRole === 'hr_senior_bp');
             const isHR_Payroll = (userRole === 'hr_payroll');
-            // const isGR_Officer = (userRole === 'gr_officer');
+            const isGR_Officer = (userRole === 'gr_officer'); // [NEW] Enable GR Officer role
             const isAnnualFly = (vacType === 'Fly');
 
             // Determine if current user is from asset clearance roles (IT, Admin, Transportation)
@@ -1855,7 +1855,27 @@ if ($can_see_all_depts) {
 
             // Payroll adjustments moved to post-approval action only
 
-            // --- Condition 3: Show HR Team CC Selection? ---
+            // [NEW] --- GR Officer Visa/Re-Entry Fee Section ---
+            if (isGR_Officer && isAnnualFly) {
+                hrPayrollHtml = `
+                    <div class="swal-gr-officer-fields text-left mt-3">
+                        <hr>
+                        <h6 class="text-primary mb-3"><i class="fa fa-passport"></i> ${__('visa_re_entry_fee_information') || 'Visa & Re-Entry Fee Information'}</h6>
+                        <div class="form-group">
+                            <label for="swal_permit_fee" class="font-weight-bold">
+                                <i class="fa fa-coins"></i> ${__('permit_fee') || 'Permit & Visa Fees (Exit & Re-Entry)'} 
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" id="swal_permit_fee" class="form-control" placeholder="0.00" step="0.01" required min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            <small class="form-text text-muted">
+                                <i class="fa fa-info-circle"></i> ${__('permit_fee_description') || 'Enter the total amount for exit and re-entry visa permit fees (in SAR)'}
+                            </small>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Payroll adjustments moved to post-approval action only
             // Only for HR Senior BP approving (to notify HR team members)
             if (isHR_SeniorBP) {
                 hrTeamCCHtml = `
@@ -1899,12 +1919,15 @@ if ($can_see_all_depts) {
                 // ANNUAL VACATION APPROVAL LOGIC (Fly)
                 if (isLevel1) {
                     // Level 1 Manager: Chain will be auto-built from assets (no UI needed)
+                    // Show additional note for Fly + Annual vacations about GR Officer
+                    const grOfficerNote = isAnnualFly ? `<br><i class="fa fa-passport"></i> ${__('gr_officer_auto_added', 'GR Officer will be automatically added for exit & re-entry visa processing.')}` : '';
                     chainHtml = `
                         <div class="swal-approval-chain text-left mt-3">
                             <hr>
                             <p class="text-info">
                                 <i class="fa fa-info-circle"></i> 
                                 ${__('approval_chain_auto_built') || 'Approval chain will be automatically determined based on assigned assets (HR Senior BP + Asset Teams).'}
+                                ${grOfficerNote}
                             </p>
                         </div>
                     `;
@@ -2392,6 +2415,15 @@ if ($can_see_all_depts) {
                             return false;
                         }
                     }
+                    
+                    // [UPDATED] Validate GR Officer required fields if GR Officer is approving Fly | Annual
+                    if ((isGR_Officer && isAnnualFly)) {
+                        const permitFee = $(swalModal).find('#swal_permit_fee').val();
+                        if (!permitFee || parseFloat(permitFee) <= 0) {
+                            Swal.showValidationMessage(__('permit_fee_required') || 'Permit & Visa Fees are required');
+                            return false;
+                        }
+                    }
 
                     // B) Get approver chain (based on leave type and role)
                     if (isSimpleLeave && isLevel1) {
@@ -2490,6 +2522,7 @@ if ($can_see_all_depts) {
                         arrival_date: arrivalDateVal,
                         ticket_pay: ticket_pay,
                         permit_fee: permit_fee,
+                        permit_fee: permit_fee, // [UPDATED] Include permit_fee for GR Officer
                         hr_team_cc: hr_team_cc,
                         overtime_hours: overtime_hours,
                         deduction_hours: deduction_hours,
@@ -2545,6 +2578,7 @@ if ($can_see_all_depts) {
                         arrival_date: approveData.arrival_date || null, // Send arrival date
                         ticket_pay: approveData.ticket_pay || null, // Send ticket pay
                         permit_fee: approveData.permit_fee || null, // Send permit fee
+                        permit_fee: approveData.permit_fee || null, // [UPDATED] Send permit_fee for GR Officer
                         hr_team_cc: approveData.hr_team_cc || [], // Send HR team CC
                         overtime_hours: approveData.overtime_hours || null, // Send overtime hours
                         deduction_hours: approveData.deduction_hours || null, // Send deduction hours
@@ -2755,7 +2789,7 @@ if ($can_see_all_depts) {
                             <label for="permit_fee_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
                                 <i class="fa fa-passport"></i> ${__('permit_fee')}
                             </label>
-                            <input type="number" id="permit_fee_update" class="form-control" placeholder="${__('permit_fee')}" value="${currentPermitFee}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            <input type="number" id="permit_fee_update" class="form-control" readonly placeholder="${__('permit_fee')}" value="${currentPermitFee}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
                         </div>
                     </div>
                 `,

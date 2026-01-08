@@ -150,7 +150,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 setcookie('remember_me', '', time() - 3600, '/');
             }
             unset($_SESSION['otp_verification']);
-            header("Location: ./dashboard.php");
+            
+            // Output redirect page that checks localStorage
+            header('Content-Type: text/html; charset=utf-8');
+            ?>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>OTP Verified - Redirecting...</title>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+            </head>
+            <body>
+                <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+                <script src="https://cdn.tailwindcss.com"></script>
+                <style>
+                    body { 
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                        background-color: #f3f4f6; 
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                    }
+                </style>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        let countdownSeconds = 3;
+                        const totalSeconds = 3;
+                        const totalMs = totalSeconds * 1000;
+                        let startTime = Date.now();
+                        Swal.fire({
+                            title: '✓ OTP Verified Successfully',
+                            html: '<p>You have been logged in successfully.</p><p style="margin-top: 15px; font-size: 16px; color: #666;">Redirecting to dashboard in <strong id="countdown-timer">' + countdownSeconds + '</strong> seconds...</p><div style="margin-top: 20px; width: 100%; height: 6px; background-color: #e5e7eb; border-radius: 3px; overflow: hidden;"><div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, #3b82f6, #0ea5e9); width: 100%; transition: width 0.05s linear;"></div></div>',
+                            icon: 'success',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            showConfirmButton: false,
+                            didOpen: (modal) => {
+                                const smoothAnimationInterval = setInterval(() => {
+                                    const elapsedMs = Date.now() - startTime;
+                                    const progressPercent = Math.max(0, 100 - (elapsedMs / totalMs) * 100);
+                                    document.getElementById('progress-bar').style.width = progressPercent + '%';
+                                    if (elapsedMs >= totalMs) {
+                                        clearInterval(smoothAnimationInterval);
+                                        window.location.href = './dashboard.php';
+                                    }
+                                }, 50); // Update every 50ms for smooth animation
+                                // Update countdown text every second
+                                const countdownInterval = setInterval(() => {
+                                    countdownSeconds--;
+                                    document.getElementById('countdown-timer').textContent = countdownSeconds;
+                                }, 1000);
+                            }
+                        });
+                    });
+                </script>
+            </body>
+            </html>
+            <?php
             exit();
         } else {
             $_SESSION['otp_verification']['attempts'] = ($_SESSION['otp_verification']['attempts'] ?? 0) + 1;

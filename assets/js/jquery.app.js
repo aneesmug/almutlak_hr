@@ -5508,7 +5508,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     icon: 'info', 
                     allowOutsideClick: false,
                     showCancelButton: true,
-                    confirmButtonText: __('apply_emergency_vacation') || 'Apply Emergency Vacation',
+                    confirmButtonText: __('apply_another_vacation') || 'Apply Another Vacation',
                     cancelButtonText: __('cancel') || 'Cancel',
                     confirmButtonColor: '#d33',
                     cancelButtonColor: '#6c757d'
@@ -5680,26 +5680,26 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     calculateVacationDays();
                 });
             };
-            
             // If forceEmergency is true, pre-select Fly and Emergency vacation
-            if (forceEmergency) {
-                setTimeout(() => {
-                    // Select "Fly" vacation type
-                    $('#inlineRadio1').prop('checked', true).trigger('change');
+            // if (forceEmergency) {
+            //     setTimeout(() => {
+            //         // Select "Fly" vacation type
+            //         $('#inlineRadio1').prop('checked', true).trigger('change');
                     
-                    // Show flyTypeSection and select "emergency"
-                    setTimeout(() => {
-                        $('#vac_type2').prop('checked', true).trigger('change');
-                        // Initialize date pickers AFTER emergency is selected
-                        setTimeout(() => {
-                            initializeDatePickers();
-                        }, 50);
-                    }, 100);
-                }, 100);
-            } else {
-                // Initialize date pickers normally if not emergency
-                initializeDatePickers();
-            }
+            //         // Show flyTypeSection and select "emergency"
+            //         setTimeout(() => {
+            //             $('#vac_type2').prop('checked', true).trigger('change');
+            //             // Initialize date pickers AFTER emergency is selected
+            //             setTimeout(() => {
+            //                 initializeDatePickers();
+            //             }, 50);
+            //         }, 100);
+            //     }, 100);
+            // } else {
+            //     // Initialize date pickers normally if not emergency
+            //     initializeDatePickers();
+            // }
+            initializeDatePickers();
 
             // Function to calculate and display vacation days
             function calculateVacationDays() {

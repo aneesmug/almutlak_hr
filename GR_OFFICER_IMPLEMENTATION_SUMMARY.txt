@@ -1,0 +1,165 @@
+# Implementation Summary: GR Officer Clearance for Fly | Annual Vacations
+
+## What Was Implemented
+
+A complete implementation to add **GR Officer (General Relations Officer)** as a required approval step in the vacation approval chain for **Fly | Annual** vacation types only.
+
+## Key Changes
+
+### 1. **Database Schema** ✅
+- Added `exit_re_entry_fee` column to `emp_vacation` table
+- File: `db_updates/add_exit_re_entry_fee_column.sql`
+- Type: DECIMAL(10, 2) for precise SAR amounts
+
+### 2. **Backend Logic** ✅
+- **File:** `includes/ajaxFile/ajaxVacation.php`
+  
+#### In `applyVacation` (lines 395-486):
+- Added GR Officer role resolution in `resolveApprover()` function
+- Automatically appends GR Officer to approval chain for Fly | Annual vacations
+- Only triggers when: `$is_fly_annual = (vac_type === 'Fly' && fly_type === 'annual')`
+
+#### In `approveVacation` (lines 1207-1843):
+- Accepts `exit_re_entry_fee` from POST request
+- Validates and stores the fee in `emp_vacation.exit_re_entry_fee`
+- Updates database with GR Officer's input
+
+### 3. **Frontend UI** ✅
+- **File:** `all_applied_vac.php`
+
+#### JavaScript Role Detection:
+```javascript
+const isGR_Officer = (userRole === 'gr_officer');
+```
+
+#### Approval Modal Form:
+- GR Officer sees a dedicated section for "Visa & Re-Entry Fee Information"
+- Input field for exit_re_entry_fee (in SAR)
+- Required field validation (must be > 0)
+- Only appears for GR Officer role when approving Fly | Annual vacations
+
+## Approval Chain Flow
+
+### New Vacation Approval Order for Fly | Annual:
+```
+1. Employee Submits
+   ↓
+2. Supervisor/Manager Approves (Level 1)
+   ↓
+3. HR Senior BP/HR Assistant Approves (Level 2)
+   ↓
+4. HR Payroll Approves [Optional - if configured] (Level 3)
+   ↓
+5. ✨ [NEW] GR Officer Approves & Records Exit Re-Entry Fee ✨
+   ↓
+6. Asset Clearance Teams (IT, Admin, Transport) (Level 4+)
+   ↓
+7. Vacation Completed ✓
+```
+
+## Field Details
+
+### Exit Re-Entry Visa Fee Field
+- **Purpose:** Record the total amount for exit and re-entry visa processing
+- **Location:** GR Officer approval modal
+- **Type:** Number (Decimal - 2 decimal places)
+- **Currency:** SAR (Saudi Arabian Riyal)
+- **Validation:** Required (must be > 0) when GR Officer approves
+- **Database Column:** `emp_vacation.exit_re_entry_fee`
+- **When Used:** Fly | Annual vacations only
+- **Trigger:** After HR Payroll approval, before Asset Clearance
+
+## Files Modified
+
+### Core Implementation Files:
+1. **`includes/ajaxFile/ajaxVacation.php`**
+   - Added GR Officer role handling in vacation application
+   - Added exit_re_entry_fee input/validation in approval
+
+2. **`all_applied_vac.php`**
+   - Enabled GR Officer role in approval modal
+   - Added exit_re_entry_fee form field
+   - Added validation logic
+
+### Database Migration:
+3. **`db_updates/add_exit_re_entry_fee_column.sql`** (NEW)
+   - Column definition and index creation
+
+### Documentation:
+4. **`readme/GR_OFFICER_CLEARANCE_IMPLEMENTATION.md`** (NEW)
+   - Complete technical documentation
+
+## Installation Steps
+
+### 1. Run Database Migration
+```sql
+SOURCE db_updates/add_exit_re_entry_fee_column.sql;
+```
+
+### 2. Verify Column Addition
+```sql
+DESCRIBE emp_vacation;
+-- Confirm exit_re_entry_fee column exists with DECIMAL(10,2) type
+```
+
+### 3. Code Already Updated
+- No manual code changes needed - all PHP and JavaScript updates are already in place
+
+### 4. Clear Browser Cache
+- Clear browser cache to load updated JavaScript files
+- Hard refresh the page (Ctrl+F5 or Cmd+Shift+R)
+
+## Testing Steps
+
+1. **Create a test Fly | Annual vacation application**
+2. **Approve through all levels** until reaching GR Officer
+3. **Verify GR Officer sees the approval modal** with exit_re_entry_fee field
+4. **Try to approve without entering fee** - should show validation error
+5. **Enter a valid amount** (e.g., 500.00 SAR)
+6. **Approve** - fee should be saved to database
+7. **Verify** the fee appears in vacation details
+
+## Important Notes
+
+### ⚠️ Critical Points:
+- **GR Officer is ONLY added for:** Fly + Annual (NOT Emergency Fly or Local Vacation)
+- **Exit Re-Entry Fee is REQUIRED** when GR Officer approves
+- **Field is NOT visible** to other roles (only GR Officer sees it in their approval modal)
+- **Database must have active GR Officer** for this step to work (user_type = 'gr_officer' in admin_login)
+- **No changes needed** for other vacation types (they are unaffected)
+
+### User Type Configuration:
+The system looks for users with:
+- **admin_login.user_type** = `'gr_officer'`
+- **employees.status** = `1` (active)
+- Selects the first available GR Officer by emp_id
+
+## Backward Compatibility
+
+✅ **All existing vacation types work as before:**
+- Local Vacation (Annual/Emergency)
+- Emergency Fly
+- Encashed Vacation
+- Sick Leave, Maternity, Paternity, etc.
+
+✅ **Only Fly | Annual affected** - New GR Officer step added in chain
+
+## Troubleshooting
+
+### GR Officer not in approval chain?
+- Check if active GR Officer exists: `SELECT * FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = 'gr_officer' AND e.status = 1;`
+- Ensure user_type in admin_login is set to `'gr_officer'` (case-sensitive)
+
+### Field not appearing in approval modal?
+- Check browser console for JavaScript errors
+- Verify you're approving a Fly | Annual vacation (not other types)
+- Check if userRole is correctly set to 'gr_officer'
+
+### Validation error when submitting?
+- Ensure exit_re_entry_fee has a positive numeric value
+- Value must be > 0 to pass validation
+
+## Support
+
+Refer to `readme/GR_OFFICER_CLEARANCE_IMPLEMENTATION.md` for detailed technical documentation.
+

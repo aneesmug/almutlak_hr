@@ -163,12 +163,17 @@
 		}
 		// Sanitize the ID to prevent SQL injection
 		$empidget = (int)$empidget;
+		// Get FIRST active vacation (oldest first) - for sequential rejoin
 		$query = "SELECT 
 			`id` AS `vacid`,
-			`return_date` AS `returndate`
+			`return_date` AS `returndate`,
+			`vac_type`,
+			`fly_type`,
+			`start_date`,
+			`vacdays`
 			FROM `emp_vacation`
 			WHERE `emp_id` = {$empidget} AND `current_status` IN  ('approved','completed') AND `review` = 'A'
-			ORDER BY `id` DESC 
+			ORDER BY `start_date` ASC, `id` ASC
 			LIMIT 1";
 		$result = mysqli_query($conDB, $query);
 		// Return null if query fails
@@ -179,5 +184,42 @@
 		// Free the result set
 		mysqli_free_result($result);
 		return $vacdata ?: null; // Return the data or null if empty
+	}
+
+	function getAllActiveVacations($empidget) {
+		global $conDB;
+		// Return empty array if ID is empty or not numeric
+		if (empty($empidget) || !is_numeric($empidget)) {
+			return [];
+		}
+		// Sanitize the ID to prevent SQL injection
+		$empidget = (int)$empidget;
+		// Get ALL active vacations ordered by start date (oldest first)
+		$query = "SELECT 
+			`id` AS `vacid`,
+			`request_inv_no`,
+			`return_date` AS `returndate`,
+			`vac_type`,
+			`fly_type`,
+			`start_date`,
+			`vacdays`,
+			`created_at`
+			FROM `emp_vacation`
+			WHERE `emp_id` = {$empidget} 
+			AND `current_status` IN ('approved','completed') 
+			AND `review` = 'A'
+			ORDER BY `start_date` ASC, `id` ASC";
+		$result = mysqli_query($conDB, $query);
+		// Return empty array if query fails
+		if (!$result) {
+			return [];
+		}
+		$vacations = [];
+		while ($row = mysqli_fetch_assoc($result)) {
+			$vacations[] = $row;
+		}
+		// Free the result set
+		mysqli_free_result($result);
+		return $vacations;
 	}
 ?>
