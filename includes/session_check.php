@@ -26,6 +26,22 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
+// --- KEEP-ALIVE ENDPOINT ---
+// Handle session extension requests from client-side (extend_session=1)
+// if (isset($_GET['extend_session']) && $_GET['extend_session'] === '1') {
+//     if (isset($_SESSION['auth_user'])) {
+//         $_SESSION['last_activity'] = time();
+//         session_write_close(); // Force session save to disk immediately
+//         header('Content-Type: application/json');
+//         echo json_encode(['status' => 'extended', 'message' => 'Session extended']);
+//         exit();
+//     }
+//     header('Content-Type: application/json');
+//     echo json_encode(['status' => 'error', 'message' => 'No session']);
+//     exit();
+// }
+
+
 // --- 1. Authentication Check ---
 if (!isset($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
     // Check if remember_me cookie exists before redirecting
@@ -93,10 +109,14 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
         </script>
     </body>
     </html>
-    <?php
+<?php
     exit();
 }
-$_SESSION['last_activity'] = time();
+    $_SESSION['last_activity'] = time();
+    // Store timeout settings in session for header.php to use
+    $_SESSION['timeout_duration'] = intval($timeout_duration);
+    $_SESSION['last_activity_time'] = isset($_SESSION['last_activity']) ? intval($_SESSION['last_activity']) : time();
+    $_SESSION['server_time'] = time();
 
 // --- 4. Fetch Full User & Employee Record ---
 

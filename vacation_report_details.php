@@ -9,7 +9,6 @@
  * 6. END OF SERVICE SALARY: Payment Details section is hidden when vacation_salary_type is 'end_of_service', showing info message instead.
  ****************************************************************/
 
-require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
 // Restrict access: Employees cannot view this detailed report page
@@ -150,11 +149,7 @@ if (mysqli_num_rows($query) == 1) {
     $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
     
     // Calculate actual days in the vacation month
-    $days_in_month = 30; // Default fallback
-    if (!empty($request['start_date'])) {
-        $start_date_obj = new DateTime($request['start_date']);
-        $days_in_month = (int)$start_date_obj->format('t'); // Actual days in month (28-31)
-    }
+    $days_in_month = 30; // Fixed 30 days for all calculations
     
     if ($calculate_payments && $salary) {
         $basic_salary = (float)($salary['basic'] ?? 0);
@@ -247,7 +242,8 @@ if (mysqli_num_rows($query) == 1) {
         $total_payable = 0;
     } elseif ($is_fly_annual) {
         // Fly + Annual: Working days + vacation salary + ticket + permit + overtime - deductions - GOSI
-        $total_payable = ($working_days_salary + $vacation_salary) + $ticket_fee + $permit_fee + $overtime_amount - $deduction_amount - $gosi_deduction;
+        // $total_payable = ($working_days_salary + $vacation_salary) + $ticket_fee + $permit_fee + $overtime_amount - $deduction_amount - $gosi_deduction;
+        $total_payable = ($working_days_salary + $vacation_salary)  + $overtime_amount - $deduction_amount - $gosi_deduction;
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
         $total_payable = 0;
@@ -667,14 +663,20 @@ if (mysqli_num_rows($query) == 1) {
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($ticket_fee > 0): ?>
-                                            <li>
-                                                <span class="label"><?= __('ticket_payment') ?? 'Ticket Payment' ?></span>
+                                            <li class="text-warning">
+                                                <div>
+                                                    <span class="label"><?= __('ticket_payment') ?? 'Ticket Payment' ?></span>
+                                                    <small class="text-muted d-block">Ticket fares will not be added in total payable amount.</small>
+                                                </div>
                                                 <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($permit_fee > 0): ?>
-                                            <li>
-                                                <span class="label"><?= __('permit_fee') ?? 'Permit Fee' ?></span>
+                                            <li class="text-warning">
+                                                <div>
+                                                    <span class="label"><?= __('permit_fee') ?? 'Permit Fee' ?></span>
+                                                    <small class="text-muted d-block">Permit fees will not be added in total payable amount.</small>
+                                                </div>
                                                 <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span>
                                             </li>
                                             <?php endif; ?>
@@ -735,7 +737,7 @@ if (mysqli_num_rows($query) == 1) {
                                                             <?php foreach ($approval_chain as $approver): ?>
                                                                 <?php if ($approver['status'] == 'approved'): ?>
                                                                     <div class="ml-3 mt-1">
-                                                                        <small><i class="fa fa-user-check text-success"></i> <?= htmlspecialchars($approver['approver_name']) ?> (<?= __($approver['approver_role']) ?>)</small>
+                                                                        <small><i class="fa fa-user-check text-success"></i> <?= htmlspecialchars($approver['approver_name']) ?> (<?= getRoleLabel($approver['approver_role']) ?>)</small>
                                                                     </div>
                                                                 <?php endif; ?>
                                                             <?php endforeach; ?>
@@ -758,7 +760,6 @@ if (mysqli_num_rows($query) == 1) {
                                                             $item_class = 'future';
                                                             $icon = 'fa-circle';
                                                         }
-                                                        
                                                         $role_icon = 'fa-user';
                                                                     if (!empty($approver['approver_role']) && stripos($approver['approver_role'], 'hr') !== false) {
                                                             $role_icon = 'fa-user-shield';
@@ -771,7 +772,7 @@ if (mysqli_num_rows($query) == 1) {
                                                                 <span class="status ml-3">
                                                                     <i class="fa <?= $role_icon ?>"></i>
                                                                     <?= htmlspecialchars($approver['approver_name']) ?> 
-                                                                    <small class="text-muted">(<?= __('level') ?> <?= $approver['approval_level'] ?>: <?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : ucfirst($approver['approver_role'])) ?>)</small>
+                                                                    <small class="text-muted">(<?= __('level') ?> <?= $approver['approval_level'] ?>: <?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : getRoleLabel($approver['approver_role'])) ?>)</small>
                                                                 </span>
                                                             </div>
                                                     <?php endforeach; ?>

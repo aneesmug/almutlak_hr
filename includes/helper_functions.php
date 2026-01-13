@@ -45,6 +45,42 @@ use PHPMailer\PHPMailer\Exception;
 $formatter = new NumberFormatter('en_SA',  NumberFormatter::CURRENCY);
 
 /**
+ * Helper function to get role label with proper formatting
+ * Maps database role types to human-readable labels
+ * 
+ * @param string $role_type The role type from database (e.g., 'dept_user', 'hr_manager')
+ * @return string The formatted role label
+ */
+if (!function_exists('getRoleLabel')) {
+    function getRoleLabel($role_type) {
+        $role_labels = [
+            'dept_user' => 'Department Manager',
+            'hr_manager' => 'HR Manager',
+            'hr_assistant' => 'HR Assistant',
+            'hr_employee' => 'HR Employee',
+            'gr_officer' => 'GR Officer',
+            'hr_senior_bp' => 'HR Senior Business Partner',
+            'hr_payroll' => 'HR Payroll',
+            'it' => 'IT Department',
+            'admin' => 'Administrator',
+            'system_admin' => 'System Administrator',
+            'general_manager' => 'General Manager',
+            'manager' => 'Manager',
+            'supervisor' => 'Supervisor',
+            'payroll' => 'Payroll Officer',
+            'finance' => 'Finance Officer',
+        ];
+        
+        if (isset($role_labels[$role_type])) {
+            return $role_labels[$role_type];
+        }
+        
+        // If role not in map, format it nicely (replace underscore with space, capitalize)
+        return ucwords(str_replace('_', ' ', $role_type ?? ''));
+    }
+}
+
+/**
  * Escapes special characters in a string for use in an SQL statement, using mysqli_real_escape_string if available.
  * Handles arrays recursively. Provides a basic fallback if DB connection is unavailable.
  *
@@ -1905,28 +1941,10 @@ if (!function_exists('handle_approval_action')) {
             if (!mysqli_stmt_execute($stmt_update)) throw new Exception("Execute failed (update task): " . mysqli_stmt_error($stmt_update));
             mysqli_stmt_close($stmt_update);
 
-            // ** [NEW] IF HR PAYROLL APPROVED, UPDATE VACATION BALANCE IMMEDIATELY **
-            // CRITICAL: Do NOT update balance for asset clearance approvals - only for final HR_Payroll approval
-            $is_asset_clearance = (stripos($note, 'Asset Clearance') !== false);
-            if ($action == 'approve' && $is_current_user_hr_payroll && $request_type === 'vacation_request' && !$is_asset_clearance) {
-                $vacation_id_for_balance = null;
-                $sql_get_balance_id = "SELECT `id` FROM `emp_vacation` WHERE `request_inv_no` = ? LIMIT 1";
-                $stmt_balance = mysqli_prepare($conDB, $sql_get_balance_id);
-                if ($stmt_balance) {
-                    mysqli_stmt_bind_param($stmt_balance, "s", $inv_no_safe);
-                    if (mysqli_stmt_execute($stmt_balance)) {
-                        $res_balance = mysqli_stmt_get_result($stmt_balance);
-                        if ($row_balance = mysqli_fetch_assoc($res_balance)) {
-                            $vacation_id_for_balance = (int)$row_balance['id'];
-                        }
-                        if ($res_balance) mysqli_free_result($res_balance);
-                    }
-                    mysqli_stmt_close($stmt_balance);
-                }
-                if ($vacation_id_for_balance > 0 && function_exists('update_vacation_balance_on_approval')) {
-                    update_vacation_balance_on_approval($conDB, $vacation_id_for_balance);
-                }
-            }
+            // ** REMOVED DUPLICATE BALANCE DEDUCTION **
+            // Balance deduction is handled ONLY at final approval (line ~2192)
+            // This prevents double deduction when HR_Payroll approves
+            // Do NOT deduct balance here - it will be deducted on final approval below
 
             // ** Log Action in smt_request_status (If this table is used for vacations) **
             $log_status = ($action == 'approve') ? "approved_level_$current_level" : 'rejected';
@@ -3377,124 +3395,88 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         // Update the tracking variable so UPDATE statement uses new total_days
         $total_contract_days = $new_total_days;
 
-        // 6. Check if a balance record ALREADY EXISTS FOR THIS SPECIFIC VACATION
-        // This prevents updating a balance record for a different vacation in the same period
-        $sql_check_vac = "SELECT id FROM `emp_vacation_balance` WHERE `vac_id` = ? LIMIT 1";
+        // 6. Check if this specific vacation has ALREADY been deducted
+        // CRITICAL: Check if a balance record exists with this EXACT vac_id AND has already deducted days
+        // If vac_id exists AND used_days > 0, it means this vacation was already processed
+        $sql_check_vac = "SELECT id, used_days, available_balance FROM `emp_vacation_balance` WHERE `vac_id` = ? AND `used_days` > 0 LIMIT 1";
         $stmt_check_vac = mysqli_prepare($conDB, $sql_check_vac);
-        if (!$stmt_check_vac) {
+        if ($stmt_check_vac) {
+            mysqli_stmt_bind_param($stmt_check_vac, "i", $vac_id_safe);
+            if (mysqli_stmt_execute($stmt_check_vac)) {
+                $res_check_vac = mysqli_stmt_get_result($stmt_check_vac);
+                $row_check_vac = mysqli_fetch_assoc($res_check_vac);
+                mysqli_free_result($res_check_vac);
+                
+                if ($row_check_vac) {
+                    // ✅ This vacation has already been deducted - DO NOT deduct again
+                    error_log("INFO: Vacation ID {$vac_id_safe} already deducted (record id={$row_check_vac['id']}, used_days={$row_check_vac['used_days']}, available={$row_check_vac['available_balance']}) - SKIPPING duplicate deduction");
+                    mysqli_stmt_close($stmt_check_vac);
+                    return true; // Return success, deduction already applied
+                }
+            }
+            mysqli_stmt_close($stmt_check_vac);
+        }
+        
+        error_log("DEBUG: Vacation ID {$vac_id_safe} - Proceeding to deduct balance. Days to deduct: {$days_to_deduct}");
+
+        // 7. CREATE OR UPDATE BALANCE RECORD
+        // Insert a new balance record with the deduction applied
+        // ✅ The columns are synchronized as follows:
+        // - total_days = opening balance for current period (DECREASES when vacation taken)
+        // - used_days = cumulative days used (old_used_days + new vacation days)
+        // - remaining_balance = total_days (always matches opening balance after deduction)
+        // - available_balance = remaining_balance (same value)
+        // Example: 17.83 opening → apply 10 days → total_days becomes 7.83, used_days becomes 11
+        $sql_insert_balance = "INSERT INTO `emp_vacation_balance` 
+                                (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, 
+                                 `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `last_updated`) 
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                               ON DUPLICATE KEY UPDATE
+                               `vac_id` = ?,
+                               `period_end` = ?,
+                               `total_days` = ?,
+                               `used_days` = ?,
+                               `remaining_balance` = ?,
+                               `available_balance` = ?,
+                               `carryover_days` = ?,
+                               `last_updated` = NOW()";
+        $stmt_insert = mysqli_prepare($conDB, $sql_insert_balance);
+        if (!$stmt_insert) {
+            error_log("ERROR: Failed to prepare INSERT statement for vacation ID {$vac_id_safe}");
             return false;
         }
-        mysqli_stmt_bind_param($stmt_check_vac, "i", $vac_id_safe);
-        mysqli_stmt_execute($stmt_check_vac);
-        $res_check_vac = mysqli_stmt_get_result($stmt_check_vac);
-        $row_check_vac = mysqli_fetch_assoc($res_check_vac);
-        mysqli_free_result($res_check_vac);
-        mysqli_stmt_close($stmt_check_vac);
-
-        if ($row_check_vac) {
-            // This vacation already has a balance record
-            // ✅ CRITICAL FIX: ALWAYS UPDATE the balance record with correct calculations
-            // The columns are synchronized as follows:
-            // - total_days = opening balance for current period (DECREASES when vacation taken)
-            // - used_days = cumulative days used (old_used_days + new vacation days)
-            // - remaining_balance = total_days (always matches opening balance after deduction)
-            // - available_balance = remaining_balance (same value)
-            // Example: 17.83 opening → apply 10 days → total_days becomes 7.83, used_days becomes 11
-            
-            error_log("INFO: Vacation ID {$vac_id_safe} - Updating balance record with new_total_days={$total_contract_days}, new_used_days={$new_used_days}, new_remaining_balance={$new_remaining_balance}");
-            
-            // Update the existing balance record with synchronized values
-            $sql_update = "UPDATE `emp_vacation_balance` SET 
-                `period_end` = ?,
-                `total_days` = ?,
-                `used_days` = ?,
-                `remaining_balance` = ?,
-                `available_balance` = ?,
-                `carryover_days` = ?,
-                `last_updated` = NOW()
-                WHERE `vac_id` = ?";
-            $stmt_update = mysqli_prepare($conDB, $sql_update);
-            if (!$stmt_update) {
-                return false;
-            }
-            mysqli_stmt_bind_param(
-                $stmt_update,
-                "sdddddi",
-                $period_end,
-                $total_contract_days,
-                $new_used_days,
-                $new_remaining_balance,
-                $new_available_balance,
-                $carryover_days,
-                $vac_id_safe
-            );
-            if (mysqli_stmt_execute($stmt_update)) {
-                mysqli_stmt_close($stmt_update);
-                error_log("SUCCESS: Updated balance record for vacation ID {$vac_id_safe} - total_days={$total_contract_days}, used_days={$new_used_days}, remaining_balance={$new_remaining_balance}, available_balance={$new_available_balance}");
-                return true;
-            } else {
-                mysqli_stmt_close($stmt_update);
-                return false;
-            }
+        // Bind for INSERT values
+        mysqli_stmt_bind_param(
+            $stmt_insert,
+            "iiisssddddisddddd",
+            $emp_id,
+            $vac_id_safe,
+            $contract_id,
+            $period_start,
+            $period_end,
+            $total_contract_days,
+            $new_used_days,
+            $new_remaining_balance,
+            $new_available_balance,
+            $carryover_days,
+            // ON DUPLICATE KEY UPDATE values
+            $vac_id_safe,
+            $period_end,
+            $total_contract_days,
+            $new_used_days,
+            $new_remaining_balance,
+            $new_available_balance,
+            $carryover_days
+        );
+        if (mysqli_stmt_execute($stmt_insert)) {
+            mysqli_stmt_close($stmt_insert);
+            error_log("SUCCESS: Inserted balance record for vacation ID {$vac_id_safe} - emp_id={$emp_id}, total_days={$total_contract_days}, used_days={$new_used_days}, remaining_balance={$new_remaining_balance}, available_balance={$new_available_balance}");
+            return true;
         } else {
-            // No existing record for this vacation, INSERT a new one
-            // ✅ The columns are synchronized as follows:
-            // - total_days = opening balance for current period (DECREASES when vacation taken)
-            // - used_days = cumulative days used (old_used_days + new vacation days)
-            // - remaining_balance = total_days (always matches opening balance after deduction)
-            // - available_balance = remaining_balance (same value)
-            // Example: 17.83 opening → apply 10 days → total_days becomes 7.83, used_days becomes 11
-            $sql_insert_balance = "INSERT INTO `emp_vacation_balance` 
-                                    (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, 
-                                     `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `last_updated`) 
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                                   ON DUPLICATE KEY UPDATE
-                                   `vac_id` = ?,
-                                   `period_end` = ?,
-                                   `total_days` = ?,
-                                   `used_days` = ?,
-                                   `remaining_balance` = ?,
-                                   `available_balance` = ?,
-                                   `carryover_days` = ?,
-                                   `last_updated` = NOW()";
-            $stmt_insert = mysqli_prepare($conDB, $sql_insert_balance);
-            if (!$stmt_insert) {
-                error_log("ERROR: Failed to prepare INSERT statement for vacation ID {$vac_id_safe}");
-                return false;
-            }
-            // Bind for INSERT values
-            mysqli_stmt_bind_param(
-                $stmt_insert,
-                "iiisssddddisddddd",
-                $emp_id,
-                $vac_id_safe,
-                $contract_id,
-                $period_start,
-                $period_end,
-                $total_contract_days,
-                $new_used_days,
-                $new_remaining_balance,
-                $new_available_balance,
-                $carryover_days,
-                // ON DUPLICATE KEY UPDATE values
-                $vac_id_safe,
-                $period_end,
-                $total_contract_days,
-                $new_used_days,
-                $new_remaining_balance,
-                $new_available_balance,
-                $carryover_days
-            );
-            if (mysqli_stmt_execute($stmt_insert)) {
-                mysqli_stmt_close($stmt_insert);
-                error_log("SUCCESS: Inserted balance record for vacation ID {$vac_id_safe} - emp_id={$emp_id}, total_days={$total_contract_days}, used_days={$new_used_days}, remaining_balance={$new_remaining_balance}, available_balance={$new_available_balance}");
-                return true;
-            } else {
-                $error = mysqli_stmt_error($stmt_insert);
-                error_log("ERROR: INSERT/UPDATE failed for vacation ID {$vac_id_safe}: {$error}");
-                mysqli_stmt_close($stmt_insert);
-                return false;
-            }
+            $error = mysqli_stmt_error($stmt_insert);
+            error_log("ERROR: INSERT/UPDATE failed for vacation ID {$vac_id_safe}: {$error}");
+            mysqli_stmt_close($stmt_insert);
+            return false;
         }
     }
 }

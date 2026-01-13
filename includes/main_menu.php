@@ -19,6 +19,7 @@ $carsLink = 'all_cars.php';
 $locationsLink = 'all_locations.php';
 $machinesLink = 'all_machines.php';
 $itemsLink = 'all_menu_item.php';
+$assetInventoryLink = 'asset_inventory.php';
 $ordersLink = 'all_orders.php';
 $customersLink = 'odr_customers.php';
 $quotationsLink = 'all_quotations.php';
@@ -43,6 +44,10 @@ $userActivityLink = 'user_activity.php';
 $activityLoggerLink = 'view_activity_logs.php';
 $manageEmployeeSupervisorsLink = 'manage_employee_supervisors.php';
 $manageHolidaysLink = 'manage_holidays.php?status=1';
+$vacationBalanceHistoryLink = 'vacation_balance_history.php';
+$diagnoseDoubleDeductionLink = 'diagnose_double_deduction.php';
+$fixDoubleDeductionLink = 'fix_double_deduction.php';
+$appSettingsLink = 'app_settings.php';
 
 
 // =================================================================================
@@ -66,6 +71,7 @@ $page_roles = [
     'all_cars.php' => ['Administrator', 'GR_Officer'],
     'all_locations.php' => ['Administrator', 'GR_Officer'],
     'all_machines.php' => ['Administrator', 'GR_Officer'],
+    'asset_inventory.php' => ['Administrator', 'IT_Team', 'IT_Team_Manager'],
     'all_menu_item.php' => ['Administrator'],
     'all_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     // 'all_general_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
@@ -85,6 +91,9 @@ $page_roles = [
     'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager','HR_Recruitment'],
     'manage_employee_supervisors.php' => ['Administrator'],
     'manage_holidays.php' => ['Administrator', 'HR_Senior_BP', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'vacation_balance_history.php' => ['Administrator'],
+    'diagnose_double_deduction.php' => ['Administrator'],
+    'fix_double_deduction.php' => ['Administrator'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -570,9 +579,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
         <!-- Employee's Group -->
         <?php if ($show_employees_menu): ?>
-        <li>
+        <li class="<?=(strpos($current_page_name, 'employee') !== false ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa fa-users-gear"></i><span><?=__("employee's") ?></span><span class="float-right fa fa-arrow-right"></span></a>
-            <ul class="nav-second-level" aria-expanded="false">
+            <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'employee') !== false ? 'true' : 'false') ?>">
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                     <li><a href="<?= $addNewEmployeeLink ?>"><i class="fa fa-user-plus"></i><span><?=__('new_employee') ?></span></a></li>
                 <?php endif; ?>
@@ -628,9 +637,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
         <!-- Approvals Group -->
         <?php if ($show_approvals_menu): ?>
-        <li>
+        <li class="<?=(strpos($current_page_name, 'applied') !== false || strpos($current_page_name, 'approvals') !== false || strpos($current_page_name, 'resignations') !== false ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa fa-check-to-slot"></i><span><?=__('approvals')?></span><?= ($approvals_total_count > 0) ? "<span class='badgez badge-danger'>$approvals_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
-            <ul class="nav-second-level" aria-expanded="false">
+            <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'applied') !== false || strpos($current_page_name, 'approvals') !== false || strpos($current_page_name, 'resignations') !== false ? 'true' : 'false') ?>">
                 <?php if (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)): ?>
                     <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
@@ -654,9 +663,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
         <!-- Requests Menu (Smart Request + General Request) -->
         <?php if ((in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)) || (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page))): ?>
-        <li>
+        <li class="<?=(strpos($current_page_name, 'request') !== false ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa fa-ticket"></i><span><?=__('requests', 'Requests')?></span><?= ($requests_total_count > 0) ? "<span class='badgez badge-danger'>$requests_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
-            <ul class="nav-second-level" aria-expanded="false">
+            <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'request') !== false ? 'true' : 'false') ?>">
                 <?php if (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)): ?>
                 <li><a href="<?= $smartRequestsLink ?>"><i class="fa fa-layer-group"></i> <span> <?=__('smart_requests', 'Smart Request') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
                 <?php endif; ?>
@@ -681,6 +690,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php if ($is_admin || $is_system_admin): ?>
             <li><a href="<?= $carsLink ?>" class="<?= all_cars($current_page) ?>"><i class="fa fa-cars"></i><span><?=__('cars') ?></span></a></li>
             <li><a href="<?= $locationsLink ?>" class="<?= all_locations($current_page) ?>"><i class="fa fa-sitemap"></i><span><?=__('locations') ?></span></a></li>
+            <li><a href="<?= $assetInventoryLink ?>"><i class="fa fa-box"></i><span>Asset Inventory</span></a></li>
         <?php endif; ?>
         <!-- Reports -->
         <?php if (in_array($user_role, $can_see_reports_page) || in_array($user_type, $can_see_reports_page)): ?>
@@ -690,9 +700,32 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <li>
             <a href="javascript:void(0);"><i class="fa fa-gear-complex"></i><span><?=__('settings') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="false">
-                <li><a href="<?= $usersLink ?>"><i class="fa fa-users-gear"></i><span><?=__('users') ?></span></a></li>
-                <li><a href="<?= $userActivityLink ?>"><i class="fa fa-history"></i><span><?=__('user_activity') ?></span></a></li>
-                <li><a href="<?= $activityLoggerLink ?>"><i class="fa fa-list-check"></i><span><?=__('activity_logger') ?></span></a></li>
+                <!-- User Management -->
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-users"></i><span><?=__('user_management', 'Users') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-third-level" aria-expanded="false">
+                        <li><a href="<?= $usersLink ?>"><i class="fa fa-users-gear"></i><span><?=__('users') ?></span></a></li>
+                        <li><a href="<?= $userActivityLink ?>"><i class="fa fa-history"></i><span><?=__('user_activity') ?></span></a></li>
+                    </ul>
+                </li>
+                <!-- System Logs -->
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-list-check"></i><span><?=__('system_logs', 'System Logs') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-third-level" aria-expanded="false">
+                        <li><a href="<?= $activityLoggerLink ?>"><i class="fa fa-list-check"></i><span><?=__('activity_logger') ?></span></a></li>
+                        <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa fa-clock-rotate-left"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
+                    </ul>
+                </li>
+                <!-- System Tools -->
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-screwdriver-wrench"></i><span><?=__('system_tools', 'System Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-third-level" aria-expanded="false">
+                        <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa fa-gear"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
+                        <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa fa-stethoscope"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
+                        <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa fa-screwdriver-wrench"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+                    </ul>
+                </li>
+                <!-- Language Settings -->
                 <li><a href="<?= $languageLink ?>"><i class="fa fa-language"></i><span><?=__('language') ?></span></a></li>
             </ul>
         </li>

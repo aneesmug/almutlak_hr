@@ -817,7 +817,8 @@ if ($can_see_all_depts) {
                                                         !empty($req['arrival_date']) &&
                                                         ($req['travel_email_sent'] == 1) &&
                                                         (empty($req['ticket_pay']) || (float)$req['ticket_pay'] <= 0 || empty($req['permit_fee']) || (float)$req['permit_fee'] <= 0) &&
-                                                        ($is_system_admin || $isHR_Payroll)
+                                                        ($is_system_admin || $isHR_Payroll) &&
+                                                        $user_type !== 'gr_officer'
                                                     ) {
                                                         $show_payment_button = true;
                                                     }
@@ -1003,37 +1004,35 @@ if ($can_see_all_depts) {
                             emp_id: employeeId
                         },
                         success: function(assetsResponse) {
-                            // Build assigned assets section
-                            let assignedAssetsHtml = '';
-                            if (assetsResponse.status === 200 && assetsResponse.assets && assetsResponse.assets.length > 0) {
-                                assignedAssetsHtml = `
-                                    <div class="alert alert-warning mb-3" style="padding: 15px; border-radius: 8px; background: #fff3cd; border: 1px solid #ffc107;">
-                                        <h6 class="mb-2"><i class="fa fa-laptop"></i> <strong>${__('assigned_assets_to_verify') || 'Assigned Assets to Verify'}</strong></h6>
-                                        <div style="padding-left: 25px; max-height: 250px; overflow-y: auto;">
-                                            <ul style="list-style-type: none; padding: 0;">
-                                `;
-                                assetsResponse.assets.forEach(function(asset, index) {
-                                    assignedAssetsHtml += `
-                                        <li style="padding: 10px; margin-bottom: 8px; background: white; border-left: 4px solid #ffc107; border-radius: 4px; font-size: 13px;">
-                                            <strong>#${index + 1}. ${asset.description || asset.asset_id || __("asset")}</strong>
-                                            ${asset.serial_number ? `<br><i class="fa fa-barcode"></i> ${__("serial_header")}: <code>${asset.serial_number}</code>` : ''}
-                                            <br><i class="fa fa-calendar"></i> ${__("assigned")}: ${asset.assigned_date}
-                                            <br><i class="fa fa-check-circle"></i> ${__("status")}: <span class="badge badge-sm badge-info">${asset.status}</span>
-                                        </li>
-                                    `;
-                                });
-                                assignedAssetsHtml += `
-                                            </ul>
-                                        </div>
-                                    </div>
-                                `;
-                            } else {
-                                assignedAssetsHtml = `
-                                    <div class="alert alert-info mb-3" style="padding: 15px; border-radius: 8px;">
-                                        <i class="fa fa-check-circle"></i> No assigned assets found for this employee.
-                                    </div>
-                                `;
+                            // CHECK IF EMPLOYEE HAS ANY ASSIGNED ASSETS
+                            if (!assetsResponse.assets || assetsResponse.assets.length === 0) {
+                                // No assets - skip clearance and proceed directly with approval
+                                processAssetClearance(vacationId, 'no_assets_required', 'Employee has no assigned assets - automatic clearance');
+                                return;
                             }
+
+                            // Build assigned assets section - only if there ARE assets
+                            let assignedAssetsHtml = `
+                                <div class="alert alert-warning mb-3" style="padding: 15px; border-radius: 8px; background: #fff3cd; border: 1px solid #ffc107;">
+                                    <h6 class="mb-2"><i class="fa fa-laptop"></i> <strong>${__('assigned_assets_to_verify') || 'Assigned Assets to Verify'}</strong></h6>
+                                    <div style="padding-left: 25px; max-height: 250px; overflow-y: auto;">
+                                        <ul style="list-style-type: none; padding: 0;">
+                            `;
+                            assetsResponse.assets.forEach(function(asset, index) {
+                                assignedAssetsHtml += `
+                                    <li style="padding: 10px; margin-bottom: 8px; background: white; border-left: 4px solid #ffc107; border-radius: 4px; font-size: 13px;">
+                                        <strong>#${index + 1}. ${asset.description || asset.asset_id || __("asset")}</strong>
+                                        ${asset.serial_number ? `<br><i class="fa fa-barcode"></i> ${__("serial_header")}: <code>${asset.serial_number}</code>` : ''}
+                                        <br><i class="fa fa-calendar"></i> ${__("assigned")}: ${asset.assigned_date}
+                                        <br><i class="fa fa-check-circle"></i> ${__("status")}: <span class="badge badge-sm badge-info">${asset.status}</span>
+                                    </li>
+                                `;
+                            });
+                            assignedAssetsHtml += `
+                                        </ul>
+                                    </div>
+                                </div>
+                            `;
 
                             Swal.fire({
                                 title: __('asset_clearance') || 'Asset Clearance',
@@ -1532,6 +1531,13 @@ if ($can_see_all_depts) {
 
             console.log('Approval Check - User Role:', userRole, 'Asset Dept ID:', assetDeptId);
 
+            // For GR Officer, ALWAYS show the approval modal with comment and permit fee
+            if (userRole === 'gr_officer') {
+                console.log('✓ GR Officer detected - showing approval modal with comment and permit fee');
+                proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                return;
+            }
+
             // Check if current user is the assigned asset checker for this vacation
             // If yes, show clearance modal; if no but they're an asset manager, show assignment modal
             if (vacType !== 'Encashed') {
@@ -1563,10 +1569,35 @@ if ($can_see_all_depts) {
                             userRole: userRole
                         });
 
-                        // If current user IS the assigned asset checker AND they're NOT a manager, show clearance modal
+                        // If current user IS the assigned asset checker AND they're NOT a manager, check if employee has assets
                         if (assignedAssetChecker && assignedAssetChecker === currentUserIdInt && !isManagerRole) {
-                            console.log('✓ Showing asset clearance modal for assigned checker (non-manager):', assignedAssetChecker);
-                            showAssetClearanceModal(vacationId, employeeId, employeeName);
+                            // FIRST CHECK: Does the employee have any assigned assets?
+                            $.ajax({
+                                url: './includes/ajaxFile/ajaxVacation.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: {
+                                    ajaxType: 'getEmployeeAssignedAssets',
+                                    emp_id: employeeId
+                                },
+                                success: function(assetsResponse) {
+                                    // If employee has NO assets, skip the clearance modal
+                                    if (!assetsResponse.assets || assetsResponse.assets.length === 0) {
+                                        console.log('✓ Employee has no assigned assets - skipping clearance modal');
+                                        processAssetClearance(vacationId, 'no_assets_required', 'Employee has no assigned assets - automatic clearance');
+                                        return;
+                                    }
+                                    
+                                    // Employee HAS assets, show the clearance modal
+                                    console.log('✓ Showing asset clearance modal for assigned checker (non-manager):', assignedAssetChecker);
+                                    showAssetClearanceModal(vacationId, employeeId, employeeName);
+                                },
+                                error: function() {
+                                    // On error, show the modal anyway as a fallback
+                                    console.log('✓ Showing asset clearance modal for assigned checker (non-manager):', assignedAssetChecker);
+                                    showAssetClearanceModal(vacationId, employeeId, employeeName);
+                                }
+                            });
                             return;
                         }
 
@@ -1955,15 +1986,17 @@ if ($can_see_all_depts) {
 
             // --- Comment/Review Textarea ---
             // Add comment field for all approvals
+            // Make it REQUIRED for GR Officer
+            const isCommentRequired = isGR_Officer;
             commentHtml = `
                 <div class="swal-comment-section text-left mt-3">
                     <hr>
                     <h6 class="text-primary mb-3">
                         <i class="fa fa-comment"></i> ${__('approval_comment') || 'Approval Comment'}
-                        <span class="text-muted">(${__('optional')})</span>
+                        ${isCommentRequired ? '<span class="text-danger">*</span>' : '<span class="text-muted">(Optional)</span>'}
                     </h6>
                     <div class="form-group">
-                        <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Write your comment or review for this approval (optional)...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;"></textarea>
+                        <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Write your comment or review for this approval (optional)...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;" ${isCommentRequired ? 'required' : ''}></textarea>
                         <small class="form-text text-muted">
                             <span id="char-count">0</span>/5000 ${__('characters')}
                         </small>
@@ -2370,6 +2403,12 @@ if ($can_see_all_depts) {
                     // Get approval comment (if provided)
                     let approval_comment = $(swalModal).find('#swal_approval_comment').val() || '';
                     approval_comment = approval_comment.trim().substring(0, 5000); // Limit to 5000 chars
+
+                    // [REQUIRED] GR Officer MUST provide a comment
+                    if (isGR_Officer && !approval_comment) {
+                        Swal.showValidationMessage(__('approval_comment_required_for_gr_officer') || 'GR Officer must provide an approval comment');
+                        return false;
+                    }
 
                     // A) Get payment details (if they exist)
                     let ticket_pay = $(swalModal).find('#swal_ticket_fares').val() || null;

@@ -87,6 +87,183 @@ if ($action === 'getEvaluationDetails') {
     exit();
 }
 
+// Get asset full activity/history endpoint
+if ($action === 'getAssetActivity') {
+    // Accept either assetItemId (preferred for per-item history) or assetId (fallback)
+    $assetItemId = isset($_POST['assetItemId']) ? intval($_POST['assetItemId']) : 0;
+    $assetId = isset($_POST['assetId']) ? intval($_POST['assetId']) : 0;
+
+    if ($assetItemId > 0) {
+        // Query specific asset item with its parent asset metadata and current holder
+        $aiId = intval($assetItemId);
+        $assetSql = "SELECT 
+                        ai.id AS asset_item_id,
+                        ai.tracking_id,
+                        ai.serial_number,
+                        ai.description AS item_description,
+                        ai.status AS item_status,
+                        ai.assigned_emp_id,
+                        ai.assigned_date,
+                        a.id AS asset_id,
+                        a.name,
+                        a.asset_type,
+                        a.created_at,
+                        a.clearance_dept_id,
+                        d.dep_nme AS asset_department,
+                        e.name AS assigned_emp_name,
+                        ed.dep_nme AS assigned_emp_department
+                    FROM asset_items ai
+                    LEFT JOIN assets a ON a.id = ai.asset_id
+                    LEFT JOIN department d ON d.id = a.clearance_dept_id
+                    LEFT JOIN employees e ON e.emp_id = ai.assigned_emp_id
+                    LEFT JOIN department ed ON ed.id = e.dept
+                    WHERE ai.id = {$aiId}";
+        $assetRes = mysqli_query($conDB, $assetSql);
+        if (!$assetRes) {
+            echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+            exit();
+        }
+        $asset = mysqli_fetch_assoc($assetRes);
+        if (!$asset) {
+            echo json_encode(['success' => false, 'message' => 'Asset item not found']);
+            exit();
+        }
+
+        // Build history based on asset_id + serial (tracking_id preferred)
+        $serialForHistory = '';
+        if (!empty($asset['tracking_id'])) {
+            $serialForHistory = mysqli_real_escape_string($conDB, $asset['tracking_id']);
+        } elseif (!empty($asset['serial_number'])) {
+            $serialForHistory = mysqli_real_escape_string($conDB, $asset['serial_number']);
+        }
+        $histWhere = "ea.asset_id = " . intval($asset['asset_id']);
+        if ($serialForHistory !== '') {
+            $histWhere .= " AND ea.serial_number = '" . $serialForHistory . "'";
+        }
+
+        $histSql = "SELECT ea.id,
+                           ea.serial_number,
+                           ea.description,
+                           ea.assigned_date,
+                           ea.return_date,
+                           ea.status,
+                           ea.return_attachment,
+                           e.emp_id,
+                           e.name AS employee_name,
+                           d.dep_nme AS employee_department
+                    FROM employee_assets ea
+                    LEFT JOIN employees e ON e.emp_id = ea.emp_id
+                    LEFT JOIN department d ON d.id = e.dept
+                    WHERE {$histWhere}
+                    ORDER BY ea.assigned_date DESC, ea.id DESC";
+        $histRes = mysqli_query($conDB, $histSql);
+        if (!$histRes) {
+            echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+            exit();
+        }
+        $history = [];
+        while ($row = mysqli_fetch_assoc($histRes)) {
+            $history[] = $row;
+        }
+
+        echo json_encode(['success' => true, 'data' => ['asset' => $asset, 'history' => $history]]);
+        exit();
+    }
+
+    if ($assetId <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid asset ID']);
+        exit();
+    }
+
+    // Fallback: Fetch by asset (assets table)
+    $assetSql = "SELECT a.id, a.name, a.asset_type, a.created_at, a.clearance_dept_id, d.dep_nme AS asset_department
+                 FROM assets a
+                 LEFT JOIN department d ON d.id = a.clearance_dept_id
+                 WHERE a.id = " . intval($assetId);
+    $assetRes = mysqli_query($conDB, $assetSql);
+    if (!$assetRes) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        exit();
+    }
+    $asset = mysqli_fetch_assoc($assetRes);
+    if (!$asset) {
+        echo json_encode(['success' => false, 'message' => 'Asset not found']);
+        exit();
+    }
+
+    // Fetch assignment/return history scoped by asset
+    $histSql = "SELECT ea.id,
+                       ea.serial_number,
+                       ea.description,
+                       ea.assigned_date,
+                       ea.return_date,
+                       ea.status,
+                       ea.return_attachment,
+                       e.emp_id,
+                       e.name AS employee_name,
+                       d.dep_nme AS employee_department
+                FROM employee_assets ea
+                LEFT JOIN employees e ON e.emp_id = ea.emp_id
+                LEFT JOIN department d ON d.id = e.dept
+                WHERE ea.asset_id = " . intval($assetId) . "
+                ORDER BY ea.assigned_date DESC, ea.id DESC";
+    $histRes = mysqli_query($conDB, $histSql);
+    if (!$histRes) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        exit();
+    }
+    $history = [];
+    while ($row = mysqli_fetch_assoc($histRes)) {
+        $history[] = $row;
+    }
+
+    echo json_encode(['success' => true, 'data' => ['asset' => $asset, 'history' => $history]]);
+    exit();
+}
+
+// Get asset items list for Select2 (id + text)
+if ($action === 'getAssetItems') {
+    $q = isset($_POST['q']) ? trim($_POST['q']) : '';
+
+    $where = ['1=1'];
+    if ($q !== '') {
+        $q_safe = mysqli_real_escape_string($conDB, $q);
+        $where[] = "(a.name LIKE '%$q_safe%' OR ai.tracking_id LIKE '%$q_safe%' OR ai.serial_number LIKE '%$q_safe%')";
+    }
+    $whereClause = implode(' AND ', $where);
+
+    $sql = "SELECT ai.id,
+                   a.name AS asset_name,
+                   COALESCE(ai.tracking_id, ai.serial_number) AS serial_or_tracking,
+                   ai.status
+            FROM asset_items ai
+            LEFT JOIN assets a ON a.id = ai.asset_id
+            WHERE $whereClause
+            ORDER BY a.name ASC, ai.tracking_id ASC, ai.id ASC
+            LIMIT 200"; // cap results for UI responsiveness
+
+    $res = mysqli_query($conDB, $sql);
+    if (!$res) {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
+        exit();
+    }
+
+    $items = [];
+    while ($row = mysqli_fetch_assoc($res)) {
+        $labelParts = [];
+        if (!empty($row['asset_name'])) { $labelParts[] = $row['asset_name']; }
+        if (!empty($row['serial_or_tracking'])) { $labelParts[] = '[' . $row['serial_or_tracking'] . ']'; }
+        if (!empty($row['status'])) { $labelParts[] = '(' . $row['status'] . ')'; }
+        $items[] = [
+            'id' => intval($row['id']),
+            'text' => implode(' ', $labelParts)
+        ];
+    }
+
+    echo json_encode(['success' => true, 'items' => $items]);
+    exit();
+}
+
 // Get request parameters
 $reportType = isset($_POST['reportType']) ? $_POST['reportType'] : '';
 $columns = isset($_POST['columns']) ? $_POST['columns'] : [];
@@ -133,6 +310,12 @@ try {
             break;
         case 'document':
             $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status);
+            break;
+        case 'assets':
+            $result = generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
+            break;
+        case 'assets_list':
+            $result = generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
             break;
         case 'evaluation':
             // Check if user can acknowledge evaluations (managers only)
@@ -274,7 +457,19 @@ function getColumnLabel($column) {
         'approved_vacations' => 'Approved Vacations',
         'active_loans' => 'Active Loans',
         'total_loan_amount' => 'Total Loan Amount',
-        'avg_service_years' => 'Avg Service Years'
+        'avg_service_years' => 'Avg Service Years',
+        'asset_name' => 'Asset Name',
+        'asset_type' => 'Asset Type',
+        'serial_number' => 'Serial Number',
+        'asset_tag' => 'Asset Tag',
+        'purchase_date' => 'Purchase Date',
+        'asset_status' => 'Asset Status',
+        'assigned_to' => 'Assigned To',
+        'assignment_date' => 'Assignment Date',
+        'return_date' => 'Return Date',
+        'assignment_status' => 'Assignment Status',
+        'return_notes' => 'Return Notes',
+        'employee_dept' => 'Department'
     ];
     return isset($labels[$column]) ? $labels[$column] : ucwords(str_replace('_', ' ', $column));
 }
@@ -2027,7 +2222,400 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
     
     return ['data' => $data, 'headers' => $headers];
 }
+
+// Asset Inventory Report
+function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+    // Build SELECT clause
+    $selectCols = ['a.id AS asset_id'];
+    
+    foreach ($columns as $col) {
+        switch ($col) {
+            case 'asset_name':
+                $selectCols[] = 'a.name AS asset_name';
+                break;
+            case 'asset_type':
+                $selectCols[] = 'a.asset_type';
+                break;
+            case 'serial_number':
+                $selectCols[] = 'ea.serial_number';
+                break;
+            case 'asset_tag':
+                $selectCols[] = 'ea.id AS asset_tag';
+                break;
+            case 'purchase_date':
+                $selectCols[] = 'a.created_at AS purchase_date';
+                break;
+            case 'asset_status':
+                $selectCols[] = 'ea.status AS asset_status';
+                break;
+            case 'assigned_to':
+                $selectCols[] = 'CONCAT(e.emp_id, " - ", e.name) AS assigned_to';
+                break;
+            case 'assignment_date':
+                $selectCols[] = 'ea.assigned_date';
+                break;
+            case 'return_date':
+                $selectCols[] = 'ea.return_date';
+                break;
+            case 'assignment_status':
+                $selectCols[] = 'ea.status AS assignment_status';
+                break;
+            case 'return_notes':
+                $selectCols[] = 'ea.description AS return_notes';
+                break;
+            case 'employee_dept':
+                $selectCols[] = 'd.dep_nme AS employee_dept';
+                break;
+        }
+    }
+    
+    if (empty($selectCols) || count($selectCols) === 1) {
+        // If no valid columns selected, select all by default
+        $selectCols = ['a.id AS asset_id', 'a.name AS asset_name', 'a.asset_type', 'ea.serial_number', 'ea.status AS asset_status', 'CONCAT(e.emp_id, " - ", e.name) AS assigned_to', 'ea.assigned_date', 'ea.return_date', 'ea.status AS assignment_status'];
+    }
+    
+    $selectClause = implode(', ', $selectCols);
+    
+    // Build WHERE clause
+    $where = ['1=1'];
+    
+    // Department filter (from assigned employee's department)
+    if (!$hasFullAccess) {
+        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!empty($departments)) {
+        $dept_list = "'" . implode("','", array_map(function($d) use ($conDB) { return mysqli_real_escape_string($conDB, $d); }, $departments)) . "'";
+        $where[] = "e.dept IN ($dept_list)";
+    }
+    
+    // Date filters - check assigned or return date
+    if (!empty($dateFrom)) {
+        $dateFrom_safe = mysqli_real_escape_string($conDB, $dateFrom);
+        $where[] = "(ea.assigned_date >= '$dateFrom_safe' OR ea.return_date >= '$dateFrom_safe')";
+    }
+    if (!empty($dateTo)) {
+        $dateTo_safe = mysqli_real_escape_string($conDB, $dateTo);
+        $where[] = "(ea.assigned_date <= '$dateTo_safe' OR ea.return_date <= '$dateTo_safe')";
+    }
+    
+    // Status filter
+    if ($status !== '') {
+        $status_safe = mysqli_real_escape_string($conDB, $status);
+        $where[] = "ea.status = '$status_safe'";
+    }
+    
+    $whereClause = implode(' AND ', $where);
+    
+    // Build and execute query
+    $sql = "SELECT $selectClause 
+            FROM assets a
+            LEFT JOIN employee_assets ea ON a.id = ea.asset_id
+            LEFT JOIN employees e ON ea.emp_id = e.emp_id
+            LEFT JOIN department d ON e.dept = d.id
+            WHERE $whereClause
+            ORDER BY a.name, ea.assigned_date DESC";
+    
+    $query = mysqli_query($conDB, $sql);
+    if (!$query) {
+        throw new Exception('Database error: ' . mysqli_error($conDB));
+    }
+    
+    $data = [];
+    $headers = [];
+    
+    // Get headers
+    foreach ($columns as $col) {
+        $headers[] = getColumnLabel($col);
+    }
+    
+    // Get data
+    while ($row = mysqli_fetch_assoc($query)) {
+        $data[] = $row;
+    }
+    
+    return ['data' => $data, 'headers' => $headers];
+}
+
+// Assets List (one row per asset with latest status/holder)
+function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+    // Check if a specific asset item is selected - if so, show full activity
+    $selectedItemId = isset($_POST['assetItemId']) ? intval($_POST['assetItemId']) : 0;
+    if ($selectedItemId > 0) {
+        return generateAssetDetailedActivityReport($conDB, $selectedItemId);
+    }
+
+    // Otherwise, show list view (multiple items)
+    // Always keep asset item id internally for reference
+    $selectCols = ['ai.id AS asset_item_id'];
+
+    // Map requested columns to expressions from asset_items + assets
+    foreach ($columns as $col) {
+        switch ($col) {
+            case 'asset_name':
+                $selectCols[] = 'a.name AS asset_name';
+                break;
+            case 'asset_type':
+                $selectCols[] = 'a.asset_type AS asset_type';
+                break;
+            case 'purchase_date':
+                $selectCols[] = 'a.created_at AS purchase_date';
+                break;
+            case 'asset_status':
+                // Prefer live assignment status from asset_items; otherwise latest history
+                $selectCols[] = "COALESCE(
+                                    CASE WHEN ai.status = 'Assigned' THEN 'Assigned' ELSE NULL END,
+                                    (
+                                        SELECT ea1.status FROM employee_assets ea1
+                                        WHERE ea1.asset_id = ai.asset_id
+                                          AND ea1.serial_number = COALESCE(ai.tracking_id, ai.serial_number)
+                                        ORDER BY ea1.assigned_date DESC, ea1.id DESC
+                                        LIMIT 1
+                                    ),
+                                    ai.status
+                                ) AS asset_status";
+                break;
+            case 'assigned_to':
+                // Current holder if assigned
+                $selectCols[] = "CASE WHEN ai.status = 'Assigned' AND e.emp_id IS NOT NULL
+                                   THEN CONCAT(e.emp_id, ' - ', e.name)
+                                   ELSE '' END AS assigned_to";
+                break;
+            case 'assignment_date':
+                $selectCols[] = 'ai.assigned_date AS assigned_date';
+                break;
+            case 'return_date':
+                // Latest return date from history
+                $selectCols[] = "(
+                                    SELECT ea4.return_date FROM employee_assets ea4
+                                    WHERE ea4.asset_id = ai.asset_id
+                                      AND ea4.serial_number = COALESCE(ai.tracking_id, ai.serial_number)
+                                    ORDER BY ea4.assigned_date DESC, ea4.id DESC
+                                    LIMIT 1
+                                ) AS return_date";
+                break;
+            case 'employee_dept':
+                // Department of current holder if assigned
+                $selectCols[] = 'ed.dep_nme AS employee_dept';
+                break;
+        }
+    }
+
+    if (count($selectCols) === 1) {
+        // Default minimal set if nothing selected
+        $selectCols = [
+            'ai.id AS asset_item_id',
+            'a.name AS asset_name',
+            'a.asset_type AS asset_type',
+            'a.created_at AS purchase_date',
+            "COALESCE(CASE WHEN ai.status = 'Assigned' THEN 'Assigned' ELSE NULL END,
+                      (SELECT ea1.status FROM employee_assets ea1 WHERE ea1.asset_id = ai.asset_id AND ea1.serial_number = COALESCE(ai.tracking_id, ai.serial_number) ORDER BY ea1.assigned_date DESC, ea1.id DESC LIMIT 1),
+                      ai.status) AS asset_status",
+            "CASE WHEN ai.status = 'Assigned' AND e.emp_id IS NOT NULL THEN CONCAT(e.emp_id, ' - ', e.name) ELSE '' END AS assigned_to",
+            'ai.assigned_date AS assigned_date'
+        ];
+    }
+
+    $selectClause = implode(', ', $selectCols);
+
+    // Build WHERE clause
+    $where = ['1=1'];
+
+    // Department filter (by asset's clearance department)
+    if (!$hasFullAccess && !empty($userDept)) {
+        $where[] = "a.clearance_dept_id = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!empty($departments)) {
+        $dept_list = "'" . implode("','", array_map(function($d) use ($conDB) { return mysqli_real_escape_string($conDB, $d); }, $departments)) . "'";
+        $where[] = "a.clearance_dept_id IN ($dept_list)";
+    }
+
+    // Date filters (use asset creation date)
+    if (!empty($dateFrom)) {
+        $dateFrom_safe = mysqli_real_escape_string($conDB, $dateFrom);
+        $where[] = "a.created_at >= '$dateFrom_safe'";
+    }
+    if (!empty($dateTo)) {
+        $dateTo_safe = mysqli_real_escape_string($conDB, $dateTo);
+        $where[] = "a.created_at <= '$dateTo_safe'";
+    }
+
+    // Status filter
+    if ($status !== '') {
+        $status_safe = mysqli_real_escape_string($conDB, $status);
+        if ($status_safe === 'Assigned') {
+            // Assigned either via live item status or latest history
+            $where[] = "(ai.status = 'Assigned' OR (
+                            SELECT ea1.status FROM employee_assets ea1
+                            WHERE ea1.asset_id = ai.asset_id
+                              AND ea1.serial_number = COALESCE(ai.tracking_id, ai.serial_number)
+                            ORDER BY ea1.assigned_date DESC, ea1.id DESC
+                            LIMIT 1
+                        ) = 'Assigned')";
+        } else {
+            // Returned/Lost/Damaged via latest history
+            $where[] = "(
+                            SELECT ea1.status FROM employee_assets ea1
+                            WHERE ea1.asset_id = ai.asset_id
+                              AND ea1.serial_number = COALESCE(ai.tracking_id, ai.serial_number)
+                            ORDER BY ea1.assigned_date DESC, ea1.id DESC
+                            LIMIT 1
+                        ) = '$status_safe'";
+        }
+    }
+
+    $whereClause = implode(' AND ', $where);
+
+    $sql = "SELECT $selectClause
+            FROM asset_items ai
+            LEFT JOIN assets a ON a.id = ai.asset_id
+            LEFT JOIN employees e ON e.emp_id = ai.assigned_emp_id
+            LEFT JOIN department ed ON ed.id = e.dept
+            WHERE $whereClause
+            ORDER BY a.name ASC, ai.tracking_id ASC, ai.id ASC";
+
+    $query = mysqli_query($conDB, $sql);
+    if (!$query) {
+        throw new Exception('Database error: ' . mysqli_error($conDB));
+    }
+
+    $data = [];
+    while ($row = mysqli_fetch_assoc($query)) {
+        $viewTxt = function_exists('__') ? __('view_activity') : 'View Activity';
+        $row['actions'] = '<button class="btn btn-sm btn-primary view-asset-activity" data-asset-item-id="' . intval($row['asset_item_id']) . '"><i class="mdi mdi-eye"></i> ' . htmlspecialchars($viewTxt) . '</button>';
+        $data[] = $row;
+    }
+
+    // Headers corresponding to requested columns
+    $headers = [];
+    foreach ($columns as $col) {
+        $headers[] = getColumnLabel($col);
+    }
+    $headers[] = function_exists('__') ? __('actions') : 'Actions';
+
+    return ['data' => $data, 'headers' => $headers];
+}
+
+// Generate detailed activity report for a single asset item (when item is selected from list)
+function generateAssetDetailedActivityReport($conDB, $assetItemId) {
+    // Get asset item info with current holder
+    $aiSql = "SELECT 
+                ai.id AS asset_item_id,
+                ai.asset_id,
+                ai.tracking_id,
+                ai.serial_number,
+                ai.description AS item_description,
+                ai.status AS item_status,
+                ai.assigned_emp_id,
+                ai.assigned_date AS current_assigned_date,
+                a.name AS asset_name,
+                a.asset_type,
+                a.created_at AS asset_created_date,
+                a.clearance_dept_id,
+                d.dep_nme AS asset_department,
+                e.name AS current_holder_name,
+                e.emp_id AS current_holder_id,
+                ed.dep_nme AS current_holder_dept
+            FROM asset_items ai
+            LEFT JOIN assets a ON a.id = ai.asset_id
+            LEFT JOIN department d ON d.id = a.clearance_dept_id
+            LEFT JOIN employees e ON e.emp_id = ai.assigned_emp_id
+            LEFT JOIN department ed ON ed.id = e.dept
+            WHERE ai.id = " . intval($assetItemId);
+    
+    $aiRes = mysqli_query($conDB, $aiSql);
+    if (!$aiRes) {
+        throw new Exception('Database error: ' . mysqli_error($conDB));
+    }
+    $assetItem = mysqli_fetch_assoc($aiRes);
+    if (!$assetItem) {
+        throw new Exception('Asset item not found');
+    }
+
+    // Get complete activity history (all assignments, returns, status changes)
+    // Fetch all employee_assets records for this specific asset item by matching asset_id AND tracking_id
+    // This ensures we only get history for THIS specific physical item, not all items of the same asset type
+    $histSql = "SELECT ea.id,
+                       ea.emp_id,
+                       ea.asset_id,
+                       ea.serial_number,
+                       ea.description,
+                       ea.assigned_date,
+                       ea.return_date,
+                       ea.status,
+                       ea.return_attachment,
+                       e.emp_id,
+                       e.name AS employee_name,
+                       d.dep_nme AS employee_department
+                FROM employee_assets ea
+                LEFT JOIN employees e ON e.emp_id = ea.emp_id
+                LEFT JOIN department d ON d.id = e.dept
+                WHERE ea.asset_id = " . intval($assetItem['asset_id']) . "
+                  AND ea.serial_number = '" . mysqli_real_escape_string($conDB, $assetItem['tracking_id']) . "'
+                ORDER BY ea.assigned_date DESC, ea.id DESC";
+    
+    $histRes = mysqli_query($conDB, $histSql);
+    if (!$histRes) {
+        throw new Exception('Database error: ' . mysqli_error($conDB));
+    }
+    
+    $history = [];
+    while ($row = mysqli_fetch_assoc($histRes)) {
+        $history[] = $row;
+    }
+
+    // Build data rows with all activity records
+    $data = [];
+    
+    foreach ($history as $idx => $historyRow) {
+        $data[] = [
+            'entry_number' => $idx + 1,
+            'asset_name' => $assetItem['asset_name'],
+            'asset_type' => $assetItem['asset_type'],
+            'tracking_id' => $assetItem['tracking_id'] ?: $assetItem['serial_number'],
+            'emp_id' => $historyRow['emp_id'] ?: 'N/A',
+            'employee_name' => $historyRow['employee_name'] ?: 'N/A',
+            'employee_department' => $historyRow['employee_department'] ?: 'N/A',
+            'assigned_date' => $historyRow['assigned_date'] ?: 'N/A',
+            'return_date' => $historyRow['return_date'] ?: 'Not Returned',
+            'status' => $historyRow['status'] ?: 'N/A',
+            'description' => $historyRow['description'] ?: 'N/A'
+        ];
+    }
+
+    // If no history, show current status
+    if (empty($data)) {
+        $data[] = [
+            'entry_number' => 1,
+            'asset_name' => $assetItem['asset_name'],
+            'asset_type' => $assetItem['asset_type'],
+            'tracking_id' => $assetItem['tracking_id'] ?: $assetItem['serial_number'],
+            'emp_id' => $assetItem['current_holder_id'] ?: 'N/A',
+            'employee_name' => $assetItem['current_holder_name'] ?: 'Not Assigned',
+            'employee_department' => $assetItem['current_holder_dept'] ?: 'N/A',
+            'assigned_date' => $assetItem['current_assigned_date'] ?: 'N/A',
+            'return_date' => 'N/A',
+            'status' => $assetItem['item_status'] ?: 'N/A',
+            'description' => $assetItem['item_description'] ?: 'N/A'
+        ];
+    }
+
+    // Define headers for detailed view
+    $headers = [
+        'entry_number' => '#',
+        'asset_name' => 'Asset Name',
+        'asset_type' => 'Asset Type',
+        'tracking_id' => 'Tracking/Serial',
+        'emp_id' => 'Employee ID',
+        'employee_name' => 'Employee Name',
+        'employee_department' => 'Department',
+        'assigned_date' => 'Assigned Date',
+        'return_date' => 'Return Date',
+        'status' => 'Status',
+        'description' => 'Description'
+    ];
+
+    return ['data' => $data, 'headers' => array_values($headers)];
+}
 ?>
+
 
 
 

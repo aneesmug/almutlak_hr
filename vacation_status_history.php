@@ -286,7 +286,7 @@ if ($vacation['fly_type'] === 'annual') {
                         ?>
                             <tr>
                                 <td class="text-center"><span class="level-badge"><?= (int)$link['approval_level'] ?></span></td>
-                                <td><strong><?= htmlspecialchars($link['approver_name'] ?? 'N/A') ?></strong><br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= htmlspecialchars($link['user_type'] ?? '') ?></small></td>
+                                <td><strong><?= htmlspecialchars($link['approver_name'] ?? 'N/A') ?></strong><br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= htmlspecialchars(getRoleLabel($link['user_type'])) ?></small></td>
                                 <td>
                                     <span class="badge badge-<?= $cClass ?>"><i class="fas <?= $cIcon ?>"></i> <?= htmlspecialchars(ucfirst($link['status'])) ?></span>
                                     <?php if (!empty($link['action_date'])): ?><br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= date('d M Y, H:i', strtotime($link['action_date'])) ?></small><?php endif; ?>

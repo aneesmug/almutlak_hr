@@ -5,6 +5,12 @@
  * This script should be scheduled to run ONCE PER DAY (recommended: 00:00 or 01:00)
  * It updates the emp_vacation_balance table with current calculated balances for all active employees.
  * 
+ * Features:
+ * - Automatically calculates and updates vacation balances for active employees (status=1)
+ * - Records all changes to emp_vacation_balance_history table for audit trail
+ * - Prevents duplicate updates on the same day (use --force to override)
+ * - Logs all operations to daily log files for troubleshooting
+ * 
  * Crontab Entry Example:
  * 0 1 * * * /usr/bin/php /path/to/almutlak/system/cron_update_vacation_balances.php >> /var/log/almutlak_cron.log 2>&1
  * 
@@ -169,26 +175,34 @@ try {
         $old_balance = (float)$row['old_balance'];
 
         try {
-            // Check last_updated for this record
-            $check_sql = "SELECT last_updated FROM emp_vacation_balance WHERE id = ? LIMIT 1";
+            // Get current record details for history tracking
+            $check_sql = "SELECT vac_id, contract_id, total_days, used_days, remaining_balance, 
+                                 available_balance, carryover_days, period_start, period_end, last_updated 
+                          FROM emp_vacation_balance WHERE id = ? LIMIT 1";
             $check_stmt = mysqli_prepare($conDB, $check_sql);
             if (!$check_stmt) {
-                log_message("  [emp_id: $emp_id] ERROR: Prepare failed for last_updated check - " . mysqli_error($conDB), 'error');
+                log_message("  [emp_id: $emp_id] ERROR: Prepare failed for record check - " . mysqli_error($conDB), 'error');
                 $error_count++;
                 continue;
             }
             mysqli_stmt_bind_param($check_stmt, 'i', $balance_record_id);
             if (!mysqli_stmt_execute($check_stmt)) {
-                log_message("  [emp_id: $emp_id] ERROR: Execute failed for last_updated check - " . mysqli_stmt_error($check_stmt), 'error');
+                log_message("  [emp_id: $emp_id] ERROR: Execute failed for record check - " . mysqli_stmt_error($check_stmt), 'error');
                 mysqli_stmt_close($check_stmt);
                 $error_count++;
                 continue;
             }
             $result_last = mysqli_stmt_get_result($check_stmt);
-            $last_row = mysqli_fetch_assoc($result_last);
+            $current_record = mysqli_fetch_assoc($result_last);
             mysqli_stmt_close($check_stmt);
 
-            $last_updated = $last_row ? $last_row['last_updated'] : null;
+            if (!$current_record) {
+                log_message("  [emp_id: $emp_id] ERROR: Could not fetch current balance record", 'error');
+                $error_count++;
+                continue;
+            }
+
+            $last_updated = $current_record['last_updated'];
             $today_str = date('Y-m-d');
             if (!$force_run && $last_updated && substr($last_updated, 0, 10) === $today_str) {
                 log_message("  [emp_id: $emp_id] SKIPPED: Already updated today ($last_updated)", 'warning');
@@ -243,6 +257,60 @@ try {
 
             if ($affected > 0) {
                 $updated_count++;
+                
+                // Insert history record for audit trail
+                $change_amount = $live_balance - $old_balance;
+                $snapshot_date = date('Y-m-d');
+                $snapshot_time = date('Y-m-d H:i:s');
+                $calc_status = 'success';
+                $notes = $balance_changed ? "Cron auto-update: Balance changed" : "Cron auto-update: Timestamp refreshed";
+                
+                $history_sql = "INSERT INTO emp_vacation_balance_history 
+                               (emp_id, vac_id, contract_id, balance_record_id, 
+                                old_available_balance, old_used_days, old_remaining_balance,
+                                new_available_balance, new_used_days, new_remaining_balance,
+                                carryover_days, total_days, period_start, period_end,
+                                balance_changed, change_amount, change_reason, 
+                                calculation_status, notes, snapshot_date, snapshot_time)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                
+                $history_stmt = mysqli_prepare($conDB, $history_sql);
+                if ($history_stmt) {
+                    $change_reason = "CRON_DAILY_UPDATE";
+                    $balance_changed_int = $balance_changed ? 1 : 0;
+                    
+                    mysqli_stmt_bind_param($history_stmt, 'siiiddddddddssidsssss',
+                        $emp_id,
+                        $current_record['vac_id'],
+                        $current_record['contract_id'],
+                        $balance_record_id,
+                        $old_balance,
+                        $current_record['used_days'],
+                        $current_record['remaining_balance'],
+                        $live_balance,
+                        $current_record['used_days'],
+                        $current_record['remaining_balance'],
+                        $current_record['carryover_days'],
+                        $live_balance,
+                        $current_record['period_start'],
+                        $current_record['period_end'],
+                        $balance_changed_int,
+                        $change_amount,
+                        $change_reason,
+                        $calc_status,
+                        $notes,
+                        $snapshot_date,
+                        $snapshot_time
+                    );
+                    
+                    if (!mysqli_stmt_execute($history_stmt)) {
+                        log_message("  [emp_id: $emp_id] WARNING: Failed to insert history record - " . mysqli_stmt_error($history_stmt), 'warning');
+                    }
+                    mysqli_stmt_close($history_stmt);
+                } else {
+                    log_message("  [emp_id: $emp_id] WARNING: Failed to prepare history insert - " . mysqli_error($conDB), 'warning');
+                }
+                
                 if ($balance_changed) {
                     $changed_count++;
                     $change_msg = "Updated: $old_balance → $live_balance";

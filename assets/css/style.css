@@ -391,7 +391,7 @@ File: Main Css File
   display: block;
   left: 70px;
   position: absolute;
-  width: 210px !important;
+  width: 250px !important;
   height: auto !important;
   -webkit-box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.02), 0 1px 0 0 rgba(0, 0, 0, 0.02);
   box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.02), 0 1px 0 0 rgba(0, 0, 0, 0.02);
@@ -402,7 +402,7 @@ File: Main Css File
   box-shadow: none;
   padding: 8px 20px;
   position: relative;
-  width: 210px !important;
+  width: 250px !important;
   z-index: 6;
 }
 
@@ -419,7 +419,7 @@ File: Main Css File
   left: 210px !important;
   margin-top: -36px;
   position: absolute;
-  width: 210px !important;
+  width: 250px !important;
 }
 
 .enlarged #wrapper .left.side-menu #sidebar-menu ul ul li>a span.pull-right {
@@ -1494,6 +1494,7 @@ code {
   vertical-align: baseline !important;
   border-radius: .25rem !important;
   float: right !important;
+  margin-left: 15px !important;
 }
 
 .badge-custom {

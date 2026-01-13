@@ -47,6 +47,7 @@ if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_G
         .signature-section { margin-top: 100px; }
         .signature-box { display: inline-block; width: 45%; margin: 10px; text-align: center; }
         .signature-line { border-top: 1px solid #000; margin-top: 40px; }
+        .btn-container { text-align: center; padding: 20px 0; }
         @media print {
             body, .report-container { margin: 0; border: none; }
             .no-print { display: none; }
@@ -84,6 +85,10 @@ if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_G
                     <th>Return Date</th>
                     <td><?= $print_return_date ? date('d M, Y', strtotime($print_return_date)) : ($asset['return_date'] ? date('d M, Y', strtotime($asset['return_date'])) : 'N/A'); ?></td>
                 </tr>
+                <tr>
+                    <th>Asset Condition</th>
+                    <td><strong><?= htmlspecialchars($asset['asset_condition'] ?? 'Not Specified') ?></strong></td>
+                </tr>
                  <tr>
                     <th>Return Status</th>
                     <td><strong><?= htmlspecialchars($asset['status']) ?></strong></td>
@@ -112,7 +117,13 @@ if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_G
         <div class="signature-section">
             <div class="signature-box float-left">
                 <p><strong>Received By (المستلم)</strong></p>
-                <p class="signature-line"></p>
+                <?php if (!empty($asset['signature_file']) && file_exists(__DIR__ . '/' . $asset['signature_file'])): ?>
+                    <div style="margin: 20px 0; min-height: 60px;">
+                        <img src="<?= htmlspecialchars($asset['signature_file']) ?>" alt="Signature" style="max-height: 80px; max-width: 100%; border-bottom: 1px solid #000; padding-bottom: 5px;">
+                    </div>
+                <?php else: ?>
+                    <p class="signature-line"></p>
+                <?php endif; ?>
                 <p>Name & Signature</p>
             </div>
             <div class="signature-box float-right">
@@ -122,8 +133,13 @@ if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_G
             </div>
         </div>
     </div>
-    <div class="text-center mt-3 mb-3 no-print">
-        <button onclick="window.print()" class="btn btn-primary">Print Report</button>
+    <div class="btn-container no-print">
+        <button onclick="window.print()" class="btn btn-primary btn-lg">
+            <i class="fa fa-print"></i> Print Report
+        </button>
+        <button onclick="window.close()" class="btn btn-secondary btn-lg ms-2">
+            <i class="fa fa-times"></i> Close
+        </button>
     </div>
 </body>
 </html>

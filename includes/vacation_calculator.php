@@ -238,7 +238,7 @@ class VacationCalculator {
                     'contract_id' => $emp_data['vac_period'],
                     'period_start' => $period_dates['start'],
                     'period_end' => $period_dates['end'],
-                    'total_days' => $final_available,
+                    'total_days' => $total_vac_days,
                     'used_days' => $used_days,
                     'remaining_balance' => $remaining_balance,
                     'available_balance' => $final_available,
@@ -266,13 +266,15 @@ class VacationCalculator {
         $start_str = $period_start->format('Y-m-d');
         $end_str = $period_end->format('Y-m-d');
 
-        // 2) Fallback: Sum approved vacations within the current period
-        // IMPORTANT: Must subtract ALL holiday days from the vacation period to avoid over-deduction
+        // CRITICAL FIX: Emergency vacations are NOT deducted from available_balance
+        // They are special leave that doesn't count against the employee's allocation.
+        // Only count ANNUAL vacations and Local Vacations.
+        // If an employee rejoins early from an emergency vacation, the balance doesn't go negative.
         $query = "SELECT `id`, `vacdays`, `start_date`, `return_date`
                   FROM `emp_vacation`
                   WHERE `emp_id` = ?
                     AND `current_status` IN ('approved', 'gm_approved')
-                    AND ((`vac_type` = 'Fly' AND `fly_type` IN ('annual','emergency')) OR (`vac_type` = 'Local Vacation'))
+                    AND ((`vac_type` = 'Fly' AND `fly_type` IN ('annual')) OR (`vac_type` = 'Local Vacation'))
                     AND `start_date` BETWEEN ? AND ?";
 
         $stmt = $this->conDB->prepare($query);

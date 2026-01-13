@@ -3938,14 +3938,14 @@ elseif ($ajaxType == 'checkAssetCheckerStatus') {
 elseif ($ajaxType == 'processAssetClearance') {
     try {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
-        $asset_decision = trim($_POST['asset_decision'] ?? ''); // 'assets_received' or 'employee_keeps_assets'
+        $asset_decision = trim($_POST['asset_decision'] ?? ''); // 'assets_received', 'employee_keeps_assets', or 'no_assets_required'
         $clearance_comment = trim($_POST['clearance_comment'] ?? '');
 
         if (empty($vacation_id) || empty($current_user_id)) {
             throw new Exception('Missing required parameters');
         }
 
-        if (!in_array($asset_decision, ['assets_received', 'employee_keeps_assets'])) {
+        if (!in_array($asset_decision, ['assets_received', 'employee_keeps_assets', 'no_assets_required'])) {
             throw new Exception('Invalid asset decision');
         }
 
@@ -3967,15 +3967,22 @@ elseif ($ajaxType == 'processAssetClearance') {
             'vacation_request',
             $current_user_id,
             'approve',
-            "Asset Clearance: " . ($asset_decision === 'assets_received' ? 'Assets received from employee' : 'Employee is keeping assets')
+            "Asset Clearance: " . ($asset_decision === 'assets_received' ? 'Assets received from employee' : ($asset_decision === 'no_assets_required' ? 'No assets assigned - automatic clearance' : 'Employee is keeping assets'))
         );
 
         if ($result['status'] == 'error') {
             throw new Exception($result['message']);
         }
 
-        // Log the asset clearance decisiona
-        $asset_decision_label = ($asset_decision === 'assets_received') ? 'Assets Received' : 'Employee Keeps Assets';
+        // Log the asset clearance decision
+        if ($asset_decision === 'no_assets_required') {
+            $asset_decision_label = 'No Assets Required';
+        } elseif ($asset_decision === 'assets_received') {
+            $asset_decision_label = 'Assets Received';
+        } else {
+            $asset_decision_label = 'Employee Keeps Assets';
+        }
+        
         if (function_exists('save_approval_comment_db')) {
             $approver_name = 'Asset Checker';
             save_approval_comment_db(

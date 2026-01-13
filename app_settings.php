@@ -1,5 +1,4 @@
 <?php
-    require_once __DIR__ . '/includes/db.php';
     require_once __DIR__ . '/includes/session_check.php';
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
@@ -54,6 +53,39 @@
             padding: 5px;
             border-radius: 4px;
             background-color: #f8f9fa;
+        }
+
+        /* --- Settings Form Layout --- */
+        #settings-container {
+            min-height: 300px;
+            max-height: 65vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 10px;
+        }
+        
+        #settings-container .tab-pane {
+            display: block !important;
+            opacity: 1 !important;
+        }
+        
+        /* Ensure scrollbar styling */
+        #settings-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #settings-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        #settings-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        
+        #settings-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
 
         /* --- Approval Chain Styles --- */

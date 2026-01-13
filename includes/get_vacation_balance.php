@@ -4,7 +4,7 @@ function get_employee_vacation_balance($conDB, $emp_id) {
     $sql = "SELECT remaining_balance FROM emp_vacation_balance WHERE emp_id = ? ORDER BY id DESC LIMIT 1";
     $stmt = mysqli_prepare($conDB, $sql);
     if (!$stmt) return false;
-    mysqli_stmt_bind_param($stmt, "i", $emp_id);
+    mysqli_stmt_bind_param($stmt, "s", $emp_id); // emp_id is VARCHAR, not INTEGER
     mysqli_stmt_execute($stmt);
     $res = mysqli_stmt_get_result($stmt);
     $row = mysqli_fetch_assoc($res);

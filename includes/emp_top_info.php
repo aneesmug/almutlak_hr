@@ -49,10 +49,10 @@ if ($emprow['status'] == 1) {
 		$moreActionsHtml .= $hr_actions;
 	}
 	
-	// IT ACTIONS
-	if ($isItAssistant || $is_system_admin) {
+	// *IT ACTIONS
+	/* if ($isItAssistant || $is_system_admin) {
 		$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"assignAsset('" . htmlspecialchars($emprow['empid']) . "')\" role=\"button\"><i class=\"fa fa-solid fa-project-diagram\"></i><span>" . __('assign_asset') . "</span></div>";
-	}
+	} */
 	
 	// VACATION & LEAVE ACTIONS
 	if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) {

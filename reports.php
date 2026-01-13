@@ -117,7 +117,9 @@ if (mysqli_num_rows($query) == 1) {
             .select2-container {
                 width: 100% !important;
             }
-
+            .select2-container--bootstrap4 .select2-selection--single{
+                padding: 0 1.125rem .75rem .375rem !important;
+            }
             /* Select2 Multi-select polish */
             .select2-container {
                 width: 100% !important;
@@ -556,6 +558,8 @@ if (mysqli_num_rows($query) == 1) {
                                                 <option value="payroll"><?= __('payroll_report') ?></option>
                                                 <option value="attendance"><?= __('attendance_report') ?></option>
                                                 <option value="document"><?= __('document_report') ?></option>
+                                                <option value="assets"><?= __('assets_report') ?: 'Asset Inventory Report' ?></option>
+                                                <option value="assets_list"><?= __('assets_list') ?: 'Assets List' ?></option>
                                                 <?php if (can_acknowledge_evaluations($user_type, $user_role)):
                                                 ?>
                                                     <option value="evaluation"><?= __('evaluation_report') ?></option>
@@ -609,6 +613,13 @@ if (mysqli_num_rows($query) == 1) {
                                             <select class="form-control" id="statusFilter">
                                                 <option value=""><?= __('all_status') ?></option>
                                             </select>
+                                        </div>
+
+                                        <!-- Asset Item Filter (for assets_list) -->
+                                        <div class="col-md-4 mb-3" id="assetItemFilterWrapper" style="display:none;">
+                                            <label for="assetItemFilter"><?= __('asset') ?: 'Asset' ?></label>
+                                            <select id="assetItemFilter" style="width:100%;"></select>
+                                            <small class="text-muted d-block mt-1"><?= __('type_to_search_assets') ?: 'Type to search assets by name, tracking or serial' ?></small>
                                         </div>
 
                                         <!-- Vacation Type Filter -->
@@ -1091,6 +1102,26 @@ if (mysqli_num_rows($query) == 1) {
                             { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
                             { value: 'A', label: (typeof __ === 'function') ? __('active') : 'Active' },
                             { value: 'I', label: (typeof __ === 'function') ? __('inactive') : 'Inactive' }
+                        ],
+                        defaultValue: ''
+                    },
+                    assets: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'Assigned', label: (typeof __ === 'function') ? __('assigned') : 'Assigned' },
+                            { value: 'Returned', label: (typeof __ === 'function') ? __('returned') : 'Returned' },
+                            { value: 'Lost', label: (typeof __ === 'function') ? __('lost') : 'Lost' },
+                            { value: 'Damaged', label: (typeof __ === 'function') ? __('damaged') : 'Damaged' }
+                        ],
+                        defaultValue: ''
+                    },
+                    assets_list: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'Assigned', label: (typeof __ === 'function') ? __('assigned') : 'Assigned' },
+                            { value: 'Returned', label: (typeof __ === 'function') ? __('returned') : 'Returned' },
+                            { value: 'Lost', label: (typeof __ === 'function') ? __('lost') : 'Lost' },
+                            { value: 'Damaged', label: (typeof __ === 'function') ? __('damaged') : 'Damaged' }
                         ],
                         defaultValue: ''
                     },
@@ -1981,7 +2012,109 @@ if (mysqli_num_rows($query) == 1) {
                             default: false
                         }
                     ],
-                    custom: []
+                    custom: [],
+                    assets: [{
+                            id: 'asset_name',
+                            label: (typeof __ === 'function') ? __('asset_name') : 'Asset Name',
+                            default: true
+                        },
+                        {
+                            id: 'asset_type',
+                            label: (typeof __ === 'function') ? __('asset_type') : 'Asset Type',
+                            default: true
+                        },
+                        {
+                            id: 'serial_number',
+                            label: (typeof __ === 'function') ? __('serial_number') : 'Serial Number',
+                            default: true
+                        },
+                        {
+                            id: 'asset_tag',
+                            label: (typeof __ === 'function') ? __('asset_tag') : 'Asset Tag',
+                            default: false
+                        },
+                        {
+                            id: 'purchase_date',
+                            label: (typeof __ === 'function') ? __('purchase_date') : 'Purchase Date',
+                            default: false
+                        },
+                        {
+                            id: 'asset_status',
+                            label: (typeof __ === 'function') ? __('asset_status') : 'Asset Status',
+                            default: true
+                        },
+                        {
+                            id: 'assigned_to',
+                            label: (typeof __ === 'function') ? __('assigned_to') : 'Assigned To',
+                            default: true
+                        },
+                        {
+                            id: 'assignment_date',
+                            label: (typeof __ === 'function') ? __('assignment_date') : 'Assignment Date',
+                            default: true
+                        },
+                        {
+                            id: 'return_date',
+                            label: (typeof __ === 'function') ? __('return_date') : 'Return Date',
+                            default: true
+                        },
+                        {
+                            id: 'assignment_status',
+                            label: (typeof __ === 'function') ? __('assignment_status') : 'Assignment Status',
+                            default: true
+                        },
+                        {
+                            id: 'return_notes',
+                            label: (typeof __ === 'function') ? __('return_notes') : 'Return Notes',
+                            default: false
+                        },
+                        {
+                            id: 'employee_dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: false
+                        }
+                    ],
+                    assets_list: [{
+                            id: 'asset_name',
+                            label: (typeof __ === 'function') ? __('asset_name') : 'Asset Name',
+                            default: true
+                        },
+                        {
+                            id: 'asset_type',
+                            label: (typeof __ === 'function') ? __('asset_type') : 'Asset Type',
+                            default: true
+                        },
+                        {
+                            id: 'purchase_date',
+                            label: (typeof __ === 'function') ? __('purchase_date') : 'Purchase Date',
+                            default: true
+                        },
+                        {
+                            id: 'asset_status',
+                            label: (typeof __ === 'function') ? __('asset_status') : 'Asset Status',
+                            default: true
+                        },
+                        {
+                            id: 'assigned_to',
+                            label: (typeof __ === 'function') ? __('assigned_to') : 'Assigned To',
+                            default: true
+                        },
+                        {
+                            id: 'assignment_date',
+                            label: (typeof __ === 'function') ? __('assignment_date') : 'Assignment Date',
+                            default: false
+                        },
+                        {
+                            id: 'return_date',
+                            label: (typeof __ === 'function') ? __('return_date') : 'Return Date',
+                            default: false
+                        },
+                        {
+                            id: 'employee_dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: false
+                        }
+                    ]
                 };
 
                 // When report type changes, load column checkboxes
@@ -2008,6 +2141,48 @@ if (mysqli_num_rows($query) == 1) {
                     // Clear table content AFTER destroying DataTable
                     $('#reportTableHead').empty();
                     $('#reportTableBody').empty()
+
+                    // Toggle Asset Item filter visibility
+                    if (reportType === 'assets_list') {
+                        $('#assetItemFilterWrapper').show();
+                        // Destroy and reinit to ensure clean state
+                        if ($('#assetItemFilter').data('select2')) {
+                            $('#assetItemFilter').select2('destroy');
+                        }
+                        $('#assetItemFilter').select2({
+                            theme: 'bootstrap4',
+                            placeholder: (typeof __ === 'function') ? __('select_asset') : 'Select Asset',
+                            allowClear: true,
+                            width: '100%',
+                            ajax: {
+                                url: 'includes/ajaxFile/ajaxReports.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                delay: 250,
+                                data: function(params) {
+                                    return { action: 'getAssetItems', q: params.term || '' };
+                                },
+                                processResults: function(resp) {
+                                    if (!resp || !resp.success) {
+                                        return { results: [] };
+                                    }
+                                    return {
+                                        results: resp.items.map(function(item){
+                                            return { id: item.id, text: item.text };
+                                        })
+                                    };
+                                },
+                                cache: true
+                            },
+                            minimumInputLength: 0
+                        });
+                    } else {
+                        // Hide and clear when not assets_list
+                        $('#assetItemFilterWrapper').hide();
+                        if ($('#assetItemFilter').data('select2')) {
+                            $('#assetItemFilter').val(null).trigger('change');
+                        }
+                    }
 
                     // Reset all filter fields
                     $('#dateFrom').val('');
@@ -2085,10 +2260,16 @@ if (mysqli_num_rows($query) == 1) {
                         $('#columnSelectionRow').hide();
 
                         // Show/hide department filters based on report type
-                        // Show multi-department filter for all report types
                         if (reportType) {
-                            $('#singleDeptFilter').hide();
-                            $('#multiDeptFilter').show(); // show only after report type selected
+                            // For assets_list, do not show department filters
+                            if (reportType === 'assets_list') {
+                                $('#singleDeptFilter').hide();
+                                $('#multiDeptFilter').hide();
+                            } else {
+                                // Default: show multi-department filter after report type selected
+                                $('#singleDeptFilter').hide();
+                                $('#multiDeptFilter').show();
+                            }
                             // For EOS report, only show dateTo (Last Working Day)
                             if (reportType === 'eos') {
                                 $('#dateFrom').closest('.col-md-4, .form-group').hide();
@@ -2097,8 +2278,10 @@ if (mysqli_num_rows($query) == 1) {
                                 $('#dateFrom').closest('.col-md-4, .form-group').show();
                                 $('#dateTo').closest('.col-md-4, .form-group').show();
                             }
-                            initDeptSelect2();
-                            updateDeptSelectionCount();
+                            if (reportType !== 'assets_list') {
+                                initDeptSelect2();
+                                updateDeptSelectionCount();
+                            }
 
                             // Only show column selection if report type has columns defined
                             if (reportColumns[reportType]) {
@@ -2531,6 +2714,14 @@ if (mysqli_num_rows($query) == 1) {
                         userDept: '<?= $user_dept ?>'
                     };
 
+                    // If assets_list, include selected asset item filter
+                    if (reportType === 'assets_list') {
+                        const assetItemId = $('#assetItemFilter').val();
+                        if (assetItemId) {
+                            filterData.assetItemId = assetItemId;
+                        }
+                    }
+
                     if (reportType === 'vacation') {
                         filterData.vacationType = vacationTypeValue;
                     }
@@ -2624,7 +2815,7 @@ if (mysqli_num_rows($query) == 1) {
                         if (!key) return '';
                         var k = String(key).toLowerCase().replace(/\s+/g, '_');
                         // Known status keys
-                        var known = ['approved', 'active', 'completed', 'rejected', 'inactive', 'cancelled', 'pending', 'pending_approval', 'awaiting', 'draft', 'paid', 'processing', 'in_progress'];
+                        var known = ['approved', 'active', 'completed', 'rejected', 'inactive', 'cancelled', 'pending', 'pending_approval', 'awaiting', 'draft', 'paid', 'processing', 'in_progress', 'assigned', 'returned', 'damaged', 'lost'];
                         if (known.indexOf(k) !== -1 && typeof __ === 'function') {
                             return __(k) || key;
                         }
@@ -2650,6 +2841,16 @@ if (mysqli_num_rows($query) == 1) {
                     if (reportType === 'document' && headers.length > columnIds.length && headers[headers.length - 1] === 'Attachment') {
                         columnIds = columnIds.concat(['attachment']);
                         // console.log('Added attachment column. New columnIds length:', columnIds.length);
+                    }
+
+                    // Add 'actions' for assets_list to show activity button
+                    if (reportType === 'assets_list' && headers.length > columnIds.length && headers[headers.length - 1] === 'Actions') {
+                        columnIds = columnIds.concat(['actions']);
+                    }
+
+                    // For asset detailed activity view, map headers to columnIds
+                    if (reportType === 'assets_list' && data.length > 0 && data[0].entry_number !== undefined) {
+                        columnIds = ['entry_number', 'asset_name', 'asset_type', 'tracking_id', 'emp_id', 'employee_name', 'employee_department', 'assigned_date', 'return_date', 'status', 'description'];
                     }
 
                     // Ensure headers and columnIds have same length
@@ -2794,7 +2995,13 @@ if (mysqli_num_rows($query) == 1) {
                     var reportWord = (typeof __ === 'function') ? __('reports') || 'Reports' : 'Reports';
                     var typeLabel = (typeof __ === 'function') ? __(reportType.toLowerCase()) || (reportType.charAt(0).toUpperCase() + reportType.slice(1)) : (reportType.charAt(0).toUpperCase() + reportType.slice(1));
                     var recordsWord = (typeof __ === 'function') ? __('records') : 'records';
-                    $('#reportTitle').text(typeLabel + ' ' + reportWord + ' - ' + data.length + ' ' + recordsWord);
+                    
+                    // For asset detailed view, show asset name in title
+                    if (reportType === 'assets_list' && data.length > 0 && data[0].entry_number !== undefined) {
+                        $('#reportTitle').text('Asset Activity - ' + (data[0].asset_name || 'Asset Item') + ' - ' + data.length + ' ' + recordsWord);
+                    } else {
+                        $('#reportTitle').text(typeLabel + ' ' + reportWord + ' - ' + data.length + ' ' + recordsWord);
+                    }
 
                     // Show/hide table container based on data
                     if (data.length > 0 && headers.length > 0) {
@@ -2916,8 +3123,8 @@ if (mysqli_num_rows($query) == 1) {
                                             filename: filename,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
-                                                    // Export all columns except the last one (Actions/Attachment) for evaluation and document reports
-                                                    if (reportType === 'evaluation' || reportType === 'document') {
+                                                    // Export all columns except the last one (Actions/Attachment) for evaluation, document, and assets_list reports
+                                                    if (reportType === 'evaluation' || reportType === 'document' || reportType === 'assets_list') {
                                                         var colCount = $('#reportTable').DataTable().columns().header().length;
                                                         return idx < colCount - 1;
                                                     }
@@ -2935,8 +3142,8 @@ if (mysqli_num_rows($query) == 1) {
                                             filename: filename,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
-                                                    // Export all columns except the last one (Actions/Attachment) for evaluation and document reports
-                                                    if (reportType === 'evaluation' || reportType === 'document') {
+                                                    // Export all columns except the last one (Actions/Attachment) for evaluation, document, and assets_list reports
+                                                    if (reportType === 'evaluation' || reportType === 'document' || reportType === 'assets_list') {
                                                         var colCount = $('#reportTable').DataTable().columns().header().length;
                                                         return idx < colCount - 1;
                                                     }
@@ -3251,6 +3458,95 @@ if (mysqli_num_rows($query) == 1) {
                         },
                         error: function() {
                             Swal.fire('Error', 'Failed to fetch evaluation details', 'error');
+                        }
+                    });
+                });
+
+                // View Asset Activity Handler
+                $(document).on('click', '.view-asset-activity', function() {
+                    const assetItemId = $(this).data('asset-item-id');
+                    Swal.fire({
+                        title: (typeof __ === 'function') ? __('loading') : 'Loading',
+                        text: (typeof __ === 'function') ? __('fetching_asset_activity') : 'Fetching asset activity',
+                        allowOutsideClick: false,
+                        didOpen: () => Swal.showLoading()
+                    });
+
+                    $.ajax({
+                        url: 'includes/ajaxFile/ajaxReports.php',
+                        type: 'POST',
+                        data: { action: 'getAssetActivity', assetItemId: assetItemId },
+                        dataType: 'json',
+                        success: function(resp) {
+                            if (!resp.success) {
+                                Swal.fire((typeof __ === 'function') ? __('error') : 'Error', resp.message || 'Failed to load activity', 'error');
+                                return;
+                            }
+                            const asset = resp.data.asset || {};
+                            const history = resp.data.history || [];
+
+                            let rowsHtml = '';
+                            if (history.length === 0) {
+                                rowsHtml = `<tr><td colspan="8" class="text-center text-muted">${(typeof __ === 'function') ? __('no_records_found') : 'No records found'}</td></tr>`;
+                            } else {
+                                history.forEach(h => {
+                                    const emp = (h.emp_id ? h.emp_id : '-') + (h.employee_name ? (' - ' + h.employee_name) : '');
+                                    rowsHtml += `
+                                        <tr>
+                                            <td>${h.id || ''}</td>
+                                            <td>${h.serial_number || ''}</td>
+                                            <td>${emp || ''}</td>
+                                            <td>${h.employee_department || ''}</td>
+                                            <td>${h.assigned_date || ''}</td>
+                                            <td>${h.return_date || ''}</td>
+                                            <td>${h.status || ''}</td>
+                                            <td>${h.description ? h.description : ''}</td>
+                                        </tr>`;
+                                });
+                            }
+
+                            const html = `
+                                <div id="assetActivityModal" style="text-align: left;">
+                                    <div style="margin-bottom: 15px;">
+                                        <h5 style="margin:0;">${(typeof __ === 'function') ? __('asset_name') : 'Asset Name'}: ${asset.name || '-'}</h5>
+                                        <div style="color:#555;">${(typeof __ === 'function') ? __('asset_type') : 'Asset Type'}: ${asset.asset_type || '-'}</div>
+                                        <div style="color:#555;">${(typeof __ === 'function') ? __('department') : 'Department'}: ${asset.asset_department || '-'}</div>
+                                        <div style="color:#555;">${(typeof __ === 'function') ? __('purchase_date') : 'Purchase Date'}: ${asset.created_at || '-'}</div>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-sm">
+                                            <thead class="thead-light">
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>${(typeof __ === 'function') ? __('serial_number') : 'Serial Number'}</th>
+                                                    <th>${(typeof __ === 'function') ? __('assigned_to') : 'Assigned To'}</th>
+                                                    <th>${(typeof __ === 'function') ? __('department') : 'Department'}</th>
+                                                    <th>${(typeof __ === 'function') ? __('assignment_date') : 'Assignment Date'}</th>
+                                                    <th>${(typeof __ === 'function') ? __('return_date') : 'Return Date'}</th>
+                                                    <th>${(typeof __ === 'function') ? __('status') : 'Status'}</th>
+                                                    <th>${(typeof __ === 'function') ? __('return_notes') : 'Return Notes'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${rowsHtml}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>`;
+
+                            Swal.fire({
+                                title: (typeof __ === 'function') ? __('asset_activity') : 'Asset Activity',
+                                html: html,
+                                width: '80%',
+                                showCloseButton: true,
+                                showCancelButton: true,
+                                showConfirmButton: false,
+                                allowOutsideClick: false,
+                                cancelButtonText: (typeof __ === 'function') ? __('close') : 'Close'
+                            });
+                        },
+                        error: function(xhr, status, error) {
+                            Swal.fire((typeof __ === 'function') ? __('error') : 'Error', 'Failed to fetch asset activity: ' + (xhr.responseJSON?.message || error), 'error');
                         }
                     });
                 });

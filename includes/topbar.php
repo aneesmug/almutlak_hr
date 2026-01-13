@@ -17,6 +17,10 @@
  * 5.  **Enable Notifications Link**: Link added in user dropdown (`#enable-notifications-link`).
  *
  **************************************************************************************************/
+
+// Output session configuration JavaScript variables from session_check.php
+// This must run early so jQuery.app.js can access the window variables
+include(__DIR__ . '/session_config_js.php');
 ?>
 <div class="topbar">
     <nav class="navbar-custom">
@@ -133,7 +137,7 @@
 
                     <!-- item-->
                      <?php if($is_system_admin ?? false){ // Added check if variable exists ?>
-                    <a href="app_seetings.php" target="_blank" id="editAllBtnX" class="dropdown-item notify-item">
+                    <a href="app_settings.php" target="_blank" id="editAllBtnX" class="dropdown-item notify-item">
                         <i class="fi-cog"></i> <span><?=__('settings'); ?></span>
                     </a>
                     <?php } ?>

@@ -4,56 +4,60 @@
  * Module/App: Main Js
  */
 
+// Option 2: Reusable function with optional attributes
+function loadResource(src, type = 'js', attributes = {}, position = 'head') {
+  let element;
+  if (type === 'js') {
+    element = document.createElement('script');
+    element.src = src;
+    element.type = 'text/javascript';
+  } else if (type === 'css') {
+    // CSS always goes in head, position is ignored for CSS
+    element = document.createElement('link');
+    element.rel = 'stylesheet';
+    element.href = src;
+    position = 'head'; // Force CSS to head
+  }
+  Object.entries(attributes).forEach(([key, value]) => element[key] = value);
+  // Choose where to append
+  if (position === 'body' && type === 'js') {
+    document.body.appendChild(element);
+  } else {
+    document.head.appendChild(element);
+  }
+  return element;
+}
+
+// loadResource('assets/css/app.css', 'css', { media: 'screen' }, 'head');
 
 //Sweet Alert v2.0
-$("head").append($("<script type='text/javascript'></script>").attr("src", "https://cdn.jsdelivr.net/npm/sweetalert2@11"));
-// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.js"));
-// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.min.js"));
-// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.all.js"));
-// $("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/sweet-alert/v11/sweetalert2.all.min.js"));
+// $("head").append($("<script type='text/javascript'></script>").attr("src", "https://cdn.jsdelivr.net/npm/sweetalert2@11"));
+loadResource('https://cdn.jsdelivr.net/npm/sweetalert2@11', 'js', { async: true, defer: true }, 'head');
 // Avatar Cropie
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/croppie/croppie.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/croppie/croppie.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/croppie/exif.js"));
+loadResource('./plugins/croppie/croppie.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/croppie/croppie.min.js', 'js', { async: true, defer: true }, 'head');
+loadResource('https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/croppie/exif.js', 'js', { async: true, defer: true }, 'head');
 // File Dropzone
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/dropzone/dropzone.js"));
+loadResource('./plugins/dropzone/dropzone.js', 'js', { async: true, defer: true }, 'head');
 // Time Picker
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-timepicker/bootstrap-timepicker.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/clockpicker/js/bootstrap-clockpicker.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-daterangepicker/daterangepicker.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"));
-// Input Mask
-/*$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/imask.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-inputmask/jquery.inputmask.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js"));
-/*$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/inputmask-pages/inputmask.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/inputmask-pages/inputmask.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/inputmask-pages/jquery.inputmask.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/inputmask-pages/jquery.inputmask.min.js"));*/
+loadResource('./plugins/bootstrap-timepicker/bootstrap-timepicker.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/clockpicker/js/bootstrap-clockpicker.min.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/bootstrap-daterangepicker/daterangepicker.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js', 'js', { async: true, defer: true }, 'head');
 // Validate
-// $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/jquery.validate.js"));
+loadResource('./assets/js/jquery.validate.js', 'js', { async: true, defer: true }, 'head');
 // Select 2
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/select2/js/select2.min.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./plugins/bootstrap-select/js/bootstrap-select.js"));
+loadResource('./plugins/select2/js/select2.min.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/bootstrap-select/js/bootstrap-select.js', 'js', { async: true, defer: true }, 'head');
 
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/notifications.js"));
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js"));
-
-
-
-/*$.getScript("./plugins/sweet-alert/v11/sweetalert2.js");
-$.getScript("./plugins/sweet-alert/v11/sweetalert2.min.js");
-$.getScript("./plugins/sweet-alert/v11/sweetalert2.all.js");
-$.getScript("./plugins/sweet-alert/v11/sweetalert2.all.min.js");
-$.getScript("./plugins/croppie/croppie.js");
-$.getScript("./plugins/croppie/croppie.min.js");
-$.getScript("./plugins/croppie/exif.js");*/
-
+loadResource('./assets/js/notifications.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./assets/js/translation.js', 'js', { async: true, defer: true }, 'head');
+// Load responsive sidebar menu functionality
 
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
@@ -9781,3 +9785,159 @@ function escapeHtml(str) {
 
 }(window.jQuery));
 
+// ================================================================
+// === SESSION TIMEOUT HANDLING (Moved from session_check.php) ===
+// ================================================================
+// Global state for pre-timeout alert
+let alertShown = false;
+let countdownInterval;
+
+function extendSessionAndDismissAlert() {
+    // Reset client-side timer
+    alertShown = false;
+    if (countdownInterval) clearInterval(countdownInterval);
+    
+    console.log('Extend Session clicked - sending request...');
+    
+    // Close current alert first
+    Swal.close();
+    
+    // Keep session alive on server
+    fetch('/includes/session_check.php?extend_session=1', { 
+        method: 'GET', 
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Session extended:', data);
+        // Reset to current server time
+        window.SERVER_LAST_ACTIVITY = Math.floor(Date.now() / 1000);
+        
+        // Show success toast
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+        });
+        Toast.fire({
+            icon: 'success',
+            title: 'Session extended for another ' + Math.floor(window.SESSION_TIMEOUT_MS / 60000) + ' minutes'
+        });
+    })
+    .catch(error => {
+        console.error('Extend session error:', error);
+        // Reset anyway even on error
+        window.SERVER_LAST_ACTIVITY = Math.floor(Date.now() / 1000);
+        
+        // Show error toast
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true,
+        });
+        Toast.fire({
+            icon: 'error',
+            title: 'Failed to extend session'
+        });
+    });
+}
+
+// Pre-timeout warning system - Initialize when SESSION_TIMEOUT_SECONDS is available
+$(document).ready(function() {
+    // Wait for session config to be available from session_check.php
+    if (typeof window.SESSION_TIMEOUT_SECONDS !== 'undefined') {
+        initSessionTimeoutAlert();
+    } else {
+        // Fallback: check again after a short delay
+        setTimeout(function() {
+            if (typeof window.SESSION_TIMEOUT_SECONDS !== 'undefined') {
+                initSessionTimeoutAlert();
+            }
+        }, 500);
+    }
+});
+
+function initSessionTimeoutAlert() {
+    (function initPreTimeoutAlert() {
+        function checkTimeout() {
+            // Calculate elapsed time based on server's last_activity, not client time
+            const currentServerTime = Math.floor(Date.now() / 1000);
+            const elapsedSeconds = currentServerTime - window.SERVER_LAST_ACTIVITY;
+            const remainingSeconds = window.SESSION_TIMEOUT_SECONDS - elapsedSeconds;
+            
+            // Show alert when 30 seconds remain (and hasn't been shown yet)
+            if (remainingSeconds <= 30 && remainingSeconds > 0 && !alertShown) {
+                alertShown = true;
+                if (countdownInterval) clearInterval(countdownInterval);
+                showPreTimeoutAlert(remainingSeconds);
+            }
+        }
+        
+        function showPreTimeoutAlert(initialCountdown) {
+            let countdown = initialCountdown;
+            
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: true,
+                confirmButtonText: 'Extend Session',
+                showCloseButton: false,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                timer: countdown * 1000,
+                timerProgressBar: true,
+            });
+            
+            Toast.fire({
+                icon: 'warning',
+                title: 'Session Expiring Soon',
+                html: 'Your session will expire in <strong id="pre-alert-countdown">' + countdown + '</strong> seconds.'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Extend button clicked
+                    console.log('Extend button clicked');
+                    extendSessionAndDismissAlert();
+                }
+            });
+            
+            // Update countdown every second
+            countdownInterval = setInterval(() => {
+                countdown--;
+                const countdownEl = document.getElementById('pre-alert-countdown');
+                if (countdownEl) countdownEl.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                }
+            }, 1000);
+            
+            // Pause/resume on hover
+            const alertContainer = Toast.getContainer();
+            if (alertContainer) {
+                alertContainer.addEventListener('mouseenter', () => {
+                    Swal.stopTimer();
+                    if (countdownInterval) clearInterval(countdownInterval);
+                });
+                
+                alertContainer.addEventListener('mouseleave', () => {
+                    Swal.resumeTimer();
+                    countdownInterval = setInterval(() => {
+                        countdown--;
+                        const countdownEl = document.getElementById('pre-alert-countdown');
+                        if (countdownEl) countdownEl.textContent = countdown;
+                    }, 1000);
+                });
+            }
+        }
+        
+        // Check for pre-timeout every 500ms
+        setInterval(checkTimeout, 500);
+    })();
+}

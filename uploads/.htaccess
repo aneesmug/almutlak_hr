@@ -1,0 +1,12 @@
+# Prevent direct execution of PHP files in uploads directory
+php_flag engine off
+
+# Alternative: Disable script execution
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phps)$">
+    Deny from all
+</FilesMatch>
+
+# Allow access to image files and other media
+<FilesMatch "\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|txt)$">
+    Allow from all
+</FilesMatch>
