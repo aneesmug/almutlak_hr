@@ -1584,6 +1584,23 @@ elseif ($ajaxType == 'approveVacation') {
                             ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
                                 "Encashed vacation marked as completed after payer payment - no asset clearance required", 'emp_vacation');
                         }
+                        
+                        // CRITICAL: Deduct balance for encashed vacation
+                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
+                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
+                        if ($bal_chk_stmt) {
+                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($bal_chk_stmt);
+                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
+                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
+                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
+                            mysqli_stmt_close($bal_chk_stmt);
+
+                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
+                                // Update balance for encashed vacation
+                                update_vacation_balance_on_approval($conDB, $vacation_id);
+                            }
+                        }
                     }
                     
                     // Return success
@@ -2425,6 +2442,24 @@ elseif ($ajaxType == 'updateVacationPayments') {
                             mysqli_stmt_execute($complete_stmt);
                             mysqli_stmt_close($complete_stmt);
                         }
+                        
+                        // CRITICAL: Deduct balance when marking vacation as completed
+                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
+                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
+                        if ($bal_chk_stmt) {
+                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($bal_chk_stmt);
+                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
+                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
+                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
+                            mysqli_stmt_close($bal_chk_stmt);
+
+                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
+                                // Update balance for annual fly vacation
+                                update_vacation_balance_on_approval($conDB, $vacation_id);
+                            }
+                        }
+                        
                         // Set employees.fly = 1 except for Encashment type
                         $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
                         if ($vac_type_lower !== 'encashed' && !empty($vac_data['emp_id'])) {
@@ -2597,6 +2632,23 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                             mysqli_stmt_close($complete_stmt);
                         }
                         $did_complete = true;
+                        
+                        // CRITICAL: Deduct balance when marking vacation as completed
+                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
+                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
+                        if ($bal_chk_stmt) {
+                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($bal_chk_stmt);
+                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
+                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
+                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
+                            mysqli_stmt_close($bal_chk_stmt);
+
+                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
+                                // Update balance for local annual vacation
+                                update_vacation_balance_on_approval($conDB, $vacation_id);
+                            }
+                        }
                     }
 
                     // Rule 2: Fly | Annual vacation -> complete when booking (payment) AND adjustments are updated
@@ -2610,22 +2662,8 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                             mysqli_stmt_close($complete_stmt);
                         }
                         $did_complete = true;
-                    }
-
-                    // Rule 3: Fly | Emergency vacation -> Booking button hidden; complete on adjustments; deduct annual balance once
-                    // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
-                    if ($is_fly && $is_emergency && $has_adjustment) {
-                        // Mark completed
-                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
-                        $complete_stmt = mysqli_prepare($conDB, $complete_sql);
-                        if ($complete_stmt) {
-                            mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
-                            mysqli_stmt_execute($complete_stmt);
-                            mysqli_stmt_close($complete_stmt);
-                        }
-                        $did_complete = true;
-
-                        // Deduct annual balance if not already linked to this vacation
+                        
+                        // CRITICAL: Deduct balance when marking vacation as completed
                         $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
                         $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
                         if ($bal_chk_stmt) {
@@ -2637,10 +2675,27 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                             mysqli_stmt_close($bal_chk_stmt);
 
                             if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
-                                // Update balance once for emergency vacations using annual balance
+                                // Update balance for annual fly vacation
                                 update_vacation_balance_on_approval($conDB, $vacation_id);
                             }
                         }
+                    }
+
+                    // Rule 3: Fly | Emergency vacation -> Booking button hidden; complete on adjustments
+                    // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
+                    // CRITICAL: Emergency vacations are NON-DEDUCTIBLE - NO balance deduction
+                    if ($is_fly && $is_emergency && $has_adjustment) {
+                        // Mark completed
+                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_stmt = mysqli_prepare($conDB, $complete_sql);
+                        if ($complete_stmt) {
+                            mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
+                            mysqli_stmt_execute($complete_stmt);
+                            mysqli_stmt_close($complete_stmt);
+                        }
+                        $did_complete = true;
+
+                        // NOTE: Emergency vacations are unpaid leave - NO balance deduction applied
                     }
 
                     // If completed in any branch, set employees.fly = 1 unless Encashment

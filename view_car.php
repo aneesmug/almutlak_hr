@@ -73,7 +73,12 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 	/********************End***********************/
 	$sql_yes_drv = mysqli_query($conDB, "SELECT COUNT(*) `car_id` FROM `cars_drv` WHERE `car_id`='" . $_GET['id'] . "' && `status`='1' ");
 	$cont_drv = mysqli_fetch_array($sql_yes_drv)[0];
-
+	// Initialize variables to prevent undefined warnings
+	$car_drv_id = '';
+	$car_drv_car_id = '';
+	$car_undrv_name = '';
+	$car_udrv_id = '';
+	$car_rcv_date = '';
 	$sql_drv = mysqli_query($conDB, "SELECT `cars_drv`.*, `employees`.`name` FROM `cars_drv` LEFT JOIN `employees` ON `cars_drv`.`car_user` = `employees`.`emp_id` WHERE `cars_drv`.`car_id`='" . $_GET['id'] . "' && `cars_drv`.`status`='1' ");
 	while ($rec = mysqli_fetch_assoc($sql_drv)) {
 		$car_drv_id = $rec["id"];
@@ -288,7 +293,7 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 																<i class="mdi mdi-library-plus"></i> <?= __('add_docs_button') ?>
 															</a>
 														<?php } ?>
-														<?php if ($cont_drv < 1) { ?>
+														<?php /* if ($cont_drv < 1) { ?>
 															<a href="javascript:void(0);" class="btn btn-sm btn-success waves-effect addDrvrAtter" data-id="<?= $id_car ?>">
 																<i class="mdi mdi-human-greeting"></i> <?= __('add_driver_button') ?>
 															</a>
@@ -296,7 +301,7 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 															<a href="javascript:void(0);" class="btn btn-sm btn-danger waves-effect addRtrnDrvrAtter" data-id="<?= $car_drv_id ?>" data-cid="<?= $id_car ?>">
 																<i class="mdi mdi-car-convertable"></i> <?= __('return_car_button') ?>
 															</a>
-														<?php } ?>
+														<?php } */ ?>
 														<a href="javascript:void(0);" class="btn btn-sm btn-dark waves-effect addMaintAttr" data-id="<?= $id_car ?>" data-caruser="<?= $car_udrv_id ?>">
 															<i class="fa fa-solid fa-screwdriver-wrench"></i> <?= __('add_maintenance_button') ?>
 														</a>

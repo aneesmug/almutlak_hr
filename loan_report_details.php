@@ -37,12 +37,14 @@ if (mysqli_num_rows($query) == 1) {
                 e.dept AS dept_id,
                 d.dep_nme AS `deptname`,
                 s.section_name,
-                c.name AS `country_name`
+                c.name AS `country_name`,
+                rejected_by_emp.name as rejected_by_name
             FROM emp_loan l
             JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN section s ON e.sectin_nme = s.id
             LEFT JOIN countries c ON e.country = c.id
+            LEFT JOIN employees rejected_by_emp ON l.rejected_by = rejected_by_emp.emp_id
             WHERE l.id = ? AND l.emp_id = ?";
 
     $stmt = $conDB->prepare($sql);
@@ -433,21 +435,30 @@ if (mysqli_num_rows($query) == 1) {
                                                             <span class="icon">
                                                                 <?php if ($level['status'] == 'approved'): ?><i class="fa fa-check"></i><?php elseif ($level['status'] == 'rejected'): ?><i class="fa fa-times"></i><?php else: ?><i class="fa fa-clock"></i><?php endif; ?>
                                                             </span>
-                                                            <span class="status">
-                                                                <strong><?= htmlspecialchars($level['approver_name'] ?? 'Pending Assignment'); ?></strong> -
-                                                                <?php 
-                                                                switch($level['status']) {
-                                                                    case 'approved': echo '<span class="text-success">' . __('Approved') . '</span>'; break;
-                                                                    case 'rejected': echo '<span class="text-danger">' . __('Rejected') . '</span>'; break;
-                                                                    case 'pending': echo '<span class="text-warning">' . __('Pending') . '</span>'; break;
-                                                                    case 'awaiting': echo '<span class="text-secondary">' . __('Awaiting') . '</span>'; break;
-                                                                    default: echo '<span class="text-muted">' . htmlspecialchars($level['status']) . '</span>';
-                                                                }
-                                                                ?>
+                                                            <div>
+                                                                <span class="status" style="font-size:1rem;">
+                                                                    <strong>Level <?= (int)$level['approval_level'] ?>:</strong> <?= htmlspecialchars($level['approver_name'] ?? 'Pending Assignment'); ?> - 
+                                                                    <?php 
+                                                                    switch($level['status']) {
+                                                                        case 'approved': echo '<span class="text-success">' . __('Approved') . '</span>'; break;
+                                                                        case 'rejected': echo '<span class="text-danger">' . __('Rejected') . '</span>'; break;
+                                                                        case 'pending': echo '<span class="text-warning">' . __('Pending') . '</span>'; break;
+                                                                        case 'awaiting': echo '<span class="text-secondary">' . __('Awaiting') . '</span>'; break;
+                                                                        default: echo '<span class="text-muted">' . htmlspecialchars($level['status']) . '</span>';
+                                                                    }
+                                                                    ?>
+                                                                </span>
                                                                 <?php if (!empty($level['action_date'])): ?>
-                                                                    <small class="text-muted"> (<?= date('d M Y, h:i A', strtotime($level['action_date'])); ?>)</small>
+                                                                <div style="font-size:0.85rem; color:#999; margin-top:4px;">
+                                                                    <i class="fa fa-calendar"></i> <?= date('d M Y, H:i', strtotime($level['action_date'])); ?>
+                                                                </div>
                                                                 <?php endif; ?>
-                                                            </span>
+                                                                <?php if (!empty($level['note'])): ?>
+                                                                <div style="font-size:0.85rem; color:#666; margin-top:8px; padding:8px; background:#f5f5f5; border-radius:4px; border-left:3px solid #667eea;">
+                                                                    <strong>Note:</strong> <?= nl2br(htmlspecialchars($level['note'])); ?>
+                                                                </div>
+                                                                <?php endif; ?>
+                                                            </div>
                                                         </div>
                                                         <?php endforeach; ?>
                                                     <?php endif; ?>

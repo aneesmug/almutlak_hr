@@ -31,6 +31,38 @@ if (!isset($pdo) || $pdo === null) {
     }
 }
 
+// Define role-based asset access control
+$roleAssetAccess = [
+    'it' => ['Laptop'],
+    'gr_officer' => ['SIM', 'Car', 'Mobile']
+];
+
+$isSystemAdmin = isset($_SESSION['is_admin']) && $_SESSION['is_admin'] == 1;
+$userType = $_SESSION['user_type'] ?? '';
+$empType = $_SESSION['emp_type'] ?? '';
+$allowedAssets = [];
+
+if (!$isSystemAdmin && isset($roleAssetAccess[$userType])) {
+    $allowedAssets = $roleAssetAccess[$userType];
+}
+
+/**
+ * Check if user can access/manage a specific asset
+ */
+function canAccessAsset($assetName, $isAdmin, $userAllowedAssets) {
+    if ($isAdmin) return true;
+    if (empty($userAllowedAssets)) return false;
+    return in_array($assetName, $userAllowedAssets);
+}
+
+/**
+ * Get allowed assets for current user
+ */
+function getAllowedAssetsForUser($isAdmin, $userAllowedAssets) {
+    if ($isAdmin) return [];
+    return $userAllowedAssets;
+}
+
 // Define helper functions
 function json_fail($message, $code = 400) {
     http_response_code($code);
@@ -215,6 +247,31 @@ try {
             json_ok(['assets' => $rows]);
             break;
 
+        case 'get_cars':
+            // Fetch all cars with proper maker and model names using LEFT JOIN
+            try {
+                $stmt = $pdo->query("
+                    SELECT 
+                        c.id,
+                        TRIM(cm.maker) as maker_name,
+                        TRIM(cmodel.model) as model,
+                        c.plate_no,
+                        c.made_year,
+                        c.type,
+                        c.status
+                    FROM cars c
+                    LEFT JOIN car_maker cm ON c.maker_name = cm.id
+                    LEFT JOIN car_model cmodel ON c.model = cmodel.id
+                    WHERE c.status = '1'
+                    ORDER BY cm.maker ASC, cmodel.model ASC
+                ");
+                $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                json_ok(['cars' => $rows]);
+            } catch (PDOException $e) {
+                json_fail('Failed to fetch cars: ' . $e->getMessage());
+            }
+            break;
+
         case 'register_asset':
             // Handle asset registration from the registerAssetModal form
             $name = trim($_POST['name'] ?? '');
@@ -274,15 +331,52 @@ try {
 
         case 'create_item':
             $assetId = (int) ($_POST['asset_id'] ?? 0);
+            $carId = (int) ($_POST['car_id'] ?? 0);
             $serialNumber = trim($_POST['serial_number'] ?? '');
             $description = trim($_POST['description'] ?? '');
             if ($assetId <= 0) {
                 json_fail('Asset type is required');
             }
-            // Serial number must be the device/asset serial entered manually
-            if ($serialNumber === '') {
-                json_fail('Serial number is required');
+            
+            // Check role-based access
+            $assetStmt = $pdo->prepare("SELECT name FROM assets WHERE id = :id");
+            $assetStmt->execute(['id' => $assetId]);
+            $assetRow = $assetStmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$assetRow) {
+                json_fail('Asset type not found');
             }
+            
+            if (!canAccessAsset($assetRow['name'], $isSystemAdmin, $allowedAssets)) {
+                json_fail('You do not have permission to add this asset type', 403);
+            }
+            
+            // If it's a Car asset and carId is provided, fetch car details
+            if ($assetRow['name'] === 'Car' && $carId > 0) {
+                $carStmt = $pdo->prepare("SELECT maker_name, model, plate_no FROM cars WHERE id = :id");
+                $carStmt->execute(['id' => $carId]);
+                $carRow = $carStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$carRow) {
+                    json_fail('Car not found');
+                }
+                
+                // Use car plate number as serial number if not provided
+                if (empty($serialNumber)) {
+                    $serialNumber = $carRow['plate_no'];
+                }
+                
+                // Update description with car details
+                if (empty($description)) {
+                    $description = $carRow['maker_name'] . ' ' . $carRow['model'] . ' (' . $carRow['plate_no'] . ')';
+                }
+            } else {
+                // Serial number must be the device/asset serial entered manually for non-car assets
+                if ($serialNumber === '') {
+                    json_fail('Serial number is required');
+                }
+            }
+            
             // Generate a numeric tracking ID distinct from the device serial (alphanumeric + special, 7-10 chars)
             $trackingId = generate_serial_number($pdo);
             $stmt = $pdo->prepare("INSERT INTO asset_items (asset_id, tracking_id, serial_number, description, status) VALUES (:asset_id, :tracking_id, :serial_number, :description, 'Available')");
@@ -302,6 +396,21 @@ try {
             $note = trim($_POST['description'] ?? '');
             if ($itemId <= 0 || empty($empId)) {
                 json_fail('Employee and asset item are required');
+            }
+            
+            // Check role-based access - verify user can assign this asset type
+            $assetCheckStmt = $pdo->prepare("SELECT a.name FROM asset_items ai 
+                                            JOIN assets a ON ai.asset_id = a.id 
+                                            WHERE ai.id = :id");
+            $assetCheckStmt->execute(['id' => $itemId]);
+            $assetCheck = $assetCheckStmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$assetCheck) {
+                json_fail('Asset not found');
+            }
+            
+            if (!canAccessAsset($assetCheck['name'], $isSystemAdmin, $allowedAssets)) {
+                json_fail('You do not have permission to assign this asset type', 403);
             }
             
             // Get the employee's emp_id (the display ID like 5430, 5127, etc.)
@@ -345,6 +454,226 @@ try {
             json_ok(['tracking_id' => $row['tracking_id']]);
             break;
 
+        case 'assign_driver':
+            $itemId = (int) ($_POST['item_id'] ?? 0);
+            $trackingId = $_POST['tracking_id'] ?? '';
+            $empId = (int) ($_POST['emp_id'] ?? 0);
+            $rcvDate = $_POST['rcv_date'] ?? date('Y-m-d');
+            $notes = trim($_POST['notes'] ?? '');
+            
+            if ($itemId <= 0 || $empId <= 0) {
+                json_fail('Item ID and Employee ID are required');
+            }
+            
+            try {
+                // Check role-based access - verify user can manage this car
+                $assetCheckStmt = $pdo->prepare("SELECT a.name FROM asset_items ai 
+                                                LEFT JOIN assets a ON ai.asset_id = a.id 
+                                                WHERE ai.id = :id");
+                $assetCheckStmt->execute(['id' => $itemId]);
+                $assetCheck = $assetCheckStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$assetCheck) {
+                    json_fail('Asset item not found');
+                }
+                
+                if (!canAccessAsset($assetCheck['name'], $isSystemAdmin, $allowedAssets)) {
+                    json_fail('You do not have permission to assign drivers for this asset type', 403);
+                }
+                
+                // Get the car details and asset_id from asset_items
+                $carStmt = $pdo->prepare("SELECT ai.asset_id, ai.serial_number, ai.description FROM asset_items ai WHERE ai.id = :id");
+                $carStmt->execute(['id' => $itemId]);
+                $carData = $carStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$carData) {
+                    json_fail('Asset item not found');
+                }
+                
+                $assetId = $carData['asset_id'];  // Get the asset_id (4 for Car type)
+                
+                // Get the employee details
+                $empStmt = $pdo->prepare("SELECT id, emp_id, name FROM employees WHERE id = :id");
+                $empStmt->execute(['id' => $empId]);
+                $empData = $empStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$empData) {
+                    json_fail('Employee not found');
+                }
+                
+                // Try to find the car ID from the asset item
+                // If it's a car asset, the description should contain the car details
+                $carId = null;
+                
+                // First, try to match by serial number (plate_no) from cars table
+                $carIdStmt = $pdo->prepare("SELECT id FROM cars WHERE plate_no = :plate_no LIMIT 1");
+                $carIdStmt->execute(['plate_no' => $carData['serial_number']]);
+                $carIdRow = $carIdStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$carIdRow) {
+                    // Try to get car_id from description if available
+                    // Description might be stored as "maker model plate_no"
+                    // Extract plate_no and search again
+                    preg_match('/\(([^)]+)\)/', $carData['description'], $matches);
+                    if (!empty($matches[1])) {
+                        $carIdStmt2 = $pdo->prepare("SELECT id FROM cars WHERE plate_no = :plate_no LIMIT 1");
+                        $carIdStmt2->execute(['plate_no' => $matches[1]]);
+                        $carIdRow = $carIdStmt2->fetch(PDO::FETCH_ASSOC);
+                    }
+                }
+                
+                if (!$carIdRow) {
+                    json_fail('Could not find associated car. Please ensure the car is properly registered in the system.');
+                }
+                
+                $carId = $carIdRow['id'];
+                
+                // Deactivate any existing driver records for this car
+                $deactiveStmt = $pdo->prepare("UPDATE cars_drv SET status = 0 WHERE car_id = :car_id AND status = 1");
+                $deactiveStmt->execute(['car_id' => $carId]);
+                
+                // Insert new driver record into cars_drv table
+                $driverStmt = $pdo->prepare("
+                    INSERT INTO cars_drv (car_id, car_user, rcv_date, status, created_at) 
+                    VALUES (:car_id, :car_user, :rcv_date, 1, NOW())
+                ");
+                $driverStmt->execute([
+                    'car_id' => $carId,
+                    'car_user' => $empData['emp_id'],  // Store emp_id (e.g., 5430)
+                    'rcv_date' => $rcvDate
+                ]);
+                
+                $driverId = $pdo->lastInsertId();
+                
+                // Update asset_items to mark it as assigned
+                $updateItemStmt = $pdo->prepare("
+                    UPDATE asset_items 
+                    SET assigned_emp_id = :assigned_emp_id, assigned_date = :assigned_date, status = 'Assigned'
+                    WHERE id = :item_id
+                ");
+                $updateItemStmt->execute([
+                    'assigned_emp_id' => $empId,  // Employee's primary ID
+                    'assigned_date' => $rcvDate,
+                    'item_id' => $itemId
+                ]);
+                
+                // Also insert into employee_assets table for audit trail and reporting
+                $empAssetStmt = $pdo->prepare("
+                    INSERT INTO employee_assets (emp_id, asset_id, serial_number, description, assigned_date, status)
+                    VALUES (:emp_id, :asset_id, :serial_number, :description, :assigned_date, 'Assigned')
+                ");
+                $empAssetStmt->execute([
+                    'emp_id' => $empData['emp_id'],  // Store emp_id
+                    'asset_id' => $assetId,          // Asset ID from asset_items (4 for Car)
+                    'serial_number' => $carData['serial_number'],  // Plate number
+                    'description' => $carData['description'],      // Car details
+                    'assigned_date' => $rcvDate
+                ]);
+                
+                json_ok([
+                    'driver_id' => $driverId,
+                    'employee_name' => $empData['name'],
+                    'car_id' => $carId,
+                    'rcv_date' => $rcvDate
+                ], 'Driver assigned successfully');
+            } catch (PDOException $e) {
+                error_log('Assign Driver Error: ' . $e->getMessage());
+                json_fail('Error assigning driver: ' . $e->getMessage(), 500);
+            }
+            break;
+
+        case 'unassign_driver':
+            $itemId = (int) ($_POST['item_id'] ?? 0);
+            $trackingId = $_POST['tracking_id'] ?? '';
+            $returnStatus = trim($_POST['return_status'] ?? 'Good');
+            $returnDate = $_POST['return_date'] ?? date('Y-m-d');
+            
+            if ($itemId <= 0) {
+                json_fail('Item ID is required');
+            }
+            
+            try {
+                // Check role-based access
+                $assetCheckStmt = $pdo->prepare("SELECT a.name FROM asset_items ai 
+                                                LEFT JOIN assets a ON ai.asset_id = a.id 
+                                                WHERE ai.id = :id");
+                $assetCheckStmt->execute(['id' => $itemId]);
+                $assetCheck = $assetCheckStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$assetCheck) {
+                    json_fail('Asset item not found');
+                }
+                
+                if (!canAccessAsset($assetCheck['name'], $isSystemAdmin, $allowedAssets)) {
+                    json_fail('You do not have permission to unassign drivers for this asset type', 403);
+                }
+                
+                // Get the asset item details including assigned employee
+                $itemStmt = $pdo->prepare("SELECT ai.asset_id, ai.serial_number, ai.assigned_emp_id FROM asset_items ai WHERE ai.id = :id");
+                $itemStmt->execute(['id' => $itemId]);
+                $itemData = $itemStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$itemData) {
+                    json_fail('Asset item not found');
+                }
+                
+                // Get employee info by assigned_emp_id
+                $empStmt = $pdo->prepare("SELECT emp_id FROM employees WHERE id = :id");
+                $empStmt->execute(['id' => $itemData['assigned_emp_id']]);
+                $empData = $empStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$empData) {
+                    json_fail('Employee not found for this asset');
+                }
+                
+                // Find and deactivate the cars_drv record
+                $carsStmt = $pdo->prepare("SELECT id FROM cars WHERE plate_no = :plate_no LIMIT 1");
+                $carsStmt->execute(['plate_no' => $itemData['serial_number']]);
+                $carsRow = $carsStmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($carsRow) {
+                    // Deactivate the driver record
+                    $deactiveStmt = $pdo->prepare("UPDATE cars_drv SET status = 0, rtn_date = :rtn_date WHERE car_id = :car_id AND status = 1");
+                    $deactiveStmt->execute([
+                        'car_id' => $carsRow['id'],
+                        'rtn_date' => $returnDate
+                    ]);
+                }
+                
+                // Update asset_items to mark it as unassigned
+                $updateItemStmt = $pdo->prepare("
+                    UPDATE asset_items 
+                    SET assigned_emp_id = NULL, status = 'Available'
+                    WHERE id = :item_id
+                ");
+                $updateItemStmt->execute(['item_id' => $itemId]);
+                
+                // Update employee_assets record status
+                $updateAssetStmt = $pdo->prepare("
+                    UPDATE employee_assets 
+                    SET status = :status
+                    WHERE emp_id = :emp_id AND asset_id = :asset_id AND serial_number = :serial_number AND status = 'Assigned'
+                    ORDER BY assigned_date DESC
+                    LIMIT 1
+                ");
+                $updateAssetStmt->execute([
+                    'status' => $returnStatus,
+                    'emp_id' => $empData['emp_id'],
+                    'asset_id' => $itemData['asset_id'],
+                    'serial_number' => $itemData['serial_number']
+                ]);
+                
+                json_ok([
+                    'item_id' => $itemId,
+                    'return_status' => $returnStatus,
+                    'return_date' => $returnDate
+                ], 'Driver unassigned successfully');
+            } catch (PDOException $e) {
+                error_log('Unassign Driver Error: ' . $e->getMessage());
+                json_fail('Error unassigning driver: ' . $e->getMessage(), 500);
+            }
+            break;
+
         case 'unassign_item':
             $itemId = (int) ($_POST['item_id'] ?? 0);
             $trackingId = $_POST['tracking_id'] ?? '';
@@ -355,6 +684,21 @@ try {
             
             if ($itemId <= 0) {
                 json_fail('Asset item ID is required');
+            }
+            
+            // Check role-based access - verify user can receive/return this asset type
+            $assetReturnCheckStmt = $pdo->prepare("SELECT a.name FROM asset_items ai 
+                                                   JOIN assets a ON ai.asset_id = a.id 
+                                                   WHERE ai.id = :id");
+            $assetReturnCheckStmt->execute(['id' => $itemId]);
+            $assetReturnCheck = $assetReturnCheckStmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$assetReturnCheck) {
+                json_fail('Asset not found');
+            }
+            
+            if (!canAccessAsset($assetReturnCheck['name'], $isSystemAdmin, $allowedAssets)) {
+                json_fail('You do not have permission to return this asset type', 403);
             }
             
             if (empty($returnDate)) {
@@ -471,8 +815,11 @@ try {
             
             $pdo->beginTransaction();
             try {
-                // Get item details
-                $stmt = $pdo->prepare("SELECT tracking_id, assigned_emp_id FROM asset_items WHERE id = :id");
+                // Get item details including asset type to check if it's a car
+                $stmt = $pdo->prepare("SELECT ai.id, ai.tracking_id, ai.assigned_emp_id, ai.serial_number, ai.description, a.name as asset_name 
+                                       FROM asset_items ai
+                                       JOIN assets a ON ai.asset_id = a.id
+                                       WHERE ai.id = :id");
                 $stmt->execute(['id' => $itemId]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 
@@ -481,14 +828,52 @@ try {
                     json_fail('Asset item not found', 404);
                 }
                 
+                error_log('Unassigning item: ' . $itemId . ', asset_name: ' . $row['asset_name'] . ', serial: ' . $row['serial_number']);
+                
+                // If it's a Car asset, also update cars_drv table (deactivate active driver)
+                if ($row['asset_name'] === 'Car' && $row['assigned_emp_id']) {
+                    error_log('Processing car unassignment for assigned_emp_id: ' . $row['assigned_emp_id']);
+                    
+                    // Get the employee's emp_id from the employees table
+                    $empStmt = $pdo->prepare("SELECT emp_id FROM employees WHERE id = :id LIMIT 1");
+                    $empStmt->execute(['id' => $row['assigned_emp_id']]);
+                    $empData = $empStmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($empData) {
+                        error_log('Found employee emp_id: ' . $empData['emp_id']);
+                        
+                        // Update cars_drv: Find active records where this employee is the driver and deactivate them
+                        // This handles the case where the car might not match by plate_no
+                        $updateCarDrvStmt = $pdo->prepare("UPDATE cars_drv 
+                                                           SET status = 0, rtn_date = :return_date 
+                                                           WHERE car_user = :emp_id AND status = 1");
+                        $affectedRows = $updateCarDrvStmt->execute([
+                            'emp_id' => $empData['emp_id'],
+                            'return_date' => $returnDate
+                        ]);
+                        
+                        $rowCount = $updateCarDrvStmt->rowCount();
+                        error_log('Updated cars_drv: ' . $rowCount . ' records deactivated for emp_id: ' . $empData['emp_id']);
+                        
+                        if ($rowCount === 0) {
+                            error_log('WARNING: No active cars_drv records found for emp_id: ' . $empData['emp_id']);
+                        }
+                    } else {
+                        error_log('WARNING: Could not find employee with id: ' . $row['assigned_emp_id']);
+                    }
+                }
+                
                 // Update asset_items status back to Available
                 $stmt = $pdo->prepare("UPDATE asset_items SET status = 'Available', assigned_emp_id = NULL, assigned_date = NULL WHERE id = :id");
                 $stmt->execute(['id' => $itemId]);
+                error_log('Updated asset_items for item_id: ' . $itemId);
                 
-                // Check if record exists in employee_assets
-                $checkStmt = $pdo->prepare("SELECT id FROM employee_assets WHERE serial_number = :serial LIMIT 1");
-                $checkStmt->execute(['serial' => $row['tracking_id']]);
+                // Check if record exists in employee_assets by serial_number
+                $checkStmt = $pdo->prepare("SELECT id, emp_id FROM employee_assets WHERE serial_number = :serial LIMIT 1");
+                $checkStmt->execute(['serial' => $row['serial_number']]);
                 $existingRecord = $checkStmt->fetch(PDO::FETCH_ASSOC);
+                
+                error_log('Looking for employee_assets record with serial: ' . $row['serial_number'] . ', found: ' . ($existingRecord ? 'yes (id=' . $existingRecord['id'] . ')' : 'no'));
                 
                 if ($existingRecord) {
                     // Update existing record
@@ -506,16 +891,40 @@ try {
                         'signature_file' => $signatureFile,
                         'proof_file' => $proofFile,
                         'asset_condition' => $assetCondition,
-                        'serial' => $row['tracking_id']
+                        'serial' => $row['serial_number']
                     ]);
+                    error_log('Updated employee_assets record for serial: ' . $row['serial_number']);
                     
                     $pdo->commit();
                     json_ok(['asset_record_id' => $existingRecord['id']], 'Asset returned and unassigned successfully');
                 } else {
-                    // No existing employee_assets record, just log the return
-                    error_log('No employee_assets record found for serial: ' . $row['tracking_id']);
+                    // No existing employee_assets record, create one with return info
+                    error_log('No employee_assets record found for serial: ' . $row['serial_number'] . ', creating new one');
+                    
+                    $insertStmt = $pdo->prepare("INSERT INTO employee_assets 
+                                                (emp_id, asset_id, serial_number, description, assigned_date, return_date, status, return_notes, signature_file, proof_file, asset_condition)
+                                                VALUES (:emp_id, :asset_id, :serial_number, :description, :assigned_date, :return_date, 'Returned', :return_notes, :signature_file, :proof_file, :asset_condition)");
+                    
+                    // Get asset_id for this item
+                    $getAssetIdStmt = $pdo->prepare("SELECT asset_id FROM asset_items WHERE id = :id");
+                    $getAssetIdStmt->execute(['id' => $itemId]);
+                    $assetIdRow = $getAssetIdStmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    $insertStmt->execute([
+                        'emp_id' => $row['assigned_emp_id'],
+                        'asset_id' => $assetIdRow ? $assetIdRow['asset_id'] : null,
+                        'serial_number' => $row['serial_number'],
+                        'description' => $row['description'],
+                        'assigned_date' => null,  // We don't know the original assigned date
+                        'return_date' => $returnDate,
+                        'return_notes' => $returnNotes,
+                        'signature_file' => $signatureFile,
+                        'proof_file' => $proofFile,
+                        'asset_condition' => $assetCondition
+                    ]);
+                    
                     $pdo->commit();
-                    json_ok(['message' => 'Asset returned and unassigned successfully']);
+                    json_ok(['asset_record_id' => $pdo->lastInsertId()], 'Asset returned and unassigned successfully');
                 }
             } catch (PDOException $e) {
                 $pdo->rollBack();

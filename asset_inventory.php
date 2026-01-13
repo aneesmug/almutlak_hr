@@ -1,14 +1,33 @@
 <?php
     require_once __DIR__ . '/includes/session_check.php';
     include(__DIR__ . '/includes/avatar_select.php');
+    
+    // Determine user role and allowed assets
+    $userType = $_SESSION['user_type'] ?? '';
+    $empType = $_SESSION['emp_type'] ?? '';
+    $isSystemAdmin = isset($_SESSION['is_admin']) && $_SESSION['is_admin'] == 1;
+    
+    // Define role-based asset access (exclusive - each role only sees their assets)
+    $roleAssetAccess = [
+        'it' => ['Laptop'],           // IT can only manage Laptops
+        'gr_officer' => ['SIM', 'Car', 'Mobile'] // GR Officer can only manage SIM, Car, Mobile
+    ];
+    
+    // Determine allowed assets for current user
+    $allowedAssets = [];
+    if ($isSystemAdmin) {
+        $allowedAssets = []; // Empty means all assets
+    } else {
+        $allowedAssets = $roleAssetAccess[$userType] ?? [];
+    }
 ?>
 
 <!doctype html>
-<html lang="en">
+<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
 <head>
     <meta charset="utf-8" />
-    <title><?= $site_title ?> - Asset Inventory</title>
+    <title><?= $site_title ?> - <?= __('asset_inventory', 'Asset Inventory') ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Al-Mutlak WMS" name="description" />
     <meta content="Al-Mutlak" name="author" />
@@ -30,6 +49,9 @@
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
+    <script>
+        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+    </script>
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
@@ -60,9 +82,9 @@
                         <div class="col-12">
                             <div class="card-box table-responsive">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h4 class="m-t-0 header-title">Asset Inventory</h4>
+                                    <h4 class="m-t-0 header-title"><?= __('asset_inventory', 'Asset Inventory') ?></h4>
                                     <button id="btn-add-asset" type="button" class="btn btn-primary btn-sm waves-effect waves-light">
-                                        <i class="mdi mdi-plus-circle mr-2"></i>Add Asset
+                                        <i class="mdi mdi-plus-circle mr-2"></i><?= __('add_asset', 'Add Asset') ?>
                                     </button>
                                 </div>
 
@@ -70,11 +92,11 @@
 
                                 <div class="row pb-3 border-bottom">
                                     <div class="col-md-4 mb-2">
-                                        <label for="filterStatus" class="form-label small font-weight-bold d-block mb-1">Filter by Status</label>
+                                        <label for="filterStatus" class="form-label small font-weight-bold d-block mb-1"><?= __('filter_by_status', 'Filter by Status') ?></label>
                                         <div class="asset_status"></div>
                                     </div>
                                     <div class="col-md-4 mb-2">
-                                        <label for="filterType" class="form-label small font-weight-bold d-block mb-1">Filter by Asset Type</label>
+                                        <label for="filterType" class="form-label small font-weight-bold d-block mb-1"><?= __('filter_by_asset_type', 'Filter by Asset Type') ?></label>
                                         <div class="asset_type"></div>
                                     </div>
                                 </div>
@@ -130,9 +152,31 @@
     (function() {
         const apiUrl = './includes/ajaxFile/ajaxAssetInventory.php';
         let inventoryTable;
+        
+        // User role information from backend
+        const userRole = {
+            userType: '<?= htmlspecialchars($userType) ?>',
+            empType: '<?= htmlspecialchars($empType) ?>',
+            isSystemAdmin: <?= $isSystemAdmin ? 'true' : 'false' ?>,
+            // Allowed assets for this user
+            allowedAssets: <?= json_encode($allowedAssets) ?>,
+            // Excluded assets for this user (exclusive filtering)
+            excludedAssets: function() {
+                if (this.isSystemAdmin) return [];
+                if (this.userType === 'it') return ['SIM', 'Car', 'Mobile'];
+                if (this.userType === 'gr_officer') return ['Laptop'];
+                return [];
+            }
+        };
+        
+        // Check if user can access asset type
+        function canAccessAsset(assetName) {
+            if (userRole.isSystemAdmin) return true;
+            if (userRole.allowedAssets.length === 0) return false;
+            return userRole.allowedAssets.includes(assetName);
+        }
 
         // Initialize DataTable
-        
 
         function statusBadge(status) {
             const cls = status === 'Assigned' ? 'success' : (status === 'Available' ? 'secondary' : 'warning');
@@ -163,6 +207,14 @@
                     
                     if (rows.length > 0) {
                         rows.forEach(row => {
+                            // Filter rows based on user role - exclude assets not allowed for this role
+                            if (!userRole.isSystemAdmin) {
+                                const excluded = userRole.excludedAssets();
+                                if (excluded.includes(row.asset_name)) {
+                                    return; // Skip this row
+                                }
+                            }
+                            
                             const rowHtml = `<tr>
                                 <td>${row.id}</td>
                                 <td><input type="checkbox" name="status" class="asset-status-checkbox" value="${row.id}" /></td>
@@ -210,6 +262,15 @@
                                                 data-tracking="${row.tracking_id}">
                                                 <i class="fa fa-unlink mr-2 font-18 vertical-middle"></i>Unassign
                                             </a>
+                                            ` : ''}
+                                            ${row.asset_name === 'Car' ? `
+                                                ${row.status === 'Available' ? `
+                                                <a href="javascript:void(0);" class="dropdown-item text-success btn-assign-driver" 
+                                                    data-id="${row.id}"
+                                                    data-tracking="${row.tracking_id}">
+                                                    <i class="fa fa-user mr-2 font-18 vertical-middle"></i>Assign Driver
+                                                </a>
+                                                ` : ''}
                                             ` : ''}
                                         </div>
                                     </div>
@@ -293,6 +354,13 @@
             const typeOptions = new Set();
             
             rows.forEach(row => {
+                // Filter based on user role - only add options for assets the user can see
+                if (!userRole.isSystemAdmin) {
+                    const excluded = userRole.excludedAssets();
+                    if (excluded.includes(row.asset_name)) {
+                        return; // Skip this row
+                    }
+                }
                 statusOptions.add(row.status);
                 typeOptions.add(row.asset_name);
             });
@@ -340,6 +408,67 @@
                     delay: 250,
                     data: params => ({ action: 'search_employees', q: params.term || '' }),
                     processResults: data => ({ results: data.data.results || [] })
+                }
+            });
+        }
+
+        async function openAssignDriverModal(itemId, trackingId) {
+            const { value: form } = await Swal.fire({
+                title: 'Assign Driver to Car',
+                html: `
+                    <div class="form-group text-left">
+                        <label>Employee/Driver</label>
+                        <select id="swal-driver-emp" class="form-control swal2-select2"></select>
+                    </div>
+                    <div class="form-group text-left">
+                        <label>Assignment Date</label>
+                        <input type="date" id="swal-driver-date" class="form-control" value="${new Date().toISOString().slice(0,10)}">
+                    </div>
+                    <div class="form-group text-left">
+                        <label>Notes (Optional)</label>
+                        <textarea id="swal-driver-notes" class="form-control" rows="2"></textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                preConfirm: () => {
+                    const empId = $('#swal-driver-emp').val();
+                    const date = $('#swal-driver-date').val();
+                    const notes = $('#swal-driver-notes').val();
+                    if (!empId) {
+                        Swal.showValidationMessage('Employee is required');
+                        return false;
+                    }
+                    return { emp_id: empId, rcv_date: date, notes: notes };
+                },
+                didOpen: () => initEmployeeSelect('#swal-driver-emp')
+            });
+            if (!form) return;
+            Swal.showLoading();
+            $.ajax({
+                url: apiUrl,
+                type: 'POST',
+                data: { 
+                    action: 'assign_driver', 
+                    item_id: itemId,
+                    tracking_id: trackingId,
+                    emp_id: form.emp_id, 
+                    rcv_date: form.rcv_date, 
+                    notes: form.notes 
+                },
+                dataType: 'json',
+                success: function(resp) {
+                    Swal.close();
+                    if (!resp.success) {
+                        Swal.fire('Error', resp.message || 'Could not assign driver', 'error');
+                        return;
+                    }
+                    Swal.fire('Success', 'Driver assigned successfully', 'success');
+                    loadInventory();
+                },
+                error: function(xhr, status, error) {
+                    Swal.close();
+                    console.error('Assign Driver Error:', status, error, xhr.responseText);
+                    Swal.fire('Error', 'Could not assign driver: ' + (xhr.responseJSON?.message || error), 'error');
                 }
             });
         }
@@ -411,7 +540,19 @@
                         return;
                     }
                     
-                    const assets = resp.data.assets;
+                    let assets = resp.data.assets;
+                    
+                    // Filter assets based on user role - exclude assets not allowed for this role
+                    if (!userRole.isSystemAdmin) {
+                        const excluded = userRole.excludedAssets();
+                        assets = assets.filter(asset => !excluded.includes(asset.name));
+                    }
+                    
+                    if (assets.length === 0) {
+                        Swal.fire('Access Denied', 'You do not have permission to add assets', 'warning');
+                        return;
+                    }
+                    
                     let assetOptions = '<option value="">-- Select Asset Type --</option>';
                     assets.forEach(asset => {
                         assetOptions += `<option value="${asset.id}">${asset.name}</option>`;
@@ -425,6 +566,12 @@
                                     <label for="swal-asset-type">Asset Type</label>
                                     <select id="swal-asset-type" class="form-control">
                                         ${assetOptions}
+                                    </select>
+                                </div>
+                                <div class="form-group" id="car-selector-group" style="display: none;">
+                                    <label for="swal-car-select">Select Car</label>
+                                    <select id="swal-car-select" class="form-control">
+                                        <option value="">-- Select a Car --</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -441,23 +588,72 @@
                         cancelButtonText: 'Cancel',
                         confirmButtonText: 'Add Asset',
                         showLoaderOnConfirm: true,
+                        allowOutsideClick: () => !Swal.isLoading(),
+                        didOpen: () => {
+                            // Handle asset type change to show car selector
+                            $('#swal-asset-type').on('change', function() {
+                                const assetTypeName = $(this).find('option:selected').text();
+                                const carGroup = $('#car-selector-group');
+                                
+                                if (assetTypeName.includes('Car')) {
+                                    carGroup.show();
+                                    // Fetch cars from database
+                                    $.ajax({
+                                        url: apiUrl,
+                                        type: 'POST',
+                                        data: { action: 'get_cars' },
+                                        dataType: 'json',
+                                        success: function(resp) {
+                                            if (resp.success && resp.data.cars) {
+                                                const carSelect = $('#swal-car-select');
+                                                carSelect.empty();
+                                                carSelect.append('<option value="">-- Select a Car --</option>');
+                                                resp.data.cars.forEach(car => {
+                                                    carSelect.append(`<option value="${car.id}">${car.maker_name} ${car.model} (${car.plate_no})</option>`);
+                                                });
+                                                
+                                                // Apply Select2 to car selector
+                                                carSelect.select2({
+                                                    dropdownParent: $('.swal2-container'),
+                                                    placeholder: 'Search and select a car',
+                                                    allowClear: true,
+                                                    width: '100%'
+                                                });
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    carGroup.hide();
+                                }
+                            });
+                        },
                         preConfirm: () => {
                             const assetId = document.getElementById('swal-asset-type').value;
+                            const carId = document.getElementById('swal-car-select').value;
                             const serialNumber = document.getElementById('swal-serial-number').value;
                             const description = document.getElementById('swal-description').value;
+                            const assetTypeName = document.querySelector('#swal-asset-type option:checked').text;
                             
                             if (!assetId) {
                                 Swal.showValidationMessage('Please select an asset type');
                                 return false;
                             }
-                            if (!serialNumber) {
+                            
+                            // If it's Car type, require car selection
+                            if (assetTypeName.includes('Car') && !carId) {
+                                Swal.showValidationMessage('Please select a car');
+                                return false;
+                            }
+                            
+                            if (!serialNumber && !carId) {
                                 Swal.showValidationMessage('Please enter serial number');
                                 return false;
                             }
                             
                             return {
                                 asset_id: assetId,
-                                serial_number: serialNumber,
+                                car_id: carId,
+                                serial_number: serialNumber || carId,
                                 description: description
                             };
                         },
@@ -470,6 +666,7 @@
                                 data: {
                                     action: 'create_item',
                                     asset_id: result.value.asset_id,
+                                    car_id: result.value.car_id,
                                     serial_number: result.value.serial_number,
                                     description: result.value.description
                                 },
@@ -518,6 +715,10 @@
 
         $(document).on('click', '.btn-assign', function() {
             openAssignModal($(this).data('id'));
+        });
+
+        $(document).on('click', '.btn-assign-driver', function() {
+            openAssignDriverModal($(this).data('id'), $(this).data('tracking'));
         });
 
         $(document).on('click', '.btn-unassign', function() {

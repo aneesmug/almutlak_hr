@@ -3267,20 +3267,16 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         // [NEW] Check if this is a DEDUCTIBLE vacation
         // ONLY these types will deduct from balance:
         // - Fly with fly_type = 'annual'
-        // - Fly with fly_type = 'emergency' 
-        // - Local Vacation with fly_type = 'emergency'
-        // ALL OTHER types (including Local Vacation without emergency) are NON-DEDUCTIBLE (unpaid/emergency leave)
+        // ALL OTHER types including Emergency, Local Vacation, Business Trip, Sick Leave, etc. are NON-DEDUCTIBLE (unpaid/emergency leave)
         $is_deductible_type = false;
         
-        // These specific combinations ARE deductible
-        if (($vac_details['vac_type'] == 'Fly' && $vac_details['fly_type'] == 'emergency') 
-            || ($vac_details['vac_type'] == 'Local Vacation' && $vac_details['fly_type'] == 'emergency')) {
-            $is_deductible_type = true;  // These are deductible
+        // Only Annual Fly vacations are deductible from balance
+        if ($vac_details['vac_type'] == 'Fly' && $vac_details['fly_type'] == 'annual') {
+            $is_deductible_type = true;  // Annual fly is deductible
         }
-        // Annual vacation is also deductible
-        elseif ($vac_details['vac_type'] == 'Fly' && $vac_details['fly_type'] == 'annual') {
-            $is_deductible_type = true;
-        }
+        
+        // CRITICAL: Emergency vacations (both Fly and Local) are NON-DEDUCTIBLE
+        // They are unpaid/emergency leave and should not reduce annual balance
 
         // 2. CHECK IF THIS VACATION TYPE SHOULD BE DEDUCTED FROM BALANCE
         // Only the specific types determined above are deductible

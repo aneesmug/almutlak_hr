@@ -12,10 +12,13 @@ if ($inv_no === '') {
 $loan = null;
 $sql = "SELECT l.id, l.inv_no, l.emp_id, l.loan_type, l.loan_amount, l.installments, l.interest_rate, l.total_payable, l.monthly_deduction, l.status,
                l.payment_proof_file, l.disbursement_receipt_id, l.disbursement_attachment,
-               e.name AS employee_name, e.avatar, e.dept, d.dep_nme AS department_name
+               l.rejection_reason, l.rejection_date, l.rejected_by,
+               e.name AS employee_name, e.avatar, e.dept, d.dep_nme AS department_name,
+               rejected_by_emp.name as rejected_by_name
         FROM emp_loan l
         JOIN employees e ON l.emp_id = e.emp_id
         LEFT JOIN department d ON e.dept = d.id
+        LEFT JOIN employees rejected_by_emp ON l.rejected_by = rejected_by_emp.emp_id
         WHERE l.inv_no = ?
         LIMIT 1";
 $stmt = $conDB->prepare($sql);
@@ -79,7 +82,7 @@ $stmt->close();
 
 // Approval chain (request_type_id 2 assumed for loans)
 $chain = [];
-$stmt = $conDB->prepare("SELECT ra.approval_level, ra.status, ra.action_date,
+$stmt = $conDB->prepare("SELECT ra.approval_level, ra.status, ra.action_date, ra.note,
                                 COALESCE(e.name, al.fullname, al.username) AS approver_name,
                                 al.user_type
                          FROM request_approvers ra
@@ -202,6 +205,32 @@ if (!empty($loan['avatar'])) {
                     <div class="info-row"><div class="info-label"><i class="fas fa-file-pdf"></i> <?= function_exists('__') ? __('payment_proof') : 'Payment Proof' ?>:</div><div class="info-value"><a href="<?= htmlspecialchars($loan['payment_proof_file']) ?>" target="_blank" class="attachment-link"><i class="fas fa-download"></i> <?= function_exists('__') ? __('view_document') : 'View Document' ?></a></div></div>
                     <?php endif; ?>
                 </div>
+
+                <?php if ($loan['status'] === 'rejected'): ?>
+                <div class="info-card">
+                    <h5 style="color:#dc3545;"><i class="fas fa-ban"></i> <?= function_exists('__') ? __('rejection_details') : 'Rejection Details' ?></h5>
+                    <div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; border-radius: 6px;">
+                        <?php if (!empty($loan['rejection_reason'])): ?>
+                        <div class="info-row" style="background:transparent;border:none;padding:0 0 12px 0;">
+                            <div class="info-label" style="width:auto;"><i class="fas fa-comment-slash"></i> <?= function_exists('__') ? __('rejection_reason') : 'Rejection Reason' ?>:</div>
+                            <div class="info-value" style="width:auto;color:#721c24;font-weight:500;"><?= nl2br(htmlspecialchars($loan['rejection_reason'])); ?></div>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (!empty($loan['rejection_date'])): ?>
+                        <div class="info-row" style="background:transparent;border:none;padding:0 0 12px 0;">
+                            <div class="info-label" style="width:auto;"><i class="fas fa-calendar-times"></i> <?= function_exists('__') ? __('rejection_date') : 'Rejection Date' ?>:</div>
+                            <div class="info-value" style="width:auto;color:#721c24;"><?= date('d M Y, H:i:s', strtotime($loan['rejection_date'])); ?></div>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (!empty($loan['rejected_by'])): ?>
+                        <div class="info-row" style="background:transparent;border:none;padding:0;">
+                            <div class="info-label" style="width:auto;"><i class="fas fa-user-slash"></i> <?= function_exists('__') ? __('rejected_by') : 'Rejected By' ?>:</div>
+                            <div class="info-value" style="width:auto;color:#721c24;font-weight:500;"><?= htmlspecialchars($loan['rejected_by_name'] ?? 'System'); ?></div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
 
             <div class="col-md-6">
@@ -254,6 +283,7 @@ if (!empty($loan['avatar'])) {
                                 <td>
                                     <span class="badge badge-<?= $cClass ?>"><i class="fas <?= $cIcon ?>"></i> <?= htmlspecialchars(ucfirst($link['status'])) ?></span>
                                     <?php if (!empty($link['action_date'])): ?><br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= date('d M Y, H:i', strtotime($link['action_date'])) ?></small><?php endif; ?>
+                                    <?php if (!empty($link['note'])): ?><br><small style="background:#f0f0f0;padding:6px 10px;border-radius:4px;display:block;margin-top:8px;border-left:3px solid #667eea;"><strong>Note:</strong> <?= nl2br(htmlspecialchars($link['note'])); ?></small><?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; endif; ?>
@@ -283,7 +313,7 @@ if (!empty($loan['avatar'])) {
                         <div class="timeline-marker <?= $marker_class ?>"></div>
                         <div class="timeline-content <?= $marker_class ?>">
                             <span class="status-badge bg-<?= $badge_class ?> text-white"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
-                            <p class="mb-2"><strong><?= nl2br(htmlspecialchars($item['note'])) ?></strong></p>
+                            <p class="mb-2"><strong><?= nl2br(htmlspecialchars($item['note'] ?? 'No notes')) ?></strong></p>
                             <small class="text-muted"><i class="far fa-clock"></i> <?= date('d M Y, H:i:s', strtotime($item['created_at'])) ?> | <i class="far fa-user"></i> <?= htmlspecialchars($item['emp_name']) ?></small>
                         </div>
                     </div>

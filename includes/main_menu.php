@@ -48,6 +48,7 @@ $vacationBalanceHistoryLink = 'vacation_balance_history.php';
 $diagnoseDoubleDeductionLink = 'diagnose_double_deduction.php';
 $fixDoubleDeductionLink = 'fix_double_deduction.php';
 $appSettingsLink = 'app_settings.php';
+$loanRejectionReport = 'loan_rejection_report.php';
 
 
 // =================================================================================
@@ -71,7 +72,7 @@ $page_roles = [
     'all_cars.php' => ['Administrator', 'GR_Officer'],
     'all_locations.php' => ['Administrator', 'GR_Officer'],
     'all_machines.php' => ['Administrator', 'GR_Officer'],
-    'asset_inventory.php' => ['Administrator', 'IT_Team', 'IT_Team_Manager'],
+    'asset_inventory.php' => ['Administrator', 'IT_Team', 'IT_Team_Manager', 'GR_Officer'],
     'all_menu_item.php' => ['Administrator'],
     'all_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     // 'all_general_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
@@ -206,6 +207,14 @@ $can_see_reports_page = [
     'Finance_Officer', 'Auditor',
     'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
     'HR_Manager', 'Finance_Manager','GM'
+];
+
+$can_see_asstet_inventory_page = [
+    'Administrator', 'IT_Team', 'IT_Team_Manager', 'GR_Officer'
+];
+
+$can_see_cars_management_page = [
+    'Administrator', 'GR_Officer'
 ];
 
 $is_admin = $is_system_admin; 
@@ -619,7 +628,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
 
                 <?php if ($isHR || $is_system_admin): ?>
-                    <li><a href="<?= $manageHolidaysLink ?>"><i class="fa fa-calendar-days"></i><span>Holiday Management</span></a></li>
+                    <li><a href="<?= $manageHolidaysLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('holiday_management', 'Holiday Management') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php /* 
@@ -687,10 +696,12 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php endif; ?>
 
         <!-- Admin Section -->
-        <?php if ($is_admin || $is_system_admin): ?>
+        <?php if ($is_admin || $is_system_admin  || in_array($user_role, $can_see_cars_management_page) ): ?>
             <li><a href="<?= $carsLink ?>" class="<?= all_cars($current_page) ?>"><i class="fa fa-cars"></i><span><?=__('cars') ?></span></a></li>
             <li><a href="<?= $locationsLink ?>" class="<?= all_locations($current_page) ?>"><i class="fa fa-sitemap"></i><span><?=__('locations') ?></span></a></li>
-            <li><a href="<?= $assetInventoryLink ?>"><i class="fa fa-box"></i><span>Asset Inventory</span></a></li>
+        <?php endif; ?>
+        <?php if ($is_admin || $is_system_admin || in_array($user_role, $can_see_asstet_inventory_page)): ?>
+            <li><a href="<?= $assetInventoryLink ?>"><i class="fa fa-box"></i><span><?=__('asset_inventory', 'Asset Inventory') ?></span></a></li>
         <?php endif; ?>
         <!-- Reports -->
         <?php if (in_array($user_role, $can_see_reports_page) || in_array($user_type, $can_see_reports_page)): ?>
@@ -714,6 +725,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <ul class="nav-third-level" aria-expanded="false">
                         <li><a href="<?= $activityLoggerLink ?>"><i class="fa fa-list-check"></i><span><?=__('activity_logger') ?></span></a></li>
                         <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa fa-clock-rotate-left"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
+                        <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa fa-solid fa-square-shekel"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
                     </ul>
                 </li>
                 <!-- System Tools -->

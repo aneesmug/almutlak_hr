@@ -1,0 +1,62 @@
+
+================================================================================
+EXECUTION: 2026-01-13 15:13:22
+================================================================================
+
+Warning: Undefined array key "REQUEST_URI" in D:\xampp\htdocs\almutlak\system\includes\db.php on line 95
+
+Warning: Undefined array key "QUERY_STRING" in D:\xampp\htdocs\almutlak\system\includes\db.php on line 95
+
+Deprecated: basename(): Passing null to parameter #1 ($path) of type string is deprecated in D:\xampp\htdocs\almutlak\system\includes\db.php on line 95
+FORCE RUN enabled: Bypassing once-per-day restriction
+
+=== Loan Auto-Rejection Cron Job Started ===
+Execution Time: 2026-01-13 15:13:22
+
+Request Type ID: 2
+Cutoff Date: 2026-01-10 15:13:22
+
+Found 1 stale loan request(s) pending supervisor approval for more than 3 days.
+
+-------------------------------------------
+Processing Loan #275 (INV: LN-20260107-7052-mkqm)
+Employee: WAHEED IQBAL FAZAL KARIM (ID: 3803)
+Loan Amount: 8,638.00 SAR
+Loan Type: end_of_service
+Created: 2026-01-07 16:33:47
+Hours Pending: 142 hours
+Pending with: MOHAMED AHMED ALI SAID (ID: 3092)
+✓ Successfully auto-rejected
+Rejection Reason: Automatically rejected due to no approval action from direct supervisor within 3 days. Request submitted on 2026-01-07.
+
+=== Execution Summary ===
+Total Stale Requests: 1
+Successfully Rejected: 1
+Failed: 0
+Completion Time: 2026-01-13 15:13:22
+=== Cron Job Completed ===
+
+
+================================================================================
+EXECUTION: 2026-01-13 15:16:25
+================================================================================
+FORCE RUN enabled: Bypassing once-per-day restriction
+
+=== Loan Auto-Rejection Cron Job Started ===
+Execution Time: 2026-01-13 15:16:25
+
+Request Type ID: 2
+Cutoff Date: 2026-01-10 15:16:25
+
+Found 0 stale loan request(s) pending supervisor approval for more than 3 days.
+
+=== Execution Summary ===
+Total Stale Requests: 0
+Successfully Rejected: 0
+Failed: 0
+Completion Time: 2026-01-13 15:16:25
+=== Cron Job Completed ===
+
+No action needed. All loan requests are within the approval timeframe.
+
+

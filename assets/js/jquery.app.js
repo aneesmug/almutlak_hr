@@ -1249,7 +1249,8 @@ $(document).on('click', '.addMaintAttr', function (e) {
     })
 });
 
-$(document).on('click', '.addDrvrAtter', function (e) {
+// * working fine but disabled as per request */
+/* $(document).on('click', '.addDrvrAtter', function (e) {
     e.preventDefault();
     var cid = $(this).data('id');
     Swal.fire({
@@ -1320,7 +1321,7 @@ $(document).on('click', '.addDrvrAtter', function (e) {
             });
         },
     })
-});
+}); */
 
 $(document).on('click', '.addRtrnDrvrAtter', function (e) {
     e.preventDefault();

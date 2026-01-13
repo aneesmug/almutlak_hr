@@ -71,8 +71,8 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                         <small class="form-text text-muted">${__('accepted_formats') || 'Accepted: PDF, JPG, PNG, DOC, DOCX'}</small>
                     </div>
                     <div class="form-group">
-                        <label for="approval_comment">${__('payment_notes') || 'Payment Notes'} <span class="text-danger">*</span></label>
-                        <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_payment_notes') || 'Please provide notes for this payment processing...'}" maxlength="5000" required></textarea>
+                        <label for="approval_comment">${__('payment_notes') || 'Payment Notes'}</label>
+                        <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_payment_notes') || 'Please provide notes for this payment processing...'}" maxlength="5000"></textarea>
                         <small class="form-text text-muted"><span id="char-count">0</span>/5000 ${__('characters')}</small>
                     </div>
                 </form>
@@ -131,14 +131,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                     Swal.showValidationMessage(__('payment_proof_document_is_required') || 'Payment proof document is required');
                     return false;
                 }
-                if (!approvalComment) {
-                    Swal.showValidationMessage(__('approval_comment_required') || 'Payment notes are required. Please provide notes for this payment.');
-                    return false;
-                }
-                if (approvalComment.length < 5) {
-                    Swal.showValidationMessage(__('approval_comment_min_length') || 'Payment notes must be at least 5 characters long.');
-                    return false;
-                }
+                // Approval comment is optional - no validation required
                 return $.ajax({
                     url: './includes/ajaxFile/ajaxLoan.php',
                     type: 'POST',
@@ -204,8 +197,8 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                         </div>
                         
                         <div class="form-group">
-                            <label for="approval_comment">${__('approval_comment') || 'Approval Comment'} <span class="text-danger">*</span></label>
-                            <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Please provide your approval reasoning...'}" maxlength="5000" required></textarea>
+                            <label for="approval_comment">${__('approval_comment') || 'Approval Comment'}</label>
+                            <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Please provide your approval reasoning...'}" maxlength="5000"></textarea>
                             <small class="form-text text-muted"><span id="char-count">0</span>/5000 ${__('characters')}</small>
                         </div>
                     </form>
@@ -248,15 +241,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                         return false;
                     }
 
-                    if (!approvalComment) {
-                        Swal.showValidationMessage(__('approval_comment_required') || 'Approval notes are required. Please explain your decision.');
-                        return false;
-                    }
-
-                    if (approvalComment.length < 5) {
-                        Swal.showValidationMessage(__('approval_comment_min_length') || 'Approval notes must be at least 5 characters long.');
-                        return false;
-                    }
+                    // Approval comment is optional - no validation required
 
                     return $.ajax({
                         url: './includes/ajaxFile/ajaxLoan.php',
@@ -307,10 +292,9 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                 <hr>
                 <h6 class="text-primary mb-3">
                     <i class="fa fa-comment"></i> ${__('approval_comment') || 'Approval Comment'}
-                    <span class="text-danger">*</span>
                 </h6>
                 <div class="form-group">
-                    <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Please explain your decision and any relevant observations...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;" required></textarea>
+                    <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Please explain your decision and any relevant observations...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;"></textarea>
                     <small class="form-text text-muted">
                         <span id="char-count">0</span>/5000 ${__('characters')}
                     </small>
@@ -344,17 +328,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
         preConfirm: () => {
             const approvalComment = $('#swal_approval_comment').val().trim();
             
-            // Validate notes are provided and minimum 5 characters
-            if (!approvalComment) {
-                Swal.showValidationMessage(__('approval_comment_required') || 'Approval notes are required. Please explain your decision.');
-                return false;
-            }
-            
-            if (approvalComment.length < 5) {
-                Swal.showValidationMessage(__('approval_comment_min_length') || 'Approval notes must be at least 5 characters long.');
-                return false;
-            }
-            
+            // Approval comment is optional - return whatever was entered
             return approvalComment;
         }
     }).then((result) => {

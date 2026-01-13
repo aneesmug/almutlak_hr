@@ -231,6 +231,69 @@
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
 
+        /**
+         * Safely evaluate mathematical expressions for settings like session timeout
+         * Only allows numbers, spaces, and basic arithmetic operators: + - * / ( )
+         */
+        function evaluateExpression(expression) {
+            if (!expression) return '';
+            expression = expression.trim();
+            
+            // Check if it's a simple number
+            if (/^\d+$/.test(expression)) {
+                return expression;
+            }
+            
+            // Validate expression - only allow numbers, operators, and parentheses
+            if (!/^[\d\s\+\-\*\/\(\)]+$/.test(expression)) {
+                return null; // Invalid expression
+            }
+            
+            try {
+                // Use Function instead of eval for safer evaluation
+                const result = Function('"use strict"; return (' + expression + ')')();
+                if (typeof result === 'number' && result > 0 && Number.isInteger(result)) {
+                    return result.toString();
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        /**
+         * Convert seconds to human-readable format
+         * e.g., 7200 -> "2 hours", 1800 -> "30 minutes", 86400 -> "1 day"
+         */
+        function formatSecondsReadable(seconds) {
+            seconds = parseInt(seconds, 10);
+            if (isNaN(seconds) || seconds <= 0) return '';
+            
+            const units = [
+                { name: 'day', value: 86400 },
+                { name: 'hour', value: 3600 },
+                { name: 'minute', value: 60 },
+                { name: 'second', value: 1 }
+            ];
+            
+            let result = [];
+            let remaining = seconds;
+            
+            for (let unit of units) {
+                if (remaining >= unit.value) {
+                    const count = Math.floor(remaining / unit.value);
+                    remaining = remaining % unit.value;
+                    result.push(count + ' ' + unit.name + (count > 1 ? 's' : ''));
+                }
+            }
+            
+            if (result.length === 0) return seconds + ' second' + (seconds > 1 ? 's' : '');
+            if (result.length === 1) return result[0];
+            
+            // Join with commas and 'and' before last item
+            return result.slice(0, -1).join(', ') + ' and ' + result[result.length - 1];
+        }
+
         function renderSettingsGroup(groupName) {
             let formHtml = '';
             const settings = groupedSettings[groupName];
@@ -252,6 +315,7 @@
                 const label = setting.description;
                 const isImagePath = setting.setting_name.includes('logo') || setting.setting_name.includes('favicon');
                 const isEmailList = setting.setting_name === 'traveling_company_email';
+                const isSessionTimeout = setting.setting_name === 'session_timeout';
 
                 formHtml += `<div class="form-group row">`;
                 formHtml += `<label for="${id}" class="col-sm-3 col-form-label">${label}</label>`;
@@ -299,6 +363,14 @@
                     formHtml += `</div>`;
                     formHtml += `<button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-email-btn"><i class="mdi mdi-plus"></i> Add Email</button>`;
                     formHtml += `<input type="hidden" id="${id}" name="${setting.setting_name}" value="">`;
+                } else if (isSessionTimeout) {
+                    formHtml += `<div>`;
+                    formHtml += `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control session-timeout-input" value="${setting.setting_value || ''}" placeholder="e.g., 3600 or 60*60*2">`;
+                    formHtml += `<small class="form-text text-muted">Enter time in seconds. You can use expressions like: 60*60*2 (2 hours), 60*60*24 (1 day), etc.</small>`;
+                    formHtml += `<div id="timeout-result-${setting.setting_name}" class="mt-2" style="display:none;">`;
+                    formHtml += `<small class="text-success"><strong>Evaluated as:</strong> <span class="timeout-seconds"></span> seconds</small>`;
+                    formHtml += `</div>`;
+                    formHtml += `</div>`;
                 } else {
                     let inputHtml = '';
                     switch (setting.input_type) {
@@ -330,6 +402,38 @@
 
             attachPreviewListeners();
             attachEmailListListeners();
+            attachSessionTimeoutListeners();
+        }
+
+        function attachSessionTimeoutListeners() {
+            const timeoutInputs = document.querySelectorAll('.session-timeout-input');
+            timeoutInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    const value = this.value.trim();
+                    const resultDiv = document.getElementById(`timeout-result-${this.name}`);
+                    
+                    if (value) {
+                        const evaluated = evaluateExpression(value);
+                        if (evaluated !== null) {
+                            const readableFormat = formatSecondsReadable(evaluated);
+                            resultDiv.style.display = 'block';
+                            resultDiv.querySelector('.timeout-seconds').textContent = readableFormat + ' (' + evaluated + ' seconds)';
+                            this.classList.remove('is-invalid');
+                            this.classList.add('is-valid');
+                        } else {
+                            resultDiv.style.display = 'none';
+                            this.classList.add('is-invalid');
+                            this.classList.remove('is-valid');
+                        }
+                    } else {
+                        resultDiv.style.display = 'none';
+                        this.classList.remove('is-invalid', 'is-valid');
+                    }
+                });
+                
+                // Trigger input event on load to show current value
+                input.dispatchEvent(new Event('input'));
+            });
         }
 
         function renderApprovalChainSettings() {
@@ -846,9 +950,22 @@
                 const element = document.getElementById(`setting-${setting.setting_name}`);
                 if (element) {
                     const isImagePath = setting.setting_name.includes('logo') || setting.setting_name.includes('favicon');
+                    const isSessionTimeout = setting.setting_name === 'session_timeout';
+                    
                     if (isImagePath) {
                         if (element.files.length > 0) {
                             formData.append(setting.setting_name, element.files[0]);
+                        }
+                    } else if (isSessionTimeout) {
+                        // Evaluate session timeout expression before sending
+                        let value = element.value.trim();
+                        if (value) {
+                            const evaluated = evaluateExpression(value);
+                            if (evaluated !== null) {
+                                formData.append(setting.setting_name, evaluated);
+                            } else {
+                                throw new Error(`Invalid session timeout expression: "${value}". Please use only numbers and operators (+, -, *, /, parentheses).`);
+                            }
                         }
                     } else {
                         // Simplified logic: this works for both standard inputs and select2.
