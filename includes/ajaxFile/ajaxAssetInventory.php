@@ -34,10 +34,10 @@ if (!isset($pdo) || $pdo === null) {
 // Define role-based asset access control
 $roleAssetAccess = [
     'it' => ['Laptop'],
-    'gr_officer' => ['SIM', 'Car', 'Mobile']
+    'gr_officer' => ['SIM Card', 'Car', 'Mobile Phone']
 ];
 
-$isSystemAdmin = isset($_SESSION['is_admin']) && $_SESSION['is_admin'] == 1;
+$isSystemAdmin = $is_system_admin ?? false;
 $userType = $_SESSION['user_type'] ?? '';
 $empType = $_SESSION['emp_type'] ?? '';
 $allowedAssets = [];
@@ -48,11 +48,19 @@ if (!$isSystemAdmin && isset($roleAssetAccess[$userType])) {
 
 /**
  * Check if user can access/manage a specific asset
+ * Checks if the asset name contains any of the allowed asset keywords
  */
 function canAccessAsset($assetName, $isAdmin, $userAllowedAssets) {
     if ($isAdmin) return true;
     if (empty($userAllowedAssets)) return false;
-    return in_array($assetName, $userAllowedAssets);
+    
+    // Check if asset name contains any of the allowed asset keywords
+    foreach ($userAllowedAssets as $allowed) {
+        if (stripos($assetName, $allowed) !== false) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -249,6 +257,7 @@ try {
 
         case 'get_cars':
             // Fetch all cars with proper maker and model names using LEFT JOIN
+            // Also check if car is currently assigned to an employee
             try {
                 $stmt = $pdo->query("
                     SELECT 
@@ -258,10 +267,15 @@ try {
                         c.plate_no,
                         c.made_year,
                         c.type,
-                        c.status
+                        c.status,
+                        IF(cd.status = 1, 1, 0) as is_assigned,
+                        IF(cd.status = 1, COALESCE(e.name, e2.name), NULL) as assigned_to
                     FROM cars c
                     LEFT JOIN car_maker cm ON c.maker_name = cm.id
                     LEFT JOIN car_model cmodel ON c.model = cmodel.id
+                    LEFT JOIN cars_drv cd ON c.id = cd.car_id AND cd.status = 1
+                    LEFT JOIN employees e ON CAST(cd.car_user AS UNSIGNED) = e.id
+                    LEFT JOIN employees e2 ON cd.car_user = e2.emp_id
                     WHERE c.status = '1'
                     ORDER BY cm.maker ASC, cmodel.model ASC
                 ");
@@ -705,10 +719,6 @@ try {
                 json_fail('Return date is required');
             }
             
-            if (empty($signature)) {
-                json_fail('Signature is required');
-            }
-            
             if (empty($assetCondition)) {
                 json_fail('Asset condition is required');
             }
@@ -747,76 +757,13 @@ try {
             }
             
             // Handle signature upload
+            // Note: Signature is now captured during print flow, not during unassign
             $signatureFile = '';
-            $tempSignaturePath = '';
-            if (!empty($signature)) {
-                $uploadDir = __DIR__ . '/../../uploads/signatures/';
-                if (!is_dir($uploadDir)) {
-                    if (!mkdir($uploadDir, 0755, true)) {
-                        error_log('Failed to create signature upload directory: ' . $uploadDir);
-                        json_fail('Failed to create upload directory');
-                    }
-                }
-                
-                // Handle both base64 data URLs and regular base64
-                $signatureData = $signature;
-                if (strpos($signature, 'data:image') === 0) {
-                    // It's a base64 data URL - extract the base64 part
-                    if (preg_match('/data:image\/(\w+);base64,(.+)/', $signature, $matches)) {
-                        $signatureData = base64_decode($matches[2], true);
-                    } else {
-                        error_log('Invalid signature data URL format for item ' . $itemId);
-                        json_fail('Invalid signature format');
-                    }
-                } else {
-                    // Try to decode as base64 anyway
-                    $signatureData = base64_decode($signature, true);
-                }
-                
-                if ($signatureData === false || empty($signatureData)) {
-                    error_log('Signature decode error for item ' . $itemId . ', signature length: ' . strlen($signature));
-                    json_fail('Invalid signature data');
-                }
-                
-                $signatureFileName = 'sig_' . $itemId . '_' . time() . '.png';
-                $signatureFilePath = $uploadDir . $signatureFileName;
-                
-                // Ensure directory is writable
-                if (!is_writable($uploadDir)) {
-                    error_log('Signature upload directory is not writable: ' . $uploadDir);
-                    json_fail('Upload directory is not writable');
-                }
-                
-                $bytesWritten = file_put_contents($signatureFilePath, $signatureData);
-                if ($bytesWritten === false) {
-                    error_log('Failed to write signature file: ' . $signatureFilePath . ', error: ' . json_encode(error_get_last()));
-                    json_fail('Failed to save signature');
-                }
-                
-                if ($bytesWritten === 0) {
-                    error_log('No data written to signature file: ' . $signatureFilePath);
-                    json_fail('Failed to save signature - no data written');
-                }
-                
-                $signatureFile = 'uploads/signatures/' . $signatureFileName;
-                $tempSignaturePath = $signatureFilePath;
-                
-                // Try to embed signature into proof file if it's an image
-                $proofFilePath = __DIR__ . '/../../' . $proofFile;
-                if (file_exists($proofFilePath) && $tempSignaturePath) {
-                    $outputPath = $proofFilePath;
-                    if (embedSignatureOnProofFile($proofFilePath, $tempSignaturePath, $outputPath)) {
-                        error_log('Successfully embedded signature into proof file for item ' . $itemId);
-                    } else {
-                        error_log('Could not embed signature into proof file (non-image format or error), keeping files separate for item ' . $itemId);
-                    }
-                }
-            }
             
             $pdo->beginTransaction();
             try {
-                // Get item details including asset type to check if it's a car
-                $stmt = $pdo->prepare("SELECT ai.id, ai.tracking_id, ai.assigned_emp_id, ai.serial_number, ai.description, a.name as asset_name 
+                // Get item details including asset type and assigned_date to check if it's a car
+                $stmt = $pdo->prepare("SELECT ai.id, ai.tracking_id, ai.assigned_emp_id, ai.serial_number, ai.description, ai.assigned_date, a.name as asset_name 
                                        FROM asset_items ai
                                        JOIN assets a ON ai.asset_id = a.id
                                        WHERE ai.id = :id");
@@ -829,6 +776,9 @@ try {
                 }
                 
                 error_log('Unassigning item: ' . $itemId . ', asset_name: ' . $row['asset_name'] . ', serial: ' . $row['serial_number']);
+                
+                // Store the assigned_date before we clear it
+                $assignedDate = $row['assigned_date'];
                 
                 // If it's a Car asset, also update cars_drv table (deactivate active driver)
                 if ($row['asset_name'] === 'Car' && $row['assigned_emp_id']) {
@@ -868,12 +818,12 @@ try {
                 $stmt->execute(['id' => $itemId]);
                 error_log('Updated asset_items for item_id: ' . $itemId);
                 
-                // Check if record exists in employee_assets by serial_number
+                // Check if record exists in employee_assets by tracking_id (stored in serial_number field)
                 $checkStmt = $pdo->prepare("SELECT id, emp_id FROM employee_assets WHERE serial_number = :serial LIMIT 1");
-                $checkStmt->execute(['serial' => $row['serial_number']]);
+                $checkStmt->execute(['serial' => $row['tracking_id']]);
                 $existingRecord = $checkStmt->fetch(PDO::FETCH_ASSOC);
                 
-                error_log('Looking for employee_assets record with serial: ' . $row['serial_number'] . ', found: ' . ($existingRecord ? 'yes (id=' . $existingRecord['id'] . ')' : 'no'));
+                error_log('Looking for employee_assets record with tracking_id: ' . $row['tracking_id'] . ', found: ' . ($existingRecord ? 'yes (id=' . $existingRecord['id'] . ')' : 'no'));
                 
                 if ($existingRecord) {
                     // Update existing record
@@ -891,31 +841,36 @@ try {
                         'signature_file' => $signatureFile,
                         'proof_file' => $proofFile,
                         'asset_condition' => $assetCondition,
-                        'serial' => $row['serial_number']
+                        'serial' => $row['tracking_id']
                     ]);
-                    error_log('Updated employee_assets record for serial: ' . $row['serial_number']);
+                    error_log('Updated employee_assets record for tracking_id: ' . $row['tracking_id']);
                     
                     $pdo->commit();
                     json_ok(['asset_record_id' => $existingRecord['id']], 'Asset returned and unassigned successfully');
                 } else {
                     // No existing employee_assets record, create one with return info
-                    error_log('No employee_assets record found for serial: ' . $row['serial_number'] . ', creating new one');
+                    error_log('No employee_assets record found for tracking_id: ' . $row['tracking_id'] . ', creating new one');
                     
                     $insertStmt = $pdo->prepare("INSERT INTO employee_assets 
                                                 (emp_id, asset_id, serial_number, description, assigned_date, return_date, status, return_notes, signature_file, proof_file, asset_condition)
                                                 VALUES (:emp_id, :asset_id, :serial_number, :description, :assigned_date, :return_date, 'Returned', :return_notes, :signature_file, :proof_file, :asset_condition)");
                     
-                    // Get asset_id for this item
+                    // Get asset_id and emp_id for this item
                     $getAssetIdStmt = $pdo->prepare("SELECT asset_id FROM asset_items WHERE id = :id");
                     $getAssetIdStmt->execute(['id' => $itemId]);
                     $assetIdRow = $getAssetIdStmt->fetch(PDO::FETCH_ASSOC);
                     
+                    // Get employee emp_id from employees table
+                    $getEmpIdStmt = $pdo->prepare("SELECT emp_id FROM employees WHERE id = :id");
+                    $getEmpIdStmt->execute(['id' => $row['assigned_emp_id']]);
+                    $empIdRow = $getEmpIdStmt->fetch(PDO::FETCH_ASSOC);
+                    
                     $insertStmt->execute([
-                        'emp_id' => $row['assigned_emp_id'],
+                        'emp_id' => $empIdRow ? $empIdRow['emp_id'] : $row['assigned_emp_id'],
                         'asset_id' => $assetIdRow ? $assetIdRow['asset_id'] : null,
-                        'serial_number' => $row['serial_number'],
+                        'serial_number' => $row['tracking_id'],  // Store tracking_id like assign does
                         'description' => $row['description'],
-                        'assigned_date' => null,  // We don't know the original assigned date
+                        'assigned_date' => $assignedDate,  // Use the actual assigned date from asset_items
                         'return_date' => $returnDate,
                         'return_notes' => $returnNotes,
                         'signature_file' => $signatureFile,
@@ -1006,11 +961,14 @@ try {
             }
             
             try {
-                // Get the asset item details and check if it has an employee assignment
+                // Get the asset item details including status
                 $stmt = $pdo->prepare("
-                    SELECT ai.id, ai.tracking_id, ai.serial_number, ea.id AS employee_asset_id
+                    SELECT ai.id, ai.tracking_id, ai.serial_number, ai.status, ai.assigned_emp_id, ai.assigned_date, ai.asset_id,
+                           ea.id AS employee_asset_id,
+                           a.name as asset_name
                     FROM asset_items ai
                     LEFT JOIN employee_assets ea ON (ai.tracking_id = ea.serial_number OR ai.serial_number = ea.serial_number)
+                    LEFT JOIN assets a ON ai.asset_id = a.id
                     WHERE ai.id = :id
                     LIMIT 1
                 ");
@@ -1021,13 +979,93 @@ try {
                     json_fail('Asset item not found', 404);
                 }
                 
-                // If no employee_asset record, use the tracking ID as fallback
-                $recordId = $row['employee_asset_id'] ?? $row['tracking_id'];
+                // If no employee_assets record exists but item is assigned, create one now
+                if (!$row['employee_asset_id'] && $row['status'] === 'Assigned' && $row['assigned_emp_id']) {
+                    try {
+                        $empStmt = $pdo->prepare("SELECT emp_id FROM employees WHERE id = :id");
+                        $empStmt->execute(['id' => $row['assigned_emp_id']]);
+                        $empData = $empStmt->fetch(PDO::FETCH_ASSOC);
+                        
+                        if ($empData) {
+                            $createStmt = $pdo->prepare("INSERT INTO employee_assets (emp_id, asset_id, serial_number, description, assigned_date, status) 
+                                                         VALUES (:emp_id, :asset_id, :serial_number, :description, :assigned_date, 'Assigned')");
+                            $createStmt->execute([
+                                'emp_id' => $empData['emp_id'],
+                                'asset_id' => $row['asset_id'],
+                                'serial_number' => $row['tracking_id'],
+                                'description' => '',
+                                'assigned_date' => $row['assigned_date']
+                            ]);
+                            $row['employee_asset_id'] = $pdo->lastInsertId();
+                        }
+                    } catch (PDOException $e) {
+                        error_log('Failed to create employee_assets record: ' . $e->getMessage());
+                        // Continue anyway - fallback to asset_id in URL
+                    }
+                }
                 
-                json_ok(['asset_id' => $assetId, 'employee_asset_id' => $recordId, 'tracking_id' => $row['tracking_id']]);
+                // Use employee_asset_id if available, otherwise use asset item id
+                $reportId = $row['employee_asset_id'] ?: $assetId;
+                
+                json_ok(['asset_id' => $reportId, 'employee_asset_id' => $reportId, 'tracking_id' => $row['tracking_id'], 'asset_name' => $row['asset_name'], 'status' => $row['status']]);
             } catch (PDOException $e) {
                 json_fail('Query error: ' . $e->getMessage(), 500);
             }
+            break;
+
+        case 'save_print_proof':
+            // Save signature image prior to unassign (signed report will be uploaded in unassign flow)
+            $itemId = (int)($_POST['item_id'] ?? 0);
+            $trackingId = trim($_POST['tracking_id'] ?? '');
+            $employeeAssetId = isset($_POST['employee_asset_id']) ? (int)$_POST['employee_asset_id'] : 0;
+            $signature = $_POST['signature'] ?? '';
+
+            if ($itemId <= 0 || empty($trackingId)) {
+                json_fail('Item ID and Tracking ID are required');
+            }
+
+            $uploadDir = __DIR__ . '/../../uploads/asset_returns/';
+            if (!is_dir($uploadDir)) {
+                @mkdir($uploadDir, 0777, true);
+            }
+
+            $savedSignatureFile = '';
+
+            // Handle signature base64 (PNG/JPEG expected)
+            if (!empty($signature)) {
+                // Expecting data URL like data:image/png;base64,....
+                if (preg_match('/^data:image\/(png|jpeg);base64,/', $signature)) {
+                    $base64 = preg_replace('/^data:image\/(png|jpeg);base64,/', '', $signature);
+                    $base64 = str_replace(' ', '+', $base64);
+                    $binary = base64_decode($base64);
+                    if ($binary !== false) {
+                        $sigExt = (strpos($signature, 'image/jpeg') !== false) ? 'jpg' : 'png';
+                        $sigName = 'print_signature_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $trackingId) . '_' . time() . '.' . $sigExt;
+                        $sigPath = $uploadDir . $sigName;
+                        if (@file_put_contents($sigPath, $binary) !== false) {
+                            $savedSignatureFile = 'uploads/asset_returns/' . $sigName;
+                        }
+                    }
+                }
+            }
+
+            // If we have an employee asset record, persist the signature for the report
+            if ($employeeAssetId > 0 && !empty($savedSignatureFile)) {
+                try {
+                    $stmt = $pdo->prepare("UPDATE employee_assets SET signature_file = :sig WHERE id = :id");
+                    $stmt->execute(['sig' => $savedSignatureFile, 'id' => $employeeAssetId]);
+                } catch (PDOException $e) {
+                    // Do not block printing on a persistence error; just log it
+                    error_log('save_print_proof: failed to update employee_assets.id=' . $employeeAssetId . ' with signature: ' . $e->getMessage());
+                }
+            }
+
+            json_ok([
+                'signature_file' => $savedSignatureFile,
+                'tracking_id' => $trackingId,
+                'item_id' => $itemId,
+                'employee_asset_id' => $employeeAssetId
+            ], 'Print proof saved');
             break;
 
         default:

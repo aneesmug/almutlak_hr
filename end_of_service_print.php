@@ -41,8 +41,8 @@
 	}
 
     // Get EOS details
-    $get_eos_data = mysqli_query($conDB, "
-        SELECT `emp_eos`.*, `eos_calc`.`details`
+    $get_eos_data = mysqli_query($conDB, "SELECT 
+        `emp_eos`.*, `eos_calc`.`details`
         FROM `emp_eos`
         LEFT JOIN `eos_calc` ON `eos_calc`.`cid` = `emp_eos`.`eos_reason`
         WHERE `emp_eos`.`emp_id`='".$_GET['emp_id']."'
@@ -50,12 +50,12 @@
     $eosrow = mysqli_fetch_assoc($get_eos_data) ?: [];
 
     // Get Salary benefits
-    $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `emp_id`='".$_GET['emp_id']."'");
+    $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `status` = 1 AND `emp_id`='".$_GET['emp_id']."'");
     $salaryrow = mysqli_fetch_assoc($get_salary_data) ?: [];
 
     // Get Assigned Assets for Clearance
-    $get_assets_data = mysqli_query($conDB, "
-        SELECT ea.serial_number, ea.description, ea.assigned_date, a.name as asset_name
+    $get_assets_data = mysqli_query($conDB, "SELECT 
+        ea.serial_number, ea.description, ea.assigned_date, a.name as asset_name
         FROM `employee_assets` ea
         LEFT JOIN `assets` a ON ea.asset_id = a.id
         WHERE ea.emp_id = '".$_GET['emp_id']."' AND ea.status = 'Assigned'
@@ -63,8 +63,7 @@
     $assigned_assets = mysqli_fetch_all($get_assets_data, MYSQLI_ASSOC);
 
     // Get Outstanding Loans
-    $get_loans_data = mysqli_query($conDB, "
-        SELECT 
+    $get_loans_data = mysqli_query($conDB, "SELECT 
             l.loan_type,
             l.loan_amount,
             l.total_payable,

@@ -166,6 +166,9 @@ if ($total_items > 0) {
     $sql = "SELECT 
         l.*, 
         l.inv_no AS request_inv_no,
+        l.approved_amount,
+        l.approved_by_emp_id,
+        l.approved_at,
         e.name as employee_name,
         e.dept,
         ra_pending.approver_id as current_approver_id, 
@@ -298,12 +301,13 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
             .request-card .card-body { padding: 1.5rem; }
             .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
             .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
-            .detail-item strong { color: #8a94a6; min-width: 100px; display: inline-block; }
+            .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
             .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; }
             .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
 			.btn-block + .btn-block{ margin-top: 0rem !important; }
             .detail-item{
                 flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
+                text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>;
             }
         </style>
         <?php if ($is_rtl): ?>
@@ -371,11 +375,18 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                 <div class="col-lg-4 col-md-6 mb-4">
                                                     <div class="card request-card h-100">
                                                         <div class="card-header">
-                                                            <?=parseName($loan['employee_name']); ?>
+                                                            <?=getDisplayName(parseName($loan['employee_name'])); ?>
                                                             <span class="float-right"><?=__('emp_id')?>: <?=htmlspecialchars($loan['emp_id']); ?></span>
                                                         </div>
                                                         <div class="card-body">
-                                                            <div class="detail-item"><i class="fad fa-hand-holding-usd duotone-info"></i><strong><?=__('amount')?>:</strong> <?=htmlspecialchars($loan['loan_amount']); ?></div>
+                                                            <div class="detail-item">
+                                                                <i class="fad fa-hand-holding-usd duotone-info"></i><strong><?=__('applied_amount')?>:</strong> <?=htmlspecialchars($loan['loan_amount']); ?>
+                                                            </div>
+                                                            <?php if (!empty($loan['approved_amount']) && $loan['approved_amount'] != $loan['loan_amount']): ?>
+                                                                <div class="detail-item">
+                                                                    <i class="fad fa-check-circle text-success"></i><strong><?=__('approved')?>:</strong> <span class="text-success font-weight-bold"><?=htmlspecialchars($loan['approved_amount']); ?></span>
+                                                                </div>
+                                                            <?php endif; ?>
                                                             <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start_date')?>:</strong> <?=htmlspecialchars(date('d M Y', strtotime($loan['start_date']))); ?></div>
                                                             <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?=__('end_date')?>:</strong> <?=htmlspecialchars(date('d M Y', strtotime($loan['end_date']))); ?></div>
                                                             <div class="detail-item"><i class="fad fa-wallet duotone-info"></i><strong><?=__('monthly')?>:</strong> <?=htmlspecialchars($loan['monthly_deduction']); ?></div>
@@ -387,7 +398,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                     
                                                                     // Check if we have current approver from chain (ALWAYS show if available)
                                                                     if (!empty($loan['current_approver_name'])) {
-                                                                        $loan_status_text = __('pending_with') . ' ' . htmlspecialchars($loan['current_approver_name']);
+                                                                        $loan_status_text = __('pending_with') . ' ' . getDisplayName(parseName($loan['current_approver_name']));
                                                                         $loan_badge_class = 'warning';
                                                                         if (!empty($loan['current_approval_level'])) {
                                                                             $current_level_display = ' (Level ' . $loan['current_approval_level'] . ')';

@@ -288,7 +288,7 @@ if (mysqli_num_rows($query) == 1) {
                                 <div class="employee-banner">
                                     <img src="<?= !empty($resignation['avatar']) && file_exists($resignation['avatar']) ? htmlspecialchars($resignation['avatar']) : 'assets/images/users/avatar-1.jpg'; ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
-                                        <h4><?= translate_name($resignation['employee_name'], $current_lang ?? 'en'); ?></h4>
+                                        <h4><?= getDisplayName($resignation['employee_name']); ?></h4>
                                         <p><?= __('emp_id') ?>: <?= htmlspecialchars($resignation['emp_id'] ?? 'N/A'); ?> | <?= __('iqama_id_label') ?>: <?= htmlspecialchars($resignation['iqama'] ?? 'N/A'); ?></p>
                                     </div>
                                 </div>
@@ -299,11 +299,11 @@ if (mysqli_num_rows($query) == 1) {
                                     <table class="info-table">
                                         <tr>
                                             <td class="label"><?= __('department') ?></td>
-                                            <td class="value"><?= translate_name($resignation['department_name'], $current_lang ?? 'en'); ?></td>
+                                            <td class="value"><?= getDisplayName($resignation['department_name']); ?></td>
                                         </tr>
                                         <tr>
                                             <td class="label"><?= __('designation') ?></td>
-                                            <td class="value"><?= htmlspecialchars($resignation['designation'] ?? 'N/A') ; ?></td>
+                                            <td class="value"><?= getDisplayName($resignation['designation']) ; ?></td>
                                         </tr>
                                         <tr>
                                             <td class="label"><?= __('submitted_on') ?></td>

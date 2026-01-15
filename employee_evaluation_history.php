@@ -208,7 +208,7 @@ $evaluations = $eval_query->fetchAll(PDO::FETCH_ASSOC);
                                                 <td>
                                                     <?= htmlspecialchars($eval['eval_date']) ?>
                                                 </td>
-                                                <td><?= translate_name($eval['manager_name'], $current_lang ?? 'en') ?></td>
+                                                <td><?= getDisplayName($eval['manager_name']) ?></td>
                                                 <td><?= ($is_rtl ?? false ? $eval['dep_nme_ar'] : $eval['dep_nme']) ?></td>
                                                 <td>
                                                     <span class="badge badge-<?= $score_class ?> score-badge">

@@ -512,7 +512,7 @@ $status_classes = [
                     <div class="profile-header no-print">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
-                                <h3><?= translate_name($request['request_title'], $current_lang ?? 'en') ?></h3>
+                                <h3><?= getDisplayName($request['request_title']) ?></h3>
                                 <div style="margin-top: 10px;">
                                     <span class="badge-custom" style="background: rgba(255,255,255,0.2);">
                                         <?= __($request['current_status']) ?>
@@ -531,7 +531,7 @@ $status_classes = [
                             </div>
                             <div class="request-meta-item">
                                 <div class="request-meta-icon"><i class="mdi mdi-account"></i></div>
-                                <div><small><?=__('requester') ?></small><br><strong><?= translate_name($request['emp_name'], $current_lang ?? 'en') ?></strong></div>
+                                <div><small><?=__('requester') ?></small><br><strong><?= getDisplayName($request['emp_name']) ?></strong></div>
                             </div>
                             <div class="request-meta-item">
                                 <div class="request-meta-icon"><i class="mdi mdi-calendar"></i></div>
@@ -539,7 +539,7 @@ $status_classes = [
                             </div>
                             <div class="request-meta-item">
                                 <div class="request-meta-icon"><i class="mdi mdi-folder"></i></div>
-                                <div><small><?=__('target') ?></small><br><strong><?= translate_name($request['department_to'], $current_lang ?? 'en') ?></strong></div>
+                                <div><small><?=__('target') ?></small><br><strong><?= getDisplayName($request['department_to']) ?></strong></div>
                             </div>
                         </div>
                     </div>
@@ -617,7 +617,7 @@ $status_classes = [
                                         </div>
                                         <div style="font-size: 14px; color: #1565c0;">
                                             <strong><?= __('received_by', 'Received By') ?>:</strong>
-                                            <?= translate_name($delivery_info['received_employee_name'], $current_lang ?? 'en') ?>
+                                            <?= getDisplayName($delivery_info['received_employee_name']) ?>
                                         </div>
                                         <div style="font-size: 14px; color: #1565c0;">
                                             <strong><?= __('date', 'Date') ?>:</strong>
@@ -639,7 +639,7 @@ $status_classes = [
                                                 <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
                                                     <div>
                                                         <div style="font-weight: 500; color: #2c3e50;">
-                                                            <?= translate_name($it['item_name'], $current_lang ?? 'en') ?>
+                                                            <?= getDisplayName($it['item_name']) ?>
                                                         </div>
                                                         <small style="color: #6c757d; display: inline-block; margin-top: 2px;">
                                                             <?= __('quantity', 'Quantity') ?>: <?= (int)$it['quantity'] ?>
@@ -671,7 +671,7 @@ $status_classes = [
                                                     <div class="item-number" style="width: 32px; height: 32px; background-color: #667eea; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600;"><?= $index + 1 ?></div>
                                                     <div class="item-info">
                                                         <h6 style="margin: 0 0 5px 0; font-weight: 600; color: #2c3e50;">
-                                                            <?= translate_name($item['item_name'], $current_lang ?? 'en')  ?>
+                                                            <?= getDisplayName($item['item_name'])  ?>
                                                             <!-- Delivery Status Badge for Completed Requests -->
                                                             <?php if ($request['current_status'] === 'completed'): ?>
                                                                 <?php 
@@ -685,10 +685,10 @@ $status_classes = [
                                                             <?php endif; ?>
                                                         </h6>
                                                         <?php if (!empty($item['item_type'])): ?>
-                                                            <small style="color: #6c757d;"><?=__('type')?>: <?= translate_name($item['item_type'], $current_lang ?? 'en') ?></small>
+                                                            <small style="color: #6c757d;"><?=__('type')?>: <?= getDisplayName($item['item_type']) ?></small>
                                                         <?php endif; ?>
                                                         <?php if (!empty($item['specifications'])): ?>
-                                                            <small style="display: block; margin-top: 4px; color: #6c757d;"><?=__('specs', 'Specs')?>: <?= translate_name($item['specifications'], $current_lang ?? 'en') ?></small>
+                                                            <small style="display: block; margin-top: 4px; color: #6c757d;"><?=__('specs', 'Specs')?>: <?= getDisplayName($item['specifications']) ?></small>
                                                         <?php endif; ?>
                                                     </div>
                                                 </div>
@@ -823,7 +823,7 @@ $status_classes = [
                                                         <option value=""></option>
                                                         <?php foreach ($potential_approvers as $approver): ?>
                                                             <option value="<?= $approver['emp_id'] ?>" data-type="<?= ($approver['user_type']) ?>" data-dept="<?= $approver['dept'] ?>">
-                                                                <?= translate_name($approver['name'], $current_lang ?? 'en') ?>
+                                                                <?= getDisplayName($approver['name']) ?>
                                                             </option>
                                                         <?php endforeach; ?>
                                                     </select>
@@ -889,21 +889,21 @@ $status_classes = [
                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                                         <div style="padding: 6px; background: #f8f9fa; border-radius: 4px;">
                                             <small style="color: #6c757d; font-weight: 600; font-size: 0.75rem; display: block;"><?= __('category', 'Category') ?></small>
-                                            <div style="color: #2c3e50; font-size: 0.8rem;"><?= translate_name($request['request_category'], $current_lang ?? 'en') ?></div>
+                                            <div style="color: #2c3e50; font-size: 0.8rem;"><?= getDisplayName($request['request_category']) ?></div>
                                         </div>
                                         <div style="padding: 6px; background: #f8f9fa; border-radius: 4px;">
                                             <small style="color: #6c757d; font-weight: 600; font-size: 0.75rem; display: block;"><?= __('department', 'Department') ?></small>
-                                            <div style="color: #2c3e50; font-size: 0.8rem;"><?= translate_name($request['dep_nme'], $current_lang ?? 'en') ?></div>
+                                            <div style="color: #2c3e50; font-size: 0.8rem;"><?= getDisplayName($request['dep_nme']) ?></div>
                                         </div>
                                     </div>
                                     <div style="padding: 6px; background: #f8f9fa; border-radius: 4px; margin-top: 8px;">
                                         <small style="color: #6c757d; font-weight: 600; font-size: 0.75rem; display: block;"><?= __('requester', 'Requester') ?></small>
-                                        <div style="color: #2c3e50; font-size: 0.8rem;"><?= translate_name($request['emp_name'], $current_lang ?? 'en') ?></div>
+                                        <div style="color: #2c3e50; font-size: 0.8rem;"><?= getDisplayName($request['emp_name']) ?></div>
                                     </div>
                                     <?php if (!empty($request['description'])): ?>
                                     <div style="padding: 6px; background: #f8f9fa; border-radius: 4px; margin-top: 8px;">
                                         <small style="color: #6c757d; font-weight: 600; font-size: 0.75rem; display: block;"><?= __('description', 'Description') ?></small>
-                                        <div style="color: #2c3e50; font-size: 0.8rem; line-height: 1.2;"><?= translate_name($request['description'], $current_lang ?? 'en') ?></div>
+                                        <div style="color: #2c3e50; font-size: 0.8rem; line-height: 1.2;"><?= getDisplayName($request['description']) ?></div>
                                     </div>
                                     <?php endif; ?>
                                 </div>
@@ -956,7 +956,7 @@ $status_classes = [
                                                     <i class="mdi mdi-<?= $approver['status'] == 'approved' ? 'check' : ($approver['status'] == 'rejected' ? 'close' : 'clock-outline') ?>"></i>
                                                 </div>
                                                 <div class="timeline-content">
-                                                    <h6 style="margin: 0 0 5px 0; color: #2c3e50;"><?= __('level', 'Level') ?> <?= $approver['approval_level'] ?>: <?= translate_name($approver['approver_name'], $current_lang ?? 'en') ?></h6>
+                                                    <h6 style="margin: 0 0 5px 0; color: #2c3e50;"><?= __('level', 'Level') ?> <?= $approver['approval_level'] ?>: <?=  getDisplayName($approver['approver_name']) ?></h6>
                                                     <small style="color: #6c757d;"><?= __('status', 'Status') ?>: <strong><?= __(strtolower($approver['status'])) ?></strong></small>
                                                     <?php if ($approver['action_date']): ?>
                                                         <small style="display: block; color: #6c757d; margin-top: 5px;"><?= date('M d, Y H:i', strtotime($approver['action_date'])) ?></small>

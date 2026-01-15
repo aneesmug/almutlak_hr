@@ -241,7 +241,7 @@ $all_payrolls = $stmt->get_result();
                             
                             <div class="row mb-4">
                                 <div class="col-sm-8">
-                                    <h4><?= translate_name($emprow['name'], $current_lang ?? 'en') ?> - <?= __('payroll_slip', 'Payroll Slip'); ?></h4>
+                                    <h4><?= getDisplayName($emprow['name']) ?> - <?= __('payroll_slip', 'Payroll Slip'); ?></h4>
                                     <p class="text-muted"><?= __('employee_id', 'Employee ID') ?>: <?= htmlspecialchars($emprow['emp_id']) ?></p>
                                 </div>
                                 <div class="col-sm-4 text-<?= $is_rtl ? 'left' : 'right' ?>">
@@ -294,7 +294,7 @@ $all_payrolls = $stmt->get_result();
                                         <div class="col-md-6">
                                             <div class="employee-details-card">
                                                 <h6><i class="fa fa-user"></i> <?= __('employee_information', 'Employee Information') ?></h6>
-                                                <p><i class="fa fa-id-card"></i> <strong><?= __('name', 'Name') ?>:</strong> <?= translate_name($emprow['name'], $current_lang ?? 'en') ?></p>
+                                                <p><i class="fa fa-id-card"></i> <strong><?= __('name', 'Name') ?>:</strong> <?= getDisplayName($emprow['name']) ?></p>
                                                 <p><i class="fa fa-hashtag"></i> <strong><?= __('employee_id', 'Employee ID') ?>:</strong> <?= htmlspecialchars($emprow['emp_id']) ?></p>
                                                 <p><i class="fa fa-building"></i> <strong><?= __('department', 'Department') ?>:</strong> <?= ($is_rtl ?? false ? $emprow['dep_nme_ar'] : $emprow['dep_nme']) ?></p>
                                             </div>

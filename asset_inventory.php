@@ -5,12 +5,12 @@
     // Determine user role and allowed assets
     $userType = $_SESSION['user_type'] ?? '';
     $empType = $_SESSION['emp_type'] ?? '';
-    $isSystemAdmin = isset($_SESSION['is_admin']) && $_SESSION['is_admin'] == 1;
+    $isSystemAdmin = $is_system_admin ?? false;
     
     // Define role-based asset access (exclusive - each role only sees their assets)
     $roleAssetAccess = [
         'it' => ['Laptop'],           // IT can only manage Laptops
-        'gr_officer' => ['SIM', 'Car', 'Mobile'] // GR Officer can only manage SIM, Car, Mobile
+        'gr_officer' => ['SIM Card', 'Car', 'Mobile Phone'] // GR Officer can only manage SIM Card, Car, Mobile Phone
     ];
     
     // Determine allowed assets for current user
@@ -104,16 +104,16 @@
                                 <table id="inventory_table" class="table table-striped table-bordered dt-responsive nowrap inventory_table" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
                                     <thead>
                                         <tr>
-                                            <th>ID</th>
+                                            <th><?= __('id', 'ID') ?></th>
                                             <th></th>
-                                            <th>Tracking ID</th>
-                                            <th>Asset Type</th>
-                                            <th>Serial Number</th>
-                                            <th>Description</th>
-                                            <th>Status</th>
-                                            <th>Assigned To</th>
-                                            <th>Assigned Date</th>
-                                            <th style="width: 30px">Action</th>
+                                            <th><?= __('tracking_id', 'Tracking ID') ?></th>
+                                            <th><?= __('asset_type', 'Asset Type') ?></th>
+                                            <th><?= __('serial_number', 'Serial Number') ?></th>
+                                            <th><?= __('description', 'Description') ?></th>
+                                            <th><?= __('status', 'Status') ?></th>
+                                            <th><?= __('assigned_to', 'Assigned To') ?></th>
+                                            <th><?= __('assigned_date', 'Assigned Date') ?></th>
+                                            <th style="width: 30px"><?= __('action', 'Action') ?></th>
                                         </tr>
                                     </thead>
                                     <tbody id="inventory-body">
@@ -163,7 +163,7 @@
             // Excluded assets for this user (exclusive filtering)
             excludedAssets: function() {
                 if (this.isSystemAdmin) return [];
-                if (this.userType === 'it') return ['SIM', 'Car', 'Mobile'];
+                if (this.userType === 'it') return ['SIM Card', 'Car', 'Mobile Phone'];
                 if (this.userType === 'gr_officer') return ['Laptop'];
                 return [];
             }
@@ -178,9 +178,9 @@
 
         // Initialize DataTable
 
-        function statusBadge(status) {
+        function statusBadge(status, translatedStatus) {
             const cls = status === 'Assigned' ? 'success' : (status === 'Available' ? 'secondary' : 'warning');
-            return `<span class="badge badge-${cls}">${status}</span>`;
+            return `<span class="badge badge-${cls}">${translatedStatus || status}</span>`;
         }
 
         function loadInventory() {
@@ -219,10 +219,10 @@
                                 <td>${row.id}</td>
                                 <td><input type="checkbox" name="status" class="asset-status-checkbox" value="${row.id}" /></td>
                                 <td><strong>${row.tracking_id || '-'}</strong></td>
-                                <td>${row.asset_name || '-'}</td>
+                                <td>${__(row.asset_name.toLowerCase().replace(/ /g, '_')) || '-'}</td>
                                 <td>${row.serial_number || '-'}</td>
                                 <td>${row.description || '-'}</td>
-                                <td>${statusBadge(row.status)}</td>
+                                <td>${statusBadge(row.status, __(row.status.toLowerCase()))}</td>
                                 <td>${row.employee_name || '-'}</td>
                                 <td>${row.assigned_date || '-'}</td>
                                 <td>
@@ -231,46 +231,51 @@
                                             <i class="mdi mdi-dots-horizontal"></i>
                                         </a>
                                         <div class="dropdown-menu dropdown-menu-right">
+                                            ${row.status !== 'Assigned' ? `
                                             <a href="javascript:void(0);" class="dropdown-item text-custom editAssetBtn" 
                                                 data-id="${row.id}" 
                                                 data-asset_id="${row.asset_id}" 
-                                                data-asset_name="${row.asset_name || ''}"
+                                                data-asset_name="${(row.asset_name) || ''}"
                                                 data-tracking="${row.tracking_id || ''}"
                                                 data-serial="${row.serial_number || ''}"
                                                 data-description="${(row.description || '').replace(/"/g, '&quot;')}"
                                                 data-status="${row.status}">
-                                                <i class="fa fa-edit mr-2 font-18 vertical-middle"></i>Edit
+                                                <i class="fa fa-edit mr-2 font-18 vertical-middle"></i>${__('edit', 'Edit')}
                                             </a>
-                                            <a href="javascript:void(0);" class="dropdown-item text-danger deleteAssetBtn" 
-                                                data-id="${row.id}" 
-                                                data-tracking="${row.tracking_id}">
-                                                <i class="fa fa-trash mr-2 font-18 vertical-middle"></i>Delete
+                                            ` : ''}
+                                            ${row.status !== 'Assigned' ? `
+                                            <a href="javascript:void(0);" class="dropdown-item text-danger deleteAjax" 
+                                                data-tbl='asset_items'
+                                                data-file='0'
+                                                data-id="${row.id}">
+                                                <i class="fa fa-trash mr-2 font-18 vertical-middle"></i>${__('delete', 'Delete')}
                                             </a>
+                                            ` : ''}
+                                            ${row.status === 'Assigned' ? `
                                             <a href="javascript:void(0);" class="dropdown-item text-info print-asset-report" 
                                                 data-id="${row.id}">
-                                                <i class="fa fa-print mr-2 font-18 vertical-middle"></i>Print Report
+                                                <i class="fa fa-print mr-2 font-18 vertical-middle"></i>${__('print_report', 'Print Report')}
                                             </a>
-                                            ${row.status === 'Available' ? `
+                                            ` : ''}
+                                            ${row.asset_id != 4 && row.status === 'Available' ? `
                                             <a href="javascript:void(0);" class="dropdown-item btn-assign" 
                                                 data-id="${row.id}">
-                                                <i class="fa fa-link mr-2 font-18 vertical-middle"></i>Assign
+                                                <i class="fa fa-link mr-2 font-18 vertical-middle"></i>${__('assign', 'Assign')}
                                             </a>
                                             ` : ''}
                                             ${row.status === 'Assigned' ? `
                                             <a href="javascript:void(0);" class="dropdown-item text-warning btn-unassign" 
                                                 data-id="${row.id}"
                                                 data-tracking="${row.tracking_id}">
-                                                <i class="fa fa-unlink mr-2 font-18 vertical-middle"></i>Unassign
+                                                <i class="fa fa-unlink mr-2 font-18 vertical-middle"></i>${__('unassign', 'Unassign')}
                                             </a>
                                             ` : ''}
-                                            ${row.asset_name === 'Car' ? `
-                                                ${row.status === 'Available' ? `
-                                                <a href="javascript:void(0);" class="dropdown-item text-success btn-assign-driver" 
-                                                    data-id="${row.id}"
-                                                    data-tracking="${row.tracking_id}">
-                                                    <i class="fa fa-user mr-2 font-18 vertical-middle"></i>Assign Driver
-                                                </a>
-                                                ` : ''}
+                                            ${row.asset_id == 4 && row.status === 'Available' ? `
+                                            <a href="javascript:void(0);" class="dropdown-item text-success btn-assign-driver" 
+                                                data-id="${row.id}"
+                                                data-tracking="${row.tracking_id}">
+                                                <i class="fa fa-user mr-2 font-18 vertical-middle"></i>${__('assign_driver', 'Assign Driver')}
+                                            </a>
                                             ` : ''}
                                         </div>
                                     </div>
@@ -344,7 +349,24 @@
                     text: '<i class="icon-share-alt me-1 ti-xs"></i> Export',
                     buttons: buttonConfig
                 }],
-                bDestroy: true
+                bDestroy: true,
+                language: {
+                        search: `<span>${__('search')}:</span> _INPUT_`,
+                        searchPlaceholder: `${__('search')}...`,
+                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                        paginate: {
+                            first: __('first'),
+                            last: __('last'),
+                            next: __('next'),
+                            previous: __('previous')
+                        },
+                        emptyTable: __('no_data_available_in_table'),
+                        zeroRecords: __('no_matching_records_found'),
+                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                    }
             });
         }
 
@@ -375,10 +397,10 @@
                 inventoryTable.column(6).search(val, true, false).draw();
             });
             Array.from(statusOptions).sort().forEach(status => {
-                statusSelect.append(`<option value="${status}">${status}</option>`);
+                statusSelect.append(`<option value="${__(status.toLowerCase().replace(/ /g, '_'))}">${__(status.toLowerCase().replace(/ /g, '_'))}</option>`);
             });
             statusSelect.select2({
-                placeholder: 'Select Status',
+                placeholder: __('select_status', 'Select Status'),
                 allowClear: true,
                 width: '100%'
             });
@@ -389,10 +411,10 @@
                 inventoryTable.column(3).search(val, true, false).draw();
             });
             Array.from(typeOptions).sort().forEach(type => {
-                typeSelect.append(`<option value="${type}">${type}</option>`);
+                typeSelect.append(`<option value="${__(type.toLowerCase().replace(/ /g, '_'))}">${__(type.toLowerCase().replace(/ /g, '_'))}</option>`);
             });
             typeSelect.select2({
-                placeholder: 'Select Asset Type',
+                placeholder: __('select_asset_type', 'Select Asset Type'),
                 allowClear: true,
                 width: '100%'
             });
@@ -542,10 +564,18 @@
                     
                     let assets = resp.data.assets;
                     
-                    // Filter assets based on user role - exclude assets not allowed for this role
+                    // Filter assets based on user role - only show allowed assets
                     if (!userRole.isSystemAdmin) {
-                        const excluded = userRole.excludedAssets();
-                        assets = assets.filter(asset => !excluded.includes(asset.name));
+                        if (userRole.allowedAssets.length > 0) {
+                            // Check if asset name contains any of the allowed keywords
+                            assets = assets.filter(asset => {
+                                return userRole.allowedAssets.some(allowed => 
+                                    asset.name.toLowerCase().includes(allowed.toLowerCase())
+                                );
+                            });
+                        } else {
+                            assets = []; // No assets allowed
+                        }
                     }
                     
                     if (assets.length === 0) {
@@ -553,49 +583,52 @@
                         return;
                     }
                     
-                    let assetOptions = '<option value="">-- Select Asset Type --</option>';
+                    let assetOptions = `<option value="">${__('select_asset_type')}</option>`;
                     assets.forEach(asset => {
-                        assetOptions += `<option value="${asset.id}">${asset.name}</option>`;
+                        assetOptions += `<option value="${asset.id}">${__(asset.name.toLowerCase().replace(/ /g, '_'))}</option>`;
                     });
                     
                     Swal.fire({
-                        title: 'Add New Asset Item',
+                        title: __('add_new_asset_item'),
                         html: `
                             <form id="registerAssetForm" class="text-left">
                                 <div class="form-group">
-                                    <label for="swal-asset-type">Asset Type</label>
+                                    <label for="swal-asset-type">${__('asset_type')}</label>
                                     <select id="swal-asset-type" class="form-control">
                                         ${assetOptions}
                                     </select>
                                 </div>
                                 <div class="form-group" id="car-selector-group" style="display: none;">
-                                    <label for="swal-car-select">Select Car</label>
+                                    <label for="swal-car-select">${__('select_car')}</label>
                                     <select id="swal-car-select" class="form-control">
-                                        <option value="">-- Select a Car --</option>
+                                        <option value="">${__('select_car')}</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="swal-serial-number">Serial Number / Identifier</label>
-                                    <input id="swal-serial-number" class="form-control" placeholder="Enter serial number or identifier">
+                                    <label for="swal-serial-number">${__('serial_number_identifier')}</label>
+                                    <input id="swal-serial-number" class="form-control" placeholder="${__('enter_serial_number_identifier')}">
                                 </div>
                                 <div class="form-group">
-                                    <label for="swal-description">Description</label>
-                                    <textarea id="swal-description" class="form-control" placeholder="Enter asset description" rows="3"></textarea>
+                                    <label for="swal-description">${__('description')}</label>
+                                    <textarea id="swal-description" class="form-control" placeholder="${__('enter_asset_description')}" rows="3"></textarea>
                                 </div>
                             </form>
                         `,
                         showCancelButton: true,
-                        cancelButtonText: 'Cancel',
-                        confirmButtonText: 'Add Asset',
+                        cancelButtonText: __('cancel'),
+                        confirmButtonText: __('add_asset'),
+                        confirmButtonColor: '#3085d6',
                         showLoaderOnConfirm: true,
                         allowOutsideClick: () => !Swal.isLoading(),
                         didOpen: () => {
                             // Handle asset type change to show car selector
                             $('#swal-asset-type').on('change', function() {
-                                const assetTypeName = $(this).find('option:selected').text();
+                                const assetTypeId = $(this).find('option:selected').val();
+                                console.log('Selected Asset Type ID:', assetTypeId);
                                 const carGroup = $('#car-selector-group');
                                 
-                                if (assetTypeName.includes('Car')) {
+                                // Only show car selector for Car asset (ID = 4)
+                                if (assetTypeId == 4) {
                                     carGroup.show();
                                     // Fetch cars from database
                                     $.ajax({
@@ -607,15 +640,20 @@
                                             if (resp.success && resp.data.cars) {
                                                 const carSelect = $('#swal-car-select');
                                                 carSelect.empty();
-                                                carSelect.append('<option value="">-- Select a Car --</option>');
+                                                carSelect.append(`<option value="">${__('select_car')}</option>`);
                                                 resp.data.cars.forEach(car => {
-                                                    carSelect.append(`<option value="${car.id}">${car.maker_name} ${car.model} (${car.plate_no})</option>`);
+                                                    const isAssigned = car.is_assigned == 1;
+                                                    const displayText = isAssigned ? 
+                                                        `${car.maker_name} ${car.model} (${car.plate_no}) - ${__('assigned')} (${car.assigned_to})` :
+                                                        `${car.maker_name} ${car.model} (${car.plate_no})`;
+                                                    const option = $(`<option value="${car.id}" ${isAssigned ? 'disabled' : ''}>${displayText}</option>`);
+                                                    carSelect.append(option);
                                                 });
                                                 
                                                 // Apply Select2 to car selector
                                                 carSelect.select2({
                                                     dropdownParent: $('.swal2-container'),
-                                                    placeholder: 'Search and select a car',
+                                                    placeholder: __('search_and_select_a_car'),
                                                     allowClear: true,
                                                     width: '100%'
                                                 });
@@ -632,21 +670,20 @@
                             const carId = document.getElementById('swal-car-select').value;
                             const serialNumber = document.getElementById('swal-serial-number').value;
                             const description = document.getElementById('swal-description').value;
-                            const assetTypeName = document.querySelector('#swal-asset-type option:checked').text;
                             
                             if (!assetId) {
-                                Swal.showValidationMessage('Please select an asset type');
+                                Swal.showValidationMessage(__('please_select_an_asset_type'));
                                 return false;
                             }
                             
-                            // If it's Car type, require car selection
-                            if (assetTypeName.includes('Car') && !carId) {
-                                Swal.showValidationMessage('Please select a car');
+                            // If it's Car type (ID = 4), require car selection
+                            if (assetId == 4 && !carId) {
+                                Swal.showValidationMessage(__('please_select_a_car'));
                                 return false;
                             }
                             
                             if (!serialNumber && !carId) {
-                                Swal.showValidationMessage('Please enter serial number');
+                                Swal.showValidationMessage(__('please_enter_serial_number'));
                                 return false;
                             }
                             
@@ -724,121 +761,54 @@
         $(document).on('click', '.btn-unassign', function() {
             const itemId = $(this).data('id');
             const trackingId = $(this).data('tracking');
-            let signaturePad;
-            let uploadedSignatureImage = null;
             
             Swal.fire({
-                title: 'Return Asset Item',
+                title: __('return_asset_item', 'Return Asset Item'),
                 html: `
                     <div class="text-left">
+                        <div class="alert alert-info mb-3">
+                            <strong>${__('instructions', 'Instructions')}:</strong><br>
+                            1. ${__('click_print_report_to_print_asset_details', 'Click "Print Report" from the asset actions to print asset details and capture signature')}<br>
+                            2. ${__('get_the_printed_document_signed', 'Get the printed document signed by the employee')}<br>
+                            3. ${__('upload_the_signed_proof_below', 'Upload the signed proof document below')}
+                        </div>
+                        
                         <div class="form-group mb-3">
-                            <label><strong>Asset Condition</strong></label>
+                            <label><strong>${__('asset_condition', 'Asset Condition')}</strong></label>
                             <select id="asset-condition" class="form-control" required>
-                                <option value="">-- Select Condition --</option>
-                                <option value="Good">Good</option>
-                                <option value="Damage">Damage</option>
-                                <option value="Lost">Lost</option>
-                                <option value="Buy">Buy</option>
-                                <option value="Other">Other</option>
+                                <option value="">${__('select_condition', 'Select Condition')}</option>
+                                <option value="Good">${__('good', 'Good')}</option>
+                                <option value="Damage">${__('damage', 'Damage')}</option>
+                                <option value="Lost">${__('lost', 'Lost')}</option>
+                                <option value="Buy">${__('buy', 'Buy')}</option>
+                                <option value="Other">${__('other', 'Other')}</option>
                             </select>
                         </div>
                         
                         <div class="form-group mb-3">
-                            <label><strong>Signature</strong></label>
-                            <ul class="nav nav-tabs mb-2" id="signature-tabs" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link active" id="draw-tab" data-bs-toggle="tab" data-bs-target="#draw-pane" type="button" role="tab">Draw Signature</button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-pane" type="button" role="tab">Upload Signature</button>
-                                </li>
-                            </ul>
-                            <div class="tab-content">
-                                <div class="tab-pane fade show active" id="draw-pane" role="tabpanel">
-                                    <div id="signature-pad-container" style="border: 2px solid #ccc; border-radius: 4px; background: white; margin-bottom: 10px;">
-                                        <canvas id="signature-canvas" width="400" height="150" style="display: block; cursor: crosshair; touch-action: none; border-radius: 4px;"></canvas>
-                                    </div>
-                                    <small class="form-text text-muted">Draw your signature above</small>
-                                    <button type="button" id="clear-signature-btn" class="btn btn-sm btn-secondary mt-2">Clear Signature</button>
-                                </div>
-                                <div class="tab-pane fade" id="upload-pane" role="tabpanel">
-                                    <input type="file" id="signature-file" class="form-control mb-2" accept=".jpg,.jpeg,.png,.gif,.bmp">
-                                    <small class="form-text text-muted">Select a signature image file (JPG, PNG, GIF, BMP)</small>
-                                    <div id="uploaded-signature-preview" style="margin-top: 10px; display: none;">
-                                        <img id="signature-preview-img" src="" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 4px;">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="form-group mb-3">
-                            <label><strong>Return Date</strong></label>
+                            <label><strong>${__('return_date', 'Return Date')}</strong></label>
                             <input type="date" id="return-date" class="form-control" value="${new Date().toISOString().split('T')[0]}">
                         </div>
                         
                         <div class="form-group mb-3">
-                            <label><strong>Proof of Return (Document/Receipt)</strong></label>
+                            <label><strong>${__('proof_of_return', 'Proof of Return (Signed Document/Receipt)')}</strong></label>
                             <input type="file" id="proof-file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
-                            <small class="form-text text-muted">Accepted formats: PDF, JPG, PNG, DOC</small>
+                            <small class="form-text text-muted">${__('accepted_formats', 'Upload the signed printed document here (PDF, JPG, PNG, DOC)')}</small>
                         </div>
                         
                         <div class="form-group">
-                            <label><strong>Notes (Optional)</strong></label>
-                            <textarea id="return-notes" class="form-control" rows="2" placeholder="Add any return notes..."></textarea>
+                            <label><strong>${__('notes_optional', 'Notes (Optional)')}</strong></label>
+                            <textarea id="return-notes" class="form-control" rows="2" placeholder="${__('add_return_notes', 'Add any return notes...')}"></textarea>
                         </div>
                     </div>
                 `,
-                width: '600px',
+                width: '45%',
                 showCancelButton: true,
-                confirmButtonText: 'Confirm Return',
+                confirmButtonText: __('confirm_return', 'Confirm Return'),
                 confirmButtonColor: '#28a745',
                 cancelButtonColor: '#d33',
+                cancelButtonText: __('cancel', 'Cancel'),
                 showLoaderOnConfirm: true,
-                didOpen: (modal) => {
-                    const canvas = document.getElementById('signature-canvas');
-                    signaturePad = new SignaturePad(canvas, {
-                        backgroundColor: 'rgb(255,255,255)'
-                    });
-                    
-                    document.getElementById('clear-signature-btn').addEventListener('click', () => {
-                        signaturePad.clear();
-                    });
-                    
-                    // Handle tab switching
-                    const drawTab = document.getElementById('draw-tab');
-                    const uploadTab = document.getElementById('upload-tab');
-                    const drawPane = document.getElementById('draw-pane');
-                    const uploadPane = document.getElementById('upload-pane');
-                    
-                    drawTab.addEventListener('click', () => {
-                        drawTab.classList.add('active');
-                        uploadTab.classList.remove('active');
-                        drawPane.classList.add('show', 'active');
-                        uploadPane.classList.remove('show', 'active');
-                    });
-                    
-                    uploadTab.addEventListener('click', () => {
-                        uploadTab.classList.add('active');
-                        drawTab.classList.remove('active');
-                        uploadPane.classList.add('show', 'active');
-                        drawPane.classList.remove('show', 'active');
-                    });
-                    
-                    // Handle signature file upload
-                    document.getElementById('signature-file').addEventListener('change', function(e) {
-                        const file = e.target.files[0];
-                        if (file) {
-                            const reader = new FileReader();
-                            reader.onload = function(event) {
-                                uploadedSignatureImage = event.target.result;
-                                const previewImg = document.getElementById('signature-preview-img');
-                                previewImg.src = uploadedSignatureImage;
-                                document.getElementById('uploaded-signature-preview').style.display = 'block';
-                            };
-                            reader.readAsDataURL(file);
-                        }
-                    });
-                },
                 preConfirm: () => {
                     const assetCondition = document.getElementById('asset-condition').value;
                     const returnDate = document.getElementById('return-date').value;
@@ -846,38 +816,23 @@
                     const returnNotes = document.getElementById('return-notes').value;
                     
                     if (!assetCondition) {
-                        Swal.showValidationMessage('Please select an asset condition');
+                        Swal.showValidationMessage(__('please_select_an_asset_condition', 'Please select an asset condition'));
                         return false;
                     }
                     
-                    // Check if using uploaded signature or drawn signature
-                    let signature = null;
-                    
-                    if (uploadedSignatureImage) {
-                        signature = uploadedSignatureImage;
-                    } else {
-                        signature = signaturePad.toDataURL('image/png');
-                        const isSignatureEmpty = signaturePad.isEmpty();
-                        if (isSignatureEmpty) {
-                            Swal.showValidationMessage('Please draw a signature or upload a signature image');
-                            return false;
-                        }
-                    }
-                    
                     if (!returnDate) {
-                        Swal.showValidationMessage('Return date is required');
+                        Swal.showValidationMessage(__('return_date_is_required', 'Return date is required'));
                         return false;
                     }
                     
                     if (!proofFile) {
-                        Swal.showValidationMessage('Proof of return document is required');
+                        Swal.showValidationMessage(__('proof_of_return_document_is_required', 'Proof of return document is required'));
                         return false;
                     }
                     
                     return {
                         assetCondition: assetCondition,
                         returnDate: returnDate,
-                        signature: signature,
                         proofFile: proofFile,
                         notes: returnNotes
                     };
@@ -891,7 +846,6 @@
                     formData.append('tracking_id', trackingId);
                     formData.append('asset_condition', result.value.assetCondition);
                     formData.append('return_date', result.value.returnDate);
-                    formData.append('signature', result.value.signature);
                     formData.append('proof_file', result.value.proofFile);
                     formData.append('notes', result.value.notes);
                     
@@ -905,14 +859,15 @@
                         success: function(resp) {
                             if (resp.success) {
                                 Swal.fire({
-                                    title: 'Returned!',
-                                    text: 'Asset item returned and unassigned successfully',
+                                    title: __('returned', 'Returned'),
+                                    text: __('asset_item_returned_and_unassigned_successfully', 'Asset item returned and unassigned successfully'),
                                     icon: 'success',
                                     showCancelButton: true,
-                                    confirmButtonText: 'Print Report',
-                                    cancelButtonText: 'Done',
+                                    confirmButtonText: __('print_report', 'Print Report'),
+                                    cancelButtonText: __('done', 'Done'),
                                     confirmButtonColor: '#3085d6',
-                                    cancelButtonColor: '#6c757d'
+                                    cancelButtonColor: '#6c757d',
+                                    allowOutsideClick: false
                                 }).then((printResult) => {
                                     loadInventory();
                                     if (printResult.isConfirmed) {
@@ -940,25 +895,27 @@
             const description = $(this).data('description');
             
             Swal.fire({
-                title: 'Edit Asset Item',
+                title: __('edit_asset_item', 'Edit Asset Item'),
                 html: `
                     <form id="editAssetForm" class="text-left">
                         <div class="form-group">
-                            <label for="edit-asset-name">Asset Type</label>
-                            <input type="text" class="form-control" value="${assetName}" readonly>
+                            <label for="edit-asset-name">${__('asset_type', 'Asset Type')}</label>
+                            <input type="text" class="form-control" value="${__(assetName.toLowerCase())}" readonly>
                         </div>
                         <div class="form-group">
-                            <label for="edit-serial-number">Serial Number</label>
+                            <label for="edit-serial-number">${__('serial_number', 'Serial Number')}</label>
                             <input id="edit-serial-number" type="text" class="form-control" value="${serial}">
                         </div>
                         <div class="form-group">
-                            <label for="edit-description">Description</label>
+                            <label for="edit-description">${__('description', 'Description')}</label>
                             <textarea id="edit-description" class="form-control" rows="3">${description}</textarea>
                         </div>
                     </form>
                 `,
                 showCancelButton: true,
-                confirmButtonText: 'Update',
+                cancelButtonText: __('cancel', 'Cancel'),
+                confirmButtonText: __('update', 'Update'),
+                confirmButtonColor: '#28a745',
                 showLoaderOnConfirm: true,
                 preConfirm: () => {
                     const newSerial = document.getElementById('edit-serial-number').value;
@@ -984,54 +941,33 @@
                         dataType: 'json',
                         success: function(resp) {
                             if (resp.success) {
-                                Swal.fire('Updated!', 'Asset item updated successfully', 'success').then(() => {
+                                Swal.fire({
+                                    title: __('updated', 'Updated!'), 
+                                    text: __('asset_item_updated_successfully', 'Asset item updated successfully'),
+                                    icon: 'success',
+                                    confirmButtonText: __('ok', 'OK'),
+                                    allowOutsideClick: false
+                                }).then(() => {
                                     loadInventory();
                                 });
                             } else {
-                                Swal.fire('Error', resp.message || 'Could not update asset', 'error');
-                            }
-                        },
-                        error: function(xhr) {
-                            Swal.fire('Error', xhr.responseJSON?.message || 'Failed to update asset', 'error');
-                        }
-                    });
-                }
-            });
-        });
-
-        $(document).on('click', '.deleteAssetBtn', function() {
-            const itemId = $(this).data('id');
-            const tracking = $(this).data('tracking');
-            
-            Swal.fire({
-                title: 'Are you sure?',
-                text: 'Delete asset with tracking ID: ' + tracking + '?',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                confirmButtonText: 'Yes, Delete!',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $.ajax({
-                        type: 'POST',
-                        url: apiUrl,
-                        data: {
-                            action: 'delete_item',
-                            item_id: itemId
-                        },
-                        dataType: 'json',
-                        success: function(resp) {
-                            if (resp.success) {
-                                Swal.fire('Deleted!', 'Asset item deleted successfully', 'success').then(() => {
-                                    loadInventory();
+                                Swal.fire({
+                                    title: __('error', 'Error'),
+                                    text: resp.message || __('could_not_update_asset', 'Could not update asset'),
+                                    icon: 'error',
+                                    allowOutsideClick: false,
+                                    confirmButtonText: __('ok', 'OK')
                                 });
-                            } else {
-                                Swal.fire('Error', resp.message || 'Could not delete asset', 'error');
                             }
                         },
                         error: function(xhr) {
-                            Swal.fire('Error', xhr.responseJSON?.message || 'Failed to delete asset', 'error');
+                            Swal.fire({
+                                title: __('error', 'Error'),
+                                text: xhr.responseJSON?.message || __('failed_to_update_asset', 'Failed to update asset'),
+                                icon: 'error',
+                                allowOutsideClick: false,
+                                confirmButtonText: __('ok', 'OK')
+                            });
                         }
                     });
                 }
@@ -1051,45 +987,141 @@
                 },
                 dataType: 'json',
                 success: function(resp) {
-                    if (resp.success && resp.data && resp.data.employee_asset_id) {
-                        const reportUrl = 'asset_return_report.php?asset_id=' + resp.data.employee_asset_id;
+                    if (resp.success && resp.data && resp.data.tracking_id) {
+                        const employeeAssetId = resp.data.employee_asset_id;
+                        const reportUrl = 'asset_return_report.php?asset_id=' + employeeAssetId;
+                        let signaturePad;
+                        let uploadedSignatureImage = null;
                         
-                        // Show SweetAlert2 modal with print options
+                        // Show modal to capture signature and optionally upload signed report before opening
                         Swal.fire({
-                            title: 'Asset Return Report',
+                            title: __('asset_return_report', 'Asset Return Report'),
                             html: `
-                                <div class="text-center">
-                                    <p>Choose an action for the asset report:</p>
+                                <div class="">
+                                    <div class="alert alert-info mb-3">
+                                        <strong>${__('instructions', 'Instructions')}:</strong><br>
+                                        1. ${__('review_asset_details_then_click_confirm_to_open_report', 'Review asset details then click Confirm to open the report')}<br>
+                                        2. ${__('draw_or_upload_signature_to_attach_as_proof', 'Draw or upload signature to attach as proof')}
+                                    </div>
+                                    <div class="form-group mb-3">
+                                        <label><strong>${__('signature', 'Signature')}</strong></label>
+                                        <ul class="nav nav-tabs mb-2" id="print-signature-tabs" role="tablist">
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link active" id="print-draw-tab" data-bs-toggle="tab" data-bs-target="#print-draw-pane" type="button" role="tab">${__('draw_signature', 'Draw Signature')}</button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link" id="print-upload-tab" data-bs-toggle="tab" data-bs-target="#print-upload-pane" type="button" role="tab">${__('upload_signature', 'Upload Signature')}</button>
+                                            </li>
+                                        </ul>
+                                        <div class="tab-content">
+                                            <div class="tab-pane fade show active" id="print-draw-pane" role="tabpanel">
+                                                <div id="print-signature-pad-container" style="border: 2px solid #ccc; border-radius: 4px; background: white; margin-bottom: 10px;">
+                                                    <canvas id="print-signature-canvas" width="560" height="250" style="display: block; width: 560px; height: 250px; cursor: crosshair; touch-action: none; border-radius: 4px;"></canvas>
+                                                </div>
+                                                <small class="form-text text-muted">${__('draw_your_signature_above', 'Draw your signature above')}</small>
+                                                <button type="button" id="print-clear-signature-btn" class="btn btn-sm btn-secondary mt-2">${__('clear_signature', 'Clear Signature')}</button>
+                                            </div>
+                                            <div class="tab-pane fade" id="print-upload-pane" role="tabpanel">
+                                                <input type="file" id="print-signature-file" class="form-control mb-2" accept=".jpg,.jpeg,.png,.gif,.bmp">
+                                                <small class="form-text text-muted">${__('select_signature_image_file', 'Select a signature image file (JPG, PNG, GIF, BMP)')}</small>
+                                                <div id="print-uploaded-signature-preview" style="margin-top: 10px; display: none;">
+                                                    <img id="print-signature-preview-img" src="" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 4px;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             `,
-                            icon: 'info',
+                            // icon: 'info',
                             showCancelButton: true,
-                            showDenyButton: true,
-                            confirmButtonText: '<i class="mdi mdi-printer mr-2"></i>Print',
-                            denyButtonText: '<i class="mdi mdi-eye mr-2"></i>Preview in New Tab',
-                            cancelButtonText: 'Cancel',
+                            confirmButtonText: __('confirm_and_open_report', 'Confirm and Open Report'),
+                            cancelButtonText: __('cancel', 'Cancel'),
                             confirmButtonColor: '#3085d6',
-                            denyButtonColor: '#17a2b8',
                             cancelButtonColor: '#6c757d',
-                            allowOutsideClick: false
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                // Print directly
-                                $.ajax({
-                                    url: reportUrl,
-                                    method: 'GET',
-                                    success: function(data) {
-                                        const printWindow = window.open('', '', 'height=600,width=900');
-                                        printWindow.document.write(data);
-                                        printWindow.document.close();
-                                        printWindow.print();
-                                    },
-                                    error: function() {
-                                        Swal.fire('Error', 'Could not load report for printing', 'error');
+                            allowOutsideClick: false,
+                            width: '35%',
+                            didOpen: () => {
+                                const canvas = document.getElementById('print-signature-canvas');
+                                signaturePad = new SignaturePad(canvas, {
+                                    backgroundColor: 'rgb(255,255,255)'
+                                });
+                                document.getElementById('print-clear-signature-btn').addEventListener('click', () => {
+                                    signaturePad.clear();
+                                });
+                                // Tabs toggle
+                                const drawTab = document.getElementById('print-draw-tab');
+                                const uploadTab = document.getElementById('print-upload-tab');
+                                const drawPane = document.getElementById('print-draw-pane');
+                                const uploadPane = document.getElementById('print-upload-pane');
+                                drawTab.addEventListener('click', () => {
+                                    drawTab.classList.add('active');
+                                    uploadTab.classList.remove('active');
+                                    drawPane.classList.add('show', 'active');
+                                    uploadPane.classList.remove('show', 'active');
+                                });
+                                uploadTab.addEventListener('click', () => {
+                                    uploadTab.classList.add('active');
+                                    drawTab.classList.remove('active');
+                                    uploadPane.classList.add('show', 'active');
+                                    drawPane.classList.remove('show', 'active');
+                                });
+                                // Signature file upload
+                                document.getElementById('print-signature-file').addEventListener('change', function(e) {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = function(event) {
+                                            uploadedSignatureImage = event.target.result;
+                                            const previewImg = document.getElementById('print-signature-preview-img');
+                                            previewImg.src = uploadedSignatureImage;
+                                            document.getElementById('print-uploaded-signature-preview').style.display = 'block';
+                                        };
+                                        reader.readAsDataURL(file);
                                     }
                                 });
-                            } else if (result.isDenied) {
-                                // Open in new tab for preview
+                            },
+                            preConfirm: () => {
+                                // Build form data to save signature prior to report open
+                                const formData = new FormData();
+                                formData.append('action', 'save_print_proof');
+                                formData.append('item_id', itemId);
+                                formData.append('tracking_id', resp.data.tracking_id);
+                                if (employeeAssetId) { formData.append('employee_asset_id', employeeAssetId); }
+                                let signature = null;
+                                if (uploadedSignatureImage) {
+                                    signature = uploadedSignatureImage;
+                                } else {
+                                    signature = signaturePad.toDataURL('image/png');
+                                }
+                                if (signature) {
+                                    formData.append('signature', signature);
+                                }
+                                return new Promise((resolve) => {
+                                    $.ajax({
+                                        type: 'POST',
+                                        url: apiUrl,
+                                        data: formData,
+                                        contentType: false,
+                                        processData: false,
+                                        dataType: 'json',
+                                        success: function(saveResp) {
+                                            if (!saveResp.success) {
+                                                Swal.showValidationMessage(saveResp.message || __('failed_to_save_signature_or_proof', 'Failed to save signature/proof'));
+                                                resolve(false);
+                                                return;
+                                            }
+                                            resolve(true);
+                                        },
+                                        error: function(xhr) {
+                                            Swal.showValidationMessage(xhr.responseJSON?.message || __('failed_to_save_signature_or_proof', 'Failed to save signature/proof'));
+                                            resolve(false);
+                                        }
+                                    });
+                                });
+                            }
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                // Open report in new tab for printing/downloading
                                 window.open(reportUrl, '_blank');
                             }
                         });

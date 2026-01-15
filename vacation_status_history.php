@@ -22,6 +22,7 @@ $vacation = null;
 $sql = "SELECT v.*, 
                e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp,
                d.dep_nme AS department_name,
+               d.dep_nme_ar AS department_name_ar,
                b.remaining_balance, b.available_balance
         FROM emp_vacation v
         JOIN employees e ON v.emp_id = e.emp_id
@@ -65,6 +66,63 @@ if (!$canSeeAll) {
     }
 }
 
+// Status history - Build from both smt_request_status and request_approvers
+$history = [];
+
+// First, try to get history from smt_request_status
+$stmt = $conDB->prepare("SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = ? ORDER BY created_at ASC");
+$stmt->bind_param('s', $request_inv_no);
+$stmt->execute();
+$hr = $stmt->get_result();
+while ($row = $hr->fetch_assoc()) {
+    $history[] = $row;
+}
+$stmt->close();
+
+// * If no history from smt_request_status, build from request_approvers + initial creation
+/* if (empty($history)) {
+    // Add initial "Submitted" status
+    $history[] = [
+        'status' => 'submitted',
+        'note' => 'Vacation request submitted for approval',
+        'emp_name' => $vacation['employee_name'],
+        'created_at' => $vacation['created_at'] ?? date('Y-m-d H:i:s')
+    ];
+    
+    // Get approval actions from request_approvers
+    $typeStmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE type_name = 'vacation_request' LIMIT 1");
+    $typeStmt->execute();
+    $typeRes = $typeStmt->get_result();
+    $request_type_id = 1;
+    if ($typeRow = $typeRes->fetch_assoc()) {
+        $request_type_id = (int)$typeRow['id'];
+    }
+    $typeStmt->close();
+    
+    $approvalStmt = $conDB->prepare("
+        SELECT ra.status, ra.action_date, ra.note,
+               COALESCE(e.name, al.fullname, al.username) AS emp_name
+        FROM request_approvers ra
+        LEFT JOIN employees e ON ra.approver_id = e.emp_id
+        LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
+        WHERE ra.request_inv_no = ? AND ra.request_type_id = ? AND ra.action_date IS NOT NULL
+        ORDER BY ra.action_date ASC
+    ");
+    $approvalStmt->bind_param('si', $request_inv_no, $request_type_id);
+    $approvalStmt->execute();
+    $approvalRes = $approvalStmt->get_result();
+    while ($row = $approvalRes->fetch_assoc()) {
+        $history[] = [
+            'status' => $row['status'] === 'approved' ? 'approved' : 'rejected',
+            'note' => $row['note'] ?? ($row['status'] === 'approved' ? 'Approved' : 'Rejected'),
+            'emp_name' => $row['emp_name'],
+            'created_at' => $row['action_date']
+        ];
+    }
+    $approvalStmt->close();
+} */
+
+
 // Status history
 $history = [];
 $stmt = $conDB->prepare("SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = ? ORDER BY created_at ASC");
@@ -75,6 +133,7 @@ while ($row = $hr->fetch_assoc()) {
     $history[] = $row;
 }
 $stmt->close();
+
 
 // Approval chain
 $chain = [];
@@ -112,6 +171,7 @@ $status_icon = 'fa-circle';
 if ($vacation['current_status'] === 'approved') { $status_class = 'success'; $status_icon = 'fa-check-circle'; }
 elseif ($vacation['current_status'] === 'rejected') { $status_class = 'danger'; $status_icon = 'fa-times-circle'; }
 elseif (strpos($vacation['current_status'], 'pending') !== false) { $status_class = 'warning'; $status_icon = 'fa-clock'; }
+elseif (strpos($vacation['current_status'], 'completed') !== false) { $status_class = 'primary'; $status_icon = 'fa-check-circle'; }
 
 $avatar_path = 'assets/images/users/avatar-1.jpg';
 if (!empty($vacation['avatar'])) {
@@ -143,12 +203,12 @@ if ($vacation['fly_type'] === 'annual') {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body { background-color: #f8f9fa; }
-        .page-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 30px 0; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .page-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 30px 0; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
         .page-header h3 { margin: 0; font-weight: 600; }
-        .info-card { background: #fff; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .info-card { background: #fff; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
         .info-card h5 { color: #667eea; margin-bottom: 20px; font-weight: 600; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
-        .employee-header { display: flex; align-items: center; margin-bottom: 20px; }
-        .employee-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-right: 20px; border: 3px solid #667eea; }
+        .employee-header { display: flex; align-items: center; margin-bottom: 20px; text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
+        .employee-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; <?= $is_rtl ?? false ? 'margin-left' : 'margin-right' ?>: 20px; border: 3px solid #667eea; }
         .info-row { display: flex; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
         .info-row:last-child { border-bottom: none; }
         .info-label { font-weight: 600; color: #666; width: 40%; display: flex; align-items: center; }
@@ -159,25 +219,43 @@ if ($vacation['fly_type'] === 'annual') {
         .level-badge { display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; font-weight: 700; }
         .attachment-link { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f0f4ff; border-radius: 6px; color: #667eea; text-decoration: none; font-weight: 500; }
         .attachment-link:hover { background: #667eea; color: #fff; text-decoration: none; }
-        .timeline { position: relative; padding: 30px 0; margin-top: 20px; }
-        .timeline:before { content: ''; position: absolute; left: 40px; top: 0; bottom: 0; width: 3px; background: linear-gradient(to bottom, #667eea, #e0e0e0); }
-        .timeline-item { position: relative; padding-left: 90px; padding-bottom: 30px; }
-        .timeline-marker { position: absolute; left: 25px; width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 4px solid #28a745; z-index: 1; display:flex;align-items:center;justify-content:center; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-        .timeline-marker.pending { border-color: #ffc107; }
-        .timeline-marker.rejected { border-color: #dc3545; }
-        .timeline-content { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 3px 10px rgba(0,0,0,0.08); border-left: 4px solid transparent; }
-        .timeline-content.approved { border-left-color: #28a745; }
-        .timeline-content.pending { border-left-color: #ffc107; }
-        .timeline-content.rejected { border-left-color: #dc3545; }
-        .status-badge { padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        /* Modern Timeline Design */
+        .timeline { position: relative; padding: 10px 0; }
+        .timeline:before { content: ''; position: absolute; left: 19px; top: 0; bottom: 0; width: 2px; background: #eaedf1; }
+        .timeline-item { position: relative; padding-left: 50px; margin-bottom: 20px; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-marker { 
+            position: absolute; left: 8px; top: 4px; width: 24px; height: 24px; 
+            border-radius: 50%; background: #fff; border: 2px solid #adb5bd; 
+            z-index: 1; display:flex; align-items:center; justify-content:center; 
+            font-size: 10px; color: #adb5bd; transition: all 0.3s ease;
+        }
+        .timeline-item.approved .timeline-marker, .timeline-item.completed .timeline-marker { border-color: #28a745; color: #28a745; background-color: #f6ffed; }
+        .timeline-item.rejected .timeline-marker { border-color: #dc3545; color: #dc3545; background-color: #fff1f0; }
+        .timeline-item.pending .timeline-marker { border-color: #ffc107; color: #ffc107; background-color: #fffbe6; }
+        
+        .timeline-content { 
+            background: #fff; padding: 15px; border-radius: 8px; 
+            border: 1px solid #e3e8ee; box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
+            position: relative; transition: all 0.2s ease-in-out;
+            text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>;
+        }
+        .timeline-content:hover { border-color: #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); }
+        .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+
+        /* RTL Adjustments */
+        [dir="rtl"] .timeline:before { left: auto; right: 19px; }
+        [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 50px; }
+        [dir="rtl"] .timeline-marker { left: auto; right: 8px; }
         .btn-back { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: #fff; padding: 12px 30px; border-radius: 25px; font-weight: 600; }
     </style>
 </head>
 <body class="enlarged">
     <div class="page-header">
         <div class="container">
-            <h3><i class="fas fa-history"></i> <?= function_exists('__') ? __('vacation_approval_history') : 'Vacation Approval History' ?></h3>
-            <p class="mb-0"><?= function_exists('__') ? __('complete_approval_timeline') : 'Complete approval timeline and status history' ?></p>
+            <h3><i class="fas fa-history"></i> <?= __('vacation_approval_history') ?></h3>
+            <p class="mb-0"><?= __('complete_approval_timeline') ?></p>
         </div>
     </div>
 
@@ -187,11 +265,11 @@ if ($vacation['fly_type'] === 'annual') {
             <div class="employee-header">
                 <img src="<?= htmlspecialchars($avatar_path) ?>" class="employee-avatar" alt="avatar" />
                 <div>
-                    <h4 style="margin:0;"><?= htmlspecialchars(function_exists('parseName') ? parseName($vacation['employee_name']) : $vacation['employee_name']) ?></h4>
+                    <h4 style="margin:0;"><?= getDisplayName($vacation['employee_name'])?></h4>
                     <div class="text-muted" style="margin-top:6px;">
-                        <strong><?= function_exists('__') ? __('emp_id') : 'Employee ID' ?>:</strong> <?= htmlspecialchars($vacation['emp_id']) ?>
+                        <strong><?= __('emp_id') ?>:</strong> <?= htmlspecialchars($vacation['emp_id']) ?>
                         &nbsp; | &nbsp;
-                        <strong><?= function_exists('__') ? __('department') : 'Department' ?>:</strong> <?= htmlspecialchars($vacation['department_name'] ?? 'N/A') ?>
+                        <strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false ? $vacation['department_name_ar'] ?? 'N/A' : $vacation['department_name'] ?? 'N/A') ?>
                     </div>
                 </div>
             </div>
@@ -200,27 +278,27 @@ if ($vacation['fly_type'] === 'annual') {
         <div class="row">
             <div class="col-md-6">
                 <div class="info-card">
-                    <h5><i class="fas fa-suitcase-rolling"></i> <?= function_exists('__') ? __('vacation_details') : 'Vacation Details' ?></h5>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-barcode"></i> <?= function_exists('__') ? __('invoice_no') : 'Invoice No' ?>:</div><div class="info-value"><code><?= htmlspecialchars($vacation['request_inv_no']) ?></code></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-tag"></i> <?= function_exists('__') ? __('type') : 'Type' ?>:</div><div class="info-value"><strong><?= htmlspecialchars($vacation['vac_type']) ?></strong></div></div>
+                    <h5><i class="fas fa-suitcase-rolling"></i> <?= __('vacation_details')?></h5>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-barcode"></i> <?= __('invoice_no') ?>:</div><div class="info-value"><code><?= htmlspecialchars($vacation['request_inv_no']) ?></code></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-tag"></i> <?= __('type')?>:</div><div class="info-value"><strong><?= getDisplayName($vacation['vac_type']) ?></strong></div></div>
                     <?php if (!empty($fly_type_display)): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-plane"></i> <?= function_exists('__') ? __('fly_type') : 'Fly Type' ?>:</div><div class="info-value"><strong><?= htmlspecialchars($fly_type_display) ?></strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-plane"></i> <?= __('fly_type') ?>:</div><div class="info-value"><strong><?= htmlspecialchars($fly_type_display) ?></strong></div></div>
                     <?php endif; ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar-alt"></i> <?= function_exists('__') ? __('start_date') : 'Start Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['start_date'] ?? 'N/A') ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar-check"></i> <?= function_exists('__') ? __('return_date') : 'Return Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['return_date'] ?? 'N/A') ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar-alt"></i> <?= __('start_date') ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['start_date'] ?? 'N/A') ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar-check"></i> <?= __('return_date') ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['return_date'] ?? 'N/A') ?></div></div>
                     <?php if (!empty($vacation['departure_date']) && $vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual'): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-plane-departure"></i> <?= function_exists('__') ? __('departure_date') : 'Departure Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['departure_date']) ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-plane-departure"></i> <?= __('departure_date') ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['departure_date']) ?></div></div>
                     <?php endif; ?>
                     <?php if (!empty($vacation['arrival_date']) && $vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual'): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-plane-arrival"></i> <?= function_exists('__') ? __('arrival_date') : 'Arrival Date' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['arrival_date']) ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-plane-arrival"></i> <?= __('arrival_date') ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['arrival_date']) ?></div></div>
                     <?php endif; ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-sun"></i> <?= function_exists('__') ? __('total_days') : 'Total Days' ?>:</div><div class="info-value"><strong><?= (int)$vacation['vacdays'] ?></strong> <?= function_exists('__') ? __('days') : 'days' ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-sun"></i> <?= __('total_days') ?>:</div><div class="info-value"><strong><?= (int)$vacation['vacdays'] ?></strong> <?= __('days') ?></div></div>
                     <?php if (!empty($vacation['replacement_person'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-user-friends"></i> <?= function_exists('__') ? __('replacement') : 'Replacement' ?>:</div><div class="info-value"><?= htmlspecialchars($vacation['replacement_person']) ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-user-friends"></i> <?= __('replacement') ?>:</div><div class="info-value"><?= getDisplayName($vacation['replacement_person']) ?></div></div>
                     <?php endif; ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= function_exists('__') ? __('status') : 'Status' ?>:</div><div class="info-value"><span class="badge badge-<?= $status_class ?>" style="font-size:14px;padding:8px 16px;"><i class="fas <?= $status_icon ?>"></i> <?= htmlspecialchars(ucwords(str_replace('_', ' ', $vacation['current_status']))) ?></span></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('status') ?>:</div><div class="info-value"><span class="badge badge-<?= $status_class ?>" style="font-size:14px;padding:8px 16px;"><i class="fas <?= $status_icon ?>"></i> <?= getDisplayName(ucwords(str_replace('_', ' ', $vacation['current_status']))) ?></span></div></div>
                     <?php if (!empty($vacation['remarks'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-comment"></i> <?= function_exists('__') ? __('remarks') : 'Remarks' ?>:</div><div class="info-value"><?= nl2br(htmlspecialchars($vacation['remarks'])) ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-comment"></i> <?= __('remarks') ?>:</div><div class="info-value"><?= (nl2br(htmlspecialchars(getDisplayName($vacation['remarks'])))) ?></div></div>
                     <?php endif; ?>
                     <?php if (!empty($vacation['attachment_path'])): 
                         // Decode JSON array of attachments
@@ -231,12 +309,12 @@ if ($vacation['fly_type'] === 'annual') {
                         }
                     ?>
                     <div class="info-row">
-                        <div class="info-label"><i class="fas fa-paperclip"></i> <?= function_exists('__') ? __('attachments') : 'Attachments' ?> (<?= count($attachments) ?>):</div>
+                        <div class="info-label"><i class="fas fa-paperclip"></i> <?= __('attachments') ?> (<?= count($attachments) ?>):</div>
                         <div class="info-value">
                             <?php foreach ($attachments as $index => $attachment): ?>
                                 <a href="<?= htmlspecialchars($attachment) ?>" target="_blank" class="attachment-link" style="margin-bottom: 8px; display: inline-flex;">
                                     <i class="fas fa-file-<?= pathinfo($attachment, PATHINFO_EXTENSION) === 'pdf' ? 'pdf' : 'image' ?>"></i> 
-                                    <?= function_exists('__') ? __('document') : 'Document' ?> <?= $index + 1 ?>
+                                    <?= __('document') ?> <?= $index + 1 ?>
                                 </a>
                                 <?php if ($index < count($attachments) - 1): ?>&nbsp;&nbsp;<?php endif; ?>
                             <?php endforeach; ?>
@@ -249,35 +327,35 @@ if ($vacation['fly_type'] === 'annual') {
             <div class="col-md-6">
                 <?php if ($vacation['current_status'] == 'approved' && (isset($vacation['remaining_balance']) || isset($vacation['available_balance']))): ?>
                 <div class="info-card mb-3">
-                    <h5><i class="fas fa-wallet"></i> <?= function_exists('__') ? __('vacation_balance') : 'Vacation Balance' ?></h5>
+                    <h5><i class="fas fa-wallet"></i> <?= __('vacation_balance') ?></h5>
                     <?php if (isset($vacation['remaining_balance'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-hourglass-half"></i> <?= function_exists('__') ? __('remaining') : 'Remaining' ?>:</div><div class="info-value"><strong style="color:#28a745;"><?= number_format($vacation['remaining_balance'], 2) ?></strong> <?= function_exists('__') ? __('days') : 'days' ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-hourglass-half"></i> <?= __('remaining') ?>:</div><div class="info-value"><strong style="color:#28a745;"><?= number_format($vacation['remaining_balance'], 2) ?></strong> <?= __('days') ?></div></div>
                     <?php endif; ?>
                     <?php if (isset($vacation['available_balance'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-check-double"></i> <?= function_exists('__') ? __('available') : 'Available' ?>:</div><div class="info-value"><strong style="color:#667eea;"><?= number_format($vacation['available_balance'], 2) ?></strong> <?= function_exists('__') ? __('days') : 'days' ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-check-double"></i> <?= __('available') ?>:</div><div class="info-value"><strong style="color:#667eea;"><?= number_format($vacation['available_balance'], 2) ?></strong> <?= __('days') ?></div></div>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
 
                 <?php if ($vacation['vac_type'] == 'Fly' && ($vacation['ticket_pay'] > 0 || $vacation['permit_fee'] > 0)): ?>
                 <div class="info-card mb-3">
-                    <h5><i class="fas fa-money-bill-wave"></i> <?= function_exists('__') ? __('payment_information') : 'Payment Information' ?></h5>
+                    <h5><i class="fas fa-money-bill-wave"></i> <?= __('payment_information') ?></h5>
                     <?php if ($vacation['ticket_pay'] > 0): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-plane"></i> <?= function_exists('__') ? __('ticket_payment') : 'Ticket Payment' ?>:</div><div class="info-value"><strong>SAR <?= number_format($vacation['ticket_pay'], 2) ?></strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-plane"></i> <?= __('ticket_payment') ?>:</div><div class="info-value"><strong>SAR <?= number_format($vacation['ticket_pay'], 2) ?></strong></div></div>
                     <?php endif; ?>
                     <?php if ($vacation['permit_fee'] > 0): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-passport"></i> <?= function_exists('__') ? __('permit_fee') : 'Permit Fee' ?>:</div><div class="info-value"><strong>SAR <?= number_format($vacation['permit_fee'], 2) ?></strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-passport"></i> <?= __('permit_fee') ?>:</div><div class="info-value"><strong>SAR <?= number_format($vacation['permit_fee'], 2) ?></strong></div></div>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
 
                 <div class="info-card">
-                    <h5><i class="fas fa-users-cog"></i> <?= function_exists('__') ? __('approval_chain') : 'Approval Chain' ?></h5>
+                    <h5><i class="fas fa-users-cog"></i> <?= __('approval_chain') ?></h5>
                     <table class="table table-sm chain-table table-hover">
-                        <thead><tr><th width="70" class="text-center"><?= function_exists('__') ? __('level') : 'Level' ?></th><th><?= function_exists('__') ? __('approver') : 'Approver' ?></th><th><?= function_exists('__') ? __('status') : 'Status' ?></th></tr></thead>
+                        <thead><tr><th width="70" class="text-center"><?= __('level') ?></th><th><?= __('approver') ?></th><th><?= __('status') ?></th></tr></thead>
                         <tbody>
                         <?php if (empty($chain)): ?>
-                            <tr><td colspan="3" class="text-center text-muted"><i class="fas fa-info-circle"></i> <?= function_exists('__') ? __('no_approval_chain') : 'No approval chain configured' ?></td></tr>
+                            <tr><td colspan="3" class="text-center text-muted"><i class="fas fa-info-circle"></i> <?= __('no_approval_chain') ?></td></tr>
                         <?php else: foreach ($chain as $link): 
                             $cClass = 'secondary'; $cIcon = 'fa-circle';
                             if ($link['status']==='approved') { $cClass='success'; $cIcon='fa-check-circle'; }
@@ -286,9 +364,9 @@ if ($vacation['fly_type'] === 'annual') {
                         ?>
                             <tr>
                                 <td class="text-center"><span class="level-badge"><?= (int)$link['approval_level'] ?></span></td>
-                                <td><strong><?= htmlspecialchars($link['approver_name'] ?? 'N/A') ?></strong><br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= htmlspecialchars(getRoleLabel($link['user_type'])) ?></small></td>
+                                <td><strong><?= getDisplayName($link['approver_name'] ?? 'N/A') ?></strong><br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= getDisplayName(getRoleLabel($link['user_type'])) ?></small></td>
                                 <td>
-                                    <span class="badge badge-<?= $cClass ?>"><i class="fas <?= $cIcon ?>"></i> <?= htmlspecialchars(ucfirst($link['status'])) ?></span>
+                                    <span class="badge badge-<?= $cClass ?>"><i class="fas <?= $cIcon ?>"></i> <?= getDisplayName(ucfirst($link['status'])) ?></span>
                                     <?php if (!empty($link['action_date'])): ?><br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= date('d M Y, H:i', strtotime($link['action_date'])) ?></small><?php endif; ?>
                                 </td>
                             </tr>
@@ -300,35 +378,37 @@ if ($vacation['fly_type'] === 'annual') {
         </div>
 
         <div class="info-card">
-            <h5><i class="fas fa-history"></i> <?= function_exists('__') ? __('status_history_timeline') : 'Status History Timeline' ?></h5>
+            <h5><i class="fas fa-history"></i> <?= __('status_history_timeline') ?></h5>
             <?php if (empty($history)): ?>
-                <div class="alert alert-info"><i class="fas fa-info-circle"></i> <?= function_exists('__') ? __('no_history') : 'No status history available for this vacation request.' ?></div>
+                <div class="alert alert-info"><i class="fas fa-info-circle"></i> <?= __('no_history') ?></div>
             <?php else: ?>
                 <div class="timeline">
                     <?php foreach ($history as $item): 
-                        $marker_class = 'draft';
-                        if (strpos($item['status'], 'approved') !== false) $marker_class = 'approved';
-                        elseif (strpos($item['status'], 'rejected') !== false) $marker_class = 'rejected';
-                        elseif (strpos($item['status'], 'pending') !== false) $marker_class = 'pending';
-                        $badge_class = 'secondary';
-                        if (strpos($item['status'], 'approved') !== false) $badge_class = 'success';
-                        elseif (strpos($item['status'], 'rejected') !== false) $badge_class = 'danger';
-                        elseif (strpos($item['status'], 'pending') !== false) $badge_class = 'warning';
+                        $status_clean = strtolower($item['status']);
+                        $item_class = 'pending'; $icon = 'fa-clock'; $badge = 'warning';
+                        if (strpos($status_clean, 'approved') !== false || strpos($status_clean, 'completed') !== false) {
+                            $item_class = 'approved'; $icon = 'fa-check'; $badge = 'success';
+                        } elseif (strpos($status_clean, 'rejected') !== false) {
+                            $item_class = 'rejected'; $icon = 'fa-times'; $badge = 'danger';
+                        }
                     ?>
-                    <div class="timeline-item">
-                        <div class="timeline-marker <?= $marker_class ?>"></div>
-                        <div class="timeline-content <?= $marker_class ?>">
-                            <span class="status-badge bg-<?= $badge_class ?> text-white"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
-                            <p class="mb-2"><strong><?= nl2br(htmlspecialchars($item['note'])) ?></strong></p>
-                            <small class="text-muted"><i class="far fa-clock"></i> <?= date('d M Y, H:i:s', strtotime($item['created_at'])) ?> | <i class="far fa-user"></i> <?= htmlspecialchars($item['emp_name']) ?></small>
+                    <div class="timeline-item <?= $item_class ?>">
+                        <div class="timeline-marker"><i class="fas <?= $icon ?>"></i></div>
+                        <div class="timeline-content">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="status-badge bg-<?= $badge ?> text-white"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
+                                <small class="text-muted"><i class="far fa-clock"></i> <?= date('d M Y, H:i', strtotime($item['created_at'])) ?></small>
+                            </div>
+                            <p class="mb-1"><strong><?= nl2br(htmlspecialchars(getDisplayName(($item['note']) ?? 'No notes'))) ?></strong></p>
+                            <small class="text-muted"><i class="far fa-user"></i> <?= getDisplayName($item['emp_name']) ?></small>
                         </div>
                     </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
             <div class="text-center mt-4">
-                <a href="all_applied_vac.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= function_exists('__') ? __('back_to_vacations') : 'Back to Vacation Requests' ?></a>
-                <a href="vacation_report_details.php?id=<?= (int)$vacation['id'] ?>&emp_id=<?= urlencode($vacation['emp_id']) ?>" target="_blank" class="btn btn-back ml-2"><i class="fas fa-file-pdf"></i> <?= function_exists('__') ? __('view_report') : 'View Report' ?></a>
+                <a href="all_applied_vac.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= __('back_to_vacations') ?></a>
+                <a href="vacation_report_details.php?id=<?= (int)$vacation['id'] ?>&emp_id=<?= urlencode($vacation['emp_id']) ?>" target="_blank" class="btn btn-back ml-2"><i class="fas fa-file-pdf"></i> <?= __('view_report') ?></a>
             </div>
         </div>
     </div>

@@ -821,6 +821,38 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
         }
         /* --- END UPDATED BADGE FIX CSS V3 --- */
 
+        /* Modern Timeline Design for Request History */
+        .timeline { position: relative; padding: 10px 0; margin-top: 20px; }
+        .timeline:before { content: ''; position: absolute; left: 19px; top: 0; bottom: 0; width: 2px; background: #eaedf1; }
+        .timeline-item { position: relative; padding-left: 50px; margin-bottom: 20px; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-marker { 
+            position: absolute; left: 8px; top: 4px; width: 24px; height: 24px; 
+            border-radius: 50%; background: #fff; border: 2px solid #adb5bd; 
+            z-index: 1; display:flex; align-items:center; justify-content:center; 
+            font-size: 10px; color: #adb5bd; transition: all 0.3s ease;
+        }
+        .timeline-item.approved .timeline-marker, .timeline-item.completed .timeline-marker, .timeline-item.paid .timeline-marker { 
+            border-color: #28a745; color: #28a745; background-color: #f6ffed; 
+        }
+        .timeline-item.rejected .timeline-marker { border-color: #dc3545; color: #dc3545; background-color: #fff1f0; }
+        .timeline-item.pending .timeline-marker { border-color: #ffc107; color: #ffc107; background-color: #fffbe6; }
+        
+        .timeline-content { 
+            background: #fff; padding: 15px; border-radius: 8px; 
+            border: 1px solid #e3e8ee; box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
+            position: relative; transition: all 0.2s ease-in-out;
+            text-align: left;
+        }
+        .timeline-content:hover { border-color: #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); }
+        .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+
+        /* RTL Adjustments for Timeline */
+        [dir="rtl"] .timeline:before { left: auto; right: 19px; }
+        [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 50px; }
+        [dir="rtl"] .timeline-marker { left: auto; right: 8px; }
+        [dir="rtl"] .timeline-content { text-align: right; }
+
     </style>
     <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -958,6 +990,49 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                             <?php endforeach; ?>
                                                         </div>
                                                         <!-- END NEW Approval Status Trail -->
+
+                                                        <!-- Status History Timeline -->
+                                                        <div class="mt-4">
+                                                            <h5><i class="fas fa-history"></i> <?= __('status_history_timeline', 'Status History Timeline') ?></h5>
+                                                            <?php
+                                                                // Fetch History from smt_request_status
+                                                                $history = [];
+                                                                $history_query = mysqli_query($conDB, "SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = '" . escape_string($invnoget) . "' ORDER BY created_at ASC");
+                                                                if ($history_query) {
+                                                                    while ($h_row = mysqli_fetch_assoc($history_query)) {
+                                                                        $history[] = $h_row;
+                                                                    }
+                                                                }
+
+                                                                if (empty($history)): ?>
+                                                                    <div class="alert alert-info"><small><?= __('no_history', 'No history recorded yet.') ?></small></div>
+                                                                <?php else: ?>
+                                                                    <div class="timeline">
+                                                                        <?php foreach ($history as $item): 
+                                                                            $status_clean = strtolower($item['status']);
+                                                                            $item_class = 'pending'; $icon = 'fa-clock'; $badge = 'warning';
+                                                                            if (strpos($status_clean, 'approved') !== false || strpos($status_clean, 'completed') !== false || strpos($status_clean, 'paid') !== false) {
+                                                                                $item_class = 'approved'; $icon = 'fa-check'; $badge = 'success';
+                                                                            } elseif (strpos($status_clean, 'rejected') !== false) {
+                                                                                $item_class = 'rejected'; $icon = 'fa-times'; $badge = 'danger';
+                                                                            }
+                                                                        ?>
+                                                                        <div class="timeline-item <?= $item_class ?>">
+                                                                            <div class="timeline-marker"><i class="fas <?= $icon ?>"></i></div>
+                                                                            <div class="timeline-content">
+                                                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                                                    <span class="status-badge bg-<?= $badge ?> text-white"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
+                                                                                    <small class="text-muted"><i class="far fa-clock"></i> <?= date('d M Y, H:i', strtotime($item['created_at'])) ?></small>
+                                                                                </div>
+                                                                                <p class="mb-1"><strong><?= nl2br(htmlspecialchars(getDisplayName(($item['note']) ?? 'No notes'))) ?></strong></p>
+                                                                                <small class="text-muted"><i class="far fa-user"></i> <?= getDisplayName($item['emp_name']) ?></small>
+                                                                            </div>
+                                                                        </div>
+                                                                        <?php endforeach; ?>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                        </div>
+                                                        <!-- End Status History Timeline -->
 
                                                         <!-- NEW: Show Assigned Payer on Left Side -->
                                                          <?php if ($assigned_payer_name): ?>

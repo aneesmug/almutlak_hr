@@ -9,6 +9,7 @@ if ($ajaxType == 'add_customer') {
 } elseif($ajaxType == 'user_upate'){
     $user_type_up = mysqli_real_escape_string($conDB, $_POST['user_type']);
     $email_up = mysqli_real_escape_string($conDB, $_POST['email']);
+    $user_status = isset($_POST['user_status']) && $_POST['user_status'] == '1' ? 1 : 0;
     $user_id = intval($_POST['id']);
     
     // Fetch old user data for logging
@@ -53,12 +54,13 @@ if ($ajaxType == 'add_customer') {
         ? "'" . mysqli_real_escape_string($conDB, $allowed_companies_json) . "'"
         : "NULL";
     
-    // Update admin_login with user_type, email, and company access
+    // Update admin_login with user_type, email, status, and company access
     $sql = "UPDATE `admin_login` SET 
             `fullname` = '".$fullname_up."', 
             `user_type` = '".$user_type_up."', 
             `emp_type` = '".$emp_type_up."', 
             `email` = '".$email_up."', 
+            `status` = ".$user_status.", 
             `allowed_companies` = " . $allowed_companies_sql . ",
             `updated_at` = '".date('Y-m-d H:i:s')."' 
             WHERE `id` = '".$user_id."'";
@@ -68,6 +70,7 @@ if ($ajaxType == 'add_customer') {
         $new_values = [
             'user_type' => $user_type_up,
             'email' => $email_up,
+            'status' => $user_status,
             'emp_type' => $emp_type_up,
             'allowed_companies' => $allowed_companies_json ? json_decode($allowed_companies_json, true) : null
         ];

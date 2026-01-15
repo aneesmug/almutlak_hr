@@ -26,16 +26,45 @@ window.SERVER_LAST_ACTIVITY = <?php echo $last_activity_time; ?>; // Unix timest
 window.SERVER_TIME = <?php echo $current_server_time; ?>; // Current server time in seconds
 
 // ✅ Console verification - Test if session variables loaded successfully
-console.log('%c✅ SESSION CONFIG LOADED SUCCESSFULLY', 'color: #4CAF50; font-weight: bold; font-size: 14px;');
-console.log('%cSession Timeout:', 'color: #2196F3; font-weight: bold;', window.SESSION_TIMEOUT_SECONDS + ' seconds');
-console.log('%cTimeout in Milliseconds:', 'color: #2196F3; font-weight: bold;', window.SESSION_TIMEOUT_MS + ' ms');
-console.log('%cServer Last Activity:', 'color: #FF9800; font-weight: bold;', new Date(window.SERVER_LAST_ACTIVITY * 1000).toLocaleString());
-console.log('%cServer Current Time:', 'color: #FF9800; font-weight: bold;', new Date(window.SERVER_TIME * 1000).toLocaleString());
-
+console.info('%c✅ SESSION CONFIG LOADED SUCCESSFULLY', 'color: #4CAF50; font-weight: bold; font-size: 14px;');
+console.info('%cSession Timeout:', 'color: #2196F3; font-weight: bold;', window.SESSION_TIMEOUT_SECONDS + ' seconds');
+console.info('%cTimeout in Milliseconds:', 'color: #2196F3; font-weight: bold;', window.SESSION_TIMEOUT_MS + ' ms');
+console.info('%cServer Last Activity:', 'color: #FF9800; font-weight: bold;', new Date(window.SERVER_LAST_ACTIVITY * 1000).toLocaleString());
+console.info('%cServer Current Time:', 'color: #FF9800; font-weight: bold;', new Date(window.SERVER_TIME * 1000).toLocaleString());
 // Calculate time difference
 var timeSinceLastActivity = window.SERVER_TIME - window.SERVER_LAST_ACTIVITY;
-console.log('%cTime Since Last Activity:', 'color: #9C27B0; font-weight: bold;', timeSinceLastActivity + ' seconds (' + Math.round(timeSinceLastActivity/60) + ' minutes)');
-console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #4CAF50;');
+console.info('%cTime Since Last Activity:', 'color: #9C27B0; font-weight: bold;', timeSinceLastActivity + ' seconds (' + Math.round(timeSinceLastActivity/60) + ' minutes)');
+console.info('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #4CAF50;');
+
+// ✅ Live Session Countdown in Console
+(function() {
+    var lastLogged = -1;
+    var loopTime = 120;
+    // Log every 15 seconds with full H:M:S format
+    setInterval(function() {
+        var now = Math.floor(Date.now() / 1000);
+        var elapsedSeconds = now - (window.SERVER_LAST_ACTIVITY || now);
+        var remainingSeconds = window.SESSION_TIMEOUT_SECONDS - elapsedSeconds;
+        if (remainingSeconds > 0) {
+            if (remainingSeconds !== lastLogged && (remainingSeconds % loopTime === 0 || lastLogged === -1)) {
+                var h = Math.floor(remainingSeconds / 3600);
+                var m = Math.floor((remainingSeconds % 3600) / 60);
+                var s = remainingSeconds % 60;
+                // Format: 00h 00m 00s (only show hours if > 0)
+                var timeStr = (h > 0 ? h + 'h ' : '') + 
+                              (m < 10 && h > 0 ? '0' : '') + m + 'm ' + 
+                              (s < 10 ? '0' : '') + s + 's';
+                
+                var color = remainingSeconds <= 60 ? '#f44336' : (remainingSeconds <= 300 ? '#FF9800' : '#2196F3');
+                console.info('%c[Session] %cRemaining: ' + timeStr, 'color: #9E9E9E;', 'color: ' + color + '; font-weight: bold;');
+                lastLogged = remainingSeconds;
+            }
+        } else if (remainingSeconds <= 0 && lastLogged > 0) {
+            console.info('%c[Session] %cEXPIRED', 'color: #9E9E9E;', 'color: #f44336; font-weight: bold;');
+            lastLogged = 0;
+        }
+    }, 1000);
+})();
 </script>
 <?php
 } else {

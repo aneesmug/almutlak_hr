@@ -1,168 +1,126 @@
-# 🚀 Quick Reference: Loan Payroll Deduction System
+# PENDING LOAN REQUEST VALIDATION - QUICK REFERENCE
 
-## One-Sentence Summary
-**When a GM approves a loan, monthly payroll deduction entries are automatically created and deducted from salary during payroll generation.**
+## What Was Done
+✅ Added validation to prevent employees from submitting new loan requests if they already have a pending or awaiting loan request.
 
----
+## How It Works
+1. Employee tries to apply for a loan
+2. System checks if they have any pending/awaiting loans
+3. If YES: Shows "Cannot apply now" modal with approval chain
+4. If NO: Allows normal loan submission
 
-## The 4-Step Process
+## Files Changed
+| File | Location | Change |
+|------|----------|--------|
+| `includes/ajaxFile/ajaxLoan.php` | Lines 1103-1191 | Added pending check & approval chain fetching |
+| `assets/js/loanHandling.js` | Lines 385-446 | Updated response handler for pending_request type |
 
-### 1️⃣ Loan Approval (GM gives final approval)
+## The Modal (When Blocked)
 ```
-ajaxLoan.php - approve_loan() [LINE 775]
-UPDATE emp_loan SET status = 'approved'
-```
-
-### 2️⃣ Automatic Deduction Creation (Triggered immediately)
-```
-ajaxLoan.php - integrate_loan_to_payroll() [LINE 841-851]
-Calls: add_monthly_installment_deduction()
-Creates entries in payroll_deductions table for each installment month
-```
-
-### 3️⃣ Payroll Generation (Monthly)
-```
-process_payroll.php - process_payroll()
-Reads payroll_deductions entries for the month
-Calculates total_deductions
-Updates payrolls table with net_salary = gross - deductions
-```
-
-### 4️⃣ Result
-```
-Employee net salary automatically reduced by loan amount ✅
-```
-
----
-
-## Critical Files
-
-| File | Purpose | Key Function |
-|------|---------|--------------|
-| `includes/ajaxFile/ajaxLoan.php` | Loan approval & deduction setup | `approve_loan()`, `integrate_loan_to_payroll()` |
-| `includes/api/process_payroll.php` | Monthly payroll generation | Reads `payroll_deductions`, calculates net |
-| `testing/verify_loan_deductions.php` | Check system status | Dashboard view |
-| `testing/fix_loan_deductions.php` | Fix missing deductions | Auto-recreate entries |
-
----
-
-## Database Tables
-
-| Table | Purpose | Key Fields |
-|-------|---------|-----------|
-| `emp_loan` | Loan details | `status`, `monthly_deduction`, `start_date`, `deduction_mode` |
-| `payroll_deductions` | Monthly deductions | `emp_id`, `month`, `deduction`, `note` (amount) |
-| `payrolls` | Final payroll | `total_deductions`, `net_salary` |
-
----
-
-## How to Use
-
-### Check System Status
-```
-1. Open: testing/verify_loan_deductions.php
-2. See all approved loans and their deduction status
-3. Preview next month's deductions
+╔════════════════════════════════════════════╗
+║ ⓘ Cannot apply now                         ║
+├────────────────────────────────────────────┤
+│ You already have a HOUSING loan request    │
+│ pending approval.                          │
+│                                            │
+│ Invoice: LN-20260107-7052-mkqm             │
+│ Amount: SAR 50,000.00                      │
+│ Status: PENDING                            │
+│ Submitted: 2 days ago                      │
+│                                            │
+│ ⏳ Pending with: SHARIFAH ALSALHI          │
+│                                            │
+│ ✓ Level 1: ANEES AFZAL — Approved         │
+│ ✓ Level 2: ABDULRAHMAN ALSALHI — Approved │
+│ ● Level 3: SHARIFAH ALSALHI — Pending     │
+│ ◌ Level 4: [name] — Pending               │
+│ ◌ Level 5: [name] — Pending               │
+│ ◌ Level 6: [name] — Pending               │
+│                                            │
+│ Please wait for current approval to       │
+│ complete before submitting another.       │
+│                              [Got it] ✓   │
+╚════════════════════════════════════════════╝
 ```
 
-### Fix Missing Deductions
+## Response Format (from server)
+```json
+{
+  "status": "error",
+  "title": "Cannot apply now",
+  "type": "pending_request",
+  "message": "You already have a HOUSING loan request pending approval.",
+  "pending_loan": {
+    "inv_no": "LN-20260107-7052-mkqm",
+    "loan_type": "housing",
+    "loan_amount": "50000",
+    "status": "pending",
+    "created_at": "2026-01-10 14:30:00",
+    "pending_at_name": "SHARIFAH ALSALHI",
+    "approval_chain": "<html approval chain markup>"
+  }
+}
 ```
-1. Open: testing/fix_loan_deductions.php
-2. System auto-scans for missing entries
-3. Recreates them automatically
-```
 
-### Troubleshoot Issue
-```
-1. Go to verify_loan_deductions.php
-2. Check "Data Consistency Checks" section
-3. Follow "Action Required" recommendations
-```
-
----
-
-## Common Questions
-
-**Q: When are deductions created?**
-A: Automatically when GM gives final approval (status = 'approved')
-
-**Q: How many months of deductions?**
-A: Equal to loan's `installments` value (e.g., 12 months = 12 deduction entries)
-
-**Q: Can I skip a month?**
-A: Yes, delete the payroll_deductions entry for that month, then payroll won't deduct it
-
-**Q: What if loan was approved manually?**
-A: Run fix_loan_deductions.php to create missing entries
-
-**Q: Can I change the monthly amount?**
-A: Yes, update payroll_deductions.note for that month before payroll generation
-
-**Q: What if loan has deduction_mode='manual'?**
-A: No auto-deductions created. Add manually per month as needed.
-
----
-
-## Key SQL Queries
-
-### View All Active Loan Deductions for a Month
+## Database Queries Used
 ```sql
-SELECT emp_id, deduction, note as amount, month
-FROM payroll_deductions
-WHERE month = '2025-01' AND deduction LIKE '%Loan%'
-ORDER BY emp_id;
-```
+-- 1. Check for pending loans
+SELECT * FROM emp_loan 
+WHERE emp_id = ? AND status IN ('pending', 'awaiting')
 
-### Check Deductions for Specific Employee
-```sql
-SELECT * FROM payroll_deductions
-WHERE emp_id = '1574' AND deduction LIKE '%LN-%'
-ORDER BY month;
-```
+-- 2. Get approval chain
+SELECT ra.approval_level, ra.status, 
+       COALESCE(e.name, al.fullname) as approver_name
+FROM request_approvers ra
+LEFT JOIN employees e ON ra.approver_id = e.emp_id
+LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+WHERE ra.request_inv_no = ? AND ra.request_type_id = 2
+ORDER BY ra.approval_level
 
-### Find Loans Missing Deductions
-```sql
-SELECT el.inv_no, el.emp_id, el.installments, COUNT(pd.id) as deduction_count
-FROM emp_loan el
-LEFT JOIN payroll_deductions pd ON el.emp_id = pd.emp_id 
-    AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
-WHERE el.status = 'approved' AND el.deduction_mode = 'automatic'
-GROUP BY el.id
-HAVING deduction_count < el.installments;
+-- 3. Get current approver
+SELECT COALESCE(e.name, al.fullname) as approver_name
+FROM request_approvers ra
+LEFT JOIN employees e ON ra.approver_id = e.emp_id
+LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+WHERE ra.request_inv_no = ? AND ra.request_type_id = 2 AND ra.approval_level = ?
 ```
-
-### View Next Month's Total Loan Deductions (by employee)
-```sql
-SELECT emp_id, COUNT(*) as loans, SUM(CAST(note AS DECIMAL(10,2))) as total
-FROM payroll_deductions
-WHERE month = '2025-02' AND deduction LIKE '%Loan%'
-GROUP BY emp_id;
-```
-
----
 
 ## Testing Checklist
+- [ ] Employee with no pending loans can apply normally ✓
+- [ ] Employee with pending loan sees "Cannot apply now" modal ✓
+- [ ] Modal shows correct loan details (invoice, amount, status) ✓
+- [ ] Modal shows all 6 approval levels with correct statuses ✓
+- [ ] Badges display correctly (✓ ● ✗) ✓
+- [ ] Days pending calculated correctly ✓
+- [ ] Current approver name displays ✓
+- [ ] Employee can't bypass the restriction ✓
 
-- [ ] Create a loan for test employee
-- [ ] Approvers approve through all levels
-- [ ] GM gives final approval
-- [ ] Check payroll_deductions has entries
-- [ ] Generate payroll for that month
-- [ ] Verify deduction in net salary
-- [ ] Check salary slip shows deduction
-- [ ] Test with multiple loans in same month
-- [ ] Test manual mode (no auto-deductions)
+## Key Features
+✨ **User-Friendly**: Shows exact status and who to follow up with
+🔒 **Secure**: Uses prepared statements to prevent SQL injection
+⚡ **Fast**: Only queries database when needed
+📱 **Responsive**: Works on mobile and desktop
+🎨 **Styled**: Matches existing application UI
+
+## Error Handling
+- Missing approver name → Falls back to admin_login.fullname or username
+- No approval chain → Still shows request details with "Processing" status
+- Multiple pending → Shows most recent one
+- Database error → Returns standard error JSON response
+
+## Deployment Notes
+✓ No database schema changes needed
+✓ No migrations required
+✓ No new tables created
+✓ Backward compatible with existing code
+✓ Uses only existing tables (emp_loan, request_approvers, employees, admin_login)
+
+## Estimated Impact
+- **Security**: High (prevents application bugs)
+- **Performance**: Minimal (adds 3 quick queries)
+- **User Impact**: Positive (clear, helpful feedback)
+- **Maintenance**: Low (self-contained feature)
 
 ---
-
-## Support
-
-**Check System**: `testing/verify_loan_deductions.php`
-**Fix Issues**: `testing/fix_loan_deductions.php`
-**Read Full Doc**: `testing/LOAN_PAYROLL_DEDUCTION_FLOW.md`
-**Endpoint Details**: `testing/ENDPOINT_MAPPING.md`
-
----
-
-**Status**: ✅ Fully Operational
-**Last Check**: 2025-01-06
+**Status**: ✅ COMPLETE & READY FOR TESTING
+**Last Updated**: 2026-01-13

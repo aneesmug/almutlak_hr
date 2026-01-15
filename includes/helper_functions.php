@@ -4300,14 +4300,11 @@ if (!function_exists('getDisplayName')) {
         
         // ===== MULTI-LEVEL CACHING FOR ARABIC TRANSLATION =====
         
-        // 1. Check session cache (fastest - in-memory)
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        $cache_key = 'display_name_' . md5($name . '_ar');
-        if (isset($_SESSION[$cache_key]) && !empty($_SESSION[$cache_key])) {
-            return $_SESSION[$cache_key];
+        // 1. Check request cache (static variable - fastest, lasts for one page load)
+        static $request_display_cache = [];
+        $cache_key = md5($name . '_ar');
+        if (isset($request_display_cache[$cache_key])) {
+            return $request_display_cache[$cache_key];
         }
         
         // 2. Check database cache (persistent across sessions)
@@ -4323,8 +4320,8 @@ if (!function_exists('getDisplayName')) {
             
             if ($db_check && $db_row = mysqli_fetch_assoc($db_check)) {
                 $translated = $db_row['translated_text'];
-                // Store in session cache for this request
-                $_SESSION[$cache_key] = $translated;
+                // Store in request cache
+                $request_display_cache[$cache_key] = $translated;
                 return $translated;
             }
         }
@@ -4336,8 +4333,8 @@ if (!function_exists('getDisplayName')) {
         if (function_exists('translate_name')) {
             $translated = @translate_name($name);
             if (!empty($translated) && $translated !== $name) {
-                // Cache in session immediately
-                $_SESSION[$cache_key] = $translated;
+                // Cache in request cache immediately
+                $request_display_cache[$cache_key] = $translated;
                 
                 // Save to database cache for future use
                 if ($conDB) {
@@ -4370,8 +4367,8 @@ if (!function_exists('getDisplayName')) {
         if (function_exists('auto_translate_text')) {
             $translated = @auto_translate_text($name, 'en', 'ar');
             if (!empty($translated) && $translated !== $name) {
-                // Cache in session immediately
-                $_SESSION[$cache_key] = $translated;
+                // Cache in request cache immediately
+                $request_display_cache[$cache_key] = $translated;
                 
                 // auto_translate_text() already saves to database, so no need to duplicate
                 return $translated;
@@ -4379,6 +4376,7 @@ if (!function_exists('getDisplayName')) {
         }
         
         // Return original name if translation fails or functions unavailable
+        $request_display_cache[$cache_key] = $name;
         return $name;
     }
 }

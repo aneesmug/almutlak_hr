@@ -53,30 +53,26 @@
         
         // Calculate Total Salary by summing up all components
         $total_salary = 0;
+        $two_month_housing = 0; // Separate benefit to add after EOS
         if (!empty($salaryrow)) {
             $basic_salary = (float)($salaryrow['basic'] ?? 0);
             $housing_benefit = (float)($salaryrow['housing'] ?? 0);
             $calculated_housing = 0;
 
-            // If housing benefit is not provided, calculate it as (basic/12)*2
+            // If housing benefit is not provided, calculate it as (basic/12)*2 for DISPLAY ONLY
             if ($housing_benefit == 0 && $basic_salary > 0) {
                 $calculated_housing = ($basic_salary / 12) * 2;
+                $two_month_housing = $calculated_housing; // Store for separate benefit line
             } else {
                 $calculated_housing = $housing_benefit;
             }
         }
 
-        // Calculate base salary for EOS calculation (includes calculated housing if missing)
+        // Calculate base salary for EOS calculation (WITHOUT calculated housing - only actual components)
         $actual_salary_base = 0;
         if (!empty($salaryrow)) {
             $actual_salary_base += (float)($salaryrow['basic'] ?? 0);
-            
-            // Add calculated housing if original housing is 0, otherwise use actual housing
-            if ((float)($salaryrow['housing'] ?? 0) == 0 && (float)($salaryrow['basic'] ?? 0) > 0) {
-                $actual_salary_base += (($salaryrow['basic'] / 12) * 2); // calculated housing for EOS
-            } else {
-                $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // actual housing
-            }
+            $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // Only actual housing, NO calculation
             
             $actual_salary_base += (float)($salaryrow['transport'] ?? 0);
             $actual_salary_base += (float)($salaryrow['food'] ?? 0);
@@ -362,7 +358,7 @@
                 $stmt_update->bind_param("sss", $notes, $endDateStr, $emprow['empid']);
                 $stmt_update->execute();
                 
-                mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$username."','emp_end_of_service','".$_GET['emp_id']."','".date("c")."')");
+                // mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$username."','emp_end_of_service','".$_GET['emp_id']."','".date("c")."')");
                 
                 $error_1 = "<div class='alert alert-success'><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.')."</div>";
                 header("refresh:1; ./emp_end_of_service.php?emp_id=".$_GET['emp_id']."");
@@ -495,6 +491,50 @@
                                                     <p><strong><?=__('Outstanding Loan Balance');?>:</strong><br><span class="text-danger"><?= htmlspecialchars(number_format($outstanding_loan, 2)); ?> <?=__('SAR');?></span></p>
                                                 </div>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Salary Components Section -->
+                                    <div class="card mt-4">
+                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Salary Components');?></h5></div>
+                                        <div class="card-body">
+                                            <table class="table table-sm">
+                                                <tbody>
+                                                    <tr>
+                                                        <td><strong><?=__('Basic Salary');?>:</strong></td>
+                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['basic'] ?? 0, 2)); ?> <?=__('SAR');?></td>
+                                                    </tr>
+                                                    <tr <?= ($salaryrow['housing'] ?? 0) == 0 ? 'style="background-color:#fff3cd;"' : '' ?>>
+                                                        <td><strong><?=__('Housing Allowance');?>:</strong></td>
+                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['housing'] ?? 0, 2)); ?> <?=__('SAR');?></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td><strong><?=__('Food Allowance');?>:</strong></td>
+                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['food'] ?? 0, 2)); ?> <?=__('SAR');?></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td><strong><?=__('Transport Allowance');?>:</strong></td>
+                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['transport'] ?? 0, 2)); ?> <?=__('SAR');?></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td><strong><?=__('Miscellaneous');?>:</strong></td>
+                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['misc'] ?? 0, 2)); ?> <?=__('SAR');?></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td><strong><?=__('Other Allowances');?>:</strong></td>
+                                                        <td class="text-right"><?= htmlspecialchars(number_format(($salaryrow['cashier'] ?? 0) + ($salaryrow['fuel'] ?? 0) + ($salaryrow['tel'] ?? 0) + ($salaryrow['guard'] ?? 0) + ($salaryrow['other'] ?? 0), 2)); ?> <?=__('SAR');?></td>
+                                                    </tr>
+                                                    <tr style="border-top: 2px solid #ddd; font-weight: bold;">
+                                                        <td><strong><?=__('Total Salary Base');?>:</strong></td>
+                                                        <td class="text-right text-success"><?= htmlspecialchars(number_format($actual_salary_base, 2)); ?> <?=__('SAR');?></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                            <?php if (($salaryrow['housing'] ?? 0) == 0 && ($salaryrow['basic'] ?? 0) > 0): ?>
+                                                <div class="alert alert-warning mt-3">
+                                                    <strong><?=__('Note');?>:</strong> Housing allowance is 0 in salary. <strong>2-month housing benefit will be added to EOS</strong>: (Basic / 12) × 2 = <?= htmlspecialchars(number_format($two_month_housing, 2)); ?> <?=__('SAR');?>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
 
@@ -664,15 +704,19 @@
                                                             <div class="col-12"><hr/></div>
                                                             
                                                             <!-- Final Summary Row -->
-                                                            <div class="form-group col-lg-4">
+                                                            <div class="form-group col-lg-3">
                                                                 <label><?=__('EOS Amount (from API)');?></label>
                                                                 <input type="text" class="form-control" id="eos_amount_display" value="0.00" readonly style="background-color: #e9ecef;">
                                                             </div>
-                                                            <div class="form-group col-lg-4">
+                                                            <div class="form-group col-lg-3">
                                                                 <label><?=__('Vacation Salary');?></label>
                                                                 <input type="text" class="form-control" id="vacation_salary_display" value="0.00" readonly style="background-color: #e9ecef;">
                                                             </div>
-                                                            <div class="form-group col-lg-4">
+                                                            <div class="form-group col-lg-3">
+                                                                <label class="text-success"><strong><?=__('2-Month Housing Benefit');?></strong></label>
+                                                                <input type="text" class="form-control text-success font-weight-bold" id="two_month_housing_display" value="<?= htmlspecialchars(number_format($two_month_housing, 2)); ?>" readonly style="background-color: #d4edda;">
+                                                            </div>
+                                                            <div class="form-group col-lg-3">
                                                                 <label class="font-weight-bold"><?=__('Total Net Payment');?></label>
                                                                 <input type="text" class="form-control font-weight-bold" id="net_payment_display" value="0.00" readonly style="background-color: #dff0d8;">
                                                             </div>
@@ -696,6 +740,8 @@
                                                         <input type="hidden" id="total_salary" value="<?= htmlspecialchars($total_salary); ?>">
                                                         <input type="hidden" id="basic_salary" value="<?= htmlspecialchars($salaryrow['basic'] ?? 0); ?>">
                                                         <input type="hidden" id="housing_allowance" value="<?= htmlspecialchars($salaryrow['housing'] ?? 0); ?>">
+                                                        <input type="hidden" id="calculated_housing" value="<?= htmlspecialchars($calculated_housing); ?>">
+                                                        <input type="hidden" id="two_month_housing_benefit" value="<?= htmlspecialchars($two_month_housing); ?>">
                                                         <input type="hidden" id="actual_salary_base" value="<?= htmlspecialchars($actual_salary_base); ?>">
                                                         <input type="hidden" id="vacation_salary_base" value="<?= htmlspecialchars($vacation_salary_base); ?>">
                                                         <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($annual_vacation_entitlement); ?>">
@@ -884,6 +930,7 @@
                     const eosAmount = parseFloat($('#eos_amount_display').val()) || 0;
                     const vacationSalary = parseFloat($('#vacation_salary_display').val()) || 0;
                     const otherEarnings = parseFloat($('#other_earnings').val()) || 0;
+                    const twoMonthHousingBenefit = parseFloat($('#two_month_housing_benefit').val()) || 0; // 2-month housing benefit
                     
                     // Calculate overtime earnings per new rule:
                     // per-hour overtime rate = (basic/240)/2 + (full/240)
@@ -899,7 +946,7 @@
                     
                     const loanDeduction = parseFloat($('#deduct').val()) || 0;
  
-                    const totalEarnings = eosAmount + vacationSalary + resignationSalary + otherEarnings + totalOvertimeEarnings;
+                    const totalEarnings = eosAmount + vacationSalary + resignationSalary + otherEarnings + totalOvertimeEarnings + twoMonthHousingBenefit;
                     const totalDeductions = loanDeduction + gosiDeduction + absentDeductionAmount + hourlyDeductionAmount;
                     const netPayment = totalEarnings - totalDeductions;                    // --- MODIFICATION: Round up the net payment to the nearest next number ---
                     const roundedNetPayment = Math.ceil(netPayment);

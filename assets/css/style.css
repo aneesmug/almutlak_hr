@@ -4912,6 +4912,7 @@ a.editable-click:hover {
 .table-condensed>thead>tr>td,
 .table-condensed>thead>tr>th {
   padding: 7px;
+  /* text-align: center !important; */
 }
 
 th {
@@ -8667,4 +8668,10 @@ i.fa-clipboard {
 .swal2-container .select2-container--disabled .select2-selection {
     opacity: 0.6;
     background-color: #e9ecef;
+}
+
+.select2-container--default .select2-results__option[aria-disabled=true] {
+    color: #dc3545 !important;
+    background-color: #fff5f5 !important;
+    opacity: 0.8;
 }

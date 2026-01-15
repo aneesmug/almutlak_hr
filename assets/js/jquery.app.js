@@ -2762,6 +2762,26 @@ function toggleCompanyAccessSection(userType) {
 ////////////             End Users Handling           //////////////
 ////////////////////////////////////////////////////////////////////
 
+// Function to toggle email field visibility based on user type
+function toggleEmailFieldVisibility() {
+    var selectedType = $('#user_type').val();
+    // console.log('Toggling email field. Selected type:', selectedType);
+    if (selectedType === 'employee') {
+        $('#email-group').hide();
+        $('#email').removeAttr('required');
+        // console.log('Email field hidden (employee)');
+    } else {
+        $('#email-group').show();
+        $('#email').attr('required', 'required');
+        // console.log('Email field shown for:', selectedType);
+    }
+}
+
+// Global change handler to keep email field in sync for any user_type select
+$(document).on('change', '#user_type', function() {
+    toggleEmailFieldVisibility();
+});
+
 $(document).on('click', '.updateUserAjax', function (e) {
     e.preventDefault();
     var e_iduser        = $(this).data('id'); 
@@ -2769,6 +2789,7 @@ $(document).on('click', '.updateUserAjax', function (e) {
     var e_dept          = $(this).data('dept');
     var e_email         = $(this).data('email');
     var user_type       = $(this).data('user_type');
+    var user_status     = $(this).data('status');
     Swal.fire({
         title: e_fullname, // Show user's name in title
         html: edit_user_HTML(),
@@ -2779,33 +2800,20 @@ $(document).on('click', '.updateUserAjax', function (e) {
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
         willOpen: function() {
-            $('#iduser').val(e_iduser); 
-            $('#dept').val(e_dept);
-            $('#email').val(e_email);
-            $('#user_type option[value="'+user_type+'"]').prop("selected", "selected");
-            
-            // Load companies and set current user's allowed companies
-            loadCompanyAccess(e_iduser, user_type);
-            
-            // Function to toggle email field visibility
-            function toggleEmailField() {
-                var selectedType = $('#user_type').val();
-                if (selectedType === 'employee') {
-                    $('#email-group').hide();
-                    $('#email').removeAttr('required');
-                } else {
-                    $('#email-group').show();
-                    $('#email').attr('required', 'required');
-                }
-            }
-            
-            // Initial toggle on load
-            toggleEmailField();
-            
-            // Toggle on change
-            $('#user_type').on('change', function() {
-                toggleEmailField();
-                allowOutsideClick:false});
+            // Give DOM time to render
+            setTimeout(function() {
+                $('#iduser').val(e_iduser); 
+                $('#dept').val(e_dept);
+                $('#email').val(e_email);
+                $('#user_status').prop('checked', user_status == 1);
+
+                // Set the select value properly using .val() and then trigger the toggle
+                $('#user_type').val(user_type);
+                toggleEmailFieldVisibility();  // Call immediately after setting value
+
+                // Load companies and set current user's allowed companies
+                loadCompanyAccess(e_iduser, user_type);
+            }, 100);
         },
         didClose: function() {
             // Destroy Select2 instance when modal closes
@@ -7455,6 +7463,14 @@ function edit_user_HTML(){
                 <!-- Companies will be loaded dynamically -->
             </select>
             <small class="form-text text-muted d-block mt-2">${__('company_access_note') || 'Type to search and select companies. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
+        </div>
+
+        <div class="form-group col-md-12">
+            <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" id="user_status" name="user_status" value="1">
+                <label class="custom-control-label" for="user_status">${__('active_user') || 'Active User'}</label>
+            </div>
+            <small class="form-text text-muted d-block mt-2">${__('user_status_note') || 'Check to activate this user account, uncheck to deactivate.'}</small>
         </div>
         
         <input type="hidden" id="iduser" name="id">

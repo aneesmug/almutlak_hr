@@ -51,6 +51,7 @@ if (mysqli_num_rows($query) == 1) {
                 e.passport_number,
                 e.passport_exp,
                 d.dep_nme AS `deptname`,
+                d.dep_nme_ar AS `deptname_ar`,
                 s.section_name,
                 c.name AS `country_name`,
                 re.name AS `replacement_person_name`,
@@ -463,15 +464,15 @@ if (mysqli_num_rows($query) == 1) {
                                 <div class="employee-banner">
                                     <img src="<?= display_or_na($request['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
-                                        <h4><?= display_or_na($request['employee_name'] ?? null); ?></h4>
-                                        <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= display_or_na($request['deptname'] ?? null); ?><?= !empty($request['section_name']) ? ' / ' . display_or_na($request['section_name']) : '' ?></p>
+                                        <h4><?= getDisplayName($request['employee_name'] ?? null); ?></h4>
+                                        <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= ($is_rtl ?? false ? $request['deptname_ar'] : $request['deptname']); ?><?= getDisplayName($request['section_name']) ? ' / ' . getDisplayName($request['section_name']) : '' ?></p>
                                     </div>
                                 </div>
 
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-calendar-alt"></i><?= __('vacation_details') ?></h5>
                                     <div class="grid-details">
-                                        <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?= display_or_na($request['vac_type'] ?? null); ?><?= !empty($request['fly_type']) ? ' | ' . display_or_na($request['fly_type']) : '' ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('vacation_type') ?></span> <span class="value"><small><?= getDisplayName($request['vac_type'] ?? null); ?><?= getDisplayName($request['fly_type']) ? ' | ' . getDisplayName($request['fly_type']) : '' ?></small></span></div>
                                         <?php if ($request['vac_type'] !== 'Encashed'): ?>
                                         <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['start_date']) ? date('d M Y', strtotime($request['start_date'])) : null); ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['return_date']) ? date('d M Y', strtotime($request['return_date'])) : null); ?></small></span></div>
@@ -496,7 +497,7 @@ if (mysqli_num_rows($query) == 1) {
                                         <?php if ($flight_days > 0 && $ticket_fee > 0): ?>
                                             <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?= display_or_na($flight_days); ?> <?= __('days') ?></small></span></div>
                                         <?php endif; ?>
-                                        <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?= parseName(($request['replacement_person_name'] ?? '') !== '' ? $request['replacement_person_name'] : __('not_available')); ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('replacement') ?></span> <span class="value"><small><?= getDisplayName(($request['replacement_person_name'] ?? '') !== '' ? $request['replacement_person_name'] : __('not_available')); ?></small></span></div>
                                         
                                         <?php if ($request['vac_type'] === 'Business Trip'): ?>
                                             <div class="detail-item"><span class="label"><?= __('accommodation_provided') ?></span> <span class="value"><small><?= ucfirst($request['accommodation_provided'] ?? 'N/A'); ?></small></span></div>
@@ -610,7 +611,7 @@ if (mysqli_num_rows($query) == 1) {
                                         <i class="fa fa-check-circle"></i> <strong><?= __('employee_active_in_payroll') ?? 'Employee Active in Payroll' ?></strong>
                                         <p class="mb-2 mt-2"><?= __('local_annual_vacation_payroll_message') ?? 'This is a Local Annual vacation. The employee will remain active in the payroll system and receive their complete monthly salary as per normal.' ?></p>
                                         <ul class="mb-0 pl-4">
-                                            <li><?= __('vacation_type') ?>: <strong><?= htmlspecialchars($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
+                                            <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
                                             <li><?= __('payroll_status') ?>: <strong><?= __('active_full_salary') ?? 'Active - Full Salary' ?></strong></li>
                                             <li><?= __('vacation_days_deducted') ?? 'Vacation Days Deducted' ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
                                             <li><?= __('salary_deduction') ?? 'Salary Deduction' ?>: <strong><?= __('none') ?? 'None' ?></strong></li>
@@ -737,7 +738,7 @@ if (mysqli_num_rows($query) == 1) {
                                                             <?php foreach ($approval_chain as $approver): ?>
                                                                 <?php if ($approver['status'] == 'approved'): ?>
                                                                     <div class="ml-3 mt-1">
-                                                                        <small><i class="fa fa-user-check text-success"></i> <?= htmlspecialchars($approver['approver_name']) ?> (<?= getRoleLabel($approver['approver_role']) ?>)</small>
+                                                                        <small><i class="fa fa-user-check text-success"></i> <?=getDisplayName($approver['approver_name']) ?> (<?= getRoleLabel($approver['approver_role']) ?>)</small>
                                                                     </div>
                                                                 <?php endif; ?>
                                                             <?php endforeach; ?>
@@ -771,8 +772,8 @@ if (mysqli_num_rows($query) == 1) {
                                                                 <div class="icon"><i class="fa <?= $icon ?>"></i></div>
                                                                 <span class="status ml-3">
                                                                     <i class="fa <?= $role_icon ?>"></i>
-                                                                    <?= htmlspecialchars($approver['approver_name']) ?> 
-                                                                    <small class="text-muted">(<?= __('level') ?> <?= $approver['approval_level'] ?>: <?= htmlspecialchars(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : getRoleLabel($approver['approver_role'])) ?>)</small>
+                                                                    <?= getDisplayName($approver['approver_name']) ?> 
+                                                                    <small class="text-muted">(<?= __('level') ?> <?= $approver['approval_level'] ?>: <?= getDisplayName(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : getRoleLabel($approver['approver_role'])) ?>)</small>
                                                                 </span>
                                                             </div>
                                                     <?php endforeach; ?>
@@ -800,9 +801,9 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="report-section">
                                              <h5 class="section-title"><i class="fa fa-comments"></i><?= __('remarks') ?></h5>
                                              <?php if($current_status == 'rejected'): ?>
-                                                <div class="alert alert-danger mb-0"><?=nl2br(htmlspecialchars($request['note'])); ?></div>
+                                                <div class="alert alert-danger mb-0"><?=getDisplayName(nl2br(htmlspecialchars($request['note']))); ?></div>
                                              <?php elseif(!empty($request['remarks'])): ?>
-                                                <div class="notes-section"><p class="mb-0"><?=nl2br(htmlspecialchars($request['remarks'])); ?></p></div>
+                                                <div class="notes-section"><p class="mb-0"><?=getDisplayName(nl2br(htmlspecialchars($request['remarks']))); ?></p></div>
                                              <?php endif; ?>
                                         </div>
                                         <?php endif; ?>
@@ -1030,7 +1031,7 @@ if (mysqli_num_rows($query) == 1) {
                             
                             <div class="report-footer">
                                 <div class="signature-area">
-                                    <div class="signature-box"><p><?= __('employee_signature') ?></p></div>
+                                    <div class="signature-box"><p><?= __('compensation_signature') ?></p></div>
                                     <div class="signature-box"><p><?= __('hr_manager_signature') ?></p></div>
                                     <div class="signature-box"><p><?= __('general_manager_signature') ?></p></div>
                                 </div>

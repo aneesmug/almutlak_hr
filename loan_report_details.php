@@ -8,8 +8,10 @@
  * 4. PRINT STYLES: Includes CSS to ensure the report is formatted correctly for printing.
  ****************************************************************/
 
-require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+
+// Ensure UTF-8 encoding for database connection
+mysqli_set_charset($conDB, "utf8mb4");
 
 // Restrict access: Employees cannot view this detailed report page
 if (isset($isEmployee) && $isEmployee === true) {
@@ -36,6 +38,7 @@ if (mysqli_num_rows($query) == 1) {
                 e.joining_date,
                 e.dept AS dept_id,
                 d.dep_nme AS `deptname`,
+                d.dep_nme_ar AS `deptname_ar`,
                 s.section_name,
                 c.name AS `country_name`,
                 rejected_by_emp.name as rejected_by_name
@@ -286,16 +289,19 @@ if (mysqli_num_rows($query) == 1) {
                                 <div class="employee-banner">
                                     <img src="<?=htmlspecialchars($loan_details['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
-                                        <h4><?=htmlspecialchars($loan_details['employee_name']); ?></h4>
-                                        <p><?= __('employee_id_label') ?>: <?=htmlspecialchars($loan_details['emp_id']); ?> | <?=htmlspecialchars($loan_details['deptname']); ?><?= !empty($loan_details['section_name']) ? ' / ' . htmlspecialchars($loan_details['section_name']) : '' ?></p>
+                                        <h4><?=getDisplayName($loan_details['employee_name']); ?></h4>
+                                        <p><?= __('employee_id_label') ?>: <?=htmlspecialchars($loan_details['emp_id']); ?> | <?=($is_rtl ?? false ? $loan_details['deptname_ar'] : $loan_details['deptname']) ; ?><?= getDisplayName(!empty($loan_details['section_name']) ? ' / ' . htmlspecialchars($loan_details['section_name']) : '') ?></p>
                                     </div>
                                 </div>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('loan_details_header') ?></h5>
                                     <div class="grid-details">
                                         <div class="detail-item"><span class="label"><?= __('invoice_no') ?></span> <span class="value"><code><?= htmlspecialchars($loan_details['inv_no'] ?? 'N/A'); ?></code></span></div>
-                                        <div class="detail-item"><span class="label"><?= __('loan_type_label') ?></span> <span class="value"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $loan_details['loan_type'] ?? 'N/A'))); ?></span></div>
-                                        <div class="detail-item"><span class="label"><?= __('loan_amount_label') ?></span> <span class="value highlight"><?= number_format($loan_details['loan_amount'], 2); ?> <?= __('sar_currency') ?></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('loan_type_label') ?></span> <span class="value"><?= getDisplayName(ucwords(str_replace('_', ' ', $loan_details['loan_type'] ?? 'N/A'))); ?></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('applied_loan_amount') ?></span> <span class="value"><?= number_format($loan_details['loan_amount'], 2); ?> <?= __('sar_currency') ?></span></div>
+                                        <?php if (!empty($loan_details['approved_amount']) && $loan_details['approved_amount'] != $loan_details['loan_amount']): ?>
+                                        <div class="detail-item"><span class="label"><?= __('approved_loan_amount') ?></span> <span class="value highlight" style="color: #28a745;"><?= number_format($loan_details['approved_amount'], 2); ?> <?= __('sar_currency') ?> <small class="text-muted">(<?= __('modified_by') ?>: <?= htmlspecialchars($loan_details['approved_by_emp_id'] ?? 'N/A') ?>)</small></span></div>
+                                        <?php endif; ?>
                                         <div class="detail-item"><span class="label"><?= __('loan_installments_label') ?></span> <span class="value"><?= htmlspecialchars($loan_details['installments'] ?? '1'); ?> <?= __('months') ?></span></div>
                                         <div class="detail-item"><span class="label"><?= __('total_payable_label') ?></span> <span class="value highlight"><?= number_format($loan_details['total_payable'], 2); ?> <?= __('sar_currency') ?></span></div>
                                         <div class="detail-item"><span class="label"><?= __('monthly_deduction_label') ?></span> <span class="value"><?= number_format($loan_details['monthly_deduction'], 2); ?> <?= __('sar_currency') ?></span></div>
@@ -401,7 +407,7 @@ if (mysqli_num_rows($query) == 1) {
                                                                 <tr>
                                                                     <td colspan="5" class="bg-light">
                                                                         <small class="text-muted">
-                                                                            <i class="fa fa-comment"></i> <strong><?= __('note_label') ?>:</strong> <?= htmlspecialchars($payment['note']); ?>
+                                                                            <i class="fa fa-comment"></i> <strong><?= __('note_label') ?>:</strong> <?= htmlspecialchars($payment['note'], ENT_QUOTES, 'UTF-8'); ?>
                                                                         </small>
                                                                     </td>
                                                                 </tr>
@@ -425,10 +431,10 @@ if (mysqli_num_rows($query) == 1) {
                                                 <?php endif; ?>
                                             </div>
                                             <div class="report-section">
-                                                <h5 class="section-title"><i class="fa fa-check-circle"></i> <?= __('Approval Chain') ?></h5>
+                                                <h5 class="section-title"><i class="fa fa-check-circle"></i> <?= __('approval_chain') ?></h5>
                                                 <div class="approval-timeline">
                                                     <?php if (empty($approval_chain)): ?>
-                                                        <div class="alert alert-info"><?= __('No approval chain found') ?></div>
+                                                        <div class="alert alert-info"><?= __('no_approval_chain_found') ?></div>
                                                     <?php else: ?>
                                                         <?php foreach ($approval_chain as $level): ?>
                                                         <div class="timeline-item <?= $level['status'] ?>">
@@ -437,25 +443,25 @@ if (mysqli_num_rows($query) == 1) {
                                                             </span>
                                                             <div>
                                                                 <span class="status" style="font-size:1rem;">
-                                                                    <strong>Level <?= (int)$level['approval_level'] ?>:</strong> <?= htmlspecialchars($level['approver_name'] ?? 'Pending Assignment'); ?> - 
+                                                                    <strong><?=__('level') ?> <?= (int)$level['approval_level'] ?>:</strong> <?= getDisplayName($level['approver_name'] ?? 'Pending Assignment'); ?> - 
                                                                     <?php 
                                                                     switch($level['status']) {
-                                                                        case 'approved': echo '<span class="text-success">' . __('Approved') . '</span>'; break;
-                                                                        case 'rejected': echo '<span class="text-danger">' . __('Rejected') . '</span>'; break;
-                                                                        case 'pending': echo '<span class="text-warning">' . __('Pending') . '</span>'; break;
-                                                                        case 'awaiting': echo '<span class="text-secondary">' . __('Awaiting') . '</span>'; break;
+                                                                        case 'approved': echo '<span class="text-success">' . __('approved') . '</span>'; break;
+                                                                        case 'rejected': echo '<span class="text-danger">' . __('rejected') . '</span>'; break;
+                                                                        case 'pending': echo '<span class="text-warning">' . __('pending') . '</span>'; break;
+                                                                        case 'awaiting': echo '<span class="text-secondary">' . __('awaiting') . '</span>'; break;
                                                                         default: echo '<span class="text-muted">' . htmlspecialchars($level['status']) . '</span>';
                                                                     }
                                                                     ?>
                                                                 </span>
                                                                 <?php if (!empty($level['action_date'])): ?>
-                                                                <div style="font-size:0.85rem; color:#999; margin-top:4px;">
+                                                                <div style="font-size:0.85rem; color:#999; margin-top:4px; <?= ($is_rtl) ? 'margin-right:22px !important;' : 'margin-left:22px !important;' ?>">
                                                                     <i class="fa fa-calendar"></i> <?= date('d M Y, H:i', strtotime($level['action_date'])); ?>
                                                                 </div>
                                                                 <?php endif; ?>
                                                                 <?php if (!empty($level['note'])): ?>
-                                                                <div style="font-size:0.85rem; color:#666; margin-top:8px; padding:8px; background:#f5f5f5; border-radius:4px; border-left:3px solid #667eea;">
-                                                                    <strong>Note:</strong> <?= nl2br(htmlspecialchars($level['note'])); ?>
+                                                                <div style="font-size:0.85rem; color:#666; margin-top:8px; padding:8px; background:#f5f5f5; border-radius:4px; border-left:3px solid #667eea; <?= ($is_rtl) ? 'margin-right:22px !important;' : 'margin-left:22px !important;' ?>">
+                                                                    <strong><?= __('note') ?>:</strong> <?= getDisplayName($level['note']); ?>
                                                                 </div>
                                                                 <?php endif; ?>
                                                             </div>

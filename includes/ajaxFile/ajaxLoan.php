@@ -1100,6 +1100,97 @@ function apply_for_loan() {
     // Sanitize and validate inputs
     $emp_id = mysqli_real_escape_string($conDB, $_POST['emp_id']);
     
+    // CHECK IF EMPLOYEE HAS PENDING OR AWAITING LOAN REQUESTS
+    $pending_check = $conDB->prepare("SELECT id, inv_no, loan_type, loan_amount, status, created_at FROM emp_loan WHERE emp_id = ? AND status IN ('pending', 'awaiting')");
+    $pending_check->bind_param("s", $emp_id);
+    $pending_check->execute();
+    $pending_result = $pending_check->get_result();
+    
+    if ($pending_result->num_rows > 0) {
+        $pending_loan = $pending_result->fetch_assoc();
+        $pending_check->close();
+        
+        // Get approval chain for this pending loan
+        $approval_chain_query = $conDB->prepare("
+            SELECT ra.approval_level, ra.status, 
+                   COALESCE(e.name, al.fullname, al.username) as approver_name,
+                   ra.action_date
+            FROM request_approvers ra
+            LEFT JOIN employees e ON ra.approver_id = e.emp_id
+            LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+            WHERE ra.request_inv_no = ? AND ra.request_type_id = 2
+            ORDER BY ra.approval_level ASC
+        ");
+        $approval_chain_query->bind_param("s", $pending_loan['inv_no']);
+        $approval_chain_query->execute();
+        $chain_result = $approval_chain_query->get_result();
+        
+        $approval_chain_html = '';
+        $pending_at_level = null;
+        
+        while ($chain_row = $chain_result->fetch_assoc()) {
+            $status = strtolower($chain_row['status']);
+            $icon = '';
+            $badge_class = '';
+            
+            if ($status === 'approved') {
+                $icon = '✓';
+                $badge_class = 'badge-success';
+            } elseif ($status === 'rejected') {
+                $icon = '✗';
+                $badge_class = 'badge-danger';
+            } else {
+                $icon = '●';
+                $badge_class = 'badge-warning';
+                if (!$pending_at_level) {
+                    $pending_at_level = $chain_row['approval_level'];
+                }
+            }
+            
+            $approval_chain_html .= '<div style="display:flex; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
+                <span class="badge ' . $badge_class . '" style="min-width:30px; margin-right:10px;">' . $icon . '</span>
+                <span style="flex:1;">Level ' . $chain_row['approval_level'] . ': ' . htmlspecialchars($chain_row['approver_name']) . ' — ' . ucfirst($status) . '</span>
+            </div>';
+        }
+        $approval_chain_query->close();
+        
+        $pending_at_name = 'Processing';
+        if ($pending_at_level) {
+            $pending_at_query = $conDB->prepare("
+                SELECT COALESCE(e.name, al.fullname, al.username) as approver_name
+                FROM request_approvers ra
+                LEFT JOIN employees e ON ra.approver_id = e.emp_id
+                LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+                WHERE ra.request_inv_no = ? AND ra.request_type_id = 2 AND ra.approval_level = ?
+            ");
+            $pending_at_query->bind_param("si", $pending_loan['inv_no'], $pending_at_level);
+            $pending_at_query->execute();
+            $pending_at_result = $pending_at_query->get_result();
+            if ($row = $pending_at_result->fetch_assoc()) {
+                $pending_at_name = $row['approver_name'];
+            }
+            $pending_at_query->close();
+        }
+        
+        echo json_encode([
+            'status' => 'error',
+            'title' => 'Cannot apply now',
+            'message' => 'You already have a ' . strtoupper($pending_loan['loan_type']) . ' loan request pending approval.',
+            'type' => 'pending_request',
+            'pending_loan' => [
+                'inv_no' => $pending_loan['inv_no'],
+                'loan_type' => $pending_loan['loan_type'],
+                'loan_amount' => $pending_loan['loan_amount'],
+                'status' => $pending_loan['status'],
+                'created_at' => $pending_loan['created_at'],
+                'pending_at_name' => $pending_at_name,
+                'approval_chain' => $approval_chain_html
+            ]
+        ]);
+        return;
+    }
+    $pending_check->close();
+    
     // Validate supervisor assignment FIRST
     $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
     if (!$supervisor_check['valid']) {
@@ -2028,15 +2119,29 @@ function modify_and_approve_loan() {
         $new_end_date->modify('+' . ($new_installments - 1) . ' months');
         $new_end_date_str = $new_end_date->format('Y-m-d');
 
-        // Update the loan record (no status restriction - it will be updated after approval)
+        // Get approver emp_id for tracking
+        $approver_emp_id = $_SESSION['empid'] ?? null;
+        if (!$approver_emp_id) {
+            $stmt_user = $conDB->prepare("SELECT emp_id FROM admin_login WHERE id_iqama = ? LIMIT 1");
+            $stmt_user->bind_param("s", $username);
+            $stmt_user->execute();
+            $res_user = $stmt_user->get_result();
+            $user_row = $res_user->fetch_assoc();
+            $stmt_user->close();
+            $approver_emp_id = $user_row['emp_id'] ?? null;
+        }
+        
+        // Update the loan record - keep original loan_amount, set approved_amount with modified value
         $stmt_update = $conDB->prepare("UPDATE `emp_loan` SET 
-            `loan_amount` = ?, 
+            `approved_amount` = ?,
+            `approved_by_emp_id` = ?,
+            `approved_at` = NOW(),
             `total_payable` = ?, 
             `monthly_deduction` = ?, 
             `end_date` = ?,
             `installments` = ?
             WHERE `id` = ?");
-        $stmt_update->bind_param("dddsii", $new_loan_amount, $new_total_payable, $new_monthly_deduction, $new_end_date_str, $new_installments, $loan_id);
+        $stmt_update->bind_param("dsddsii", $new_loan_amount, $approver_emp_id, $new_total_payable, $new_monthly_deduction, $new_end_date_str, $new_installments, $loan_id);
         $stmt_update->execute();
 
         if ($stmt_update->affected_rows === 0) {
@@ -2189,15 +2294,17 @@ function modify_and_approve_loan_hr_assistant() {
         $new_end_date->modify('+' . ($new_installments - 1) . ' months');
         $new_end_date_str = $new_end_date->format('Y-m-d');
 
-        // Update the loan record (no status restriction)
+        // Update the loan record - keep original loan_amount, set approved_amount with modified value
         $stmt_update = $conDB->prepare("UPDATE `emp_loan` SET 
-            `loan_amount` = ?, 
+            `approved_amount` = ?,
+            `approved_by_emp_id` = ?,
+            `approved_at` = NOW(),
             `total_payable` = ?, 
             `monthly_deduction` = ?, 
             `end_date` = ?,
             `installments` = ?
             WHERE `id` = ?");
-        $stmt_update->bind_param("dddsii", $new_loan_amount, $new_total_payable, $new_monthly_deduction, $new_end_date_str, $new_installments, $loan_id);
+        $stmt_update->bind_param("dsddsii", $new_loan_amount, $approver_emp_id, $new_total_payable, $new_monthly_deduction, $new_end_date_str, $new_installments, $loan_id);
         $stmt_update->execute();
 
         if ($stmt_update->affected_rows === 0) {
@@ -2928,7 +3035,8 @@ function integrate_loan_to_payroll($loan_id, $conDB) {
         
         $emp_id = $loan['emp_id'];
         $loan_type = $loan['loan_type'];
-        $final_amount = $loan['final_approved_amount'] ?? $loan['total_payable'];
+        // Use approved_amount if set, otherwise use loan_amount
+        $final_amount = $loan['approved_amount'] ?? $loan['loan_amount'];
         $monthly_deduction = $loan['monthly_deduction'];
         $installments = $loan['installments'] ?? 1;
         $start_date = new DateTime($loan['start_date']);

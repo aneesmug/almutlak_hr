@@ -333,6 +333,8 @@ if ($can_see_all_depts) {
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
+
     <script src="assets/js/modernizr.min.js"></script>
     <style>
         .filter-controls {
@@ -634,12 +636,12 @@ if ($can_see_all_depts) {
                                             <div class="col-lg-4 col-md-6 mb-4">
                                                 <div class="card request-card h-100">
                                                     <div class="card-header">
-                                                        <?= translate_name($req['employee_name'], $current_lang ?? 'en'); ?>
+                                                        <?= getDisplayName($req['employee_name']); ?>
                                                         <span class="float-right"><?= __('emp_id') ?>: <?= htmlspecialchars($req['emp_id']); ?></span>
                                                     </div>
                                                     <div class="card-body">
                                                         <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?= __('applied') ?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($req['created_at']))); ?></div>
-                                                        <div class="detail-item"><i class="fad fa-suitcase-rolling duotone-info"></i><strong><?= __('type') ?>:</strong> <?= htmlspecialchars(parseName($req['vac_type'], 'FIRST') . " | " . $req['fly_type_translated']); ?></div>
+                                                        <div class="detail-item"><i class="fad fa-suitcase-rolling duotone-info"></i><strong><?= __('type') ?>:</strong> <?= getDisplayName($req['vac_type']) . " | " . $req['fly_type_translated']; ?></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?= __('start') ?>:</strong> <?= htmlspecialchars($req['start_date'] ?? 'N/A'); ?></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?= __('return') ?>:</strong> <?= htmlspecialchars($req['return_date'] ?? 'N/A'); ?></div>
                                                         <?php if (!empty($req['departure_date']) && $req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual'): ?>
@@ -1886,6 +1888,35 @@ if ($can_see_all_depts) {
 
             // Payroll adjustments moved to post-approval action only
 
+            // Helper: constrain return date to ±2 days around base return date
+            const setReturnDateBounds = (dateStr) => {
+                const base = dateStr ? new Date(dateStr) : (vacEndDate ? new Date(vacEndDate) : null);
+                if (!base || isNaN(base.getTime())) return;
+                const min = new Date(base); min.setDate(min.getDate() - 2);
+                const max = new Date(base); max.setDate(max.getDate() + 2);
+                $('#swal_return_date').datepicker('setStartDate', min);
+                $('#swal_return_date').datepicker('setEndDate', max);
+                $('#swal_return_date').datepicker('setDate', base);
+            };
+
+            // [NEW] HR Payroll: Return Date (Last Working Day)
+            if (isHR_Payroll) {
+                hrPayrollHtml += `
+                    <div class="swal-hr-payroll-fields text-left mt-3">
+                        <hr>
+                        <h6 class="text-primary mb-3"><i class="fa fa-calendar"></i> ${__('return_date') || 'Return Date (Last Working Day)'}</h6>
+                        <div class="form-group">
+                            <label for="swal_return_date" class="font-weight-bold">
+                                <i class="fa fa-calendar-day"></i> ${__('return_date') || 'Return Date / Last Working Day'}
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="swal_return_date" class="form-control" placeholder="${__('select_return_date') || 'Select return date'}" readonly required style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                            <small class="form-text text-muted">${__('hr_payroll_return_date_note') || 'HR Payroll can adjust the employee\'s last working day (return date) before final approval. Limit: ±2 days from current return date.'}</small>
+                        </div>
+                    </div>
+                `;
+            }
+
             // [NEW] --- GR Officer Visa/Re-Entry Fee Section ---
             if (isGR_Officer && isAnnualFly) {
                 hrPayrollHtml = `
@@ -2027,9 +2058,8 @@ if ($can_see_all_depts) {
                         });
                     };
 
-                    // --- Initialize Date Pickers for Payment Fields ---
-                    // if ((isHR_Assistant || isGR_Officer) && isAnnualFly) {
-                    if ((isHR_Assistant || isHR_Payroll) && isAnnualFly) {
+                    // --- Initialize Date Pickers for Payment / Travel / Return Fields ---
+                    if ((isHR_Assistant || isHR_Payroll || isGR_Officer) && isAnnualFly) {
                         // Fetch existing departure and arrival dates from database
                         $.ajax({
                             url: './includes/ajaxFile/ajaxVacation.php',
@@ -2072,6 +2102,13 @@ if ($can_see_all_depts) {
                                     if (res.arrival_date) {
                                         $('#swal_arrival_date').datepicker('setDate', res.arrival_date);
                                     }
+                                    if (res.return_date) {
+                                        $('#swal_return_date').datepicker('setDate', res.return_date);
+                                        setReturnDateBounds(res.return_date);
+                                    } else if (vacEndDate) {
+                                        $('#swal_return_date').datepicker('setDate', vacEndDate);
+                                        setReturnDateBounds(vacEndDate);
+                                    }
                                 }
                             },
                             error: function() {
@@ -2097,8 +2134,28 @@ if ($can_see_all_depts) {
                                     var arrivalDate = e.date;
                                     $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
                                 });
+
+                                // Initialize return date with default end date for HR Payroll
+                                if (isHR_Payroll) {
+                                    $('#swal_return_date').datepicker({
+                                        format: "yyyy-mm-dd",
+                                        todayHighlight: true,
+                                        autoclose: true
+                                    }).datepicker('setDate', vacEndDate);
+                                    setReturnDateBounds(vacEndDate);
+                                }
                             }
                         });
+                    }
+
+                    // Initialize return date picker for HR Payroll even when not Fly/annual
+                    if (isHR_Payroll) {
+                        $('#swal_return_date').datepicker({
+                            format: "yyyy-mm-dd",
+                            todayHighlight: true,
+                            autoclose: true
+                        }).datepicker('setDate', vacEndDate);
+                        setReturnDateBounds(vacEndDate);
                     }
 
                     // --- SIMPLE LEAVE LOGIC ---
@@ -2414,6 +2471,9 @@ if ($can_see_all_depts) {
                     let ticket_pay = $(swalModal).find('#swal_ticket_fares').val() || null;
                     let permit_fee = $(swalModal).find('#swal_permit_fee').val() || null;
 
+                    // A.0) HR Payroll return date (last working day)
+                    let return_date = $(swalModal).find('#swal_return_date').val() || null;
+
                     // A.1) Get HR Payroll details (if they exist)
                     let overtime_hours = $(swalModal).find('#swal_overtime_hours').val() || null;
                     let deduction_hours = $(swalModal).find('#swal_deduction_hours').val() || null;
@@ -2455,6 +2515,14 @@ if ($can_see_all_depts) {
                         }
                     }
                     
+                    // HR Payroll must set return date
+                    if (isHR_Payroll) {
+                        if (!return_date || return_date.trim() === '') {
+                            Swal.showValidationMessage(__('return_date_required') || 'Return date is required for HR Payroll approval');
+                            return false;
+                        }
+                    }
+
                     // [UPDATED] Validate GR Officer required fields if GR Officer is approving Fly | Annual
                     if ((isGR_Officer && isAnnualFly)) {
                         const permitFee = $(swalModal).find('#swal_permit_fee').val();
@@ -2548,17 +2616,20 @@ if ($can_see_all_depts) {
                     // Return all gathered data
                     const departureDateVal = $(swalModal).find('#swal_departure_date').val() || '';
                     const arrivalDateVal = $(swalModal).find('#swal_arrival_date').val() || '';
+                    const returnDateVal = $(swalModal).find('#swal_return_date').val() || '';
 
                     // Log for debugging
                     console.log('sendApproval preConfirm - departure_date:', departureDateVal);
                     console.log('sendApproval preConfirm - arrival_date:', arrivalDateVal);
                     console.log('sendApproval preConfirm - ticket_pay:', ticket_pay);
                     console.log('sendApproval preConfirm - permit_fee:', permit_fee);
+                    console.log('sendApproval preConfirm - return_date:', returnDateVal);
 
                     return {
                         approver_chain: approver_chain,
                         departure_date: departureDateVal,
                         arrival_date: arrivalDateVal,
+                        return_date: returnDateVal,
                         ticket_pay: ticket_pay,
                         permit_fee: permit_fee,
                         permit_fee: permit_fee, // [UPDATED] Include permit_fee for GR Officer
@@ -2615,6 +2686,7 @@ if ($can_see_all_depts) {
                         asset_checker_emp_id: approveData.asset_checker_emp_id || null, // Asset checker assigned by asset managers
                         departure_date: approveData.departure_date || null, // Send departure date
                         arrival_date: approveData.arrival_date || null, // Send arrival date
+                        return_date: approveData.return_date || null, // HR Payroll adjusted return/last working day
                         ticket_pay: approveData.ticket_pay || null, // Send ticket pay
                         permit_fee: approveData.permit_fee || null, // Send permit fee
                         permit_fee: approveData.permit_fee || null, // [UPDATED] Send permit_fee for GR Officer

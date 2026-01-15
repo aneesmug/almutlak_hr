@@ -539,9 +539,13 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                         <hr>
                         <p class="mb-0">${__('max_loan_amount_40_percent')} <strong>${maxLoanAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
                     </div>
+                    <div class="alert alert-warning text-left">
+                        <strong>${__('applied_amount')}:</strong> <span class="text-dark">${currentAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</span><br>
+                        <small class="text-muted">${__('original_employee_request')}</small>
+                    </div>
                     <form id="modifyLoanForm" class="text-left">
                         <div class="form-group">
-                            <label for="new_loan_amount">${__('loan_amount_label')}</label>
+                            <label for="new_loan_amount">${__('approved_loan_amount')} <span class="text-danger">*</span></label>
                             <input type="number" id="new_loan_amount" class="form-control" value="${currentAmount}" required max="${maxLoanAmount}">
                             <small id="loan_feedback_gm" class="form-text text-danger"></small>
                         </div>
@@ -703,9 +707,13 @@ async function modifyAndApproveLoanHRAssistant(loanId, currentAmount, currentIns
                         <hr>
                         <p class="mb-0">${__('max_loan_amount_40_percent')} <strong>${maxLoanAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
                     </div>
+                    <div class="alert alert-warning text-left">
+                        <strong>${__('applied_amount')}:</strong> <span class="text-dark">${currentAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</span><br>
+                        <small class="text-muted">${__('original_employee_request')}</small>
+                    </div>
                     <form id="modifyLoanFormHR" class="text-left">
                         <div class="form-group">
-                            <label for="new_loan_amount_hr">${__('loan_amount_label')}</label>
+                            <label for="new_loan_amount_hr">${__('approved_loan_amount')} <span class="text-danger">*</span></label>
                             <input type="number" id="new_loan_amount_hr" class="form-control" value="${currentAmount}" required max="${maxLoanAmount}">
                             <small id="loan_feedback_hr" class="form-text text-danger"></small>
                         </div>

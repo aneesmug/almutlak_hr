@@ -7111,6 +7111,12 @@ input[name^="idiscount"]:read-only {
 .datepicker table tr td.disabled:hover {
   color: #ff0000;
   background: #ffeeee;
+  cursor: not-allowed;
+}
+
+.datepicker table tr td,
+.datepicker table tr td:hover {
+  cursor: pointer;
 }
 
 /* --- FIX for SweetAlert Scrollbar --- */

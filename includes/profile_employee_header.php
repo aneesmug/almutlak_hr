@@ -3,7 +3,7 @@
         <div class="container-custom">
             <img src="<?= htmlspecialchars($emprow['avatar'] ?? './assets/images/users/avatar-1.jpg') ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
             <div class="profile-header-info">
-                <h1><?= translate_name($emprow['name'], $current_lang ?? 'en') ?></h1>
+                <h1><?= getDisplayName($emprow['name']) ?></h1>
                 <p><strong><?= __('employee_id') ?>:</strong> <?= htmlspecialchars($emprow['emp_id']) ?></p>
             </div>
             <?php

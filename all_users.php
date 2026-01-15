@@ -424,6 +424,7 @@ if (mysqli_num_rows($query) == 1) {
                                             data-dept="${recordData.deptnme || ''}" 
                                             data-email="${recordData.email || ''}" 
                                             data-user_type="${recordData.user_type}" 
+                                            data-status="${recordData.status || 0}" 
                                             data-allowed_companies="${(recordData.allowed_companies || '').replace(/"/g, '&quot;')}">
                                             <i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit
                                         </a>`;

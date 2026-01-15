@@ -385,8 +385,63 @@ $(document).on('click', '.applyLoan', async function(e) {
     }).then(result => {
         if (result.isConfirmed) {
             const response = result.value;
-            Swal.fire({ title: response.title, text: response.message, icon: response.type, allowOutsideClick: false })
-            .then(() => { if (response.status === 'success') location.reload(); });
+            
+            // Handle pending request case
+            if (response.type === 'pending_request') {
+                const pendingLoan = response.pending_loan;
+                const approvalChain = pendingLoan.approval_chain || '';
+                const createdDate = new Date(pendingLoan.created_at);
+                const daysAgo = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
+                
+                Swal.fire({
+                    title: '<i class="fa fa-info-circle" style="color: #f39c12;"></i> ' + response.title,
+                    html: `
+                        <div style="text-align: left; padding: 20px; background: #f8f9fa; border-radius: 5px;">
+                            <p style="margin-bottom: 15px;">
+                                <strong>You already have a <span style="color: #dc3545;">${pendingLoan.loan_type.toUpperCase()}</span> loan request pending approval.</strong>
+                            </p>
+                            <div style="background: white; padding: 15px; border-radius: 5px; margin-bottom: 15px; text-align: left;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                                    <span><strong>Invoice:</strong></span>
+                                    <span>${pendingLoan.inv_no}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                                    <span><strong>Amount:</strong></span>
+                                    <span>${Number(pendingLoan.loan_amount).toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                                    <span><strong>Status:</strong></span>
+                                    <span><span class="badge badge-warning">${pendingLoan.status.toUpperCase()}</span></span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; padding-bottom: 10px;">
+                                    <span><strong>Submitted:</strong></span>
+                                    <span>${daysAgo} days ago</span>
+                                </div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                                <div style="font-weight: bold; margin-bottom: 12px; text-align: center; color: #f39c12;">
+                                    ⏳ Pending with: <strong>${pendingLoan.pending_at_name}</strong>
+                                </div>
+                                <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 13px;">
+                                    ${approvalChain}
+                                </div>
+                            </div>
+                            <p style="color: #666; font-size: 13px; margin: 0;">
+                                Please wait for the current approval to complete before submitting another loan request.
+                            </p>
+                        </div>
+                    `,
+                    icon: 'info',
+                    confirmButtonText: 'Got it',
+                    confirmButtonColor: '#f39c12',
+                    allowOutsideClick: false,
+                    width: '40%',
+                });
+            } else {
+                // Regular success/error handling
+                Swal.fire({ title: response.title, text: response.message, icon: response.type, allowOutsideClick: false })
+                .then(() => { if (response.status === 'success') location.reload(); });
+            }
         }
     });
 });

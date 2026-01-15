@@ -1306,6 +1306,18 @@ elseif ($ajaxType == 'applyVacation') {
             }
         }
         
+        // Log submission to smt_request_status
+        $log_status = 'submitted';
+        $log_note = sprintf('Vacation request submitted for approval. Type: %s', $vac_type);
+        $log_query = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+                      VALUES (?, ?, ?, ?, ?, NOW())";
+        $log_stmt = $conDB->prepare($log_query);
+        if ($log_stmt) {
+            $log_stmt->bind_param('issss', $emp_id, $request_inv_no, $userwel, $log_status, $log_note);
+            $log_stmt->execute();
+            $log_stmt->close();
+        }
+        
         send_json_response("Success!", sprintf(__("your_vacation_request_submitted_for_approval"), htmlspecialchars($request_inv_no)) . $pending_with_text, "success");
     } catch (Exception $e) {
         send_json_response("Error", __("an_error_occurred") . ": " . $e->getMessage(), "error", 500);
@@ -1325,6 +1337,7 @@ elseif ($ajaxType == 'approveVacation') {
         // Payment and travel details (sent by HR Assistant, GR Officer, or HR Payroll)
         $departure_date = trim($_POST['departure_date'] ?? '');
         $arrival_date = trim($_POST['arrival_date'] ?? '');
+        $return_date = trim($_POST['return_date'] ?? '');
         $ticket_pay = (float)($_POST['ticket_pay'] ?? 0);
         // [UPDATED] permit_fee is now used for GR Officer's exit/re-entry visa fees
         $permit_fee = (float)($_POST['permit_fee'] ?? 0);
@@ -1796,6 +1809,20 @@ elseif ($ajaxType == 'approveVacation') {
             $needs_update = true;
         }
 
+        // HR Payroll can adjust return_date (last working day)
+        // When return_date is set, also sync arrival_date to the same value
+        if (!empty($return_date)) {
+            $update_fields[] = "`return_date` = ?";
+            $update_values[] = $return_date;
+            $update_types .= "s";
+            $needs_update = true;
+            
+            // Sync arrival_date with return_date
+            $update_fields[] = "`arrival_date` = ?";
+            $update_values[] = $return_date;
+            $update_types .= "s";
+        }
+
         // Execute the update if we have any fields to update
         if ($needs_update) {
             $sql_update = "UPDATE `emp_vacation` SET " . implode(", ", $update_fields) . " WHERE `id` = ?";
@@ -1813,13 +1840,25 @@ elseif ($ajaxType == 'approveVacation') {
 
 
                     // Verify the update by reading back
-                    $verify_sql = "SELECT departure_date, arrival_date, ticket_pay, permit_fee FROM emp_vacation WHERE id = ?";
+                    $verify_sql = "SELECT departure_date, arrival_date, ticket_pay, permit_fee, return_date FROM emp_vacation WHERE id = ?";
                     $verify_stmt = mysqli_prepare($conDB, $verify_sql);
                     if ($verify_stmt) {
                         mysqli_stmt_bind_param($verify_stmt, "i", $vacation_id);
                         mysqli_stmt_execute($verify_stmt);
                         $verify_result = mysqli_stmt_get_result($verify_stmt);
                         if ($verify_row = mysqli_fetch_assoc($verify_result)) {
+                            // Log return_date change to smt_request_status if HR Payroll updated it
+                            if (!empty($return_date)) {
+                                $log_query_return_date = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+                                                         VALUES (?, ?, ?, 'updated', ?, NOW())";
+                                $log_stmt_return_date = $conDB->prepare($log_query_return_date);
+                                if ($log_stmt_return_date) {
+                                    $return_date_note = sprintf('HR Payroll: Return date applied and changed to %s', date('Y-m-d', strtotime($verify_row['return_date'])));
+                                    $log_stmt_return_date->bind_param('isss', $current_user_id, $request_inv_no, $userwel, $return_date_note);
+                                    $log_stmt_return_date->execute();
+                                    $log_stmt_return_date->close();
+                                }
+                            }
                         }
                         mysqli_stmt_close($verify_stmt);
                     }
@@ -1948,6 +1987,48 @@ elseif ($ajaxType == 'approveVacation') {
         }
 
         // 5. Send success response
+        // Log approval to smt_request_status with level-wise information
+        $log_status = 'approved';
+        
+        // Get the approval level and approver details from request_approvers table
+        $approval_level = 1; // Default
+        $approver_role = '';
+        $level_query = $conDB->prepare("
+            SELECT ra.approval_level, ra.approver_id,
+                   COALESCE(e.name, al.fullname, al.username) AS approver_name
+            FROM request_approvers ra
+            LEFT JOIN employees e ON ra.approver_id = e.emp_id
+            LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
+            WHERE ra.request_inv_no = ? AND ra.approver_id = ?
+            LIMIT 1
+        ");
+        if ($level_query) {
+            $level_query->bind_param('si', $request_inv_no, $current_user_id);
+            $level_query->execute();
+            $level_result = $level_query->get_result();
+            if ($level_row = $level_result->fetch_assoc()) {
+                $approval_level = (int)($level_row['approval_level'] ?? 1);
+                $approver_name = $level_row['approver_name'] ?? 'System';
+            }
+            $level_result->free();
+            $level_query->close();
+        }
+        
+        // Build level-wise log note
+        $log_note = sprintf('Level %d: %s - Vacation request approved', $approval_level, $approver_name);
+        if (!empty($approval_comment)) {
+            $log_note .= ' - ' . $approval_comment;
+        }
+        
+        $log_query = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+                      VALUES (?, ?, ?, ?, ?, NOW())";
+        $log_stmt = $conDB->prepare($log_query);
+        if ($log_stmt) {
+            $log_stmt->bind_param('issss', $current_user_id, $request_inv_no, $userwel, $log_status, $log_note);
+            $log_stmt->execute();
+            $log_stmt->close();
+        }
+        
         send_json_response("Approved!", __("the_vacation_request_has_been_approved"), "success");
     } catch (Exception $e) {
 
@@ -2232,6 +2313,48 @@ elseif ($ajaxType == 'rejectVacation') {
         if ($vacation_details) mysqli_free_result($vacation_details);
 
         // 3. Send success response
+        // Log rejection to smt_request_status with level-wise information
+        $log_status = 'rejected';
+        
+        // Get the approval level and approver details from request_approvers table
+        $approval_level = 1; // Default
+        $approver_role = '';
+        $level_query = $conDB->prepare("
+            SELECT ra.approval_level, ra.approver_id,
+                   COALESCE(e.name, al.fullname, al.username) AS approver_name
+            FROM request_approvers ra
+            LEFT JOIN employees e ON ra.approver_id = e.emp_id
+            LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
+            WHERE ra.request_inv_no = ? AND ra.approver_id = ?
+            LIMIT 1
+        ");
+        if ($level_query) {
+            $level_query->bind_param('si', $request_inv_no, $current_user_id);
+            $level_query->execute();
+            $level_result = $level_query->get_result();
+            if ($level_row = $level_result->fetch_assoc()) {
+                $approval_level = (int)($level_row['approval_level'] ?? 1);
+                $approver_name = $level_row['approver_name'] ?? 'System';
+            }
+            $level_result->free();
+            $level_query->close();
+        }
+        
+        // Build level-wise log note
+        $log_note = sprintf('Level %d: %s - Vacation request rejected', $approval_level, $approver_name);
+        if (!empty($rejection_notes)) {
+            $log_note .= ' - ' . $rejection_notes;
+        }
+        
+        $log_query = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+                      VALUES (?, ?, ?, ?, ?, NOW())";
+        $log_stmt = $conDB->prepare($log_query);
+        if ($log_stmt) {
+            $log_stmt->bind_param('issss', $current_user_id, $request_inv_no, $userwel, $log_status, $log_note);
+            $log_stmt->execute();
+            $log_stmt->close();
+        }
+        
         send_json_response("Rejected!", __("the_vacation_request_has_been_rejected"), "success");
     } catch (Exception $e) {
 
@@ -2361,6 +2484,21 @@ elseif ($ajaxType == 'returnVacation') {
 
         if ($extra_days > 0) {
             $message .= " " . sprintf(__("extra_days_deducted_from_balance"), $extra_days);
+        }
+
+        // Log return/completion to smt_request_status
+        $log_status = 'completed';
+        $log_note = 'Vacation completed - Employee returned';
+        if ($extra_days > 0) {
+            $log_note .= ' (Extra days deducted: ' . $extra_days . ')';
+        }
+        $log_query = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+                      VALUES (?, ?, ?, ?, ?, NOW())";
+        $log_stmt = $conDB->prepare($log_query);
+        if ($log_stmt) {
+            $log_stmt->bind_param('issss', $emp_id, $request_inv_no, $userwel, $log_status, $log_note);
+            $log_stmt->execute();
+            $log_stmt->close();
         }
 
         send_json_response("Success!", $message, "success");

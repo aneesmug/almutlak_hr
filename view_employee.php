@@ -1238,11 +1238,11 @@ if (mysqli_num_rows($query) == 1) {
 														<div class="profile-grid">
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('car_maker') ?></div>
-																<div class="profile-field-value"><?= car_get_info($emprow["car_id"])['maker_name'] . " (" . car_get_info($emprow["car_id"])['made_year'] . ")" ?></div>
+																<div class="profile-field-value"><?= getDisplayName(car_get_info($emprow["car_id"])['maker_name']) . " (" . car_get_info($emprow["car_id"])['made_year'] . ")" ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('car_model') ?></div>
-																<div class="profile-field-value"><?= car_get_info($emprow["car_id"])['model'] ?></div>
+																<div class="profile-field-value"><?= getDisplayName(car_get_info($emprow["car_id"])['model']) ?></div>
 															</div>
 														</div>
 													</div>

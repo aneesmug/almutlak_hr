@@ -908,57 +908,13 @@ input[type="file"]::file-selector-button:hover {
 =================================================================
 */
 
-/**
- * This section provides RTL overrides for vacation request cards
- * to ensure proper icon positioning, text alignment, and layout.
- */
-
-/* --- Complete Card RTL Flip --- */
-[dir="rtl"] .request-card {
-    direction: rtl !important;
-    text-align: right !important;
+/* Removing redundant card styles to consolidate at the end of the file */
+@media (max-width: 768px) {
+    .navbar-custom .menu-left {
+        display: none;
+    }
 }
 
-/* --- Card Header RTL --- */
-[dir="rtl"] .request-card .card-header {
-    text-align: right !important;
-    direction: rtl !important;
-}
-
-[dir="rtl"] .request-card .card-header .float-right {
-    float: left !important;
-}
-
-/* --- Card Body RTL --- */
-[dir="rtl"] .request-card .card-body {
-    text-align: right !important;
-    direction: rtl !important;
-}
-
-/* --- Detail Items in Cards --- */
-[dir="rtl"] .request-card .detail-item {
-    flex-direction: row-reverse !important;
-    text-align: right !important;
-    direction: rtl !important;
-}
-
-[dir="rtl"] .request-card .detail-item i.fad,
-[dir="rtl"] .request-card .detail-item i.fa {
-    margin-right: 0 !important;
-    margin-left: 15px !important;
-}
-
-[dir="rtl"] .request-card .detail-item strong {
-    text-align: right !important;
-    margin-right: 0 !important;
-    margin-left: 10px !important;
-}
-
-/* --- Generic Detail Items (fallback) --- */
-[dir="rtl"] .detail-item {
-    flex-direction: row-reverse !important;
-    text-align: right !important;
-}
 
 [dir="rtl"] .detail-item i.fad,
 [dir="rtl"] .detail-item i.fa {
@@ -1034,4 +990,123 @@ input[type="file"]::file-selector-button:hover {
     float: right !important;
 }
 
+/*
+=================================================================
+  RTL Modifications for Loan Request Cards
+=================================================================
+*/
 
+/* Card header alignment and float elements */
+[dir="rtl"] .request-card .card-header {
+    text-align: right !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-direction: row !important; /* Natural RTL: name on right, span on left */
+}
+
+[dir="rtl"] .request-card .card-header span.float-right {
+    float: none !important;
+    margin-right: auto !important;
+    margin-left: 0 !important;
+}
+
+/* Card body - enable RTL direction */
+[dir="rtl"] .request-card .card-body {
+    direction: rtl !important;
+    text-align: right !important;
+}
+
+/* Detail items - proper RTL mirroring using natural row order */
+[dir="rtl"] .request-card .detail-item {
+    display: flex !important;
+    flex-direction: row !important; /* Natural RTL order: Icon -> Label -> Value (from right to left) */
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    text-align: right !important;
+    width: 100% !important;
+    margin-bottom: 1rem !important;
+}
+
+/* Icons in detail items - mirror margin to the left */
+[dir="rtl"] .request-card .detail-item i {
+    margin-left: 15px !important;
+    margin-right: 0 !important;
+    width: 20px !important;
+    text-align: center !important;
+    order: 0 !important;
+}
+
+/* Strong labels - mirror margin */
+[dir="rtl"] .request-card .detail-item strong {
+    margin-left: 10px !important;
+    margin-right: 0 !important;
+    /* min-width: unset !important; Removing fixed width to prevent overlapping in RTL if translation is long */
+    display: inline-block !important;
+}
+
+/* Status badges - proper spacing */
+[dir="rtl"] .badge {
+    margin-right: 10px !important;
+    margin-left: 0 !important;
+}
+
+/* Nested elements inside detail-item (for approved amount, etc) */
+[dir="rtl"] .request-card .detail-item br + i {
+    margin-left: 8px !important;
+    margin-right: 0 !important;
+}
+
+/* Status badges - proper positioning */
+[dir="rtl"] .badge {
+    margin-left: 0 !important;
+    margin-right: 5px !important;
+}
+
+/* Success/warning/danger text with icons */
+[dir="rtl"] .text-success,
+[dir="rtl"] .text-warning,
+[dir="rtl"] .text-danger,
+[dir="rtl"] .text-info {
+    direction: rtl !important;
+}
+
+[dir="rtl"] .text-success i,
+[dir="rtl"] .text-warning i,
+[dir="rtl"] .text-danger i,
+[dir="rtl"] .text-info i {
+    margin-left: 5px !important;
+    margin-right: 0 !important;
+}
+
+/* Font weight bold elements */
+[dir="rtl"] .font-weight-bold {
+    margin-left: 0 !important;
+    margin-right: 5px !important;
+}
+
+/* Card footer buttons - align to left in RTL */
+[dir="rtl"] .request-card .card-footer {
+    text-align: left !important;
+    direction: rtl !important;
+}
+
+[dir="rtl"] .request-card .card-footer .btn {
+    margin-left: 0 !important;
+    margin-right: 5px !important;
+}
+
+[dir="rtl"] .request-card .card-footer .btn:last-child {
+    margin-right: 0 !important;
+}
+
+/* Dropdown toggle in cards */
+[dir="rtl"] .request-card .dropdown-toggle::after {
+    margin-left: 0 !important;
+    margin-right: 0.255em !important;
+}
+
+#swal2-html-container.swal2-html-container {
+    direction: rtl !important;
+}

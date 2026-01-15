@@ -354,7 +354,7 @@ try {
                                                             <option value="<?=($emp['emp_id']); ?>" 
                                                                     data-position="<?=($emp['job'] ?? 'N/A'); ?>"
                                                                     data-name="<?=($emp['name']); ?>">
-                                                                <?=translate_name($emp['name']); ?>
+                                                                <?=getDisplayName($emp['name']); ?>
                                                             </option>
                                                         <?php endforeach; ?>
                                                     </select>

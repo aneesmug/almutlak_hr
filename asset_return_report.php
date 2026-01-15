@@ -82,10 +82,6 @@ if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_G
                     <td><?= date('d M, Y', strtotime($asset['assigned_date'])) ?></td>
                 </tr>
                 <tr>
-                    <th>Return Date</th>
-                    <td><?= $print_return_date ? date('d M, Y', strtotime($print_return_date)) : ($asset['return_date'] ? date('d M, Y', strtotime($asset['return_date'])) : 'N/A'); ?></td>
-                </tr>
-                <tr>
                     <th>Asset Condition</th>
                     <td><strong><?= htmlspecialchars($asset['asset_condition'] ?? 'Not Specified') ?></strong></td>
                 </tr>

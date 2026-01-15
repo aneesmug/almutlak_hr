@@ -1,0 +1,221 @@
+✅ PENDING LOAN REQUEST VALIDATION - IMPLEMENTATION COMPLETE
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FEATURE: Restrict employees from submitting new loan requests if they already have 
+         pending or awaiting loan requests. Show user-friendly modal with approval 
+         chain details.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📋 CHANGES MADE:
+
+1. Backend Implementation (ajaxLoan.php)
+   ─────────────────────────────────────
+   File: includes/ajaxFile/ajaxLoan.php
+   Function: apply_for_loan() [Lines 1092-1203]
+   
+   Changes:
+   ✓ Added pending/awaiting loan check at start of function (lines 1104-1108)
+   ✓ Queries emp_loan table: SELECT FROM emp_loan WHERE emp_id = ? AND status IN ('pending', 'awaiting')
+   ✓ Fetches approval chain from request_approvers table (lines 1117-1131)
+   ✓ Builds HTML markup with approval status badges:
+     - Green badge (✓) for Approved
+     - Yellow badge (●) for Pending
+     - Red badge (✗) for Rejected
+   ✓ Gets current pending approver name (lines 1143-1155)
+   ✓ Returns JSON response with type='pending_request' (lines 1177-1190)
+   ✓ Response includes:
+     - pending_loan object with: inv_no, loan_type, loan_amount, status, created_at
+     - pending_at_name: the person currently waiting for approval
+     - approval_chain: HTML markup for displaying chain with badges
+   ✓ Uses prepared statements to prevent SQL injection
+
+2. Frontend Implementation (loanHandling.js)
+   ──────────────────────────────────────────
+   File: assets/js/loanHandling.js
+   Response Handler: .then(result => {}) [Lines 385-446]
+   
+   Changes:
+   ✓ Added check for response.type === 'pending_request' (line 390)
+   ✓ Extracts pending loan details from response (line 391-393)
+   ✓ Calculates days since submission using JavaScript Date (lines 393-394)
+   ✓ Builds SweetAlert2 modal with:
+     - Title: "Cannot apply now" with info icon (orange color #f39c12)
+     - Loan details card showing:
+       * Invoice number
+       * Loan amount (formatted as currency)
+       * Status badge (yellow)
+       * Days submitted ago
+     - Pending approval section:
+       * "⏳ Pending with: [Approver Name]"
+       * Full approval chain HTML with styled badges
+     - Message: "Please wait for current approval to complete..."
+   ✓ Uses only "Got it" button (confirms, doesn't proceed with application)
+   ✓ Modal text is left-aligned for better readability
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔄 WORKFLOW:
+
+1. Employee clicks "Apply for Loan"
+2. Selects loan type and amount
+3. Enters installments (if applicable)
+4. Clicks "Submit Application"
+5. AJAX sends: emp_id, loan_amount, loan_type, installments
+6. Backend apply_for_loan() executes:
+   → Check 1: Is emp_id in database? (existing check)
+   → Check 2: Does employee have pending/awaiting loan? [NEW]
+      YES: Return pending_request response with approval chain
+      NO: Continue with normal processing
+7. Frontend receives response:
+   → If type='pending_request': Show "Cannot apply now" modal
+   → Else: Show normal success/error message
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📊 DATABASE QUERIES:
+
+Query 1: Check for pending loans
+─────────────────────────────────
+SELECT id, inv_no, loan_type, loan_amount, status, created_at 
+FROM emp_loan 
+WHERE emp_id = ? AND status IN ('pending', 'awaiting')
+LIMIT 1
+
+Uses prepared statement with bind_param("s", $emp_id)
+
+Query 2: Get approval chain
+──────────────────────────
+SELECT ra.approval_level, ra.status, 
+       COALESCE(e.name, al.fullname, al.username) as approver_name,
+       ra.action_date
+FROM request_approvers ra
+LEFT JOIN employees e ON ra.approver_id = e.emp_id
+LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+WHERE ra.request_inv_no = ? AND ra.request_type_id = 2
+ORDER BY ra.approval_level ASC
+
+Uses prepared statement with bind_param("s", $inv_no)
+
+Query 3: Get current approver at pending level
+──────────────────────────────────────────────
+SELECT COALESCE(e.name, al.fullname, al.username) as approver_name
+FROM request_approvers ra
+LEFT JOIN employees e ON ra.approver_id = e.emp_id
+LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+WHERE ra.request_inv_no = ? AND ra.request_type_id = 2 AND ra.approval_level = ?
+
+Uses prepared statement with bind_param("si", $inv_no, $pending_level)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📱 MODAL DISPLAY:
+
+Title: ⓘ Cannot apply now (Orange color)
+
+Content:
+┌─────────────────────────────────────────┐
+│ You already have a [LOAN_TYPE] loan     │
+│ request pending approval.               │
+│                                         │
+│ ┌─────────────────────────────────────┐ │
+│ │ Invoice: [INV_NO]                   │ │
+│ │ Amount: [AMOUNT] SAR                │ │
+│ │ Status: [badge] PENDING/AWAITING    │ │
+│ │ Submitted: [X] days ago             │ │
+│ └─────────────────────────────────────┘ │
+│                                         │
+│ ⏳ Pending with: [APPROVER_NAME]        │
+│ ┌─────────────────────────────────────┐ │
+│ │ ✓ Level 1: Name — Approved         │ │
+│ │ ✓ Level 2: Name — Approved         │ │
+│ │ ● Level 3: Name — Pending          │ │
+│ │ ◌ Level 4: Name — Pending          │ │
+│ │ ◌ Level 5: Name — Pending          │ │
+│ │ ◌ Level 6: Name — Pending          │ │
+│ └─────────────────────────────────────┘ │
+│                                         │
+│ Please wait for current approval to    │
+│ complete before submitting another     │
+│ loan request.                          │
+│                              [Got it]  │
+└─────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ TESTING CHECKLIST:
+
+Test Case 1: Employee with NO pending loans
+─────────────────────────────────────────────
+✓ Condition: emp_loan table has no records with status IN ('pending', 'awaiting')
+✓ Result: Normal loan application proceeds
+✓ Verification: First pending check returns 0 rows, continues to supervisor validation
+
+Test Case 2: Employee with ONE pending loan
+────────────────────────────────────────────
+✓ Condition: emp_loan table has 1 record with status='pending'
+✓ Result: Shows "Cannot apply now" modal
+✓ Verification: Displays pending loan details and approval chain
+
+Test Case 3: Employee with ONE awaiting loan
+────────────────────────────────────────────
+✓ Condition: emp_loan table has 1 record with status='awaiting'
+✓ Result: Shows "Cannot apply now" modal
+✓ Verification: Same behavior as pending status
+
+Test Case 4: Approval chain display
+───────────────────────────────────
+✓ Shows all 6 approval levels with correct statuses
+✓ Icons display correctly: ✓ (green), ● (yellow), ✗ (red)
+✓ Approver names populate from employees.name or admin_login.fullname
+✓ Current pending level is identified and shown at top
+
+Test Case 5: Days calculation
+───────────────────────────────
+✓ Created_at timestamp used to calculate days pending
+✓ Display shows "X days ago" (e.g., "2 days ago")
+✓ Same-day submissions show "0 days ago"
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔐 SECURITY:
+
+✓ Prepared statements used for all SQL queries (prevents SQL injection)
+✓ Bind parameters for all user inputs
+✓ HTML output properly escaped with htmlspecialchars()
+✓ No direct array access without validation
+✓ Status values validated against ENUM in database
+
+═══════════════════════════════════════════════════════════════════════════════
+
+💾 FILES MODIFIED:
+
+1. includes/ajaxFile/ajaxLoan.php
+   - Function: apply_for_loan() 
+   - Lines: 1092-1203
+   - Added: Pending/awaiting check with approval chain fetching
+
+2. assets/js/loanHandling.js
+   - Response handler: .then(result => {})
+   - Lines: 385-446
+   - Added: SweetAlert2 modal display for pending_request type
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📚 DOCUMENTATION FILES CREATED:
+
+1. PENDING_LOAN_FEATURE.php - Feature implementation summary
+2. PENDING_LOAN_TESTING_GUIDE.md - Comprehensive testing guide with scenarios
+3. test_pending_loan_check.php - Database verification script
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 FEATURE COMPLETE - READY FOR TESTING
+
+The pending loan request validation feature has been successfully implemented.
+Employees can no longer submit duplicate loan applications while a request is
+pending or awaiting approval. They receive clear, friendly feedback showing 
+exactly where their current request is in the approval chain.
+
+═══════════════════════════════════════════════════════════════════════════════

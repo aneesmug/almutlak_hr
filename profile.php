@@ -1939,7 +1939,7 @@ RTL Support
                 <img src="<?= $emprow['avatar'] ?>" alt="<?= $emprow['name'] ?>" class="profile-avatar">
 
                 <div class="profile-header-info">
-                    <h1><?= translate_name($emprow['name'], $current_lang ?? 'en') ?></h1>
+                    <h1><?= getDisplayName($emprow['name']) ?></h1>
                     <p><strong><?= __('employee_id') ?>:</strong> <?= display_or_na($emprow['empid'] ?? null) ?></p>
                     <p><strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></p>
                     <p><strong><?= __('actual_job_label') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["jobname_ar"] : $emprow["jobname"] ?></p>
@@ -2146,7 +2146,7 @@ RTL Support
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('section_name_header') ?></span>
-                        <span class="info-value"><?= translate_name($emprow['sectin_nme'] ?? null, $current_lang ?? 'en') ?></span>
+                        <span class="info-value"><?= getDisplayName($emprow['sectin_nme'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('sponsorship_label') ?></span>
@@ -2161,7 +2161,7 @@ RTL Support
                         <span class="info-value">
                             <?php
                             if (!empty($emprow['supervisor_id']) && !empty($emprow['supervisor_name'])) {
-                                echo translate_name($emprow['supervisor_name'], $current_lang ?? 'en') . ' (' . htmlspecialchars($emprow['supervisor_id']) . ')';
+                                echo getDisplayName($emprow['supervisor_name']) . ' (' . htmlspecialchars($emprow['supervisor_id']) . ')';
                             } else {
                                 echo __('not_assigned', 'Not Assigned');
                             }

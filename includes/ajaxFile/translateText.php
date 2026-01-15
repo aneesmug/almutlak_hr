@@ -28,11 +28,12 @@ function auto_translate_text(string $text, string $source = 'en', string $target
     }
     
     global $conDB;
-    $cache_key = 'translation_' . md5($text . '_' . $source . '_' . $target);
+    static $request_translation_cache = [];
+    $cache_key = md5($text . '_' . $source . '_' . $target);
     
-    // 1. Check session cache first (fastest - in-memory)
-    if (isset($_SESSION[$cache_key]) && !empty($_SESSION[$cache_key])) {
-        return $_SESSION[$cache_key];
+    // 1. Check request cache first (static variable - fastest, lasts for one page load)
+    if (isset($request_translation_cache[$cache_key])) {
+        return $request_translation_cache[$cache_key];
     }
     
     // 2. Check database cache (persistent across sessions)
@@ -48,8 +49,8 @@ function auto_translate_text(string $text, string $source = 'en', string $target
         
         if ($db_check && $db_row = mysqli_fetch_assoc($db_check)) {
             $translated = $db_row['translated_text'];
-            // Store in session cache for this request
-            $_SESSION[$cache_key] = $translated;
+            // Store in request cache
+            $request_translation_cache[$cache_key] = $translated;
             return $translated;
         }
     }
@@ -97,8 +98,8 @@ function auto_translate_text(string $text, string $source = 'en', string $target
             return $text;
         }
         
-        // Cache in session immediately
-        $_SESSION[$cache_key] = $translatedText;
+        // Cache in request cache immediately
+        $request_translation_cache[$cache_key] = $translatedText;
         
         // Save to database (persistent cache for all users)
         if ($conDB) {

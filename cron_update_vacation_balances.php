@@ -20,7 +20,7 @@
  */
 
 error_reporting(E_ALL);
-ini_set('display_errors', 0);
+ini_set('display_errors', 1); // temporary: surface errors instead of blank page
 ini_set('log_errors', 1);
 
 // Set timezone
@@ -147,6 +147,48 @@ try {
     
     log_message("Database connection established", 'info');
 
+    // Ensure all active employees have a vacation balance record
+    $new_records = 0;
+    $missing_sql = "SELECT e.emp_id
+                    FROM employees e
+                    WHERE e.status = 1
+                      AND NOT EXISTS (SELECT 1 FROM emp_vacation_balance evb WHERE evb.emp_id = e.emp_id)";
+    $missing_result = mysqli_query($conDB, $missing_sql);
+    if ($missing_result) {
+        while ($emp = mysqli_fetch_assoc($missing_result)) {
+            $emp_id_missing = $emp['emp_id'];
+            $initial_balance = get_live_vacation_balance($conDB, $emp_id_missing);
+            if ($initial_balance === null) {
+                $initial_balance = 0; // fallback to zero if calculation fails
+            }
+            $insert_sql = "INSERT INTO emp_vacation_balance (
+                                emp_id, vac_id, contract_id,
+                                total_days, used_days, remaining_balance,
+                                available_balance, carryover_days,
+                                period_start, period_end, last_updated
+                            ) VALUES (?, 0, 0, ?, 0, ?, ?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR), NOW())";
+            $insert_stmt = mysqli_prepare($conDB, $insert_sql);
+            if ($insert_stmt) {
+                mysqli_stmt_bind_param($insert_stmt, 'sddd', $emp_id_missing, $initial_balance, $initial_balance, $initial_balance);
+                if (mysqli_stmt_execute($insert_stmt)) {
+                    $new_records++;
+                    log_message("[emp_id: $emp_id_missing] Created new emp_vacation_balance with starting balance {$initial_balance}", 'info');
+                } else {
+                    log_message("[emp_id: $emp_id_missing] ERROR creating emp_vacation_balance: " . mysqli_stmt_error($insert_stmt), 'error');
+                }
+                mysqli_stmt_close($insert_stmt);
+            } else {
+                log_message("[emp_id: $emp_id_missing] ERROR preparing insert for emp_vacation_balance: " . mysqli_error($conDB), 'error');
+            }
+        }
+        mysqli_free_result($missing_result);
+    } else {
+        log_message("ERROR: Failed to fetch missing vacation balance records - " . mysqli_error($conDB), 'error');
+    }
+    if ($new_records > 0) {
+        log_message("Created $new_records new emp_vacation_balance record(s) for newly registered employees", 'info');
+    }
+
     // Get all active employees (status = 1) that have vacation balance records
     $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
               FROM emp_vacation_balance evb
@@ -227,12 +269,13 @@ try {
             }
 
             // Update the record with new balance and track when it was last updated
-            // CRITICAL FIX: Also update total_days to keep it synchronized with available_balance
+            // CRITICAL FIX: Also update total_days and remaining_balance to keep synchronized with available_balance
             // total_days represents the opening balance, so when available_balance changes,
             // total_days must also be updated to reflect the new opening balance for vacation deductions
             $update_sql = "UPDATE `emp_vacation_balance` 
                           SET `available_balance` = ?, 
                               `total_days` = ?,
+                              `remaining_balance` = ?,
                               `last_updated` = NOW() 
                           WHERE `id` = ?";
 
@@ -243,7 +286,7 @@ try {
                 continue;
             }
 
-            mysqli_stmt_bind_param($stmt, 'ddi', $live_balance, $live_balance, $balance_record_id);
+            mysqli_stmt_bind_param($stmt, 'dddi', $live_balance, $live_balance, $live_balance, $balance_record_id);
 
             if (!mysqli_stmt_execute($stmt)) {
                 log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt), 'error');
