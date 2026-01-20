@@ -24,6 +24,7 @@ $supervisor_emp_id = $_SESSION['empid'];
     <!-- DataTables -->
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
     <!-- Bootstrap Datepicker -->
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
@@ -40,6 +41,24 @@ $supervisor_emp_id = $_SESSION['empid'];
     <?php endif; ?>
     
     <style>
+        /* Tab content display fix */
+        .tab-pane {
+            display: none;
+        }
+        
+        .tab-pane.active {
+            display: block;
+        }
+        
+        /* DataTable width fix */
+        .table-responsive {
+            width: 100%;
+        }
+        
+        table.dataTable {
+            width: 100% !important;
+        }
+        
         /* Employee Information Container */
         .employee-info-container {
             display: grid;
@@ -366,7 +385,6 @@ $supervisor_emp_id = $_SESSION['empid'];
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="assets/js/jquery.min.js"></script>
     <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
@@ -374,83 +392,184 @@ $supervisor_emp_id = $_SESSION['empid'];
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- DataTables -->
+    <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
+    <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
+    <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
+    <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
     <!-- Select2 -->
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js"></script>
 
     <script>
+        let pendingTable, approvedTable, rejectedTable;
+
         $(document).ready(function() {
-            loadRejoinRequests();
-
-            // Reload every 30 seconds
-            setInterval(loadRejoinRequests, 30000);
-        });
-
-        function loadRejoinRequests() {
-            $.ajax({
-                url: './includes/get_rejoin_requests.php',
-                type: 'GET',
-                dataType: 'JSON',
-                success: function(response) {
-                    if (response.status === 'success') {
-                        updateRequestsTables(response.data);
+            // Initialize DataTables
+            pendingTable = $('#pendingRequestsTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: './includes/get_rejoin_requests.php',
+                    type: 'POST',
+                    data: function(d) {
+                        d.status = 'pending';
                     }
-                }
-            });
-        }
-
-        function updateRequestsTables(data) {
-            // Update pending table
-            $('#pendingRequestsTable tbody').empty();
-            $('#pending-count').text(data.pending.length);
-            data.pending.forEach(req => {
-                $('#pendingRequestsTable tbody').append(`
-                    <tr>
-                        <td><strong>${req.emp_name}</strong></td>
-                        <td>${req.emp_id}</td>
-                        <td>${new Date(req.return_date).toLocaleDateString()}</td>
-                        <td><span class="badge badge-warning">${new Date(req.requested_rejoin_date).toLocaleDateString()}</span></td>
-                        <td>${req.requested_reason || '-'}</td>
-                        <td>${new Date(req.requested_at).toLocaleDateString()}</td>
-                        <td>
-                            <button class="btn btn-sm btn-primary" onclick="viewAndApproveRequest(${req.rejoin_request_id}, ${req.emp_id}, '${req.requested_rejoin_date}', '${req.emp_name}', '${req.vac_type}')">
+                },
+                columns: [
+                    { data: 'emp_name' },
+                    { data: 'emp_id' },
+                    { data: 'return_date' },
+                    { data: 'requested_rejoin_date' },
+                    { data: 'requested_reason' },
+                    { data: 'requested_at' },
+                    { data: null, orderable: false, searchable: false }
+                ],
+                columnDefs: [
+                    {
+                        targets: 2,
+                        render: function(data) {
+                            return data ? new Date(data).toLocaleDateString() : '-';
+                        }
+                    },
+                    {
+                        targets: 3,
+                        render: function(data) {
+                            return data ? `<span class="badge badge-warning">${new Date(data).toLocaleDateString()}</span>` : '-';
+                        }
+                    },
+                    {
+                        targets: 4,
+                        render: function(data) {
+                            return data || '-';
+                        }
+                    },
+                    {
+                        targets: 5,
+                        render: function(data) {
+                            return data ? new Date(data).toLocaleDateString() : '-';
+                        }
+                    },
+                    {
+                        targets: 6,
+                        render: function(data, type, row) {
+                            return `<button class="btn btn-sm btn-primary" onclick="viewAndApproveRequest(${row.rejoin_request_id}, ${row.emp_id}, '${row.requested_rejoin_date}', '${(row.emp_name || '').replace(/'/g, "\\'")}', '${row.vac_type || ''}')">
                                 <i class="fa fa-check"></i> Review
-                            </button>
-                        </td>
-                    </tr>
-                `);
+                            </button>`;
+                        }
+                    }
+                ],
+                pageLength: 10,
+                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+                order: [[5, 'desc']]
             });
 
-            // Update approved table
-            $('#approvedRequestsTable tbody').empty();
-            $('#approved-count').text(data.approved.length);
-            data.approved.forEach(req => {
-                $('#approvedRequestsTable tbody').append(`
-                    <tr>
-                        <td><strong>${req.emp_name}</strong></td>
-                        <td>${req.emp_id}</td>
-                        <td><span class="badge badge-success">${new Date(req.final_approved_date || req.approved_date).toLocaleDateString()}</span></td>
-                        <td>${req.approval_note || '-'}</td>
-                        <td>${new Date(req.approved_at).toLocaleDateString()}</td>
-                    </tr>
-                `);
+            approvedTable = $('#approvedRequestsTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: './includes/get_rejoin_requests.php',
+                    type: 'POST',
+                    data: function(d) {
+                        d.status = 'approved';
+                    }
+                },
+                columns: [
+                    { data: 'emp_name' },
+                    { data: 'emp_id' },
+                    { data: 'final_approved_date' },
+                    { data: 'approval_note' },
+                    { data: 'approved_at' }
+                ],
+                columnDefs: [
+                    {
+                        targets: 2,
+                        render: function(data, type, row) {
+                            const approvedDate = data || row.approved_date;
+                            return approvedDate ? `<span class="badge badge-success">${new Date(approvedDate).toLocaleDateString()}</span>` : '-';
+                        }
+                    },
+                    {
+                        targets: 3,
+                        render: function(data) {
+                            return data || '-';
+                        }
+                    },
+                    {
+                        targets: 4,
+                        render: function(data) {
+                            return data ? new Date(data).toLocaleDateString() : '-';
+                        }
+                    }
+                ],
+                pageLength: 10,
+                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+                order: [[4, 'desc']]
             });
 
-            // Update rejected table
-            $('#rejectedRequestsTable tbody').empty();
-            $('#rejected-count').text(data.rejected.length);
-            data.rejected.forEach(req => {
-                $('#rejectedRequestsTable tbody').append(`
-                    <tr>
-                        <td><strong>${req.emp_name}</strong></td>
-                        <td>${req.emp_id}</td>
-                        <td>${req.rejection_reason || '-'}</td>
-                        <td>${new Date(req.approved_at).toLocaleDateString()}</td>
-                    </tr>
-                `);
+            rejectedTable = $('#rejectedRequestsTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: './includes/get_rejoin_requests.php',
+                    type: 'POST',
+                    data: function(d) {
+                        d.status = 'rejected';
+                    }
+                },
+                columns: [
+                    { data: 'emp_name' },
+                    { data: 'emp_id' },
+                    { data: 'rejection_reason' },
+                    { data: 'approved_at' }
+                ],
+                columnDefs: [
+                    {
+                        targets: 2,
+                        render: function(data) {
+                            return data || '-';
+                        }
+                    },
+                    {
+                        targets: 3,
+                        render: function(data) {
+                            return data ? new Date(data).toLocaleDateString() : '-';
+                        }
+                    }
+                ],
+                pageLength: 10,
+                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+                order: [[3, 'desc']]
             });
-        }
+
+            // Handle tab clicks
+            $('.nav-link').on('click', function(e) {
+                e.preventDefault();
+                
+                // Remove active from all tabs
+                $('.nav-link').removeClass('active');
+                $('.tab-pane').removeClass('active show');
+                
+                // Add active to clicked tab
+                $(this).addClass('active');
+                
+                // Show corresponding content
+                const target = $(this).attr('href');
+                $(target).addClass('active show');
+                
+                // Redraw the visible DataTable after tab is shown
+                setTimeout(function() {
+                    if (target === '#pending' && pendingTable) {
+                        pendingTable.columns.adjust().responsive.recalc();
+                    } else if (target === '#approved' && approvedTable) {
+                        approvedTable.columns.adjust().responsive.recalc();
+                    } else if (target === '#rejected' && rejectedTable) {
+                        rejectedTable.columns.adjust().responsive.recalc();
+                    }
+                }, 150);
+            });
+        });
 
         function viewAndApproveRequest(rejoinRequestId, empId, rejoinDate, empName, vacationType) {
             // Determine vacation type label and icon
@@ -530,7 +649,7 @@ $supervisor_emp_id = $_SESSION['empid'];
                     </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: '<?= __("submit", "Submit") ?>',
+                confirmButtonText: '<?= __("submit_rejoin", "Submit") ?>',
                 cancelButtonText: '<?= __("cancel", "Cancel") ?>',
                 width:"50%",
                 allowOutsideClick: false,

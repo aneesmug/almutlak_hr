@@ -1099,6 +1099,144 @@ elseif ($ajaxType == 'applyVacation') {
         // Log vacation request submission
         ActivityLogger::logSubmit('Vacation', 'ajaxVacation.php', $inserted_id, "Submitted vacation request: {$request_inv_no}, Days: {$vacdays}", 'emp_vacation');
 
+        // === NEW: Notify employee when someone else applies vacation on their behalf ===
+        // Check if the person applying (submitted_by) is different from the employee
+        if ($submitted_by_val !== 'NULL' && (int)$submitted_by_val !== (int)$emp_id) {
+            // Someone is applying vacation on behalf of this employee
+            // Send notification to the employee whose vacation was applied
+            
+            // Get employee details
+            $emp_details_query = "SELECT e.name, e.email FROM employees e WHERE e.emp_id = ? LIMIT 1";
+            $emp_stmt = mysqli_prepare($conDB, $emp_details_query);
+            if ($emp_stmt) {
+                mysqli_stmt_bind_param($emp_stmt, "i", $emp_id);
+                mysqli_stmt_execute($emp_stmt);
+                $emp_result = mysqli_stmt_get_result($emp_stmt);
+                $emp_details = mysqli_fetch_assoc($emp_result);
+                mysqli_free_result($emp_result);
+                mysqli_stmt_close($emp_stmt);
+                
+                if ($emp_details) {
+                    // Get applier details (person who submitted) - email from admin_login.email
+                    $applier_name = 'HR';
+                    $applier_email = '';
+                    $applier_query = "SELECT e.name, al.email
+                                       FROM employees e
+                                       LEFT JOIN admin_login al ON al.emp_id = e.emp_id
+                                       WHERE e.emp_id = ?
+                                       LIMIT 1";
+                    $applier_stmt = mysqli_prepare($conDB, $applier_query);
+                    if ($applier_stmt) {
+                        mysqli_stmt_bind_param($applier_stmt, "i", $submitted_by_val);
+                        mysqli_stmt_execute($applier_stmt);
+                        $applier_result = mysqli_stmt_get_result($applier_stmt);
+                        if ($applier_row = mysqli_fetch_assoc($applier_result)) {
+                            $applier_name = $applier_row['name'];
+                            $applier_email = $applier_row['email'];
+                        }
+                        if ($applier_result) {
+                            mysqli_free_result($applier_result);
+                        }
+                        mysqli_stmt_close($applier_stmt);
+                    }
+                    
+                    // Create browser notification for the employee
+                    if (function_exists('create_browser_notification')) {
+                        $notification_title = __('vacation_request_submitted_on_your_behalf');
+                        if (!$notification_title || $notification_title == 'vacation_request_submitted_on_your_behalf') {
+                            $notification_title = 'Vacation Request Submitted on Your Behalf';
+                        }
+                        
+                        $notification_message = sprintf(
+                            '%s has submitted a vacation request on your behalf. Request ID: %s, Duration: %s days (%s to %s)',
+                            $applier_name,
+                            $request_inv_no,
+                            $vacdays,
+                            date('d M Y', strtotime($start_date)),
+                            date('d M Y', strtotime($end_date))
+                        );
+                        
+                        create_browser_notification(
+                            $conDB,
+                            $emp_id,
+                            $notification_title,
+                            $notification_message,
+                            'all_applied_vac.php?emp_id=' . $emp_id
+                        );
+                    }
+                    
+                    $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+                    
+                    // Send email notification to the employee
+                    if (!empty($emp_details['email']) && function_exists('send_approval_email')) {
+                        $template_data = [
+                            'APPROVER_NAME' => $emp_details['name'],
+                            'REQUEST_TYPE' => 'Vacation Request Submitted on Your Behalf',
+                            'REQUEST_TYPE_LOWER' => 'vacation request',
+                            'REQUEST_ID' => $request_inv_no,
+                            'EMPLOYEE_NAME' => $emp_details['name'],
+                            'SUBMITTED_BY' => $applier_name,
+                            'START_DATE' => date('d M Y', strtotime($start_date)),
+                            'END_DATE' => date('d M Y', strtotime($end_date)),
+                            'DURATION' => $vacdays,
+                            'EMAIL_MESSAGE' => sprintf(
+                                '%s has submitted a vacation request on your behalf for %s days from %s to %s. The request is now pending approval.',
+                                $applier_name,
+                                $vacdays,
+                                date('d M Y', strtotime($start_date)),
+                                date('d M Y', strtotime($end_date))
+                            ),
+                            'REQUEST_URL' => $base_url . '/all_applied_vac.php?emp_id=' . $emp_id
+                        ];
+                        
+                        $email_subject = 'Vacation Request Submitted on Your Behalf - ' . $request_inv_no;
+                        send_approval_email(
+                            $conDB,
+                            $emp_details['email'],
+                            $emp_details['name'],
+                            $email_subject,
+                            'vacation_request',
+                            $template_data
+                        );
+                    }
+                    
+                    // Send email confirmation to the applier (person who submitted)
+                    if (!empty($applier_email) && function_exists('send_approval_email')) {
+                        $template_data_applier = [
+                            'APPROVER_NAME' => $applier_name,
+                            'REQUEST_TYPE' => 'Vacation Request Submission Confirmation',
+                            'REQUEST_TYPE_LOWER' => 'vacation request',
+                            'REQUEST_ID' => $request_inv_no,
+                            'EMPLOYEE_NAME' => $emp_details['name'],
+                            'SUBMITTED_BY' => $applier_name,
+                            'START_DATE' => date('d M Y', strtotime($start_date)),
+                            'END_DATE' => date('d M Y', strtotime($end_date)),
+                            'DURATION' => $vacdays,
+                            'EMAIL_MESSAGE' => sprintf(
+                                'You have successfully submitted a vacation request on behalf of %s for %s days from %s to %s. The request is now pending approval.',
+                                $emp_details['name'],
+                                $vacdays,
+                                date('d M Y', strtotime($start_date)),
+                                date('d M Y', strtotime($end_date))
+                            ),
+                            'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=all'
+                        ];
+                        
+                        $email_subject_applier = 'Vacation Request Submitted Successfully - ' . $request_inv_no;
+                        send_approval_email(
+                            $conDB,
+                            $applier_email,
+                            $applier_name,
+                            $email_subject_applier,
+                            'vacation_request',
+                            $template_data_applier
+                        );
+                    }
+                }
+            }
+        }
+        // === END: Employee notification for vacation applied on their behalf ===
+
         // 8.5 DEDUCT FROM VACATION BALANCE for annual vacation and encashment
         // Deduct immediately upon submission to reserve the days
         $should_deduct_balance = false;
@@ -1338,6 +1476,7 @@ elseif ($ajaxType == 'approveVacation') {
         $departure_date = trim($_POST['departure_date'] ?? '');
         $arrival_date = trim($_POST['arrival_date'] ?? '');
         $return_date = trim($_POST['return_date'] ?? '');
+        $start_date = trim($_POST['start_date'] ?? ''); // HR Payroll can adjust start_date
         $ticket_pay = (float)($_POST['ticket_pay'] ?? 0);
         // [UPDATED] permit_fee is now used for GR Officer's exit/re-entry visa fees
         $permit_fee = (float)($_POST['permit_fee'] ?? 0);
@@ -1366,17 +1505,22 @@ elseif ($ajaxType == 'approveVacation') {
         }
 
         // 1. Get the request_inv_no and payment-related fields from the vacation ID
-        $query_inv = mysqli_query($conDB, "SELECT `request_inv_no`, `vac_type`, `fly_type`, `payment_status`, `is_payment_completed`, `departure_date`, `arrival_date`, `ticket_pay`, `permit_fee` FROM `emp_vacation` WHERE `id` = " . $vacation_id);
+        $query_inv = mysqli_query($conDB, "SELECT `request_inv_no`, `emp_id`, `vac_type`, `fly_type`, `payment_status`, `is_payment_completed`, `departure_date`, `arrival_date`, `ticket_pay`, `permit_fee`, `start_date`, `return_date`, `vacdays` FROM `emp_vacation` WHERE `id` = " . $vacation_id);
         if (!$query_inv || mysqli_num_rows($query_inv) == 0) {
             if ($query_inv) mysqli_free_result($query_inv);
             throw new Exception("Invalid Vacation ID.");
         }
         $row_inv = mysqli_fetch_assoc($query_inv);
         $request_inv_no = $row_inv['request_inv_no'];
+        $employee_id = $row_inv['emp_id'] ?? '';
         $vac_type = $row_inv['vac_type'] ?? '';
         $fly_type = $row_inv['fly_type'] ?? '';
         $payment_status = $row_inv['payment_status'] ?? 'pending_payment';
         $is_payment_completed = (int)($row_inv['is_payment_completed'] ?? 0);
+        // Original vacation dates and days for comparison
+        $original_start_date = $row_inv['start_date'] ?? '';
+        $original_return_date = $row_inv['return_date'] ?? '';
+        $original_vacdays = (float)($row_inv['vacdays'] ?? 0);
         // Payment fields that must be present before final approval
         $has_departure = !empty($row_inv['departure_date']);
         $has_arrival = !empty($row_inv['arrival_date']);
@@ -1809,6 +1953,14 @@ elseif ($ajaxType == 'approveVacation') {
             $needs_update = true;
         }
 
+        // HR Payroll can adjust start_date (vacation start date)
+        if (!empty($start_date)) {
+            $update_fields[] = "`start_date` = ?";
+            $update_values[] = $start_date;
+            $update_types .= "s";
+            $needs_update = true;
+        }
+
         // HR Payroll can adjust return_date (last working day)
         // When return_date is set, also sync arrival_date to the same value
         if (!empty($return_date)) {
@@ -1821,6 +1973,28 @@ elseif ($ajaxType == 'approveVacation') {
             $update_fields[] = "`arrival_date` = ?";
             $update_values[] = $return_date;
             $update_types .= "s";
+        }
+
+        // Recalculate vacation days if HR Payroll adjusted start_date or return_date
+        $new_vacdays = null;
+        $use_start = !empty($start_date) ? $start_date : $original_start_date;
+        $use_return = !empty($return_date) ? $return_date : $original_return_date;
+        
+        if ((!empty($start_date) || !empty($return_date)) && !empty($use_start) && !empty($use_return)) {
+            // Calculate new vacation days based on adjusted dates
+            $start_dt = new DateTime($use_start);
+            $return_dt = new DateTime($use_return);
+            $interval = $start_dt->diff($return_dt);
+            $new_vacdays = $interval->days + 1; // Include both start and return days
+            
+            // Update vacdays field
+            $update_fields[] = "`vacdays` = ?";
+            $update_values[] = $new_vacdays;
+            $update_types .= "d";
+            $needs_update = true;
+            
+            // Log the recalculation for tracking
+            error_log("HR Payroll adjusted vacation dates - Original: {$original_start_date} to {$original_return_date} ({$original_vacdays} days) | New: {$use_start} to {$use_return} ({$new_vacdays} days)");
         }
 
         // Execute the update if we have any fields to update
@@ -1847,6 +2021,29 @@ elseif ($ajaxType == 'approveVacation') {
                         mysqli_stmt_execute($verify_stmt);
                         $verify_result = mysqli_stmt_get_result($verify_stmt);
                         if ($verify_row = mysqli_fetch_assoc($verify_result)) {
+                            // If vacation days changed, update the balance deduction
+                            if ($new_vacdays !== null && $new_vacdays != $original_vacdays && !empty($employee_id)) {
+                                $days_difference = $new_vacdays - $original_vacdays;
+                                
+                                // Update emp_vacation_balance to reflect the new deduction
+                                $balance_update_sql = "UPDATE `emp_vacation_balance` 
+                                                      SET `used_days` = ?, 
+                                                          `available_balance` = `available_balance` - ?,
+                                                          `last_updated` = NOW()
+                                                      WHERE `vac_id` = ?";
+                                $balance_update_stmt = mysqli_prepare($conDB, $balance_update_sql);
+                                if ($balance_update_stmt) {
+                                    mysqli_stmt_bind_param($balance_update_stmt, "ddi", $new_vacdays, $days_difference, $vacation_id);
+                                    mysqli_stmt_execute($balance_update_stmt);
+                                    mysqli_stmt_close($balance_update_stmt);
+                                    error_log("Updated vacation balance for vac_id {$vacation_id}: used_days={$new_vacdays}, difference={$days_difference} days");
+                                    // Log the balance adjustment
+                                    ActivityLogger::logUpdate('Vacation Balance', 'ajaxVacation.php', $vacation_id, 
+                                        "HR Payroll adjusted dates: Original {$original_vacdays} days → New {$new_vacdays} days (Difference: {$days_difference} days). Balance updated accordingly.", 
+                                        'emp_vacation_balance');
+                                }
+                            }
+                            
                             // Log return_date change to smt_request_status if HR Payroll updated it
                             if (!empty($return_date)) {
                                 $log_query_return_date = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
@@ -1857,6 +2054,30 @@ elseif ($ajaxType == 'approveVacation') {
                                     $log_stmt_return_date->bind_param('isss', $current_user_id, $request_inv_no, $userwel, $return_date_note);
                                     $log_stmt_return_date->execute();
                                     $log_stmt_return_date->close();
+                                }
+                            }
+                            
+                            // Log start_date change to smt_request_status if HR Payroll updated it
+                            if (!empty($start_date)) {
+                                $log_query_start_date = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+                                                        VALUES (?, ?, ?, 'updated', ?, NOW())";
+                                $log_stmt_start_date = $conDB->prepare($log_query_start_date);
+                                if ($log_stmt_start_date) {
+                                    // Get start_date from verified row (we need to add it to the SELECT query)
+                                    $verify_start_sql = "SELECT start_date FROM emp_vacation WHERE id = ?";
+                                    $verify_start_stmt = mysqli_prepare($conDB, $verify_start_sql);
+                                    if ($verify_start_stmt) {
+                                        mysqli_stmt_bind_param($verify_start_stmt, "i", $vacation_id);
+                                        mysqli_stmt_execute($verify_start_stmt);
+                                        $verify_start_result = mysqli_stmt_get_result($verify_start_stmt);
+                                        if ($verify_start_row = mysqli_fetch_assoc($verify_start_result)) {
+                                            $start_date_note = sprintf('HR Payroll: Start date applied and changed to %s', date('Y-m-d', strtotime($verify_start_row['start_date'])));
+                                            $log_stmt_start_date->bind_param('isss', $current_user_id, $request_inv_no, $userwel, $start_date_note);
+                                            $log_stmt_start_date->execute();
+                                        }
+                                        mysqli_stmt_close($verify_start_stmt);
+                                    }
+                                    $log_stmt_start_date->close();
                                 }
                             }
                         }

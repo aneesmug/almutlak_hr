@@ -649,6 +649,7 @@ if (mysqli_num_rows($query) == 1) {
                                                     'section' => __('sections'),
                                                     'ac_jobs' => __('job_titles'),
                                                     'countries' => __('countries'),
+                                                    'companies' => __('companies') ?: 'Companies',
                                                     'bank_list' => __('banks'),
                                                     'emp_vacation' => __('employee_vacations'),
                                                     'emp_loan' => __('employee_loans'),
@@ -1464,6 +1465,11 @@ if (mysqli_num_rows($query) == 1) {
                         {
                             id: 'dept',
                             label: (typeof __ === 'function') ? __('dept') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'comp_no',
+                            label: (typeof __ === 'function') ? __('comp_no') : 'Company',
                             default: true
                         },
                         {

@@ -230,7 +230,8 @@ if ($total_items > 0) {
         v.current_approval_level, -- Select the current level
         supervisor_emp.name as supervisor_name,
         supervisor_emp.emptype as supervisor_type,
-        ra_payer.approver_id as payer_emp_id
+        ra_payer.approver_id as payer_emp_id,
+        ra_rejected.note as rejection_note
     FROM emp_vacation v 
     JOIN employees e ON v.emp_id = e.emp_id
     LEFT JOIN emp_vacation_balance b ON v.id = b.vac_id
@@ -246,6 +247,10 @@ if ($total_items > 0) {
     -- This JOIN gets the assigned payer information (approval_level >= 100 in request_approvers)
     LEFT JOIN request_approvers ra_payer ON ra_payer.request_inv_no = v.request_inv_no 
          AND ra_payer.request_type_id IN ($request_type_ids_list) AND ra_payer.approval_level >= 100
+
+        -- This JOIN fetches rejection notes (if any)
+        LEFT JOIN request_approvers ra_rejected ON ra_rejected.request_inv_no = v.request_inv_no 
+            AND ra_rejected.request_type_id IN ($request_type_ids_list) AND ra_rejected.status = 'rejected'
     
     -- This JOIN is for the 'my_pending' filter
     $join_sql
@@ -771,6 +776,15 @@ if ($can_see_all_depts) {
                                                             </div>
 
                                                         </div>
+
+                                                        <?php if ($req['current_status'] === 'rejected' && !empty($req['rejection_note'])): 
+                                                            $rejection_note_clean = stripslashes($req['rejection_note']);
+                                                        ?>
+                                                            <div class="detail-item" style="margin-top: 12px; padding: 10px; background-color: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px;">
+                                                                <i class="fas fa-ban" style="color:#dc3545; margin-right:8px;"></i>
+                                                                <strong><?= __('rejection_reason') ?>:</strong>&nbsp;<?= nl2br(htmlspecialchars(getDisplayName($rejection_note_clean))); ?>
+                                                            </div>
+                                                        <?php endif; ?>
 
                                                         <?php if ($req['current_status'] == 'approved' && isset($req['remaining_balance'])): ?>
                                                             <hr>
@@ -1898,10 +1912,31 @@ if ($can_see_all_depts) {
                 $('#swal_return_date').datepicker('setEndDate', max);
                 $('#swal_return_date').datepicker('setDate', base);
             };
+            const setStartDateBounds = (dateStr) => {
+                const base = dateStr ? new Date(dateStr) : (vacStartDate ? new Date(vacStartDate) : null);
+                if (!base || isNaN(base.getTime())) return;
+                const min = new Date(base); min.setDate(min.getDate() - 2);
+                const max = new Date(base); max.setDate(max.getDate() + 2);
+                $('#swal_start_date').datepicker('setStartDate', min);
+                $('#swal_start_date').datepicker('setEndDate', max);
+                $('#swal_start_date').datepicker('setDate', base);
+            };
 
             // [NEW] HR Payroll: Return Date (Last Working Day)
             if (isHR_Payroll) {
                 hrPayrollHtml += `
+                    <div class="swal-hr-payroll-fields text-left mt-3">
+                        <hr>
+                        <h6 class="text-primary mb-3"><i class="fa fa-calendar"></i> ${__('start_date') || 'Start Date'}</h6>
+                        <div class="form-group">
+                            <label for="swal_start_date" class="font-weight-bold">
+                                <i class="fa fa-calendar-day"></i> ${__('start_date') || 'Start Date'}
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="swal_start_date" class="form-control" placeholder="${__('select_return_date') || 'Select return date'}" readonly required style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                            <small class="form-text text-muted">${__('hr_payroll_start_date_note') || 'HR Payroll can adjust the employee\'s last working day (return date) before final approval. Limit: ±2 days from current return date.'}</small>
+                        </div>
+                    </div>
                     <div class="swal-hr-payroll-fields text-left mt-3">
                         <hr>
                         <h6 class="text-primary mb-3"><i class="fa fa-calendar"></i> ${__('return_date') || 'Return Date (Last Working Day)'}</h6>
@@ -2095,6 +2130,23 @@ if ($can_see_all_depts) {
                                         $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
                                     });
 
+                                    // Initialize start_date and return_date datepickers for HR Payroll
+                                    if (isHR_Payroll) {
+                                        // Initialize start_date datepicker
+                                        $('#swal_start_date').datepicker({
+                                            format: "yyyy-mm-dd",
+                                            todayHighlight: true,
+                                            autoclose: true
+                                        });
+                                        
+                                        // Initialize return_date datepicker
+                                        $('#swal_return_date').datepicker({
+                                            format: "yyyy-mm-dd",
+                                            todayHighlight: true,
+                                            autoclose: true
+                                        });
+                                    }
+
                                     // Set initial values if they exist
                                     if (res.departure_date) {
                                         $('#swal_departure_date').datepicker('setDate', res.departure_date);
@@ -2102,12 +2154,24 @@ if ($can_see_all_depts) {
                                     if (res.arrival_date) {
                                         $('#swal_arrival_date').datepicker('setDate', res.arrival_date);
                                     }
-                                    if (res.return_date) {
-                                        $('#swal_return_date').datepicker('setDate', res.return_date);
-                                        setReturnDateBounds(res.return_date);
-                                    } else if (vacEndDate) {
-                                        $('#swal_return_date').datepicker('setDate', vacEndDate);
-                                        setReturnDateBounds(vacEndDate);
+                                    
+                                    // Set start_date and return_date for HR Payroll
+                                    if (isHR_Payroll) {
+                                        if (res.start_date) {
+                                            $('#swal_start_date').datepicker('setDate', res.start_date);
+                                            setStartDateBounds(res.start_date);
+                                        } else if (vacStartDate) {
+                                            $('#swal_start_date').datepicker('setDate', vacStartDate);
+                                            setStartDateBounds(vacStartDate);
+                                        }
+                                        
+                                        if (res.return_date) {
+                                            $('#swal_return_date').datepicker('setDate', res.return_date);
+                                            setReturnDateBounds(res.return_date);
+                                        } else if (vacEndDate) {
+                                            $('#swal_return_date').datepicker('setDate', vacEndDate);
+                                            setReturnDateBounds(vacEndDate);
+                                        }
                                     }
                                 }
                             },
@@ -2135,8 +2199,17 @@ if ($can_see_all_depts) {
                                     $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
                                 });
 
-                                // Initialize return date with default end date for HR Payroll
+                                // Initialize start_date and return_date for HR Payroll even if fetch fails
                                 if (isHR_Payroll) {
+                                    // Initialize start_date datepicker
+                                    $('#swal_start_date').datepicker({
+                                        format: "yyyy-mm-dd",
+                                        todayHighlight: true,
+                                        autoclose: true
+                                    }).datepicker('setDate', vacStartDate);
+                                    setStartDateBounds(vacStartDate);
+                                    
+                                    // Initialize return_date datepicker
                                     $('#swal_return_date').datepicker({
                                         format: "yyyy-mm-dd",
                                         todayHighlight: true,
@@ -2150,6 +2223,15 @@ if ($can_see_all_depts) {
 
                     // Initialize return date picker for HR Payroll even when not Fly/annual
                     if (isHR_Payroll) {
+                        // Initialize start_date datepicker
+                        $('#swal_start_date').datepicker({
+                            format: "yyyy-mm-dd",
+                            todayHighlight: true,
+                            autoclose: true
+                        }).datepicker('setDate', vacStartDate);
+                        setStartDateBounds(vacStartDate);
+                        
+                        // Initialize return_date datepicker
                         $('#swal_return_date').datepicker({
                             format: "yyyy-mm-dd",
                             todayHighlight: true,
@@ -2515,8 +2597,13 @@ if ($can_see_all_depts) {
                         }
                     }
                     
-                    // HR Payroll must set return date
+                    // HR Payroll must set start_date and return_date
                     if (isHR_Payroll) {
+                        const start_date = $(swalModal).find('#swal_start_date').val();
+                        if (!start_date || start_date.trim() === '') {
+                            Swal.showValidationMessage(__('start_date_required') || 'Start date is required for HR Payroll approval');
+                            return false;
+                        }
                         if (!return_date || return_date.trim() === '') {
                             Swal.showValidationMessage(__('return_date_required') || 'Return date is required for HR Payroll approval');
                             return false;
@@ -2617,6 +2704,7 @@ if ($can_see_all_depts) {
                     const departureDateVal = $(swalModal).find('#swal_departure_date').val() || '';
                     const arrivalDateVal = $(swalModal).find('#swal_arrival_date').val() || '';
                     const returnDateVal = $(swalModal).find('#swal_return_date').val() || '';
+                    const startDateVal = $(swalModal).find('#swal_start_date').val() || '';
 
                     // Log for debugging
                     console.log('sendApproval preConfirm - departure_date:', departureDateVal);
@@ -2624,14 +2712,15 @@ if ($can_see_all_depts) {
                     console.log('sendApproval preConfirm - ticket_pay:', ticket_pay);
                     console.log('sendApproval preConfirm - permit_fee:', permit_fee);
                     console.log('sendApproval preConfirm - return_date:', returnDateVal);
+                    console.log('sendApproval preConfirm - start_date:', startDateVal);
 
                     return {
                         approver_chain: approver_chain,
                         departure_date: departureDateVal,
                         arrival_date: arrivalDateVal,
                         return_date: returnDateVal,
+                        start_date: startDateVal,
                         ticket_pay: ticket_pay,
-                        permit_fee: permit_fee,
                         permit_fee: permit_fee, // [UPDATED] Include permit_fee for GR Officer
                         hr_team_cc: hr_team_cc,
                         overtime_hours: overtime_hours,

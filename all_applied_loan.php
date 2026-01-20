@@ -178,12 +178,14 @@ if ($total_items > 0) {
         l.loan_amount,
         l.monthly_deduction,
         l.start_date,
-        l.end_date
+        l.end_date,
+        ra_rejected.note as rejection_note
     FROM emp_loan l 
     JOIN employees e ON l.emp_id = e.emp_id
     LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = l.inv_no AND ra_pending.request_type_id = ? AND ra_pending.status = 'pending' 
     LEFT JOIN employees approver_emp ON ra_pending.approver_id = approver_emp.emp_id 
     LEFT JOIN admin_login approver_admin ON ra_pending.approver_id = approver_admin.emp_id
+    LEFT JOIN request_approvers ra_rejected ON ra_rejected.request_inv_no = l.inv_no AND ra_rejected.request_type_id = ? AND ra_rejected.status = 'rejected'
     $join_sql
     $where_sql";
     $sql .= " GROUP BY l.id ORDER BY l.created_at DESC";
@@ -192,7 +194,9 @@ if ($total_items > 0) {
     $main_types = $types;
     // Prepend the request_type_id for the LEFT JOIN on ra_pending
     array_unshift($main_params, $request_type_id);
-    $main_types = "i" . $main_types;
+        // Prepend another request_type_id for the LEFT JOIN on ra_rejected
+        array_unshift($main_params, $request_type_id);
+        $main_types = "ii" . $main_types;
 
     if (!$show_all) {
         $offset = ($current_page - 1) * $items_per_page;
@@ -424,6 +428,12 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                 <i class="fad fa-info-circle duotone-info"></i>
                                                                 <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$loan_badge_class; ?> p-2"><?=htmlspecialchars($loan_status_text . $current_level_display); ?></span>
                                                             </div>
+                                                            <?php if ($loan['status'] === 'rejected' && !empty($loan['rejection_note'])): ?>
+                                                            <div class="detail-item" style="margin-top: 12px; padding: 10px; background-color: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px;">
+                                                                <i class="fas fa-ban" style="color:#dc3545; margin-right:8px;"></i><strong><?=__('rejection_reason')?>:</strong>    
+                                                                    <?=nl2br(htmlspecialchars(getDisplayName($loan['rejection_note']))); ?>
+                                                            </div>
+                                                            <?php endif; ?>
                                                         </div>
                                                         <?php
                                                             // Button visibility: Only show if pending with logged-in user

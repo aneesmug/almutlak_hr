@@ -1557,39 +1557,32 @@ function reject_loan() {
         $type_stmt->execute();
         $request_type_id = ($type_stmt->get_result()->fetch_assoc()['id'] ?? 2);
         $type_stmt->close();
-        $rej = $conDB->prepare("UPDATE request_approvers SET status = 'rejected', action_date = NOW() WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND status = 'pending'");
-        $rej->bind_param("sii", $inv_no, $request_type_id, $approver_emp_id);
+        // Update request_approvers with rejection status and rejection note
+        $rej = $conDB->prepare("UPDATE request_approvers SET status = 'rejected', action_date = NOW(), note = ? WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND status = 'pending'");
+        $rej->bind_param("ssii", $rejection_note, $inv_no, $request_type_id, $approver_emp_id);
         $rej->execute();
         $rej->close();
     }
 
-    // Update loan status to rejected (no longer using individual approval status columns)
+    // Update loan status to rejected
     $stmt = $conDB->prepare("UPDATE `emp_loan` SET `status` = 'rejected' WHERE `id` = ?");
     $stmt->bind_param("i", $loan_id);
 
     if ($stmt->execute()) {
-        $stmt_approval = $conDB->prepare("INSERT INTO `emp_loan_approvals` (loan_id, approver_id, approver_role, status, notes) VALUES (?, ?, ?, ?, ?)");
-        $status = 'rejected';
-        // Log using approver's employee ID if available, otherwise fall back to id_iqama
-        $log_approver = $approver_emp_id ?: $username;
-        $stmt_approval->bind_param("issss", $loan_id, $log_approver, $approver_role, $status, $rejection_note);
-        $stmt_approval->execute();
-        $stmt_approval->close();
-        
         // Add rejection status history to smt_request_status
         if (!empty($inv_no)) {
             $reject_status = 'rejected';
             $note_reject = 'Loan rejected: ' . $rejection_note;
             $hist_reject = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, ?)");
-            $hist_reject->bind_param("ssss", $inv_no, $log_approver, $note_reject, $reject_status);
+            $hist_reject->bind_param("ssss", $inv_no, $approver_emp_id, $note_reject, $reject_status);
             $hist_reject->execute();
             $hist_reject->close();
         }
         
         // --- SEND REJECTION NOTIFICATIONS ---
-        if (!empty($inv_no) && $log_approver && function_exists('getEmployeeDetails')) {
+        if (!empty($inv_no) && $approver_emp_id && function_exists('getEmployeeDetails')) {
             // Get approver name for notification message
-            $approver_details = getEmployeeDetails($conDB, $log_approver);
+            $approver_details = getEmployeeDetails($conDB, $approver_emp_id);
             $approver_name = ($approver_details && $approver_details['name'] !== 'N/A') ? $approver_details['name'] : 'Approver';
             
             // 1. Notify the loan creator
@@ -1602,7 +1595,7 @@ function reject_loan() {
             
             if ($creator_row) {
                 $creator_emp_id = $creator_row['emp_id'];
-                if ($creator_emp_id != $log_approver) { // Don't notify self
+                if ($creator_emp_id != $approver_emp_id) { // Don't notify self
                     $creator_details = getEmployeeDetails($conDB, $creator_emp_id);
                     if ($creator_details && $creator_details['name'] !== 'N/A') {
                         // Send browser notification
@@ -1660,7 +1653,7 @@ function reject_loan() {
                 
                 while ($prev_row = $prev_result->fetch_assoc()) {
                     $prev_approver_id = $prev_row['approver_id'];
-                    if ($prev_approver_id != $log_approver) { // Don't notify the rejector
+                    if ($prev_approver_id != $approver_emp_id) { // Don't notify the rejector
                         $prev_approver_details = getEmployeeDetails($conDB, $prev_approver_id);
                         if ($prev_approver_details && $prev_approver_details['name'] !== 'N/A') {
                             // Send browser notification

@@ -120,6 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
 
         if ($user && !empty($user['otp']) && password_verify($submitted_otp, $user['otp'])) {
             session_regenerate_id(true);
+            $safe_fullname = htmlspecialchars($user['fullname'] ?? '', ENT_QUOTES, 'UTF-8');
             $_SESSION['auth_user'] = [
                 'user_id' => $user['id_iqama'], 'fullname' => $user['fullname'], 'email' => $user['email'], 'user_type' => $user['user_type'], 'dept' => $user['dept']
             ];
@@ -177,32 +178,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 </style>
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {
-                        let countdownSeconds = 3;
-                        const totalSeconds = 3;
+                        const userFullName = <?php echo json_encode($safe_fullname); ?>;
+                        let countdownSeconds = 5;
+                        const totalSeconds = 5;
                         const totalMs = totalSeconds * 1000;
                         let startTime = Date.now();
+                        let remainingMs = totalMs;
+                        let smoothAnimationInterval;
+                        let countdownInterval;
+
+                        const stopTimers = () => {
+                            if (smoothAnimationInterval) {
+                                clearInterval(smoothAnimationInterval);
+                                smoothAnimationInterval = null;
+                            }
+                            if (countdownInterval) {
+                                clearInterval(countdownInterval);
+                                countdownInterval = null;
+                            }
+                            remainingMs = Math.max(0, totalMs - (Date.now() - startTime));
+                        };
+
+                        const startTimers = () => {
+                            startTime = Date.now() - (totalMs - remainingMs);
+                            smoothAnimationInterval = setInterval(() => {
+                                const elapsedMs = Date.now() - startTime;
+                                const progressPercent = Math.max(0, 100 - (elapsedMs / totalMs) * 100);
+                                document.getElementById('progress-bar').style.width = progressPercent + '%';
+                                if (elapsedMs >= totalMs) {
+                                    clearInterval(smoothAnimationInterval);
+                                    clearInterval(countdownInterval);
+                                    window.location.href = './dashboard.php';
+                                }
+                            }, 50);
+                            if (!countdownInterval) {
+                                countdownInterval = setInterval(() => {
+                                    countdownSeconds = Math.max(0, countdownSeconds - 1);
+                                    document.getElementById('countdown-timer').textContent = countdownSeconds;
+                                }, 1000);
+                            }
+                        };
+
                         Swal.fire({
                             title: '✓ OTP Verified Successfully',
-                            html: '<p>You have been logged in successfully.</p><p style="margin-top: 15px; font-size: 16px; color: #666;">Redirecting to dashboard in <strong id="countdown-timer">' + countdownSeconds + '</strong> seconds...</p><div style="margin-top: 20px; width: 100%; height: 6px; background-color: #e5e7eb; border-radius: 3px; overflow: hidden;"><div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, #3b82f6, #0ea5e9); width: 100%; transition: width 0.05s linear;"></div></div>',
+                            html: '<p>Welcome, ' + userFullName + '!</p><p>You have been logged in successfully.</p><p style="margin-top: 15px; font-size: 16px; color: #666;">Redirecting to dashboard in <strong id="countdown-timer">' + countdownSeconds + '</strong> seconds...</p><div style="margin-top: 20px; width: 100%; height: 6px; background-color: #e5e7eb; border-radius: 3px; overflow: hidden;"><div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, #3b82f6, #0ea5e9); width: 100%; transition: width 0.05s linear;"></div></div>',
                             icon: 'success',
                             allowOutsideClick: false,
                             allowEscapeKey: false,
                             showConfirmButton: false,
                             didOpen: (modal) => {
-                                const smoothAnimationInterval = setInterval(() => {
-                                    const elapsedMs = Date.now() - startTime;
-                                    const progressPercent = Math.max(0, 100 - (elapsedMs / totalMs) * 100);
-                                    document.getElementById('progress-bar').style.width = progressPercent + '%';
-                                    if (elapsedMs >= totalMs) {
-                                        clearInterval(smoothAnimationInterval);
-                                        window.location.href = './dashboard.php';
-                                    }
-                                }, 50); // Update every 50ms for smooth animation
-                                // Update countdown text every second
-                                const countdownInterval = setInterval(() => {
-                                    countdownSeconds--;
-                                    document.getElementById('countdown-timer').textContent = countdownSeconds;
-                                }, 1000);
+                                startTimers();
+                                modal.addEventListener('mouseenter', stopTimers);
+                                modal.addEventListener('mouseleave', startTimers);
                             }
                         });
                     });

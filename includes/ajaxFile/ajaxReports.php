@@ -392,6 +392,8 @@ function getColumnLabel($column) {
         'insurance_no' => 'Insurance No',
         'status' => 'Status',
         'emp_name' => 'Employee Name',
+        'comp_no' => 'Company',
+        'company_name' => 'Company Name',
         'vac_type' => 'Vacation Type',
         'start_date' => 'Start Date',
         'return_date' => 'Return Date',
@@ -444,7 +446,6 @@ function getColumnLabel($column) {
         'service_duration' => 'Service Duration',
         'eos_amount' => 'EOS Amount',
         'vacation_balance' => 'Vacation Balance',
-        'vacation_days' => 'Vacation Days',
         'vacation_salary' => 'Vacation Salary',
         'total_settlement' => 'Total Settlement',
         'total_amount' => 'Total Amount',
@@ -679,20 +680,34 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
 
 // Vacation Report
 function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType = '') {
+    global $is_rtl;
+    
     // Build SELECT clause
     $selectCols = ['v.id'];
     $needsEmpName = in_array('emp_name', $columns);
     $needsDept = in_array('dept', $columns);
+    $needsCompany = in_array('comp_no', $columns);
+    
+    $columnMapping = []; // Track which column names map to which display names
     
     foreach ($columns as $col) {
         if ($col == 'emp_name') {
             $selectCols[] = 'e.name AS emp_name';
+            $columnMapping[$col] = 'emp_name';
         } elseif ($col == 'emp_id') {
             $selectCols[] = 'v.emp_id';
+            $columnMapping[$col] = 'emp_id';
         } elseif ($col == 'dept') {
             $selectCols[] = 'd.dep_nme AS dept';
+            $columnMapping[$col] = 'dept';
+        } elseif ($col == 'comp_no') {
+            // Select both language variants so we can choose in PHP based on $is_rtl
+            $selectCols[] = 'c2.comp_name AS comp_name';
+            $selectCols[] = 'c2.comp_name_ar AS comp_name_ar';
+            $columnMapping[$col] = 'comp_no';  // Maps to comp_no in result
         } else {
             $selectCols[] = 'v.' . $col;
+            $columnMapping[$col] = $col;
         }
     }
     $selectClause = implode(', ', $selectCols);
@@ -739,6 +754,7 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
             FROM emp_vacation v
             INNER JOIN employees e ON v.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN companies c2 ON e.comp_no = c2.comp_id
             WHERE $whereClause
             ORDER BY v.start_date DESC";
     
@@ -750,14 +766,23 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
     $data = [];
     $headers = [];
     
-    // Get headers
+    // Get headers - use the mapped names
     foreach ($columns as $col) {
-        $headers[] = getColumnLabel($col);
+        $headerKey = isset($columnMapping[$col]) ? $columnMapping[$col] : $col;
+        $headers[] = getColumnLabel($headerKey);
     }
     
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
         unset($row['id']);
+        
+        // Process language-specific fields
+        if (isset($row['comp_name']) || isset($row['comp_name_ar'])) {
+            $row['comp_no'] = ($is_rtl ?? false) ? $row['comp_name_ar'] : $row['comp_name'];
+            unset($row['comp_name']);
+            unset($row['comp_name_ar']);
+        }
+        
         $data[] = $row;
     }
     

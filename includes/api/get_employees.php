@@ -77,6 +77,14 @@ try {
     $stmt->execute();
     $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Apply getDisplayName() to employee names
+    foreach ($employees as &$employee) {
+        if (isset($employee['name'])) {
+            $employee['name'] = getDisplayName($employee['name']);
+        }
+    }
+    unset($employee); // Break the reference
+
     echo json_encode(['status' => 'success', 'employees' => $employees]);
 
 } catch (PDOException $e) {

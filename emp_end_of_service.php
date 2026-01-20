@@ -1,14 +1,19 @@
 <?php
 /****************************************************************
- * MODIFICATION SUMMARY (010-emp_end_of_service.php):
+ * MODIFICATION SUMMARY (011-emp_end_of_service.php):
+ * - HOUSING IN FULL PACKAGE FOR EOS: When housing allowance is 0, the calculated housing
+ *   (Basic / 12) × 2 is included in the full salary package for EOS calculation ONLY.
+ *   Example: Basic 2350 + Calculated Housing 391.67 + Food 300 = Total 3041.67 SAR
+ * - VACATION CALCULATION: Uses original salary components WITHOUT calculated housing.
+ * - actual_salary_base includes calculated housing when housing = 0 (for EOS)
+ * - vacation_salary_base uses ONLY actual salary components (no calculated housing)
+ * 
+ * PREVIOUS MODIFICATION (010-emp_end_of_service.php):
  * - COUNTRY RESTRICTION: Added check to prevent EOS processing for employees
  *   from country ID 121. Form is disabled and error message shown.
  * - HOUSING ALLOWANCE CALCULATION: If employee has no housing allowance (housing = 0),
- *   the system now calculates it as (basic/12*2) and includes it in total salary.
- *   Example: basic 1800, housing 0 → calculated housing = (1800/12*2) = 300
- *   Total = basic 1800 + food 300 + calculated 300 + all other allowances
- * - UPDATED SALARY CALCULATION: Modified actual_salary_base to include calculated
- *   housing when original housing is 0, ensuring accurate vacation pay calculations.
+ *   the system calculates it as (basic/12*2) and adds it as separate benefit.
+ * - UPDATED SALARY CALCULATION: Modified to track calculated housing separately.
  * 
  * PREVIOUS MODIFICATION (009-emp_end_of_service.php):
  * - REVERTED & FIXED VACATION LOGIC: Reinstated the use of the
@@ -68,11 +73,17 @@
             }
         }
 
-        // Calculate base salary for EOS calculation (WITHOUT calculated housing - only actual components)
+        // Calculate base salary for EOS calculation (INCLUDES calculated housing when housing is 0)
         $actual_salary_base = 0;
         if (!empty($salaryrow)) {
             $actual_salary_base += (float)($salaryrow['basic'] ?? 0);
-            $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // Only actual housing, NO calculation
+            
+            // If housing is 0, use calculated housing; otherwise use actual housing
+            if ($housing_benefit == 0 && $basic_salary > 0) {
+                $actual_salary_base += $calculated_housing; // Add calculated housing to EOS base
+            } else {
+                $actual_salary_base += (float)($salaryrow['housing'] ?? 0); // Use actual housing
+            }
             
             $actual_salary_base += (float)($salaryrow['transport'] ?? 0);
             $actual_salary_base += (float)($salaryrow['food'] ?? 0);
@@ -84,11 +95,11 @@
             $actual_salary_base += (float)($salaryrow['other'] ?? 0);
         }
 
-        // Calculate base salary for VACATION calculation (uses ONLY actual housing, NO calculated housing)
+        // Calculate base salary for VACATION calculation (uses ONLY actual/original salary components, NO calculated housing)
         $vacation_salary_base = 0;
         if (!empty($salaryrow)) {
             $vacation_salary_base += (float)($salaryrow['basic'] ?? 0);
-            $vacation_salary_base += (float)($salaryrow['housing'] ?? 0); // ONLY actual housing, no calculation
+            $vacation_salary_base += (float)($salaryrow['housing'] ?? 0); // ONLY actual housing from salary record
             $vacation_salary_base += (float)($salaryrow['transport'] ?? 0);
             $vacation_salary_base += (float)($salaryrow['food'] ?? 0);
             $vacation_salary_base += (float)($salaryrow['misc'] ?? 0);
@@ -525,14 +536,14 @@
                                                         <td class="text-right"><?= htmlspecialchars(number_format(($salaryrow['cashier'] ?? 0) + ($salaryrow['fuel'] ?? 0) + ($salaryrow['tel'] ?? 0) + ($salaryrow['guard'] ?? 0) + ($salaryrow['other'] ?? 0), 2)); ?> <?=__('SAR');?></td>
                                                     </tr>
                                                     <tr style="border-top: 2px solid #ddd; font-weight: bold;">
-                                                        <td><strong><?=__('Total Salary Base');?>:</strong></td>
+                                                        <td><strong><?=__('Total Salary Base (for EOS calculation)');?>:</strong></td>
                                                         <td class="text-right text-success"><?= htmlspecialchars(number_format($actual_salary_base, 2)); ?> <?=__('SAR');?></td>
                                                     </tr>
                                                 </tbody>
                                             </table>
                                             <?php if (($salaryrow['housing'] ?? 0) == 0 && ($salaryrow['basic'] ?? 0) > 0): ?>
-                                                <div class="alert alert-warning mt-3">
-                                                    <strong><?=__('Note');?>:</strong> Housing allowance is 0 in salary. <strong>2-month housing benefit will be added to EOS</strong>: (Basic / 12) × 2 = <?= htmlspecialchars(number_format($two_month_housing, 2)); ?> <?=__('SAR');?>
+                                                <div class="alert alert-info mt-3">
+                                                    <strong><?=__('Note');?>:</strong> Housing allowance is 0 in salary record. <strong>Calculated housing (Basic / 12) × 2 = <?= htmlspecialchars(number_format($calculated_housing, 2)); ?> SAR has been included in the total package above for EOS calculation.</strong>
                                                 </div>
                                             <?php endif; ?>
                                         </div>
@@ -946,7 +957,8 @@
                     
                     const loanDeduction = parseFloat($('#deduct').val()) || 0;
  
-                    const totalEarnings = eosAmount + vacationSalary + resignationSalary + otherEarnings + totalOvertimeEarnings + twoMonthHousingBenefit;
+                    // Note: twoMonthHousingBenefit is now included in EOS amount, so we don't add it separately
+                    const totalEarnings = eosAmount + vacationSalary + resignationSalary + otherEarnings + totalOvertimeEarnings;
                     const totalDeductions = loanDeduction + gosiDeduction + absentDeductionAmount + hourlyDeductionAmount;
                     const netPayment = totalEarnings - totalDeductions;                    // --- MODIFICATION: Round up the net payment to the nearest next number ---
                     const roundedNetPayment = Math.ceil(netPayment);

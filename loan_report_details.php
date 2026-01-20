@@ -41,13 +41,19 @@ if (mysqli_num_rows($query) == 1) {
                 d.dep_nme_ar AS `deptname_ar`,
                 s.section_name,
                 c.name AS `country_name`,
-                rejected_by_emp.name as rejected_by_name
+                rejected_by_emp.name as rejected_by_name,
+                ela.notes as rejection_notes,
+                ela.status as rejection_action,
+                ela.created_at as rejection_timestamp,
+                approver_emp.name as rejection_approver_name
             FROM emp_loan l
             JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN section s ON e.sectin_nme = s.id
             LEFT JOIN countries c ON e.country = c.id
             LEFT JOIN employees rejected_by_emp ON l.rejected_by = rejected_by_emp.emp_id
+            LEFT JOIN emp_loan_approvals ela ON ela.loan_id = l.id AND ela.status = 'rejected'
+            LEFT JOIN employees approver_emp ON ela.approver_id = approver_emp.emp_id
             WHERE l.id = ? AND l.emp_id = ?";
 
     $stmt = $conDB->prepare($sql);
@@ -95,7 +101,7 @@ if (mysqli_num_rows($query) == 1) {
     }
     $stmt_payments->close();
 
-    // Fetch Approval Chain from request_approvers table
+    // Fetch Approval Chain from request_approvers table and merge with emp_loan_approvals notes
     $approval_chain = [];
     if (!empty($loan_details['inv_no'])) {
         $chain_sql = "SELECT ra.*, 
@@ -434,7 +440,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 <h5 class="section-title"><i class="fa fa-check-circle"></i> <?= __('approval_chain') ?></h5>
                                                 <div class="approval-timeline">
                                                     <?php if (empty($approval_chain)): ?>
-                                                        <div class="alert alert-info"><?= __('no_approval_chain_found') ?></div>
+                                                        <div class="alert alert-info"><?= __('add') ?></div>
                                                     <?php else: ?>
                                                         <?php foreach ($approval_chain as $level): ?>
                                                         <div class="timeline-item <?= $level['status'] ?>">
@@ -459,9 +465,12 @@ if (mysqli_num_rows($query) == 1) {
                                                                     <i class="fa fa-calendar"></i> <?= date('d M Y, H:i', strtotime($level['action_date'])); ?>
                                                                 </div>
                                                                 <?php endif; ?>
-                                                                <?php if (!empty($level['note'])): ?>
-                                                                <div style="font-size:0.85rem; color:#666; margin-top:8px; padding:8px; background:#f5f5f5; border-radius:4px; border-left:3px solid #667eea; <?= ($is_rtl) ? 'margin-right:22px !important;' : 'margin-left:22px !important;' ?>">
-                                                                    <strong><?= __('note') ?>:</strong> <?= getDisplayName($level['note']); ?>
+                                                                <?php if (!empty($level['note'])):
+                                                                    $note_border_color = ($level['status'] == 'rejected') ? '#dc3545' : '#667eea';
+                                                                    $note_label_color = ($level['status'] == 'rejected') ? 'color:#dc3545;' : '';
+                                                                ?>
+                                                                <div style="font-size:0.85rem; color:#666; margin-top:8px; padding:8px; background:#f5f5f5; border-radius:4px; border-left:3px solid <?= $note_border_color ?>; <?= ($is_rtl) ? 'margin-right:22px !important;' : 'margin-left:22px !important;' ?>">
+                                                                    <strong style="<?= $note_label_color ?>"><?= ($level['status'] == 'rejected') ? __('rejection_reason') : __('note') ?>:</strong> <?= getDisplayName($level['note']); ?>
                                                                 </div>
                                                                 <?php endif; ?>
                                                             </div>
