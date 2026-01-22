@@ -1,0 +1,83 @@
+DEBUGGING VACATION BALANCE DEDUCTION ISSUE
+
+The balance deduction is not happening after final approval.
+
+Current Implementation:
+=======================
+1. File: includes/vacation_calculator.php (lines 547-655)
+   - Function: update_vacation_balance_on_approval($conDB, $vacation_id)
+   - Fetches vacation record (emp_id, vacdays, vac_type)
+   - Skips non-deductible types
+   - Gets latest emp_vacation_balance
+   - Calculates new balances
+   - Updates database
+   - Has error_log statements
+
+2. File: includes/helper_functions.php (line 38-40)
+   - Includes vacation_calculator.php
+
+3. File: includes/helper_functions.php (line 2205-2218)
+   - Calls update_vacation_balance_on_approval() at final approval
+   - Inside condition: if ($vacation_id > 0)
+   - Checks: !$is_asset_clearance
+   - This is in the "FINAL APPROVAL" section (2b)
+
+STEPS TO DEBUG:
+===============
+1. Add error_log statements to track execution:
+   - Before if ($vacation_id > 0)
+   - Inside the condition
+   - Before and after function call
+   - Check if $is_asset_clearance is incorrectly true
+
+2. Check PHP error log at: C:\xampp\php\logs\php_error_log
+   OR: D:\xampp\php\logs\php_error_log
+
+3. Test with employee 5383's vacation (ID 825):
+   - Approve through all levels
+   - Check error log after final approval
+   - Verify which code path is executed
+
+4. Verify the final approval detection:
+   - Check if $is_final_approver is correctly determined
+   - Check if code reaches section "2b: This is FINAL APPROVAL"
+
+MANUAL DEBUG STEPS:
+===================
+Add these lines in helper_functions.php around line 2205:
+
+Before:
+```php
+if ($vacation_id > 0) {
+    // CRITICAL: Only update balance
+```
+
+After:
+```php
+if ($vacation_id > 0) {
+    error_log("BALANCE DEBUG: vacation_id=$vacation_id, note=" . substr($note_safe, 0, 100));
+    // CRITICAL: Only update balance
+```
+
+And after line 2210:
+```php
+$is_asset_clearance = (stripos($note_safe, 'Asset Clearance') !== false);
+error_log("BALANCE DEBUG: is_asset_clearance=" . ($is_asset_clearance ? 'YES' : 'NO'));
+```
+
+And inside the if (!$is_asset_clearance) block:
+```php
+if (!$is_asset_clearance) {
+    error_log("BALANCE DEBUG: Calling function");
+    // Call the new function
+    if (!update_vacation_balance_on_approval($conDB, $vacation_id)) {
+        error_log("BALANCE DEBUG: Function FAILED");
+    } else {
+        error_log("BALANCE DEBUG: Function SUCCESS");
+    }
+} else {
+    error_log("BALANCE DEBUG: Skipped - asset clearance");
+}
+```
+
+After adding logs, approve the vacation and check php_error_log file.

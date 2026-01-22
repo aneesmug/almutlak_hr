@@ -39,7 +39,7 @@ try {
     // This allows us to generate payroll for their working days before vacation
     // ALSO include employees with is_deductible=0 (Fly+Annual) who remain in full payroll
     $sql = "SELECT DISTINCT
-            e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept, 
+            e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept, e.payment_type,
             es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard,
             gp.basic_salary, gp.housing_allowance, gp.transport_allowance, gp.food_allowance, gp.miscellaneous_allowance, gp.cashier_allowance, gp.fuel_allowance, gp.telephone_allowance, gp.other_allowance, gp.guard_allowance,
             gp.status AS payroll_status,

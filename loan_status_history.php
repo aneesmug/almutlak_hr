@@ -322,15 +322,24 @@ if (!empty($loan['avatar'])) {
                         <tbody>
                         <?php if (empty($chain)): ?>
                             <tr><td colspan="3" class="text-center text-muted"><i class="fas fa-info-circle"></i> <?= __('no_approval_chain') ?></td></tr>
-                        <?php else: foreach ($chain as $link): 
-                            $cClass = 'secondary'; $cIcon = 'fa-circle';
-                            if ($link['status']==='approved') { $cClass='success'; $cIcon='fa-check-circle'; }
-                            elseif ($link['status']==='rejected') { $cClass='danger'; $cIcon='fa-times-circle'; }
-                            elseif ($link['status']==='pending') { $cClass='warning'; $cIcon='fa-clock'; }
+                        <?php else: 
+                            // Check if request was rejected
+                            $is_rejected = isset($loan['status']) && $loan['status'] === 'rejected';
+                            
+                            foreach ($chain as $link): 
+                                // If request is rejected, skip pending/awaiting approvers
+                                if ($is_rejected && in_array($link['status'], ['pending', 'awaiting'])) {
+                                    continue;
+                                }
+                                
+                                $cClass = 'secondary'; $cIcon = 'fa-circle';
+                                if ($link['status']==='approved') { $cClass='success'; $cIcon='fa-check-circle'; }
+                                elseif ($link['status']==='rejected') { $cClass='danger'; $cIcon='fa-times-circle'; }
+                                elseif ($link['status']==='pending') { $cClass='warning'; $cIcon='fa-clock'; }
                         ?>
                             <tr>
                                 <td class="text-center"><span class="level-badge"><?= (int)$link['approval_level'] ?></span></td>
-                                <td><strong><?= getDisplayName($link['approver_name'] ?? 'N/A') ?></strong><br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= getDisplayName($link['user_type'] ?? '') ?></small></td>
+                                <td><strong><?= getDisplayName(parseName($link['approver_name']) ?? 'N/A') ?></strong><br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= getDisplayName($link['user_type'] ?? '') ?></small></td>
                                 <td>
                                     <span class="badge badge-<?= $cClass ?>"><i class="fas <?= $cIcon ?>"></i> <?= getDisplayName(ucfirst($link['status'])) ?></span>
                                     <?php if (!empty($link['action_date'])): ?><br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= date('d M Y, H:i', strtotime($link['action_date'])) ?></small><?php endif; ?>

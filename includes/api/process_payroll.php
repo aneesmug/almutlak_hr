@@ -321,9 +321,9 @@ try {
                 other_allowance = VALUES(other_allowance),
                 guard_allowance = VALUES(guard_allowance),
                 total_gross_salary = VALUES(total_gross_salary),
-                total_benefits = VALUES(total_benefits),
+                total_benefits = IF(VALUES(total_benefits) > 0, VALUES(total_benefits), total_benefits),
                 total_deductions = VALUES(total_deductions),
-                net_salary = VALUES(net_salary),
+                net_salary = VALUES(total_gross_salary) + IF(VALUES(total_benefits) > 0, VALUES(total_benefits), total_benefits) - VALUES(total_deductions),
                 status = VALUES(status)
         ");
         $stmt->execute([

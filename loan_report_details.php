@@ -441,8 +441,16 @@ if (mysqli_num_rows($query) == 1) {
                                                 <div class="approval-timeline">
                                                     <?php if (empty($approval_chain)): ?>
                                                         <div class="alert alert-info"><?= __('add') ?></div>
-                                                    <?php else: ?>
-                                                        <?php foreach ($approval_chain as $level): ?>
+                                                    <?php else: 
+                                                        // Check if request was rejected
+                                                        $is_loan_rejected = isset($loan_details['status']) && $loan_details['status'] === 'rejected';
+                                                    ?>
+                                                        <?php foreach ($approval_chain as $level): 
+                                                            // If request is rejected, skip pending/awaiting approvers
+                                                            if ($is_loan_rejected && in_array($level['status'], ['pending', 'awaiting'])) {
+                                                                continue;
+                                                            }
+                                                        ?>
                                                         <div class="timeline-item <?= $level['status'] ?>">
                                                             <span class="icon">
                                                                 <?php if ($level['status'] == 'approved'): ?><i class="fa fa-check"></i><?php elseif ($level['status'] == 'rejected'): ?><i class="fa fa-times"></i><?php else: ?><i class="fa fa-clock"></i><?php endif; ?>

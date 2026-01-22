@@ -304,6 +304,9 @@
             $net_payment = filter_input(INPUT_POST, 'net_payment', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $overtime_hours = filter_input(INPUT_POST, 'overtime_hours', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $overtime_days = filter_input(INPUT_POST, 'overtime_days', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
+            $absent_days = filter_input(INPUT_POST, 'absent_days', FILTER_VALIDATE_INT, ['options' => ['default' => 0]]);
+            $deduction_hours = filter_input(INPUT_POST, 'deduction_hours', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
+            $gosi_deduction = filter_input(INPUT_POST, 'gosi_deduction', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
 
             // Check if salary is paid for the termination month
             $salaryPaidForTerminationMonth = false;
@@ -361,8 +364,8 @@
                 $t_months = $serviceDuration->m;
                 $t_days = $serviceDuration->d;
 
-                $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("sisssdssiiiddddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
+                $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `absent_days`, `deduction_hours`, `gosi_deduction`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("sisssdssiiiddddiddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $absent_days, $deduction_hours, $gosi_deduction, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
                 $stmt->execute();
 
                 $stmt_update = $conDB->prepare("UPDATE `employees` SET `status`='0', `ter_note`=?, `fly`='0', `ter_date`=? WHERE `emp_id`=?");
@@ -643,11 +646,11 @@
                                                                 </select>
                                                                 <?php if (!empty($errors['eos_reason'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['eos_reason']); ?></small></div><?php endif; ?>
                                                             </div>
-                                                            <div class="form-group col-lg-6">
+                                                            <div class="form-group col-lg-3">
                                                                 <label for="joining_date"><?=__('joining_date_label');?>:</label>
                                                                 <input type="text" name="joining_date" class="form-control" id="joining_date" value="<?=htmlspecialchars($emprow['joining_date'] ?? '');?>" readonly>
                                                             </div>
-                                                            <div class="form-group col-lg-6">
+                                                            <div class="form-group col-lg-3">
                                                                 <label for="end_date"><?=__('last_working_day');?>:<span class="text-danger">*</span></label>
                                                                 <input type="text" name="end_date" class="form-control datepicker" id="end_date" value="<?=htmlspecialchars($endDateStr); ?>" required autocomplete="off">
                                                                 <?php if (!empty($errors['end_date'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['end_date']); ?></small></div><?php endif; ?>
@@ -666,25 +669,41 @@
                                                                 <label for="curt_month_days_display"><?=__('Working Days');?></label>
                                                                 <input type="number" class="form-control" id="curt_month_days_display" name="curt_month_days" value="0" readonly>
                                                             </div>
-                                                            <div class="form-group col-lg-2">
-                                                                <label for="absent_days" class="text-danger"><?=__('Absent Days');?></label>
-                                                                <input type="number" class="form-control calculation-trigger" id="absent_days" name="absent_days" value="0" min="0">
+
+                                                            <!-- EARNINGS SECTION -->
+                                                            <div class="col-12"><strong class="text-success">EARNINGS:</strong><hr style="margin: 5px 0;"/></div>
+                                                            <div class="form-group col-lg-3">
+                                                                <label for="curt_month_salry" class="text-success"><?=__('Resignation Month Salary');?></label>
+                                                                <input type="text" class="form-control" value="0.00" id="curt_month_salry" name="curt_month_salry" readonly>
+                                                                <small class="text-success font-weight-bold" id="curt_month_salry_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
                                                             </div>
-                                                            <div class="form-group col-lg-2">
-                                                                <label for="deduction_hours" class="text-danger"><?=__('Deduction (Hours)');?></label>
-                                                                <input type="number" class="form-control calculation-trigger" id="deduction_hours" name="deduction_hours" value="0" min="0">
-                                                            </div>
-                                                            <div class="form-group col-lg-2">
+                                                            <div class="form-group col-lg-3">
                                                                 <label for="overtime_hours" class="text-success"><?=__('Overtime (Hours)');?></label>
                                                                 <input type="number" class="form-control calculation-trigger" id="overtime_hours" name="overtime_hours" value="0" min="0" step="0.5">
+                                                                <small class="text-success font-weight-bold" id="overtime_hours_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
                                                             </div>
-                                                            <div class="form-group col-lg-2">
+                                                            <div class="form-group col-lg-3">
                                                                 <label for="overtime_days" class="text-success"><?=__('Overtime (Days)');?></label>
                                                                 <input type="number" class="form-control calculation-trigger" id="overtime_days" name="overtime_days" value="0" min="0" step="0.5">
+                                                                <small class="text-success font-weight-bold" id="overtime_days_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
                                                             </div>
-                                                            <div class="form-group col-lg-2">
-                                                                <label for="curt_month_salry"><?=__('Resignation Month Salary');?></label>
-                                                                <input type="text" class="form-control" value="0.00" id="curt_month_salry" name="curt_month_salry" readonly>
+                                                            <div class="form-group col-lg-3">
+                                                                <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
+                                                                <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
+                                                                <small class="text-success font-weight-bold" id="other_earnings_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>  
+                                                            </div>
+
+                                                            <!-- DEDUCTIONS SECTION -->
+                                                            <div class="col-12"><strong class="text-danger">DEDUCTIONS:</strong><hr style="margin: 5px 0;"/></div>
+                                                            <div class="form-group col-lg-3">
+                                                                <label for="absent_days" class="text-danger"><?=__('Absent Days');?></label>
+                                                                <input type="number" class="form-control calculation-trigger" id="absent_days" name="absent_days" value="0" min="0">
+                                                                <small class="text-danger font-weight-bold" id="absent_days_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
+                                                            </div>
+                                                            <div class="form-group col-lg-3">
+                                                                <label for="deduction_hours" class="text-danger"><?=__('Deduction (Hours)');?></label>
+                                                                <input type="number" class="form-control calculation-trigger" id="deduction_hours" name="deduction_hours" value="0" min="0">
+                                                                <small class="text-danger font-weight-bold" id="deduction_hours_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
                                                             </div>
 
                                                             <!-- Calculation Row 2 (Deductions) -->
@@ -692,23 +711,18 @@
                                                                 <div class="form-group col-lg-3">
                                                                     <label for="gosi_deduction" class="text-danger"><?=__('GOSI Deduction');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" id="gosi_deduction" name="gosi_deduction" value="0.00" step="any">
-                                                                </div>
-                                                                <div class="form-group col-lg-2">
-                                                                    <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
-                                                                    <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
+                                                                    <small class="text-danger font-weight-bold" id="gosi_deduction_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
                                                                 </div>
                                                                 <div class="form-group col-lg-3">
                                                                     <label for="deduct" class="text-danger"><?=__('Other Deductions (Loan, etc.)');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
+                                                                    <small class="text-danger font-weight-bold" id="deduct_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
                                                                 </div>
                                                             <?php else: ?>
                                                                 <div class="form-group col-lg-2">
-                                                                    <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
-                                                                    <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
-                                                                </div>
-                                                                <div class="form-group col-lg-2">
                                                                     <label for="deduct" class="text-danger"><?=__('Deduct (Loan, etc.)');?></label>
                                                                     <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
+                                                                    <small class="text-danger font-weight-bold" id="deduct_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
                                                                 </div>
                                                             <?php endif; ?>
                                                             
@@ -724,12 +738,16 @@
                                                                 <input type="text" class="form-control" id="vacation_salary_display" value="0.00" readonly style="background-color: #e9ecef;">
                                                             </div>
                                                             <div class="form-group col-lg-3">
-                                                                <label class="text-success"><strong><?=__('2-Month Housing Benefit');?></strong></label>
-                                                                <input type="text" class="form-control text-success font-weight-bold" id="two_month_housing_display" value="<?= htmlspecialchars(number_format($two_month_housing, 2)); ?>" readonly style="background-color: #d4edda;">
+                                                                <label class="text-success font-weight-bold"><?=__('Total Earnings');?></label>
+                                                                <input type="text" class="form-control text-success font-weight-bold" id="total_earnings_display" value="0.00" readonly style="background-color: #d4edda;">
                                                             </div>
                                                             <div class="form-group col-lg-3">
+                                                                <label class="text-danger font-weight-bold"><?=__('Total Deductions');?></label>
+                                                                <input type="text" class="form-control text-danger font-weight-bold" id="total_deductions_display" value="0.00" readonly style="background-color: #f8d7da;">
+                                                            </div>
+                                                            <div class="form-group col-lg-12">
                                                                 <label class="font-weight-bold"><?=__('Total Net Payment');?></label>
-                                                                <input type="text" class="form-control font-weight-bold" id="net_payment_display" value="0.00" readonly style="background-color: #dff0d8;">
+                                                                <input type="text" class="form-control font-weight-bold" id="net_payment_display" value="0.00" readonly style="background-color: #dff0d8; font-size: 1.2em;">
                                                             </div>
                                                             
                                                             <div class="col-12"><hr/></div>
@@ -910,10 +928,15 @@
                     const absentDeductionAmount = dailyRateDeduction * absentDays;
                     const hourlyDeductionAmount = hourlyRateDeduction * deductionHours;
                     
+                    // Update calculation displays
+                    $('#absent_days_calc').text(absentDeductionAmount.toFixed(2) + ' SAR');
+                    $('#deduction_hours_calc').text(hourlyDeductionAmount.toFixed(2) + ' SAR');
+                    
                     // Ensure resignation salary doesn't go below zero
                     resignationSalary = Math.max(0, resignationSalary);
                     
                     $('#curt_month_salry').val(resignationSalary.toFixed(2));
+                    $('#curt_month_salry_calc').text(resignationSalary.toFixed(2) + ' SAR');
 
                     const empCountry = $('#emp_country').val();
                     const gosiPercent = parseFloat($('#emp_gosi_percent').val()) || 0;
@@ -938,9 +961,15 @@
                     // Get the actual GOSI deduction value (user can override)
                     const gosiDeduction = parseFloat($('#gosi_deduction').val()) || 0;
                     
+                    // Update GOSI calculation display
+                    $('#gosi_deduction_calc').text(gosiDeduction.toFixed(2) + ' SAR');
+                    
                     const eosAmount = parseFloat($('#eos_amount_display').val()) || 0;
                     const vacationSalary = parseFloat($('#vacation_salary_display').val()) || 0;
                     const otherEarnings = parseFloat($('#other_earnings').val()) || 0;
+                    
+                    // Update Other Earnings display
+                    $('#other_earnings_calc').text(otherEarnings.toFixed(2) + ' SAR');
                     const twoMonthHousingBenefit = parseFloat($('#two_month_housing_benefit').val()) || 0; // 2-month housing benefit
                     
                     // Calculate overtime earnings per new rule:
@@ -955,12 +984,25 @@
                     const overtimeDaysAmount = overtimeHourlyRate * 8 * overtimeDays;
                     const totalOvertimeEarnings = overtimeHoursAmount + overtimeDaysAmount;
                     
+                    // Update overtime calculation displays
+                    $('#overtime_hours_calc').text(overtimeHoursAmount.toFixed(2) + ' SAR');
+                    $('#overtime_days_calc').text(overtimeDaysAmount.toFixed(2) + ' SAR');
+                    
                     const loanDeduction = parseFloat($('#deduct').val()) || 0;
+                    
+                    // Update Other Deductions display
+                    $('#deduct_calc').text(loanDeduction.toFixed(2) + ' SAR');
  
                     // Note: twoMonthHousingBenefit is now included in EOS amount, so we don't add it separately
                     const totalEarnings = eosAmount + vacationSalary + resignationSalary + otherEarnings + totalOvertimeEarnings;
                     const totalDeductions = loanDeduction + gosiDeduction + absentDeductionAmount + hourlyDeductionAmount;
-                    const netPayment = totalEarnings - totalDeductions;                    // --- MODIFICATION: Round up the net payment to the nearest next number ---
+                    const netPayment = totalEarnings - totalDeductions;
+                    
+                    // Update the display fields
+                    $('#total_earnings_display').val(totalEarnings.toFixed(2));
+                    $('#total_deductions_display').val(totalDeductions.toFixed(2));
+                    
+                    // --- MODIFICATION: Round up the net payment to the nearest next number ---
                     const roundedNetPayment = Math.ceil(netPayment);
                     
                     $('#net_payment_display').val(roundedNetPayment.toFixed(2));
@@ -983,15 +1025,6 @@
                         salary: totalSalary,
                         anul_vac_days: $('#anul_vac_days').val(),
                     };
-                    
-                    console.log('=== EOS API Request ===');
-                    console.log('Total Salary being sent to API:', totalSalary);
-                    console.log('Contract Type:', formData.contract_type);
-                    console.log('EOS Reason:', formData.eos_reason);
-                    console.log('Joining Date:', formData.joining_date);
-                    console.log('End Date:', formData.end_date);
-                    console.log('Vacation Days:', formData.anul_vac_days);
-                    console.log('======================');
 
                     if (!formData.end_date || !formData.eos_reason) {
                         $('#eos_amount_display, #vacation_salary_display').val('0.00');

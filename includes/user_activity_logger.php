@@ -36,18 +36,18 @@ function getUserIP() {
  * Get location information from IP address using ip-api.com (free, no key required)
  */
 function getLocationFromIP($ip) {
-    // Don't query for local/private IPs
+    // For local/private IPs, use default Saudi Arabia coordinates (Jeddah)
     if ($ip === 'UNKNOWN' || $ip === '127.0.0.1' || $ip === '::1' || 
         filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
         return [
-            'country' => 'Local/Private Network',
-            'country_code' => 'LOCAL',
-            'region' => '',
-            'city' => '',
-            'latitude' => null,
-            'longitude' => null,
-            'timezone' => '',
-            'isp' => ''
+            'country' => 'Saudi Arabia',
+            'country_code' => 'SA',
+            'region' => 'Makkah',
+            'city' => 'Jeddah',
+            'latitude' => 21.5433,
+            'longitude' => 39.1728,
+            'timezone' => 'Asia/Riyadh',
+            'isp' => 'Local Network'
         ];
     }
     
@@ -173,6 +173,10 @@ function parseUserAgent($userAgent) {
 
 /**
  * Log user login activity
+ * Note: Initial latitude/longitude are from IP geolocation (city-level accuracy).
+ * Browser-based GPS coordinates are captured client-side and updated via ajaxPreciseLocation.php
+ * providing precise location (5-30 meter accuracy) once user grants permission.
+ * If user already has an active session, update it instead of creating duplicate.
  */
 function logUserActivity($conDB, $user_id, $emp_id, $username) {
     $ip = getUserIP();
@@ -181,6 +185,73 @@ function logUserActivity($conDB, $user_id, $emp_id, $username) {
     $deviceInfo = parseUserAgent($userAgent);
     $sessionId = session_id();
     
+    // Check if user already has an active session
+    $checkStmt = $conDB->prepare("SELECT `id` FROM `user_activity_log` WHERE `user_id` = ? AND `status` = 'active' LIMIT 1");
+    if ($checkStmt) {
+        $checkStmt->bind_param("i", $user_id);
+        $checkStmt->execute();
+        $result = $checkStmt->get_result();
+        $existingSession = $result->fetch_assoc();
+        $checkStmt->close();
+        
+        if ($existingSession) {
+            // Update existing active session with new login information
+            $updateStmt = $conDB->prepare("UPDATE `user_activity_log` SET 
+                `login_time` = NOW(), 
+                `logout_time` = NULL,
+                `ip_address` = ?, 
+                `country` = ?, 
+                `country_code` = ?, 
+                `region` = ?, 
+                `city` = ?, 
+                `latitude` = ?, 
+                `longitude` = ?, 
+                `timezone` = ?, 
+                `isp` = ?,
+                `browser` = ?, 
+                `browser_version` = ?, 
+                `os` = ?, 
+                `os_version` = ?, 
+                `device_type` = ?,
+                `user_agent` = ?, 
+                `session_id` = ?,
+                `status` = 'active'
+                WHERE `id` = ?");
+            
+            if ($updateStmt) {
+                $updateStmt->bind_param(
+                    "sssssddsssssssssi",
+                    $ip,
+                    $location['country'],
+                    $location['country_code'],
+                    $location['region'],
+                    $location['city'],
+                    $location['latitude'],
+                    $location['longitude'],
+                    $location['timezone'],
+                    $location['isp'],
+                    $deviceInfo['browser'],
+                    $deviceInfo['browser_version'],
+                    $deviceInfo['os'],
+                    $deviceInfo['os_version'],
+                    $deviceInfo['device_type'],
+                    $userAgent,
+                    $sessionId,
+                    $existingSession['id']
+                );
+                
+                $updateStmt->execute();
+                $updateStmt->close();
+                
+                // Store activity ID in session for logout tracking
+                $_SESSION['activity_log_id'] = $existingSession['id'];
+                
+                return $existingSession['id'];
+            }
+        }
+    }
+    
+    // No active session found, create new record
     $stmt = $conDB->prepare("INSERT INTO `user_activity_log` (
         `user_id`, `emp_id`, `username`, `login_time`, `ip_address`, 
         `country`, `country_code`, `region`, `city`, 

@@ -129,27 +129,19 @@
         $actual_salary_base += (float)($salaryrow['other'] ?? 0);
     }
 
-    // *** Calculate individual deduction components for display ***
-    $gosi_deduction = 0;
-    // GOSI is calculated on Basic + actual Housing for Saudi employees
-    if ($emprow['country'] == 191 && !empty($emprow['gosi']) && (float)$emprow['gosi'] > 0) {
-        $gosi_base = (float)($salaryrow['basic'] ?? 0) + (float)($salaryrow['housing'] ?? 0);
-        if ($gosi_base > 0) {
-            $gosi_deduction = $gosi_base * ((float)$emprow['gosi'] / 100);
-        }
-    }
+    // *** Get deduction components from database (already calculated in EOS form) ***
+    // Fetch GOSI deduction from database instead of calculating
+    $gosi_deduction = (float)($eosrow['gosi_deduction'] ?? 0);
 
-    // Calculate potential salary and absent deduction based on ACTUAL salary and a 30-day month
-    $potential_last_month_salary = (float)($eosrow['curt_month_salry'] ?? 0);
-    $absent_deduction = 0;
-    if (!empty($eosrow['end_date']) && $actual_salary_base > 0 && isset($eosrow['curt_month_days'])) {
-        $daily_rate = $actual_salary_base / 30; // Standardized daily rate
-        $potential_last_month_salary = $daily_rate * (int)$eosrow['curt_month_days'];
-        $absent_deduction = $potential_last_month_salary - (float)($eosrow['curt_month_salry'] ?? 0);
-        $absent_deduction = max(0, $absent_deduction); // Ensure it's not negative
-    }
+    // Use ACTUAL salary paid (which already accounts for absences)
+    // Display the actual amount paid, not potential - absences are already reflected
+    $last_month_salary_paid = (float)($eosrow['curt_month_salry'] ?? 0);
 
 
+    // Fetch deduction fields from database
+    $absent_days = (int)($eosrow['absent_days'] ?? 0);
+    $deduction_hours = (float)($eosrow['deduction_hours'] ?? 0);
+    
     // Recalculate total earnings and deductions for clarity
     $overtime_hours = (float)($eosrow['overtime_hours'] ?? 0);
     $overtime_days = (float)($eosrow['overtime_days'] ?? 0);
@@ -171,9 +163,12 @@
     $loan_deduction = (float)($eosrow['deduct'] ?? 0);
     $net_payment = (float)($eosrow['net_payment'] ?? 0);
 
-    // Hourly deduction is what's left after accounting for earnings, net pay, and known deductions
-    $hourly_deduction = $total_earnings - $net_payment - $gosi_deduction - $loan_deduction;
-    $hourly_deduction = max(0, $hourly_deduction); // Ensure it's not negative
+    // Calculate deductions based on database values
+    $dailyRateDeduction = $actual_salary_base / 30;
+    $hourlyRateDeduction = $dailyRateDeduction / 8;
+    $absent_deduction_amount = $dailyRateDeduction * $absent_days;
+    $hourly_deduction_amount = $hourlyRateDeduction * $deduction_hours;
+    $total_absence_deductions = $absent_deduction_amount + $hourly_deduction_amount;
 
 ?>
 <!doctype html> 
@@ -392,13 +387,20 @@
                                                         </tr>
                                                         <tr>
                                                             <td><span class="label-pair"><span>Salary for Last Month (<?=($eosrow['curt_month_days'] ?? 'N/A')?> days)</span><span class="arabic-label">(أيام <?=($eosrow['curt_month_days'] ?? 'N/A')?>) راتب الشهر الأخير</span></span></td>
-                                                            <td class="text-right"><?=number_format($potential_last_month_salary, 2)?></td>
+                                                            <td class="text-right"><?=number_format($last_month_salary_paid, 2)?></td>
                                                         </tr>
                                                         
-                                                            <?php if ($overtime_earnings > 0): ?>
+                                                            <?php if ($overtime_hours > 0): ?>
                                                             <tr>
-                                                                <td><span class="label-pair"><span>Overtime Earnings<?php if ($overtime_hours > 0): ?> (<?=number_format($overtime_hours, 2)?> hrs)<?php endif; ?><?php if ($overtime_days > 0): ?><?php if ($overtime_hours > 0): ?> + <?php endif; ?>(<?=number_format($overtime_days, 2)?> days)<?php endif; ?></span><span class="arabic-label">أجر العمل الإضافي<?php if ($overtime_hours > 0): ?> (ساعات <?=number_format($overtime_hours, 2)?>)<?php endif; ?><?php if ($overtime_days > 0): ?><?php if ($overtime_hours > 0): ?> + <?php endif; ?>(أيام <?=number_format($overtime_days, 2)?>)<?php endif; ?></span></span></td>
-                                                                <td class="text-right text-success">+<?=number_format($overtime_earnings, 2)?></td>
+                                                                <td><span class="label-pair"><span>Overtime (Hours) - <?=number_format($overtime_hours, 2)?> hrs</span><span class="arabic-label">ساعات <?=number_format($overtime_hours, 2)?> - العمل الإضافي (ساعات)</span></span></td>
+                                                                <td class="text-right text-success">+<?=number_format($overtime_hourly_rate * $overtime_hours, 2)?></td>
+                                                            </tr>
+                                                            <?php endif; ?>
+                                                            
+                                                            <?php if ($overtime_days > 0): ?>
+                                                            <tr>
+                                                                <td><span class="label-pair"><span>Overtime (Days) - <?=number_format($overtime_days, 2)?> days</span><span class="arabic-label">أيام <?=number_format($overtime_days, 2)?> - العمل الإضافي (أيام)</span></span></td>
+                                                                <td class="text-right text-success">+<?=number_format($overtime_hourly_rate * 8 * $overtime_days, 2)?></td>
                                                             </tr>
                                                             <?php endif; ?>
                                                         
@@ -406,35 +408,35 @@
                                                             <td colspan="2"><span class="label-pair"><span><strong>Deductions</strong></span><span class="arabic-label"><strong>الخصومات</strong></span></span></td>
                                                         </tr>
 
-                                                        <?php if ($absent_deduction > 0.01): ?>
-                                                        <tr>
-                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Absent Deduction</span><span class="arabic-label">خصم الغياب</span></span></td>
-                                                            <td class="text-right text-danger">-<?=number_format($absent_deduction, 2)?></td>
-                                                        </tr>
-                                                        <?php endif; ?>
-
-                                                        <?php if ($gosi_deduction > 0): ?>
+                                                        <?php if ($gosi_deduction > 0.01): ?>
                                                         <tr>
                                                             <td><span class="label-pair" style="padding-left: 15px;"><span>GOSI Deduction</span><span class="arabic-label">خصم التأمينات</span></span></td>
                                                             <td class="text-right text-danger">-<?=number_format($gosi_deduction, 2)?></td>
                                                         </tr>
                                                         <?php endif; ?>
 
-                                                        <?php if ($hourly_deduction > 0.01): ?>
+                                                        <?php if ($absent_days > 0): ?>
                                                         <tr>
-                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Hourly Deductions</span><span class="arabic-label">خصومات الساعات</span></span></td>
-                                                            <td class="text-right text-danger">-<?=number_format($hourly_deduction, 2)?></td>
+                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Absent Days - <?=$absent_days?> days</span><span class="arabic-label">أيام <?=$absent_days?> - أيام الغياب</span></span></td>
+                                                            <td class="text-right text-danger">-<?=number_format($absent_deduction_amount, 2)?></td>
+                                                        </tr>
+                                                        <?php endif; ?>
+                                                        
+                                                        <?php if ($deduction_hours > 0): ?>
+                                                        <tr>
+                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Deduction (Hours) - <?=number_format($deduction_hours, 2)?> hrs</span><span class="arabic-label">ساعات <?=number_format($deduction_hours, 2)?> - خصم (ساعات)</span></span></td>
+                                                            <td class="text-right text-danger">-<?=number_format($hourly_deduction_amount, 2)?></td>
                                                         </tr>
                                                         <?php endif; ?>
 
-                                                        <?php if ($loan_deduction > 0): ?>
+                                                        <?php if ($loan_deduction > 0.01): ?>
                                                         <tr>
                                                             <td><span class="label-pair" style="padding-left: 15px;"><span>Loan / Other Deductions</span><span class="arabic-label">خصم السلف / أخرى</span></span></td>
                                                             <td class="text-right text-danger">-<?=number_format($loan_deduction, 2)?></td>
                                                         </tr>
                                                         <?php endif; ?>
                                                         
-                                                        <?php if ($absent_deduction < 0.01 && $gosi_deduction == 0 && $hourly_deduction < 0.01 && $loan_deduction == 0) : ?>
+                                                        <?php if ($gosi_deduction < 0.01 && $total_absence_deductions < 0.01 && $loan_deduction < 0.01) : ?>
                                                         <tr>
                                                             <td><span class="label-pair" style="padding-left: 15px;"><span>Total Deductions</span><span class="arabic-label">إجمالي الخصومات</span></span></td>
                                                             <td class="text-right text-danger">-0.00</td>

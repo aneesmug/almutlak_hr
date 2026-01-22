@@ -176,6 +176,7 @@
                                                 <!-- Action Buttons -->
                                                 <div class="col-lg-auto btn-group">
                                                     <button id="generatePayrollBtn" class="btn btn-lg btn-primary"><?=__('generate_payroll_for_selected_button')?></button>
+                                                    <button id="regeneratePayrollBtn" class="btn btn-lg btn-warning hidden" title="Re-generate payroll and skip hold employees" style="display:none;"><i class="mdi mdi-refresh"></i> <?=__('regenerate_payroll_button') ?? 'Re-generate Payroll'?></button>
                                                     <button id="generateReportBtn" class="btn btn-lg btn-outline-secondary"><?=__('generate_payroll_report_button')?></button>
                                                 </div>
                                             </div>
@@ -192,6 +193,7 @@
                                                         <th scope="col" style="width: 120px;"><?=__('employee_id')?></th>
                                                         <th scope="col"><?=__('name')?></th>
                                                         <th scope="col" style="width: 230px;"><?=__('company_label')?></th>
+                                                        <th scope="col" style="width: 160px;"><?=__('salary_payment_type_label')?></th>
                                                         <th scope="col" style="width: 200px;"><?=__('salary_label')?></th>
                                                         <th scope="col" style="width: 100px;"><?=__('actions_label')?></th>
                                                     </tr>
@@ -326,7 +328,7 @@ const buildDeductionsHtml = (deductions, payrollData) => {
         const deductionName = d.name || d.deduction || '';
         const noteAmount = parseFloat(d.amount || d.note || 0).toFixed(2);
         const hours = d.hours || '';
-        const days = calcType === 'daily_deduction' && hours ? (hours / 8).toFixed(2) : '';
+        const days = d.days || '';
         const isGosi = deductionName.toUpperCase() === 'GOSI';
         const isCalculated = calcType !== 'fixed';
         const isAmountReadonly = isGosi || isCalculated;
@@ -352,26 +354,27 @@ const buildDeductionsHtml = (deductions, payrollData) => {
             `;
         }
         return `
-        <div class="deduction-row row mb-2 align-items-center g-2" data-deduction-id="${deductionId}">
-            <div class="col-md-4">
+        <div class="deduction-row row mb-2 align-items-center g-3" data-deduction-id="${deductionId}">
+            <div class="col-12 col-md-6">
                 ${nameColumnHtml}
             </div>
-            <div class="col-md-3 deduction-period-input" style="${isCalculated ? '' : 'display: none;'}">
+            <div class="col-6 col-md-3 deduction-period-input" style="${isCalculated ? '' : 'display: none;'}">
                 <div class="input-group input-group-sm">
                     <input type="number" step="any" class="form-control form-control-sm deduction-hours" 
                            placeholder="${__('hours_placeholder')}" value="${hours}" style="${calcType !== 'hourly_deduction' ? 'display: none;' : ''}">
                     <input type="number" step="any" class="form-control form-control-sm deduction-days" 
                            placeholder="${__('days_placeholder')}" value="${days}" style="${calcType !== 'daily_deduction' ? 'display: none;' : ''}">
+                    <span class="input-group-text bg-light" style="${calcType === 'hourly_deduction' ? '' : (calcType === 'daily_deduction' ? '' : 'display: none;')}">${calcType === 'hourly_deduction' ? 'hrs' : 'days'}</span>
                 </div>
             </div>
-            <div class="col-md">
+            <div class="col-6 col-md-2">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                     <input type="text" class="form-control deduction-amount" value="${noteAmount}" 
-                           placeholder="${__('amount_placeholder')}">
+                           placeholder="${__('amount_placeholder')}" ${isAmountReadonly ? 'readonly' : ''}>
                 </div>
             </div>
-            <div class="col-md-1 text-center">
+            <div class="col-12 col-md-1 text-end text-md-center">
                 ${!isGosi ? `<button class="btn btn-sm btn-outline-danger delete-deduction-btn"><i class="fas fa-trash-alt"></i></button>` : ''}
             </div>
         </div>`;
@@ -415,7 +418,7 @@ function buildBenefitsHtml(benefits, benefitTypes) {
             ? `<input type="text" class="form-control form-control-sm benefit-name bg-light" 
                        data-benefit-id="${b.id}" value="${displayName}" readonly>`
             : (benefitTypes && benefitTypes.length > 0
-                ? `<select class="form-select form-select-sm benefit-type custom-select" data-benefit-id="${b.id}">
+                ? `<select class="form-control form-control-sm benefit-type" data-benefit-id="${b.id}">
                     <option>${__('select_type_option')}</option>
                     ${benefitTypes.map(type => `
                         <option value="${type.id}" data-calculation="${type.calculation_type}" ${type.name === benefitName ? 'selected' : ''}>
@@ -428,21 +431,19 @@ function buildBenefitsHtml(benefits, benefitTypes) {
             );
 
         return `
-            <div class="benefit-row row mb-2 align-items-center g-2">
-                <div class="col-md-6">
+            <div class="benefit-row row mb-2 align-items-center g-3">
+                <div class="col-12 col-md-6">
                     ${benefitOptionsHtml}
                     ${benefitLabel}
                 </div>
-                <div class="col-md-2">
-                    </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-5">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                         <input type="text" step="0.01" class="form-control benefit-amount ${isVacationBenefit ? 'bg-light' : ''}" 
                                data-benefit-id="${b.id}" value="${benefitAmount}" placeholder="${__('amount_placeholder')}" ${isVacationBenefit ? 'readonly' : ''}>
                     </div>
                 </div>
-                <div class="col-md-1 text-center">
+                <div class="col-12 col-md-1 text-end text-md-center">
                     <button class="btn btn-sm btn-outline-danger delete-benefit-btn" data-benefit-id="${b.id}" ${isVacationBenefit ? 'disabled title="Cannot delete vacation benefits"' : ''}>
                         <i class="fas fa-trash-alt"></i>
                     </button>
@@ -523,7 +524,20 @@ function initializeDataTable() {
             },
             { data: 'emp_id' },
             { data: 'name' },
-            { data: 'comp_name' }, // Use 'dept' field for department name
+                { data: 'comp_name' }, // Company name
+                { 
+                    data: 'payment_type',
+                    render: function(data) {
+                        const pt = parseInt(data || 1, 10);
+                        if (pt === 2) {
+                            return `<span class="badge badge-info">${__('cash_option') || 'Cash'}</span>`;
+                        }
+                        if (pt === 3) {
+                            return `<span class="badge badge-warning" style="background-color: #ff9800;">${__('hold_option') || 'Hold'}</span>`;
+                        }
+                        return `<span class="badge badge-primary">${__('bank_option') || 'Bank'}</span>`;
+                    }
+                },
             { 
                 data: 'salary',
                 render: function(data, type, row) {
@@ -601,6 +615,9 @@ async function fetchEmployees() {
             employeeTable.clear().rows.add(allEmployeesData).draw();
             populateCompanyFilter(allEmployeesData);
             addEventListeners(); // Re-attach listeners after data update
+            
+            // Show/hide Re-generate button based on whether any payroll is already generated
+            updateRegenerateButtonVisibility();
         } else {
             showError('Error', data.message || 'Failed to load employee data.');
             employeeTable.clear().draw(); // Clear table on error
@@ -615,6 +632,20 @@ async function fetchEmployees() {
                 // Only show no data message if there truly is no data after fetch
             noDataMessage.removeClass('hidden').text(__('no_employee_data_available_for_month'));
         }
+    }
+}
+
+function updateRegenerateButtonVisibility() {
+    // Check if any employee has a generated or paid payroll status
+    const hasGeneratedPayroll = Array.isArray(allEmployeesData)
+        ? allEmployeesData.some(emp => emp.payroll_status === 'generated' || emp.payroll_status === 'paid')
+        : false;
+    
+    // Show the button only if payroll exists
+    if (hasGeneratedPayroll) {
+        $('#regeneratePayrollBtn').removeClass('hidden').show();
+    } else {
+        $('#regeneratePayrollBtn').addClass('hidden').hide();
     }
 }
         
@@ -724,6 +755,10 @@ function addEventListeners() {
     $('#generateReportBtn').off('click', generatePayrollReport).on('click', generatePayrollReport);
     currentEventListeners.push(() => $('#generateReportBtn').off('click', generatePayrollReport));
 
+    // New: Re-generate Payroll button
+    $('#regeneratePayrollBtn').off('click', regeneratePayroll).on('click', regeneratePayroll);
+    currentEventListeners.push(() => $('#regeneratePayrollBtn').off('click', regeneratePayroll));
+
     // Handle delete buttons within the SweetAlert2 modal for benefits
     // These event listeners need to be attached dynamically *after* the SweetAlert2 modal is opened.
     // This is handled within the `showPayrollDetails` function's `didOpen` callback.
@@ -793,25 +828,69 @@ async function generatePayroll() {
 
         // If the server responds with 'warning', show a warning message (some employees skipped)
         if (result.status === 'warning') {
+            const holdEmployees = holdEmployeesCache();
+            const holdSkippedHtml = buildHoldSkippedHtml();
             Swal.fire({
                 icon: 'warning',
                 title: __('processing_completed_with_warnings') || 'Processing Completed with Warnings',
-                html: result.message.replace(/\n/g, '<br>'),
+                html: `${(result.message || '').replace(/\n/g, '<br>')}${holdSkippedHtml}`,
                 confirmButtonColor: '#ffc107',
                 confirmButtonText: __('ok'),
                 allowOutsideClick: false,
+                width: '70%',
+                didOpen: () => {
+                    if (holdEmployees.length) {
+                        $('#holdEmployeesTable').DataTable({
+                            data: holdEmployees,
+                            columns: [
+                                { data: 'emp_id' },
+                                { data: 'name' },
+                                { data: 'department_name' },
+                                { data: 'comp_name' },
+                                { data: 'sponsor' }
+                            ],
+                            paging: true,
+                            searching: true,
+                            info: false,
+                            lengthChange: false,
+                            ordering: true
+                        });
+                    }
+                }
             });
             fetchEmployees(); // Refresh employee list to update status
         }
         // If the server responds with 'success', show a success message
         else if (result.status === 'success') {
+            const holdEmployees = holdEmployeesCache();
+            const holdSkippedHtml = buildHoldSkippedHtml();
             Swal.fire({
                 icon: 'success',
                 title: __('payroll_generated_success_title'),
-                text: result.message,
+                html: `${(result.message || '').replace(/\n/g, '<br>')}${holdSkippedHtml}`,
                 confirmButtonColor: '#6366f1',
                 confirmButtonText: __('ok'),
                 allowOutsideClick: false,
+                width: '70%',
+                didOpen: () => {
+                    if (holdEmployees.length) {
+                        $('#holdEmployeesTable').DataTable({
+                            data: holdEmployees,
+                            columns: [
+                                { data: 'emp_id' },
+                                { data: 'name' },
+                                { data: 'department_name' },
+                                { data: 'comp_name' },
+                                { data: 'sponsor' }
+                            ],
+                            paging: true,
+                            searching: true,
+                            info: false,
+                            lengthChange: false,
+                            ordering: true
+                        });
+                    }
+                }
             });
             fetchEmployees(); // Refresh employee list to update status
         } else {
@@ -823,6 +902,207 @@ async function generatePayroll() {
         console.error('Error:', error);
         // The error message from the PHP script will be displayed here
         showError(__('error_generating_payroll_title'), error.message);
+    }
+}
+
+const holdEmployeesCache = () => {
+    return Array.isArray(allEmployeesData)
+        ? allEmployeesData.filter(emp => parseInt(emp.payment_type || 1, 10) === 3)
+        : [];
+};
+
+const buildHoldSkippedHtml = () => {
+    const holdEmployees = holdEmployeesCache();
+    if (!holdEmployees.length) return '';
+    const tableId = 'holdEmployeesTable';
+    const title = `${__('payroll_on_hold')} - ${__('employees_skipped_list')}`;
+    return `
+        <hr>
+        <div style="text-align:left;">
+            <strong class="text-warning">${title} (${holdEmployees.length})</strong>
+            <div class="table-responsive" style="margin-top:10px;">
+                <table id="${tableId}" class="table table-sm table-striped" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>${__('emp_id')}</th>
+                            <th>${__('name')}</th>
+                            <th>${__('department') || 'Department'}</th>
+                            <th>${__('company_label') || 'Company'}</th>
+                            <th>${__('sponsor') || 'Sponsor'}</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>`;
+};
+
+async function regeneratePayroll() {
+    // Get ALL employees (no checkbox filtering) - will regenerate for all non-hold employees
+    const allEmployeeIds = Array.isArray(allEmployeesData)
+        ? allEmployeesData.filter(emp => {
+            const pt = parseInt(emp.payment_type || 1, 10);
+            return pt !== 3; // Skip hold employees (payment_type = 3)
+          })
+          .map(emp => emp.emp_id)
+        : [];
+
+    const payrollMonth = $('#payrollMonth').val();
+
+    // Validate that a payroll month is selected
+    if (!payrollMonth) {
+        showWarning(__('month_not_selected_warning_title'), __('please_select_payroll_month_warning'));
+        return;
+    }
+
+    if (allEmployeeIds.length === 0) {
+        showWarning(__('no_employees_available_warning_title') || 'No Employees', __('no_active_employees_available_for_regeneration') || 'No active (non-hold) employees available for regeneration.');
+        return;
+    }
+
+    // Fetch existing benefits and deductions for the month
+    let existingBenefitsDeductions = { has_benefits: false, has_deductions: false, count: 0 };
+    try {
+        const checkResponse = await fetch(`./includes/api/check_payroll_benefits_deductions.php?month=${payrollMonth}`);
+        if (checkResponse.ok) {
+            existingBenefitsDeductions = await checkResponse.json();
+        }
+    } catch (e) {
+        console.warn('Could not check existing benefits/deductions:', e);
+    }
+
+    // Build warning message if benefits/deductions exist
+    let warningHtml = `<div style="text-align:left;">${__('regenerate_payroll_confirmation_message') || 'This will update payroll for all non-hold employees and skip those on hold. Continue?'}</div>`;
+    if (existingBenefitsDeductions.has_benefits || existingBenefitsDeductions.has_deductions) {
+        const items = [];
+        if (existingBenefitsDeductions.has_benefits) {
+            items.push(`<i class="fas fa-gift text-info"></i> ${__('benefits_section')}`);
+        }
+        if (existingBenefitsDeductions.has_deductions) {
+            items.push(`<i class="fas fa-minus-circle text-danger"></i> ${__('deductions_section')}`);
+        }
+        warningHtml += `<div style="margin-top:15px; padding:10px; background-color:#fff3cd; border-left:4px solid #ffc107; border-radius:4px;">
+            <strong style="color:#856404;">⚠️ ${__('warning_existing_benefits_deductions') || 'Warning: Existing Benefits/Deductions'}</strong>
+            <div style="margin-top:8px; color:#856404;">
+                ${items.join('<br>')}
+            </div>
+            <small style="display:block; margin-top:8px; color:#856404;">${__('these_will_be_replaced_with_freshly_calculated_values')}</small>
+        </div>`;
+    }
+
+    // Show confirmation dialog with warning
+    const confirmation = await Swal.fire({
+        title: __('regenerate_payroll_confirmation_title') || 'Regenerate Payroll?',
+        html: warningHtml,
+        icon: existingBenefitsDeductions.has_benefits || existingBenefitsDeductions.has_deductions ? 'warning' : 'info',
+        showCancelButton: true,
+        confirmButtonColor: '#ff9800',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: __('yes_regenerate_button') || 'Yes, Regenerate',
+        cancelButtonText: __('cancel'),
+        allowOutsideClick: false
+    });
+
+    if (!confirmation.isConfirmed) return;
+
+    // Show a loading indicator while processing
+    Swal.fire({
+        title: __('regenerating_payroll_title') || 'Regenerating Payroll',
+        html: __('please_wait_regenerating_payroll') || 'Please wait while payroll is being regenerated...',
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        allowEscapeKey: false
+    });
+
+    try {
+        // Send the request to the server to regenerate payroll
+        const response = await fetch('./includes/api/process_payroll.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                employee_ids: allEmployeeIds,
+                month: payrollMonth
+            }),
+        });
+        const result = await response.json();
+
+        // If the server responds with 'warning', show a warning message (some employees skipped)
+        if (result.status === 'warning') {
+            const holdEmployees = holdEmployeesCache();
+            const holdSkippedHtml = buildHoldSkippedHtml();
+            Swal.fire({
+                icon: 'warning',
+                title: __('processing_completed_with_warnings') || 'Processing Completed with Warnings',
+                html: `${(result.message || '').replace(/\n/g, '<br>')}${holdSkippedHtml}`,
+                confirmButtonColor: '#ffc107',
+                confirmButtonText: __('ok'),
+                allowOutsideClick: false,
+                didOpen: () => {
+                    if (holdEmployees.length) {
+                        $('#holdEmployeesTable').DataTable({
+                            data: holdEmployees,
+                            columns: [
+                                { data: 'emp_id' },
+                                { data: 'name' },
+                                { data: 'department_name' },
+                                { data: 'comp_name' },
+                                { data: 'sponsor' }
+                            ],
+                            paging: true,
+                            searching: true,
+                            info: false,
+                            lengthChange: false,
+                            ordering: true
+                        });
+                    }
+                }
+            });
+            fetchEmployees(); // Refresh employee list to update status
+        }
+        // If the server responds with 'success', show a success message
+        else if (result.status === 'success') {
+            const holdEmployees = holdEmployeesCache();
+            const holdSkippedHtml = buildHoldSkippedHtml();
+            Swal.fire({
+                icon: 'success',
+                title: __('payroll_regenerated_success_title') || 'Payroll Regenerated Successfully',
+                html: `${(result.message || '').replace(/\n/g, '<br>')}${holdSkippedHtml}`,
+                confirmButtonColor: '#6366f1',
+                confirmButtonText: __('ok'),
+                allowOutsideClick: false,
+                width: '70%',
+                didOpen: () => {
+                    if (holdEmployees.length) {
+                        $('#holdEmployeesTable').DataTable({
+                            data: holdEmployees,
+                            columns: [
+                                { data: 'emp_id' },
+                                { data: 'name' },
+                                { data: 'department_name' },
+                                { data: 'comp_name' },
+                                { data: 'sponsor' }
+                            ],
+                            paging: true,
+                            searching: true,
+                            info: false,
+                            lengthChange: false,
+                            ordering: true
+                        });
+                    }
+                }
+            });
+            fetchEmployees(); // Refresh employee list to update status
+        } else {
+            // If the server responds with an error, throw an error
+            throw new Error(result.message || 'An unexpected error occurred.');
+        }
+    } catch (error) {
+        // Catch any errors from the fetch or from the server's response and display them
+        console.error('Error:', error);
+        // The error message from the PHP script will be displayed here
+        showError(__('error_regenerating_payroll_title') || 'Error Regenerating Payroll', error.message);
     }
 }
 
@@ -1735,7 +2015,6 @@ async function showPayrollDetails(empId, empName, month) {
                             hours: hoursInput ? parseFloat(hoursInput.value || 0) : null
                         };
                     }).filter(b => b.benefit !== '' || b.amount > 0);
-
                     // --- REVISED LOGIC TO GATHER DEDUCTIONS ---
                     const updatedDeductions = [];
                     document.querySelectorAll('#deductions-list .deduction-row').forEach(row => {
@@ -1752,34 +2031,41 @@ async function showPayrollDetails(empId, empName, month) {
                                 deduction: 'GOSI',
                                 note: parseFloat(row.querySelector('.deduction-amount').value) || 0,
                                 hours: 0,
+                                days: 0,
                             });
                         } else {
                             // This is a regular or new deduction row
                             const calcType = typeSelect ? typeSelect.value : 'fixed';
                             const nameInput = row.querySelector('.deduction-name');
                             let hours = 0;
+                            let days = 0;
                             let name = '';
 
                             if (calcType === 'hourly_deduction') {
                                 hours = parseFloat(row.querySelector('.deduction-hours').value) || 0;
-                                name = __('hourly_deduction_default_name'); // Use a default name
+                                days = 0;
+                                name = nameInput ? nameInput.value.trim() : __('hourly_deduction_default_name');
                             } else if (calcType === 'daily_deduction') {
-                                const days = parseFloat(row.querySelector('.deduction-days').value) || 0;
-                                hours = days * 8;
-                                name = __('daily_deduction_default_name'); // Use a default name
+                                days = parseFloat(row.querySelector('.deduction-days').value) || 0;
+                                hours = 0;
+                                name = nameInput ? nameInput.value.trim() : __('daily_deduction_default_name');
                             } else {
                                 // This is a "Fixed Amount" deduction, so we get its name
-                                name = nameInput.value.trim();
+                                hours = 0;
+                                days = 0;
+                                name = nameInput ? nameInput.value.trim() : '';
                             }
                             
-                            // Only add it if there's a name or an amount
-                            if (name) {
+                            const amountVal = parseFloat(row.querySelector('.deduction-amount').value) || 0;
+                            // Save if we have a name OR a non-zero amount (covers hourly/daily entries where name is blank)
+                            if (name || amountVal > 0) {
                                 updatedDeductions.push({
                                     id: deductionId,
                                     calculation_type: calcType,
-                                    deduction: name,
-                                    note: parseFloat(row.querySelector('.deduction-amount').value) || 0,
+                                    deduction: name || (calcType === 'hourly_deduction' ? __('hourly_deduction_default_name') : (calcType === 'daily_deduction' ? __('daily_deduction_default_name') : '')),
+                                    note: amountVal,
                                     hours: hours,
+                                    days: days,
                                 });
                             }
                         }
@@ -1946,55 +2232,12 @@ async function showPayrollDetails(empId, empName, month) {
             }
         }
 
-        // --- Helper: ensure Arabic-capable font for PDF ---
-        const AMIRI_BASE64 = "AAEAAAARAQAABAAwRkZUTV5DHtgAAAEcAAAAHEdERUYAJwCmAAABKAAAACBPUy8yLohbzgAAAVgAAABgY21hcAAlAH8AAAGQAAABWmdhc3D//wADAAABwAAAAAhnbHlmfSw2ZwAAAdgAAAPWaGVhZAVaDQ4AAAz0AAAANmhoZWEOkgBoAAANJAAAACRobXR4AhQBKQAADWgAAAAkbG9jYQD4APsAAA18AAAANm1heHAAjQBkAAANpAAAACBuYW1lYl70xAAADZwAAAJFcG9zdBz5C2IAAA9cAAAB8QABAAAAAQAAAADQ/c3dXw889QADAAEAAAAAAAAAAAAAAAAAAAABAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAACAAQAAAQIBAwEEAQUBBgEHAQgBCQEKAQsBDAENAQ4BDwEQAREBEgETARQBFQEWARcBGAEZARoBGwEcAR0BHgEfASABIQEiASMBJAEoASkBKgErASwBLQEuAS8BMAExATIBMwE0ATUBNgE3ATgBOQE6ATsBPAE9AT4BPwFAAUEBQgFDAUQBRQFGAUcBSAFJAUoBSwFMAU0BTgFPAUABUQFSAVMBVAFVAVYBVwFYAVkBWgFbAVwBXQFeAV8BYAFhAWIBYwFkAWUBZgFnAWgBaQFqAWsBbAFtAW4BbwFwAXEBcgFzAXQBdgF4AX0BgAGCAYQBhwGIAZABkwGUAZgBmwGfAaEBowGlAaYBqgGsAbABswG1AbwBxAHLAcsBzAHNAc4B0AHTAdMB1AHWAdoB3AHgAeoB8QH1AfcB+QH7AfsB/QIBAggCCgIMAg4CEAIWAhgCGgIcAh4CIQIjAiUCIwIxAjMCOQI7Aj0CPwJBAkMCRQJHAkkCSwJNAlACUwJVAlcCWQJbAl0CXwJhAmMCZQJnAmsCbgJxAnMCdgJ5AnoCfQKAAoMChQKHAokCigKMAo8CkQKTApcCmQKbApcCnAKhAqMClwKkAqoCrAKyArQCugK/AsMCxgLJAssC0ALUAtcC2QLbAt0C3wLgAuIC5ALmAu4C8ALzAvUC9wL5AvsC/QMCAwQDBgMIAwoDDAMOAxADEgMUAw4DGANCA0YDTAOEA5oDwgPWA/oEDgQyBD4EQgRIBFUExATiBPwFAQUNBRsFKQVEhU0FYAVihXIFeAWQBaAFsAXCBdYF9AX+BgoGJgZEBmYGjgaRBpwGswbKBtwG5Qb4BwAHDQcTBx8HJwc5B0MHRwdRB1UHVwdpB3sHhAeMB5YHmAefB64HvQfAB8IHxgfXCE8IXQhkCGgIfgiDCI0IlQigCKwIuQi+CMQIygjSCM4I2AjhCOkJAgkGCQ4JGgkvCTIJNwk+CUIJRglMCVQJXwlkCW8JdQl4CX4JgwmCCYYJjgmeCaUJrAmzCbkJxAnUCd4J6woPCg8KFwojCisKMQo9CkEKRwpSCmUKbgqBCocKkgqVCpwKpgqwCsYK0wrZCvILBQsRCxYLGgsjCyoLMQwADYANmAgYDDAOPg42DigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDigOKA4oDjAOAAA=";
-        let pdfArabicFontLoaded = false;
-        let pdfArabicFontFailed = false;
+        // --- Helper: PDF font handler (skip custom fonts due to jsPDF compatibility) ---
         async function ensurePdfArabicFont(doc) {
-            if (pdfArabicFontLoaded) return pdfArabicFontLoaded;
-            if (pdfArabicFontFailed) return false;
-
-            const tryLoad = async (fontUrl, fontName) => {
-                const resp = await fetch(fontUrl);
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const buffer = await resp.arrayBuffer();
-                const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-                doc.addFileToVFS(`${fontName}.ttf`, base64);
-                doc.addFont(`${fontName}.ttf`, fontName, 'normal');
-                return fontName;
-            };
-
-            // 1) Inline embedded Amiri font (no network required)
-            try {
-                doc.addFileToVFS('Amiri-Regular.ttf', AMIRI_BASE64);
-                doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-                pdfArabicFontLoaded = 'Amiri';
-                return 'Amiri';
-            } catch (inlineErr) {
-                console.warn('Inline Amiri font load failed. Trying remote.', inlineErr);
-            }
-
-            // 2) Remote Amiri (fallback)
-            try {
-                const remoteFontName = 'Amiri';
-                const remoteFontUrl = 'https://fonts.gstatic.com/s/amiri/v23/J7afnpd8CGxBHpUrtLQ.ttf';
-                const name = await tryLoad(remoteFontUrl, remoteFontName);
-                pdfArabicFontLoaded = name;
-                return name;
-            } catch (remoteErr) {
-                console.warn('Primary Arabic font load failed (remote Amiri). Trying Cairo.', remoteErr);
-                try {
-                    const fallbackName = 'Cairo';
-                    const fallbackUrl = 'https://fonts.gstatic.com/s/cairo/v20/SLXGc1nY6HkvZG9iQw.ttf';
-                    const name = await tryLoad(fallbackUrl, fallbackName);
-                    pdfArabicFontLoaded = name;
-                    return name;
-                } catch (fallbackErr) {
-                    console.warn('Arabic font load failed. Falling back to default font (Arabic will not render).', fallbackErr);
-                    pdfArabicFontFailed = true;
-                    return false;
-                }
-            }
+            // jsPDF will use default Helvetica font
+            // Custom font loading was causing parser errors; using built-in font instead
+            console.info('PDF report using default font (Helvetica). Arabic characters may not render.');
+            return false;
         }
 
         // --- PDF Export Function (MODIFIED FOR DETAILED REPORT) ---
@@ -2005,7 +2248,7 @@ async function showPayrollDetails(empId, empName, month) {
                 unit: 'pt', // Use points for better control over font sizes and margins
                 format: 'a4'
             });
-            const arabicFontName = await s(doc);
+            const arabicFontName = await ensurePdfArabicFont(doc);
             if (arabicFontName) {
                 doc.setFont(arabicFontName);
             }
@@ -2033,19 +2276,88 @@ async function showPayrollDetails(empId, empName, month) {
                 ]
             ];
 
+            // Filter out cash and hold employees for detailed exports
+            const filteredReportData = Array.isArray(reportData)
+                ? reportData.filter(p => {
+                    const pt = parseInt(p.payment_type || 1, 10);
+                    return pt !== 2 && pt !== 3; // exclude cash (2) and hold (3)
+                })
+                : [];
+
+            if (filteredReportData.length === 0) {
+                showWarning(__('no_data_available_in_table'), __('no_records_to_export'));
+                return;
+            }
+
             // Sort the reportData array by emp_id in ascending order before mapping
-            reportData.sort((a, b) => a.emp_id.localeCompare(b.emp_id, undefined, { numeric: true }));
+            filteredReportData.sort((a, b) => a.emp_id.localeCompare(b.emp_id, undefined, { numeric: true }));
 
             // Prepare table body with one row per employee, matching the sub-headers
-            const body = reportData.map((p, index) => {
-                // Format benefits list into a multi-line string
+            const body = filteredReportData.map((p, index) => {
+                // Format benefits list into a multi-line string with hours/days support
                 const benefitsDetails = p.benefits_list && p.benefits_list.length > 0
-                    ? p.benefits_list.map(b => `${b.benefit || __('benefit')}: ${parseFloat(b.note || 0).toFixed(2)}`).join('\n')
+                    ? p.benefits_list.map(b => {
+                        const amount = parseFloat(b.note || 0).toFixed(2);
+                        const hoursVal = parseFloat(b.hours || 0);
+                        const daysVal = parseFloat(b.days || 0);
+                        
+                        // Determine format based on calculation type
+                        let detailsText = '';
+                        
+                        if (b.calculation_type === 'by_days') {
+                            // Show days and amount
+                            if (daysVal > 0) {
+                                detailsText = `${daysVal} Days: ${amount}`;
+                            } else {
+                                detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                            }
+                        } else if (b.calculation_type === 'by_hours' || b.calculation_type === 'overtime_basic' || b.calculation_type === 'overtime_total') {
+                            // Show hours and amount
+                            if (hoursVal > 0) {
+                                detailsText = `${hoursVal} Hours: ${amount}`;
+                            } else {
+                                detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                            }
+                        } else {
+                            // For fixed or other types, show name and amount
+                            detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                        }
+                        
+                        return detailsText;
+                    }).join('\n')
                     : 'N/A';
 
-                // Format deductions list into a multi-line string
+                // Format deductions list into a multi-line string with hours/days support
                 const deductionsDetails = p.deductions_list && p.deductions_list.length > 0
-                    ? p.deductions_list.map(d => `${d.deduction || __('deduction')}: ${parseFloat(d.note || 0).toFixed(2)}`).join('\n')
+                    ? p.deductions_list.map(d => {
+                        const amount = parseFloat(d.note || 0).toFixed(2);
+                        const hoursVal = parseFloat(d.hours || 0);
+                        const daysVal = parseFloat(d.days || 0);
+                        
+                        // Determine format based on calculation type
+                        let detailsText = '';
+                        
+                        if (d.calculation_type === 'daily_deduction') {
+                            // Show days and amount
+                            if (daysVal > 0) {
+                                detailsText = `${daysVal} Days: ${amount}`;
+                            } else {
+                                detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                            }
+                        } else if (d.calculation_type === 'hourly_deduction' || d.calculation_type === 'hourly') {
+                            // Show hours and amount
+                            if (hoursVal > 0) {
+                                detailsText = `${hoursVal} Hours: ${amount}`;
+                            } else {
+                                detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                            }
+                        } else {
+                            // For fixed or other types, show name and amount
+                            detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                        }
+                        
+                        return detailsText;
+                    }).join('\n')
                     : 'N/A';
 
                 // Map numeric payment_type to label for display
@@ -2118,10 +2430,10 @@ async function showPayrollDetails(empId, empName, month) {
                     13: { halign: 'right' },
                     14: { halign: 'right', fontStyle: 'bold' }, // Gross Salary
                     // Benefits Columns
-                    15: { halign: 'left' }, // Details
+                    15: { halign: 'left', valign: 'top', overflow: 'linebreak' }, // Details with line breaks
                     16: { halign: 'right' }, // Total
                     // Deductions Columns
-                    17: { halign: 'left' }, // Details
+                    17: { halign: 'left', valign: 'top', overflow: 'linebreak' }, // Details with line breaks
                     18: { halign: 'right' }, // Total
                     // Net Salary
                     19: { halign: 'right', fontStyle: 'bold' } 
@@ -2135,7 +2447,15 @@ async function showPayrollDetails(empId, empName, month) {
             });
 
             // Save the PDF
-            doc.save(`detailed_payroll_report_${selectedMonth.replace('-', '_')}.pdf`);
+            const now = new Date();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const yy = String(now.getFullYear()).slice(-2);
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            const pdfFilename = `details_payroll_report_${mm}${dd}${yy}${hh}${mins}${ss}.pdf`;
+            doc.save(pdfFilename);
         }
 
 
@@ -2225,7 +2545,14 @@ async function showPayrollDetails(empId, empName, month) {
             XLSX.utils.book_append_sheet(wb, ws, "Payroll Report");
 
             // Generate the XLSX file and trigger download with a dynamic filename
-            const fileName = `bank_payroll_${selectedMonth.replace('-', '_')}.xlsx`;
+            const now = new Date();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const yy = String(now.getFullYear()).slice(-2);
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            const fileName = `bank_payroll_${mm}${dd}${yy}${hh}${mins}${ss}.xlsx`;
             XLSX.writeFile(wb, fileName);
         }
 
@@ -2238,8 +2565,21 @@ async function showPayrollDetails(empId, empName, month) {
                 return;
             }
 
+            // Filter out cash and hold employees for detailed exports
+            const filteredReportData = Array.isArray(reportData)
+                ? reportData.filter(p => {
+                    const pt = parseInt(p.payment_type || 1, 10);
+                    return pt !== 2 && pt !== 3; // exclude cash (2) and hold (3)
+                })
+                : [];
+
+            if (filteredReportData.length === 0) {
+                showWarning(__('no_data_available_in_table'), __('no_records_to_export'));
+                return;
+            }
+
             // Sort the reportData array by emp_id in ascending order
-            reportData.sort((a, b) => a.emp_id.localeCompare(b.emp_id, undefined, { numeric: true }));
+            filteredReportData.sort((a, b) => a.emp_id.localeCompare(b.emp_id, undefined, { numeric: true }));
 
             // Create a new workbook
             const wb = XLSX.utils.book_new();
@@ -2258,16 +2598,72 @@ async function showPayrollDetails(empId, empName, month) {
             ];
 
             // 2. Map reportData to detailed row format
-            const dataRows = reportData.map((p, index) => {
-                // Format benefits details
+            const dataRows = filteredReportData.map((p, index) => {
+                // Format benefits details; keep cell empty when none; use LF for Excel line breaks
                 const benefitsDetails = p.benefits_list && p.benefits_list.length > 0
-                    ? p.benefits_list.map(b => `${b.benefit || 'Benefit'}: ${parseFloat(b.note || 0).toFixed(2)}`).join('\n')
-                    : 'N/A';
+                    ? p.benefits_list.map(b => {
+                        const amount = parseFloat(b.note || 0).toFixed(2);
+                        const hoursVal = parseFloat(b.hours || 0);
+                        const daysVal = parseFloat(b.days || 0);
+                        
+                        // Determine format based on calculation type
+                        let detailsText = '';
+                        
+                        if (b.calculation_type === 'by_days') {
+                            // Show days and amount
+                            if (daysVal > 0) {
+                                detailsText = `${daysVal} Days: ${amount}`;
+                            } else {
+                                detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                            }
+                        } else if (b.calculation_type === 'by_hours' || b.calculation_type === 'overtime_basic' || b.calculation_type === 'overtime_total') {
+                            // Show hours and amount
+                            if (hoursVal > 0) {
+                                detailsText = `${hoursVal} Hours: ${amount}`;
+                            } else {
+                                detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                            }
+                        } else {
+                            // For fixed or other types, show name and amount
+                            detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                        }
+                        
+                        return detailsText;
+                    }).join(' | ')
+                    : '';
 
-                // Format deductions details
+                // Format deductions details; keep cell empty when none; use | separator for Excel
                 const deductionsDetails = p.deductions_list && p.deductions_list.length > 0
-                    ? p.deductions_list.map(d => `${d.deduction || 'Deduction'}: ${parseFloat(d.note || 0).toFixed(2)}`).join('\n')
-                    : 'N/A';
+                    ? p.deductions_list.map(d => {
+                        const amount = parseFloat(d.note || 0).toFixed(2);
+                        const hoursVal = parseFloat(d.hours || 0);
+                        const daysVal = parseFloat(d.days || 0);
+                        
+                        // Determine format based on calculation type
+                        let detailsText = '';
+                        
+                        if (d.calculation_type === 'daily_deduction') {
+                            // Show days and amount
+                            if (daysVal > 0) {
+                                detailsText = `${daysVal} Days: ${amount}`;
+                            } else {
+                                detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                            }
+                        } else if (d.calculation_type === 'hourly_deduction' || d.calculation_type === 'hourly') {
+                            // Show hours and amount
+                            if (hoursVal > 0) {
+                                detailsText = `${hoursVal} Hours: ${amount}`;
+                            } else {
+                                detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                            }
+                        } else {
+                            // For fixed or other types, show name and amount
+                            detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                        }
+                        
+                        return detailsText;
+                    }).join(' | ')
+                    : '';
 
                 // Map numeric payment_type to label for display
                 const pt = parseInt(p.payment_type || 1, 10);
@@ -2342,7 +2738,7 @@ async function showPayrollDetails(empId, empName, month) {
             // Shifted by one column due to added Payment Type column
             const numericColumns = ['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'S', 'U', 'V']; // All monetary columns
 
-            // Apply number format to all data rows
+            // Apply number format and wrapText styling to all data rows
             for (let i = 1; i <= dataRows.length; i++) {
                 numericColumns.forEach(colLetter => {
                     const cellAddress = colLetter + (i + 1);
@@ -2350,6 +2746,36 @@ async function showPayrollDetails(empId, empName, month) {
                         ws[cellAddress].z = numberFormat;
                     }
                 });
+
+                // Apply wrapText to Benefits Details (column R) and Deductions Details (column T)
+                const rCell = 'R' + (i + 1);
+                const tCell = 'T' + (i + 1);
+                
+                if (ws[rCell] && ws[rCell].v) {
+                    // Ensure cell has proper styling with wrapText
+                    ws[rCell].s = {
+                        alignment: { 
+                            horizontal: "left", 
+                            vertical: "top", 
+                            wrapText: true,
+                            shrinkToFit: false
+                        },
+                        font: { size: 10 }
+                    };
+                }
+                
+                if (ws[tCell] && ws[tCell].v) {
+                    // Ensure cell has proper styling with wrapText
+                    ws[tCell].s = {
+                        alignment: { 
+                            horizontal: "left", 
+                            vertical: "top", 
+                            wrapText: true,
+                            shrinkToFit: false
+                        },
+                        font: { size: 10 }
+                    };
+                }
             }
 
             // Style header row (bold and background color)
@@ -2368,8 +2794,15 @@ async function showPayrollDetails(empId, empName, month) {
             // Add the worksheet to the workbook
             XLSX.utils.book_append_sheet(wb, ws, "Detailed Payroll Report");
 
-            // Generate the XLSX file and trigger download
-            const fileName = `detailed_payroll_report_${selectedMonth.replace('-', '_')}.xlsx`;
+            // Generate the XLSX file and trigger download with timestamp
+            const now = new Date();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const yy = String(now.getFullYear()).slice(-2);
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            const fileName = `details_payroll_report_${mm}${dd}${yy}${hh}${mins}${ss}.xlsx`;
             XLSX.writeFile(wb, fileName);
         }
 

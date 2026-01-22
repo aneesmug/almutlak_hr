@@ -105,12 +105,20 @@ try {
                 WHEN pb.type_id IS NOT NULL AND bt.name IS NOT NULL THEN bt.name
                 ELSE pb.benefit 
             END AS benefit, 
-            pb.note 
+            pb.note,
+            pb.hours,
+            pb.days,
+            pb.calculation_type
         FROM payroll_benefits pb
         LEFT JOIN benefit_types bt ON pb.type_id = bt.id
         WHERE pb.emp_id = :emp_id AND pb.month = :month_year AND pb.status = 1
     ");
-    $stmtDeductions = $pdo->prepare("SELECT deduction, note FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year");
+    // Query now includes calculation_type, hours, and days from payroll_deductions
+    $stmtDeductions = $pdo->prepare("
+        SELECT deduction, note, hours, days, calculation_type 
+        FROM payroll_deductions 
+        WHERE emp_id = :emp_id AND month = :month_year AND status = 1
+    ");
 
     // Loop through each main payroll record to fetch and attach the detailed checklist items
     foreach ($reportData as $key => $row) {

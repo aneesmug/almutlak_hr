@@ -117,10 +117,90 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
     $_SESSION['timeout_duration'] = intval($timeout_duration);
     $_SESSION['last_activity_time'] = isset($_SESSION['last_activity']) ? intval($_SESSION['last_activity']) : time();
     $_SESSION['server_time'] = time();
+    
+    // Track login time if not already set (for grace period after login)
+    if (!isset($_SESSION['session_login_time'])) {
+        $_SESSION['session_login_time'] = time();
+    }
+
+// --- 3.5 Check if User Has Been Force-Logged-Out ---
+// Validate user session status in database, but with grace period for new logins
+$user_id_for_query = $_SESSION['auth_user']['user_id']; // id_iqama for regular queries
+$numeric_user_id = $_SESSION['auth_user']['numeric_id'] ?? null; // numeric ID for activity log
+$sessionId = session_id();
+
+// Give 30 second grace period after login before checking activity log
+// BUT always check if user was force-signed-out (grace period only applies to fresh logins)
+$sessionLoginTime = $_SESSION['session_login_time'] ?? 0;
+$secondsSinceLogin = time() - $sessionLoginTime;
+$isGracePeriod = $secondsSinceLogin < 30;
+
+// Always validate if we have numeric ID (grace period is checked inside validator)
+if ($numeric_user_id) {
+    $verifyActiveSessionQuery = "SELECT `id`, `status` FROM `user_activity_log` 
+                                WHERE `user_id` = ? AND `session_id` = ? 
+                                LIMIT 1";
+    $verifyActiveStmt = mysqli_prepare($conDB, $verifyActiveSessionQuery);
+    
+    if ($verifyActiveStmt) {
+        mysqli_stmt_bind_param($verifyActiveStmt, "is", $numeric_user_id, $sessionId);
+        mysqli_stmt_execute($verifyActiveStmt);
+        $verifyActiveResult = mysqli_stmt_get_result($verifyActiveStmt);
+        $activeSessionRecord = mysqli_fetch_assoc($verifyActiveResult);
+        mysqli_stmt_close($verifyActiveStmt);
+        
+        // If session record exists but status is NOT 'active', user has been force-logged-out
+        if ($activeSessionRecord && $activeSessionRecord['status'] !== 'active') {
+            // Force logout immediately
+            session_unset();
+            
+            $session_file = session_save_path() . '/sess_' . $sessionId;
+            if (file_exists($session_file)) {
+                @unlink($session_file);
+            }
+            
+            session_destroy();
+            
+            setcookie('PHPSESSID', '', time() - 3600, '/');
+            setcookie('remember_me', '', time() - 3600, '/');
+            
+            header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+            header("Pragma: no-cache");
+            
+            while (ob_get_level()) ob_end_clean();
+            ?>
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Session Terminated</title>
+                <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+            </head>
+            <body>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        Swal.fire({
+                            title: 'Session Terminated',
+                            text: 'Your session has been terminated by an administrator. Please log in again.',
+                            icon: 'warning',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            confirmButtonText: 'Go to Login'
+                        }).then(() => {
+                            window.location.href = './index.php';
+                        });
+                    });
+                </script>
+            </body>
+            </html>
+<?php
+            exit();
+        }
+    }
+}
 
 // --- 4. Fetch Full User & Employee Record ---
-
-$user_id_for_query = $_SESSION['auth_user']['user_id'];
 
 $query = "SELECT 
             al.*, 
@@ -159,6 +239,7 @@ $user_company = $emprow['comp_no'] ?? 1;
 // Store in session for consistency across all pages
 $_SESSION['auth_user']['dept'] = $user_dept;
 $_SESSION['auth_user']['comp_no'] = $user_company;
+$_SESSION['auth_user']['numeric_id'] = $emprow['id']; // Store numeric ID for activity log validation
 
 // --- 4a. Company Access Control (Company-Level Restrictions) ---
 // Get allowed companies from admin_login.allowed_companies JSON column

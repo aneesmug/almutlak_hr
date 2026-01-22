@@ -41,6 +41,8 @@ if (!$phpmailerLoaded) {
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+// Include vacation calculator for balance updates on approval
+require_once __DIR__ . '/vacation_calculator.php';
 
 $formatter = new NumberFormatter('en_SA',  NumberFormatter::CURRENCY);
 
@@ -2144,7 +2146,7 @@ if (!function_exists('handle_approval_action')) {
                             // - Other non-annual types: can complete here
                             if (!$is_annual_fly && !$is_local_annual && !$is_fly_emergency && !$is_asset_clearance) {
                                 $final_status = 'completed';
-                                $review_status = 'C';
+                                $review_status = 'A'; // Active
                             }
                         } elseif ($request_type === 'general_request') {
                             // General requests go to 'waiting_for_delivery' after approval
@@ -2214,10 +2216,14 @@ if (!function_exists('handle_approval_action')) {
                                 }
 
                                 // --- [UPDATED] Fly Status Management ---
-                                // Set fly=1 at final HR_Payroll approval, except Encashment
+                                // Set fly=1 at final HR_Payroll approval, except Encashment and Excuse Leave types
+                                // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
                                 if ($final_status === 'completed' && !empty($vacation_emp_id)) {
                                     $vac_type_lower = strtolower($vacation_type ?? '');
-                                    if ($vac_type_lower !== 'encashed') {
+                                    // Define excuse leave types that should NOT update fly status
+                                    $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
+                                    
+                                    if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
                                         $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
                                         if ($stmtFly) {
                                             mysqli_stmt_bind_param($stmtFly, "i", $vacation_emp_id);

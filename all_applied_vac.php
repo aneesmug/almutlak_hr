@@ -1617,9 +1617,10 @@ if ($can_see_all_depts) {
                             return;
                         }
 
-                        // Otherwise, if they're an asset manager (from asset dept), show assignment modal
-                        if (assetDeptId) {
-                            console.log('✓ Showing asset checker assignment modal for asset manager');
+                        // Otherwise, if they're an asset manager (from asset dept) AND NOT a Manager by emp_type, show assignment modal
+                        // Managers from asset departments should go through normal approval flow
+                        if (assetDeptId && !isManagerRole) {
+                            console.log('✓ Showing asset checker assignment modal for asset department staff (non-manager)');
 
                             $.ajax({
                                 url: './includes/ajaxFile/ajaxVacation.php',
@@ -1706,9 +1707,35 @@ if ($can_see_all_depts) {
                             return;
                         }
 
-                        // Not an asset manager and not assigned checker - proceed with normal approval
-                        console.log('✓ Department manager - proceeding with normal approval (no asset involvement)');
-                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                        // Not an asset manager and not assigned checker - but first check if employee has assets
+                        console.log('✓ Department manager - checking if employee has any assigned assets before approval');
+                        
+                        // Check if employee has any assigned assets
+                        $.ajax({
+                            url: './includes/ajaxFile/ajaxVacation.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            data: {
+                                ajaxType: 'getEmployeeAssignedAssets',
+                                emp_id: employeeId
+                            },
+                            success: function(assetsResponse) {
+                                // If employee has assets, show asset clearance modal
+                                if (assetsResponse.assets && assetsResponse.assets.length > 0) {
+                                    console.log('✓ Employee has assigned assets - showing asset clearance modal');
+                                    showAssetClearanceModal(vacationId, employeeId, employeeName);
+                                } else {
+                                    // No assets - proceed with normal approval
+                                    console.log('✓ No assets assigned - proceeding with normal approval');
+                                    proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                                }
+                            },
+                            error: function() {
+                                // On error, proceed with normal approval as fallback
+                                console.log('✓ Error checking assets - proceeding with normal approval as fallback');
+                                proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                            }
+                        });
                     },
                     error: function() {
                         // If we can't fetch vacation details, check if they're an asset manager

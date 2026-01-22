@@ -1741,23 +1741,6 @@ elseif ($ajaxType == 'approveVacation') {
                             ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
                                 "Encashed vacation marked as completed after payer payment - no asset clearance required", 'emp_vacation');
                         }
-                        
-                        // CRITICAL: Deduct balance for encashed vacation
-                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
-                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
-                        if ($bal_chk_stmt) {
-                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
-                            mysqli_stmt_execute($bal_chk_stmt);
-                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
-                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
-                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
-                            mysqli_stmt_close($bal_chk_stmt);
-
-                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
-                                // Update balance for encashed vacation
-                                update_vacation_balance_on_approval($conDB, $vacation_id);
-                            }
-                        }
                     }
                     
                     // Return success
@@ -2021,28 +2004,8 @@ elseif ($ajaxType == 'approveVacation') {
                         mysqli_stmt_execute($verify_stmt);
                         $verify_result = mysqli_stmt_get_result($verify_stmt);
                         if ($verify_row = mysqli_fetch_assoc($verify_result)) {
-                            // If vacation days changed, update the balance deduction
-                            if ($new_vacdays !== null && $new_vacdays != $original_vacdays && !empty($employee_id)) {
-                                $days_difference = $new_vacdays - $original_vacdays;
-                                
-                                // Update emp_vacation_balance to reflect the new deduction
-                                $balance_update_sql = "UPDATE `emp_vacation_balance` 
-                                                      SET `used_days` = ?, 
-                                                          `available_balance` = `available_balance` - ?,
-                                                          `last_updated` = NOW()
-                                                      WHERE `vac_id` = ?";
-                                $balance_update_stmt = mysqli_prepare($conDB, $balance_update_sql);
-                                if ($balance_update_stmt) {
-                                    mysqli_stmt_bind_param($balance_update_stmt, "ddi", $new_vacdays, $days_difference, $vacation_id);
-                                    mysqli_stmt_execute($balance_update_stmt);
-                                    mysqli_stmt_close($balance_update_stmt);
-                                    error_log("Updated vacation balance for vac_id {$vacation_id}: used_days={$new_vacdays}, difference={$days_difference} days");
-                                    // Log the balance adjustment
-                                    ActivityLogger::logUpdate('Vacation Balance', 'ajaxVacation.php', $vacation_id, 
-                                        "HR Payroll adjusted dates: Original {$original_vacdays} days → New {$new_vacdays} days (Difference: {$days_difference} days). Balance updated accordingly.", 
-                                        'emp_vacation_balance');
-                                }
-                            }
+                            // Note: Balance deduction is now handled ONLY at final approval in the approval chain
+                            // HR Payroll adjustments to vacation days will be reflected when the request reaches final approval
                             
                             // Log return_date change to smt_request_status if HR Payroll updated it
                             if (!empty($return_date)) {
@@ -2465,71 +2428,9 @@ elseif ($ajaxType == 'rejectVacation') {
         if ($old_vacation) {
             ActivityLogger::logApproval('Vacation', 'ajaxVacation.php', $vacation_id, 'rejected', "Rejected vacation request: {$request_inv_no}, Reason: {$rejection_note}", 'emp_vacation');
             
-            // REFUND VACATION BALANCE - When a vacation request is rejected, restore the deducted days
-            // Only refund for annual vacation and encashment (not for emergency vacation)
-            $emp_id = $old_vacation['emp_id'];
-            $vac_type = $old_vacation['vac_type'];
-            $fly_type = $old_vacation['fly_type'];
-            $vacdays = (float)$old_vacation['vacdays'];
-            $remarks = strtolower(trim($old_vacation['remarks'] ?? ''));
-            
-            $is_annual = (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual');
-            $is_encashment = (strpos($remarks, 'encashment') !== false || strtolower($vac_type) === 'encashed');
-            $is_emergency = (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'emergency');
-            
-            // Refund balance if it was deducted (annual or encashment, but not emergency)
-            if (($is_annual || $is_encashment) && !$is_emergency && $vacdays > 0) {
-                // Get the current balance record for this employee
-                $sql_get_balance = "SELECT `id`, `used_days`, `remaining_balance`, `available_balance` 
-                                    FROM `emp_vacation_balance` 
-                                    WHERE `emp_id` = ? 
-                                    ORDER BY `last_updated` DESC 
-                                    LIMIT 1";
-                $stmt_get_balance = mysqli_prepare($conDB, $sql_get_balance);
-                
-                if ($stmt_get_balance) {
-                    mysqli_stmt_bind_param($stmt_get_balance, "s", $emp_id);
-                    mysqli_stmt_execute($stmt_get_balance);
-                    $res_balance = mysqli_stmt_get_result($stmt_get_balance);
-                    
-                    if ($res_balance && ($row_balance = mysqli_fetch_assoc($res_balance))) {
-                        $balance_id = (int)$row_balance['id'];
-                        $current_used_days = (float)$row_balance['used_days'];
-                        $current_remaining = (float)$row_balance['remaining_balance'];
-                        $current_available = (float)$row_balance['available_balance'];
-                        
-                        // Calculate new values after refund (restore the days)
-                        $new_used_days = max(0, $current_used_days - $vacdays);
-                        $new_remaining = $current_remaining + $vacdays;
-                        $new_available = $current_available + $vacdays;
-                        
-                        // Update the balance record
-                        $sql_update_balance = "UPDATE `emp_vacation_balance` 
-                                              SET `used_days` = ?, 
-                                                  `remaining_balance` = ?, 
-                                                  `available_balance` = ?,
-                                                  `last_updated` = NOW() 
-                                              WHERE `id` = ?";
-                        $stmt_update_balance = mysqli_prepare($conDB, $sql_update_balance);
-                        
-                        if ($stmt_update_balance) {
-                            mysqli_stmt_bind_param($stmt_update_balance, "dddi", $new_used_days, $new_remaining, $new_available, $balance_id);
-                            if (mysqli_stmt_execute($stmt_update_balance)) {
-                                // Balance successfully refunded
-                                ActivityLogger::logUpdate('VacationBalance', 'ajaxVacation.php', $balance_id, 
-                                    "Refunded {$vacdays} days for rejected request {$request_inv_no}. New remaining: {$new_remaining}", 
-                                    'emp_vacation_balance');
-                            } else {
-                                error_log("Failed to refund vacation balance for emp_id {$emp_id}: " . mysqli_stmt_error($stmt_update_balance));
-                            }
-                            mysqli_stmt_close($stmt_update_balance);
-                        }
-                    }
-                    
-                    if ($res_balance) mysqli_free_result($res_balance);
-                    mysqli_stmt_close($stmt_get_balance);
-                }
-            }
+            // NOTE: DO NOT REFUND/RESTORE VACATION BALANCE ON REJECTION
+            // Days are only deducted at FINAL APPROVAL, not at submission or rejection
+            // Therefore, rejection should not update the balance
         }
         if ($vacation_details) mysqli_free_result($vacation_details);
 
@@ -2802,26 +2703,13 @@ elseif ($ajaxType == 'updateVacationPayments') {
                             mysqli_stmt_close($complete_stmt);
                         }
                         
-                        // CRITICAL: Deduct balance when marking vacation as completed
-                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
-                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
-                        if ($bal_chk_stmt) {
-                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
-                            mysqli_stmt_execute($bal_chk_stmt);
-                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
-                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
-                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
-                            mysqli_stmt_close($bal_chk_stmt);
-
-                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
-                                // Update balance for annual fly vacation
-                                update_vacation_balance_on_approval($conDB, $vacation_id);
-                            }
-                        }
-                        
-                        // Set employees.fly = 1 except for Encashment type
+                        // Set employees.fly = 1 except for Encashment type and Excuse Leave types
+                        // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
                         $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
-                        if ($vac_type_lower !== 'encashed' && !empty($vac_data['emp_id'])) {
+                        // Define excuse leave types that should NOT update fly status
+                        $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
+                        
+                        if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types) && !empty($vac_data['emp_id'])) {
                             $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
                             if ($stmtFly) {
                                 mysqli_stmt_bind_param($stmtFly, "s", $vac_data['emp_id']);
@@ -2991,23 +2879,6 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                             mysqli_stmt_close($complete_stmt);
                         }
                         $did_complete = true;
-                        
-                        // CRITICAL: Deduct balance when marking vacation as completed
-                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
-                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
-                        if ($bal_chk_stmt) {
-                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
-                            mysqli_stmt_execute($bal_chk_stmt);
-                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
-                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
-                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
-                            mysqli_stmt_close($bal_chk_stmt);
-
-                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
-                                // Update balance for local annual vacation
-                                update_vacation_balance_on_approval($conDB, $vacation_id);
-                            }
-                        }
                     }
 
                     // Rule 2: Fly | Annual vacation -> complete when booking (payment) AND adjustments are updated
@@ -3023,21 +2894,8 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                         $did_complete = true;
                         
                         // CRITICAL: Deduct balance when marking vacation as completed
-                        $bal_chk_sql = "SELECT id FROM emp_vacation_balance WHERE vac_id = ? LIMIT 1";
-                        $bal_chk_stmt = mysqli_prepare($conDB, $bal_chk_sql);
-                        if ($bal_chk_stmt) {
-                            mysqli_stmt_bind_param($bal_chk_stmt, "i", $vacation_id);
-                            mysqli_stmt_execute($bal_chk_stmt);
-                            $bal_chk_res = mysqli_stmt_get_result($bal_chk_stmt);
-                            $has_balance_link = ($bal_chk_res && mysqli_fetch_assoc($bal_chk_res));
-                            if ($bal_chk_res) mysqli_free_result($bal_chk_res);
-                            mysqli_stmt_close($bal_chk_stmt);
-
-                            if (!$has_balance_link && function_exists('update_vacation_balance_on_approval')) {
-                                // Update balance for annual fly vacation
-                                update_vacation_balance_on_approval($conDB, $vacation_id);
-                            }
-                        }
+                        
+                        // Balance deduction is handled only at final approval in approval chain
                     }
 
                     // Rule 3: Fly | Emergency vacation -> Booking button hidden; complete on adjustments
@@ -3057,10 +2915,14 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                         // NOTE: Emergency vacations are unpaid leave - NO balance deduction applied
                     }
 
-                    // If completed in any branch, set employees.fly = 1 unless Encashment
+                    // If completed in any branch, set employees.fly = 1 unless Encashment or Excuse Leave
+                    // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
                     if ($did_complete && !empty($vacation_row['emp_id'])) {
                         $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
-                        if ($vac_type_lower !== 'encashed') {
+                        // Define excuse leave types that should NOT update fly status
+                        $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
+                        
+                        if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
                             $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
                             if ($stmtFly) {
                                 mysqli_stmt_bind_param($stmtFly, "s", $vacation_row['emp_id']);

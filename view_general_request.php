@@ -950,7 +950,16 @@ $status_classes = [
                                     </div>
                                     <div class="card-body-custom">
                                         <div class="timeline-modern">
-                                            <?php foreach ($approval_chain as $approver): ?>
+                                            <?php 
+                                                // Check if request was rejected
+                                                $is_request_rejected = isset($request['current_status']) && $request['current_status'] === 'rejected';
+                                            ?>
+                                            <?php foreach ($approval_chain as $approver): 
+                                                // If request is rejected, skip pending/awaiting approvers
+                                                if ($is_request_rejected && in_array($approver['status'], ['pending', 'awaiting'])) {
+                                                    continue;
+                                                }
+                                            ?>
                                             <div class="timeline-item-modern">
                                                 <div class="timeline-icon-modern <?= $approver['status'] ?>">
                                                     <i class="mdi mdi-<?= $approver['status'] == 'approved' ? 'check' : ($approver['status'] == 'rejected' ? 'close' : 'clock-outline') ?>"></i>

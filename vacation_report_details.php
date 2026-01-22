@@ -746,7 +746,16 @@ if (mysqli_num_rows($query) == 1) {
                                                     <?php endif; ?>
                                                 <?php elseif (!empty($approval_chain)): ?>
                                                     <?php // NEW SYSTEM: Show approval chain ?>
+                                                    <?php 
+                                                        // Check if request was rejected
+                                                        $is_vacation_rejected = isset($request['status']) && $request['status'] === 'rejected';
+                                                    ?>
                                                     <?php foreach ($approval_chain as $index => $approver): 
+                                                        // If request is rejected, skip pending/awaiting approvers
+                                                        if ($is_vacation_rejected && in_array($approver['status'], ['pending', 'awaiting'])) {
+                                                            continue;
+                                                        }
+                                                        
                                                         $item_class = '';
                                                         if ($approver['status'] == 'approved') {
                                                             $item_class = 'approved';

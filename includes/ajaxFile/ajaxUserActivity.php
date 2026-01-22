@@ -6,8 +6,13 @@
 
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
+require_once __DIR__ . '/../session_validator.php';
 
 header('Content-Type: application/json');
+
+// --- Validate Session Status on Every AJAX Request ---
+// Ensures that if user was force-logged-out, they cannot make any AJAX calls
+validateAndTerminateInvalidSession($conDB, $_SESSION, true);
 
 $ajaxType = $_POST['ajaxType'] ?? $_GET['ajaxType'] ?? '';
 
@@ -29,6 +34,14 @@ switch ($ajaxType) {
     
     case 'update_screen_resolution':
         updateScreenResolution($conDB);
+        break;
+
+    case 'get_location_markers':
+        getLocationMarkers($conDB);
+        break;
+    
+    case 'force_signout_user':
+        forceSignoutUser($conDB);
         break;
     
     default:
@@ -303,6 +316,91 @@ function getActivityDetails($conDB) {
 }
 
 /**
+ * Get location markers for map
+ */
+function getLocationMarkers($conDB) {
+    // First check if we have any records at all
+    $countQuery = "SELECT COUNT(*) as total FROM `user_activity_log`";
+    $countResult = mysqli_query($conDB, $countQuery);
+    if (!$countResult) {
+        echo json_encode([
+            'status' => 500,
+            'message' => 'Failed to count activity records',
+            'error' => mysqli_error($conDB)
+        ]);
+        return;
+    }
+    $totalRecords = mysqli_fetch_assoc($countResult)['total'];
+    
+    // Check how many have coordinates
+    $coordQuery = "SELECT COUNT(*) as total FROM `user_activity_log` 
+                   WHERE latitude IS NOT NULL AND longitude IS NOT NULL 
+                   AND latitude != 0 AND longitude != 0";
+    $coordResult = mysqli_query($conDB, $coordQuery);
+    if (!$coordResult) {
+        echo json_encode([
+            'status' => 500,
+            'message' => 'Failed to count coordinate records',
+            'error' => mysqli_error($conDB)
+        ]);
+        return;
+    }
+    $coordRecords = mysqli_fetch_assoc($coordResult)['total'];
+    
+    $query = "SELECT 
+                ual.id,
+                ual.username,
+                ual.emp_id,
+                e.name AS emp_name,
+                ual.latitude,
+                ual.longitude,
+                ual.login_time,
+                ual.city,
+                ual.country,
+                ual.status
+              FROM `user_activity_log` ual
+              LEFT JOIN `employees` e ON ual.emp_id = e.emp_id
+              WHERE ual.latitude IS NOT NULL AND ual.longitude IS NOT NULL
+              AND ual.latitude != 0 AND ual.longitude != 0
+              AND ual.status = 'active'
+              ORDER BY ual.login_time DESC
+              LIMIT 500";
+
+    $result = mysqli_query($conDB, $query);
+    if (!$result) {
+        echo json_encode([
+            'status' => 500,
+            'message' => 'Failed to load map markers',
+            'error' => mysqli_error($conDB)
+        ]);
+        return;
+    }
+
+    $markers = [];
+    while ($row = mysqli_fetch_assoc($result)) {
+        $markers[] = [
+            'id' => (int)$row['id'],
+            'username' => $row['emp_name'] ?: $row['username'],
+            'lat' => (float)$row['latitude'],
+            'lng' => (float)$row['longitude'],
+            'login_time' => $row['login_time'],
+            'city' => $row['city'] ?: 'Unknown',
+            'country' => $row['country'] ?: 'Unknown',
+            'status' => $row['status']
+        ];
+    }
+
+    echo json_encode([
+        'status' => 200,
+        'data' => $markers,
+        'debug' => [
+            'total_records' => $totalRecords,
+            'records_with_coords' => $coordRecords
+        ]
+    ]);
+}
+
+/**
  * Update screen resolution (called from client-side JavaScript)
  */
 function updateScreenResolution($conDB) {
@@ -327,13 +425,94 @@ function updateScreenResolution($conDB) {
 
 /**
  * Auto-timeout stale sessions that are still marked as active
- * Sessions older than 24 hours without logout are marked as timeout
+ * Sessions older than 10 hours (7am to 6pm) without logout are marked as timeout
  */
 function autoTimeoutStaleSessions($conDB) {
     $query = "UPDATE `user_activity_log` 
-              SET `status` = 'timeout', `logout_time` = DATE_ADD(`login_time`, INTERVAL 24 HOUR)
+              SET `status` = 'timeout', `logout_time` = DATE_ADD(`login_time`, INTERVAL 10 HOUR)
               WHERE `status` = 'active' 
-              AND `login_time` < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+              AND `login_time` < DATE_SUB(NOW(), INTERVAL 10 HOUR)
               AND `logout_time` IS NULL";
     mysqli_query($conDB, $query);
+}
+
+/**
+ * Force sign out a specific user by activity ID
+ * This will invalidate their session and remember tokens so they cannot use the system
+ */
+function forceSignoutUser($conDB) {
+    $activity_id = intval($_POST['activity_id'] ?? 0);
+    
+    if (!$activity_id) {
+        echo json_encode(['status' => 400, 'message' => 'Invalid activity ID']);
+        return;
+    }
+    
+    // Get activity details including user_id
+    $checkQuery = "SELECT `id`, `user_id`, `username` FROM `user_activity_log` WHERE `id` = ?";
+    $stmt = mysqli_prepare($conDB, $checkQuery);
+    mysqli_stmt_bind_param($stmt, "i", $activity_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $activity = mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
+    
+    if (!$activity) {
+        echo json_encode(['status' => 404, 'message' => 'Activity record not found']);
+        return;
+    }
+    
+    $user_id = $activity['user_id'];
+    $username = $activity['username'];
+    
+    // Begin transaction to ensure all updates succeed
+    mysqli_begin_transaction($conDB);
+    
+    try {
+        // 1. Update the activity log with logout time and status
+        $updateActivityQuery = "UPDATE `user_activity_log` 
+                        SET `status` = 'logged_out', `logout_time` = NOW()
+                        WHERE `id` = ?";
+        $stmt1 = mysqli_prepare($conDB, $updateActivityQuery);
+        mysqli_stmt_bind_param($stmt1, "i", $activity_id);
+        if (!mysqli_stmt_execute($stmt1)) {
+            throw new Exception('Failed to update activity log');
+        }
+        mysqli_stmt_close($stmt1);
+        
+        // 2. Clear all active sessions for this user
+        $clearSessionQuery = "UPDATE `user_activity_log` 
+                              SET `status` = 'logged_out', `logout_time` = NOW()
+                              WHERE `user_id` = ? AND `status` = 'active'";
+        $stmt2 = mysqli_prepare($conDB, $clearSessionQuery);
+        mysqli_stmt_bind_param($stmt2, "i", $user_id);
+        if (!mysqli_stmt_execute($stmt2)) {
+            throw new Exception('Failed to clear user sessions');
+        }
+        mysqli_stmt_close($stmt2);
+        
+        // 3. Clear remember tokens to prevent auto-login
+        $clearTokenQuery = "UPDATE `admin_login` 
+                           SET `remember_token` = NULL, `remember_token_expiry` = NULL
+                           WHERE `id_iqama` = ?";
+        $stmt3 = mysqli_prepare($conDB, $clearTokenQuery);
+        mysqli_stmt_bind_param($stmt3, "s", $username);
+        if (!mysqli_stmt_execute($stmt3)) {
+            throw new Exception('Failed to clear remember tokens');
+        }
+        mysqli_stmt_close($stmt3);
+        
+        mysqli_commit($conDB);
+        
+        echo json_encode([
+            'status' => 200, 
+            'message' => 'User ' . htmlspecialchars($username) . ' has been signed out successfully. All active sessions have been invalidated.'
+        ]);
+    } catch (Exception $e) {
+        mysqli_rollback($conDB);
+        echo json_encode([
+            'status' => 500, 
+            'message' => 'Failed to sign out user: ' . $e->getMessage()
+        ]);
+    }
 }

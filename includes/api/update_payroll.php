@@ -38,7 +38,12 @@ try {
     $stmtExistingIds = $pdo->prepare("SELECT id FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year");
     $stmtExistingIds->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $dbBenefitIds = $stmtExistingIds->fetchAll(PDO::FETCH_COLUMN);
-    $submittedBenefitIds = array_filter(array_column($updatedBenefits, 'id'));
+    
+    // Only get IDs from submitted benefits (filter out null IDs for new benefits)
+    $submittedBenefitIds = array_filter(array_column($updatedBenefits, 'id'), function($id) {
+        return $id !== null && $id !== '';
+    });
+    
     $idsToDelete = array_diff($dbBenefitIds, $submittedBenefitIds);
 
     if (!empty($idsToDelete)) {
@@ -48,13 +53,19 @@ try {
     }
 
     // --- LOGIC TO HANDLE DELETED DEDUCTIONS ---
+    // Only delete deductions that had existing IDs but are no longer in the submitted list
     $stmtExistingDeductionIds = $pdo->prepare("SELECT id FROM payroll_deductions 
         WHERE emp_id = :emp_id AND month = :month_year 
-        AND (deduction != 'GOSI' OR deduction IS NULL)
+        AND status = 1
     ");
     $stmtExistingDeductionIds->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $dbDeductionIds = $stmtExistingDeductionIds->fetchAll(PDO::FETCH_COLUMN);
-    $submittedDeductionIds = array_filter(array_column($updatedDeductions, 'id'));
+    
+    // Only get IDs from submitted deductions (filter out null IDs for new deductions)
+    $submittedDeductionIds = array_filter(array_column($updatedDeductions, 'id'), function($id) {
+        return $id !== null && $id !== '';
+    });
+    
     $deductionIdsToDelete = array_diff($dbDeductionIds, $submittedDeductionIds);
 
     if (!empty($deductionIdsToDelete)) {
@@ -135,7 +146,8 @@ try {
         $deductionAmount = (float)($deduction['amount'] ?? $deduction['note'] ?? 0);
         $deductionId = $deduction['id'] ?? null;
 
-        if ((empty($deductionName) && $deductionAmount <= 0) && strtoupper($deductionName) !== 'LOAN INSTALLMENT') {
+        // Skip empty deductions (but allow LOAN INSTALLMENT even with 0 amount)
+        if (empty($deductionName) && $deductionAmount <= 0 && strtoupper($deductionName) !== 'LOAN INSTALLMENT') {
             continue;
         }
 
@@ -143,16 +155,26 @@ try {
             if ($deductionId) {
                 $stmt = $pdo->prepare("UPDATE payroll_deductions SET note = :deduction_amount WHERE id = :id");
                 $stmt->execute([':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':id' => $deductionId]);
+            } else {
+                // Insert new GOSI deduction if it doesn't exist
+                $stmt = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status, calculation_type, hours, days) VALUES (:emp_id, :deduction_name, :deduction_amount, :month_year, 1, 'fixed', NULL, NULL)");
+                $stmt->execute([':emp_id' => $empId, ':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':month_year' => $monthYear]);
             }
             continue; 
         }
 
         if ($deductionId) {
-            $stmt = $pdo->prepare("UPDATE payroll_deductions SET deduction = :deduction_name, note = :deduction_amount WHERE id = :id");
-            $stmt->execute([':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':id' => $deductionId]);
+            $calcType = $deduction['calculation_type'] ?? 'fixed';
+            $hours = isset($deduction['hours']) ? (float)$deduction['hours'] : null;
+            $days = isset($deduction['days']) ? (float)$deduction['days'] : null;
+            $stmt = $pdo->prepare("UPDATE payroll_deductions SET deduction = :deduction_name, note = :deduction_amount, calculation_type = :calc_type, hours = :hours, days = :days WHERE id = :id");
+            $stmt->execute([':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':calc_type' => $calcType, ':hours' => $hours, ':days' => $days, ':id' => $deductionId]);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status) VALUES (:emp_id, :deduction_name, :deduction_amount, :month_year, 1)");
-            $stmt->execute([':emp_id' => $empId, ':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':month_year' => $monthYear]);
+            $calcType = $deduction['calculation_type'] ?? 'fixed';
+            $hours = isset($deduction['hours']) ? (float)$deduction['hours'] : null;
+            $days = isset($deduction['days']) ? (float)$deduction['days'] : null;
+            $stmt = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status, calculation_type, hours, days) VALUES (:emp_id, :deduction_name, :deduction_amount, :month_year, 1, :calc_type, :hours, :days)");
+            $stmt->execute([':emp_id' => $empId, ':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':month_year' => $monthYear, ':calc_type' => $calcType, ':hours' => $hours, ':days' => $days]);
         }
         
         // --- NEW: SYNCHRONIZE LOAN PAYMENT UPDATE ---

@@ -57,6 +57,7 @@ loadResource('./plugins/bootstrap-select/js/bootstrap-select.js', 'js', { async:
 
 loadResource('./assets/js/notifications.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/translation.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./assets/js/geolocation-capture.js', 'js', { async: true, defer: true }, 'head');
 // Load responsive sidebar menu functionality
 
 function __(key, defaultText = '') {

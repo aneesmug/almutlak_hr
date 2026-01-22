@@ -84,7 +84,7 @@ try {
     $benefits = $stmtBenefits->fetchAll(PDO::FETCH_ASSOC);
 
     // 4. Fetch specific deductions for the month
-    $stmtDeductions = $pdo->prepare("SELECT id, deduction, note FROM payroll_deductions
+    $stmtDeductions = $pdo->prepare("SELECT id, deduction, note, calculation_type, hours, days FROM payroll_deductions
         WHERE emp_id = :emp_id AND month = :month_year
     ");
 

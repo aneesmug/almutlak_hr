@@ -34,6 +34,7 @@ try {
     // Build base query
     $sql = "SELECT 
                 `admin_login`.`id` AS `lid`,
+                `admin_login`.`id_iqama`,
                 `admin_login`.`emp_id`,
                 `admin_login`.`status`,
                 `admin_login`.`user_type`,
@@ -53,6 +54,7 @@ try {
         $search = mysqli_real_escape_string($conDB, $search);
         $sql .= " AND (
             `admin_login`.`id` LIKE '%$search%' OR
+            `admin_login`.`id_iqama` LIKE '%$search%' OR
             `admin_login`.`emp_id` LIKE '%$search%' OR
             `employees`.`name` LIKE '%$search%' OR
             `employees`.`mobile` LIKE '%$search%' OR
@@ -127,6 +129,7 @@ try {
     
     while ($rec = mysqli_fetch_assoc($query)) {
         $id_user_usr = $rec["lid"];
+        $id_iqama = $rec["id_iqama"] ?? '';
         $empid = $rec["emp_id"];
         $firstnme_usr = $rec["efullname"] ?? '';
         $usrty_usr = $rec["user_type"];
@@ -153,15 +156,16 @@ try {
         $row = [
             $id_user_usr,                                    // 0: ID
             '',                                               // 1: Checkbox (empty, will be rendered in JS)
-            $empid ?? '',                                     // 2: Employee ID
-            htmlspecialchars($firstnme_usr),                 // 3: Employee Name
-            htmlspecialchars($dept_usr),                     // 4: Department
-            htmlspecialchars($mobile_usr),                   // 5: Mobile
-            $usrty_usr,                                      // 6: User Type
-            htmlspecialchars($company_names),                // 7: Allowed Companies
-            $status_usr,                                      // 8: Status
-            $id_user_usr,                                     // 9: Action (ID for button)
-            $rec                                              // 10: Full record data (for edit modal) - will be JSON encoded by json_encode()
+            htmlspecialchars($id_iqama),                     // 2: ID/IQAMA
+            $empid ?? '',                                     // 3: Employee ID
+            htmlspecialchars($firstnme_usr),                 // 4: Employee Name
+            htmlspecialchars($dept_usr),                     // 5: Department
+            htmlspecialchars($mobile_usr),                   // 6: Mobile
+            $usrty_usr,                                      // 7: User Type
+            htmlspecialchars($company_names),                // 8: Allowed Companies
+            $status_usr,                                      // 9: Status
+            $id_user_usr,                                     // 10: Action (ID for button)
+            $rec                                              // 11: Full record data (for edit modal) - will be JSON encoded by json_encode()
         ];
         
         $data[] = $row;

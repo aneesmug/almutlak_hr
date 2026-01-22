@@ -122,8 +122,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
             session_regenerate_id(true);
             $safe_fullname = htmlspecialchars($user['fullname'] ?? '', ENT_QUOTES, 'UTF-8');
             $_SESSION['auth_user'] = [
-                'user_id' => $user['id_iqama'], 'fullname' => $user['fullname'], 'email' => $user['email'], 'user_type' => $user['user_type'], 'dept' => $user['dept']
+                'user_id' => $user['id_iqama'], 
+                'numeric_id' => $user['id'], 
+                'fullname' => $user['fullname'], 
+                'email' => $user['email'], 
+                'user_type' => $user['user_type'], 
+                'dept' => $user['dept']
             ];
+            
+            // Mark the login time for grace period in session validation
+            $_SESSION['session_login_time'] = time();
             
             // LOG LOGIN ACTION
             require_once __DIR__ . '/includes/init.php';
@@ -179,8 +187,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {
                         const userFullName = <?php echo json_encode($safe_fullname); ?>;
-                        let countdownSeconds = 5;
-                        const totalSeconds = 5;
+                        let countdownSeconds = 3;
+                        const totalSeconds = 3;
                         const totalMs = totalSeconds * 1000;
                         let startTime = Date.now();
                         let remainingMs = totalMs;

@@ -409,7 +409,16 @@ if (mysqli_num_rows($query) == 1) {
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-history"></i> <?= __('approval_timeline') ?></h5>
                                     <div class="approval-timeline">
+                                        <?php 
+                                            // Check if request was rejected
+                                            $is_resignation_rejected = isset($resignation_details['status']) && $resignation_details['status'] === 'rejected';
+                                        ?>
                                         <?php foreach ($approval_chain as $approval): 
+                                            // If request is rejected, skip pending/awaiting approvers
+                                            if ($is_resignation_rejected && in_array($approval['status'], ['pending', 'awaiting'])) {
+                                                continue;
+                                            }
+                                            
                                             $is_approved = $approval['status'] === 'approved';
                                             $is_pending = $approval['status'] === 'awaiting';
                                             $is_rejected = $approval['status'] === 'rejected';

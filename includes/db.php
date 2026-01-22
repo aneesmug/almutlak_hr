@@ -35,6 +35,10 @@ define('DB_NAME', $dbConfig['DB_NAME']);
 $conDB = mysqli_connect( DB_HOST , DB_USER , DB_PASS , DB_NAME ) or die('Error: Could not connect to database.');
 $conDB->set_charset("UTF8");
 
+// Set timezone to Saudi Arabia (GMT+3)
+date_default_timezone_set('Asia/Riyadh');
+mysqli_query($conDB, "SET time_zone = '+03:00'");
+
 $pdo_dsn = 'mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4';
 $pdo_options = [
     PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',

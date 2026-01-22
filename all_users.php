@@ -154,6 +154,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <tr>
                                                 <th>ID</th>
                                                 <th></th>
+                                                <th>ID/IQAMA</th>
                                                 <th>Employee ID</th>
                                                 <th>Employee Name</th>
                                                 <th>Department</th>
@@ -280,7 +281,7 @@ if (mysqli_num_rows($query) == 1) {
             $(document).ready(function() {
                 //Buttons examples
                 var buttonConfig = [];
-                var columnNum = [2, 3, 4, 5, 6];
+                var columnNum = [2, 3, 4, 5, 6, 7];
                 buttonConfig.push({
                     extend: 'copy',
                     text: '<i class="mdi mdi-content-copy text-info mr-1"></i>Copy',
@@ -390,7 +391,7 @@ if (mysqli_num_rows($query) == 1) {
                         },
                         {
                             // User Status
-                            targets: 8,
+                            targets: 9,
                             render: function(data, type, row, meta) {
                                 if (statusObj[data]) {
                                     return (`<span class="badge-border ${statusObj[data].class}" text-capitalized>${statusObj[data].title}</span>`);
@@ -400,7 +401,7 @@ if (mysqli_num_rows($query) == 1) {
                         },
                         {
                             // User Type/Role
-                            targets: 6,
+                            targets: 7,
                             render: function(data, type, row, meta) {
                                 // Check if user type exists in our mapping, otherwise show the raw value
                                 if (employeeTypeObj[data]) {
@@ -412,9 +413,9 @@ if (mysqli_num_rows($query) == 1) {
                         },
                         {
                             // Action column
-                            targets: 9,
+                            targets: 10,
                             render: function(data, type, row, meta) {
-                                var recordData = row[10];  // Already an object, no need to JSON.parse
+                                var recordData = row[11];  // Already an object, no need to JSON.parse
                                 var html = `<div class='btn-group dropdown'>
                                     <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                     <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
