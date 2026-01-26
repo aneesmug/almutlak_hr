@@ -461,7 +461,7 @@
                                         <div class="footer-section">
                                             <div class="signature-box">
                                                 <p class="signature-line">_________________________</p>
-                                                <p class="detail-line"><span><strong>Employee Signature</strong></span><span class="arabic-label"><strong>توقيع الموظف</strong></span></p>
+                                                <p class="detail-line"><span><strong>Compensation Signature</strong></span><span class="arabic-label"><strong>توقيع التعويض</strong></span></p>
                                                 <p class="detail-line"><span><strong>Date</strong></span><span class="arabic-label"><strong>التاريخ</strong></span>:</p>
                                             </div>
                                             <div class="signature-box">

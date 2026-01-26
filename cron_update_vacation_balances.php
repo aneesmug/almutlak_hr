@@ -164,12 +164,12 @@ try {
             $insert_sql = "INSERT INTO emp_vacation_balance (
                                 emp_id, vac_id, contract_id,
                                 total_days, used_days, remaining_balance,
-                                available_balance, carryover_days,
+                                available_balance, opening_balance, carryover_days,
                                 period_start, period_end, last_updated
-                            ) VALUES (?, 0, 0, ?, 0, ?, ?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR), NOW())";
+                            ) VALUES (?, 0, 0, ?, 0, ?, ?, ?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR), NOW())";
             $insert_stmt = mysqli_prepare($conDB, $insert_sql);
             if ($insert_stmt) {
-                mysqli_stmt_bind_param($insert_stmt, 'sddd', $emp_id_missing, $initial_balance, $initial_balance, $initial_balance);
+                mysqli_stmt_bind_param($insert_stmt, 'sdddd', $emp_id_missing, $initial_balance, $initial_balance, $initial_balance, $initial_balance);
                 if (mysqli_stmt_execute($insert_stmt)) {
                     $new_records++;
                     log_message("[emp_id: $emp_id_missing] Created new emp_vacation_balance with starting balance {$initial_balance}", 'info');
@@ -269,12 +269,12 @@ try {
             }
 
             // Update the record with new balance and track when it was last updated
-            // CRITICAL FIX: Also update total_days and remaining_balance to keep synchronized with available_balance
-            // total_days represents the opening balance, so when available_balance changes,
-            // total_days must also be updated to reflect the new opening balance for vacation deductions
+            // ✅ CRITICAL: Daily cron MUST SYNC all 3 balance columns to keep them equal
+            // available_balance, opening_balance, and remaining_balance all set to live_balance
+            // This ensures consistency across all balance tracking columns
             $update_sql = "UPDATE `emp_vacation_balance` 
                           SET `available_balance` = ?, 
-                              `total_days` = ?,
+                              `opening_balance` = ?,
                               `remaining_balance` = ?,
                               `last_updated` = NOW() 
                           WHERE `id` = ?";
@@ -286,6 +286,8 @@ try {
                 continue;
             }
 
+            // Sync all 3 columns to the same live_balance value
+            // Format: dddi = 3 doubles (available_balance, opening_balance, remaining_balance) + 1 integer (id)
             mysqli_stmt_bind_param($stmt, 'dddi', $live_balance, $live_balance, $live_balance, $balance_record_id);
 
             if (!mysqli_stmt_execute($stmt)) {
@@ -334,7 +336,7 @@ try {
                         $current_record['used_days'],
                         $current_record['remaining_balance'],
                         $current_record['carryover_days'],
-                        $live_balance,
+                        $current_record['total_days'],
                         $current_record['period_start'],
                         $current_record['period_end'],
                         $balance_changed_int,

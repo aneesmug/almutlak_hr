@@ -6230,11 +6230,12 @@ function add_noties() {
 //    data-vacation-id, data-employee-name, data-overtime-hours, data-deduction-hours, data-deduction-days, data-other-earnings, data-payroll-note
 // ================================================================
 if (typeof window.addVacationAdjustments === 'undefined') {
-    window.addVacationAdjustments = function(vacationId, employeeName, currentOvertimeHours, currentDeductionHours, currentDeductionDays, otherEarningsOrNote, currentPayrollNote) {
+    window.addVacationAdjustments = function(vacationId, employeeName, currentOvertimeHours, currentDeductionHours, currentDeductionDays, otherEarningsOrNote, currentPayrollNote, currentOtherDeductions) {
         try {
             // Handle backward compatibility: if otherEarningsOrNote is a string, treat it as payroll_note
             let currentOtherEarnings = 0;
             let payrollNote = currentPayrollNote || '';
+            let currentOtherDeductionsVal = parseFloat(currentOtherDeductions) || 0;
             
             // Check if parameter 6 is a numeric string (other_earnings) or text string (payroll_note from old code)
             // isNaN() returns false for numeric strings, true for non-numeric strings
@@ -6256,6 +6257,12 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                                 <i class="fa fa-clock"></i> ${__('overtime_hours') || 'Overtime (Hours)'}
                             </label>
                             <input type="number" id="adj_overtime_hours" class="form-control payroll-calc-trigger" placeholder="0" step="0.5" min="0" value="${currentOvertimeHours || 0}">
+                        </div>
+                        <div class="form-group">
+                            <label for="adj_other_deductions" class="font-weight-bold text-danger">
+                                <i class="fa fa-minus-circle"></i> ${__('other_deductions') || 'Other Deductions'}
+                            </label>
+                            <input type="number" id="adj_other_deductions" class="form-control payroll-calc-trigger" placeholder="0.00" step="0.01" min="0" value="${currentOtherDeductionsVal || 0}">
                         </div>
                         <div class="form-group">
                             <label for="adj_deduction_hours" class="text-danger font-weight-bold">
@@ -6287,6 +6294,10 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                                 <span class="text-danger font-weight-bold">${__('deduction_amount') || 'Deduction Amount'}:</span>
                                 <span class="text-danger font-weight-bold">-<span id="calc_deduction_amount">0.00</span> SAR</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                <span class="text-danger font-weight-bold">${__('other_deductions') || 'Other Deductions'}:</span>
+                                <span class="text-danger font-weight-bold">-<span id="calc_other_deductions">0.00</span> SAR</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                                 <span class="text-success font-weight-bold">${__('other_earnings') || 'Other Earnings'}:</span>
@@ -6362,11 +6373,12 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         const deductionHours = parseFloat(document.getElementById('adj_deduction_hours').value) || 0;
                         const deductionDays = parseFloat(document.getElementById('adj_deduction_days').value) || 0;
                         const otherEarnings = parseFloat(document.getElementById('adj_other_earnings').value) || 0;
+                        const otherDeductions = parseFloat(document.getElementById('adj_other_deductions').value) || 0;
                         
                         // Show payroll summary block when user starts modifying
                         const summaryBlock = document.getElementById('payroll_calculation_summary');
                         const hrTop = document.getElementById('payroll_summary_hr_top');
-                        const hasModifications = overtimeHours > 0 || deductionHours > 0 || deductionDays > 0 || otherEarnings > 0;
+                        const hasModifications = overtimeHours > 0 || deductionHours > 0 || deductionDays > 0 || otherEarnings > 0 || otherDeductions > 0;
                         
                         if (hasModifications) {
                             summaryBlock.style.display = 'block';
@@ -6389,10 +6401,11 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         const overtimeAmount = (overtimeHours * overtimeHourlyRate);
                         const deductionAmount = (deductionHours * hourlyRateDeduction) + (deductionDays * dailyRateDeduction);
                         
-                        const netAdjustment = overtimeAmount - deductionAmount + otherEarnings;
+                        const netAdjustment = overtimeAmount - (deductionAmount + otherDeductions) + otherEarnings;
                         
                         document.getElementById('calc_overtime_amount').textContent = overtimeAmount.toFixed(2);
                         document.getElementById('calc_deduction_amount').textContent = deductionAmount.toFixed(2);
+                        document.getElementById('calc_other_deductions').textContent = otherDeductions.toFixed(2);
                         document.getElementById('calc_other_earnings').textContent = otherEarnings.toFixed(2);
                         document.getElementById('calc_net_adjustment').textContent = netAdjustment.toFixed(2) + ' SAR';
                     };
@@ -6406,13 +6419,14 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                     const deduction_hours = parseFloat(document.getElementById('adj_deduction_hours').value) || 0;
                     const deduction_days = parseFloat(document.getElementById('adj_deduction_days').value) || 0;
                     const other_earnings = parseFloat(document.getElementById('adj_other_earnings').value) || 0;
+                    const other_deductions = parseFloat(document.getElementById('adj_other_deductions').value) || 0;
                     const payroll_note = document.getElementById('adj_payroll_note').value || '';
 
-                    if (overtime_hours < 0 || deduction_hours < 0 || deduction_days < 0 || other_earnings < 0) {
+                    if (overtime_hours < 0 || deduction_hours < 0 || deduction_days < 0 || other_earnings < 0 || other_deductions < 0) {
                         Swal.showValidationMessage(__('invalid_negative_values_not_allowed') || 'Negative values not allowed');
                         return false;
                     }
-                    return { overtime_hours, deduction_hours, deduction_days, other_earnings, payroll_note };
+                    return { overtime_hours, deduction_hours, deduction_days, other_earnings, other_deductions, payroll_note };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -6427,6 +6441,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                             deduction_hours: result.value.deduction_hours,
                             deduction_days: result.value.deduction_days,
                             other_earnings: result.value.other_earnings,
+                            other_deductions: result.value.other_deductions,
                             payroll_note: result.value.payroll_note
                         },
                     })
@@ -6457,12 +6472,13 @@ $(document).on('click', '.addVacationAdjustments', function(e){
         const dedHrs = parseFloat($el.data('deduction-hours')) || 0;
         const dedDays = parseFloat($el.data('deduction-days')) || 0;
         const otherEarnings = parseFloat($el.data('other-earnings')) || 0;
+        const otherDeductions = parseFloat($el.data('other-deductions')) || 0;
         const note = $el.data('payroll-note') || '';
         if (!vacationId) {
             Swal.fire('Error', 'Missing vacation id', 'error');
             return;
         }
-        window.addVacationAdjustments(vacationId, employeeName, overtime, dedHrs, dedDays, otherEarnings, note);
+        window.addVacationAdjustments(vacationId, employeeName, overtime, dedHrs, dedDays, otherEarnings, note, otherDeductions);
     } catch(err) {
         Swal.fire('Error', err && err.message ? err.message : 'Unexpected error', 'error');
     }

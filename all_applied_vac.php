@@ -78,8 +78,9 @@ $join_sql = "";
 // Track whether we've already applied a department filter in a specific branch
 $dept_filter_applied = false;
 // Determine if the user can see records for all departments
-// Per requirement: Only HR and System Admin can see all departments
-$can_see_all_depts = ($is_system_admin ?? false) || ($isHR ?? false);
+// Per requirement: HR, System Admin, and Finance roles can see all departments
+$isFinanceRole = (isset($user_type) && stripos($user_type, 'finance') !== false);
+$can_see_all_depts = ($is_system_admin ?? false) || ($isHR ?? false) || $isFinanceRole;
 
 // 3. Based on the effective filter, build the query
 $page_title = $all_statuses[$current_filter] ?? __('all_requests');
@@ -923,7 +924,7 @@ if ($can_see_all_depts) {
 
                                                                     <!-- STEP 3: Show Adjustments Button After Payments are Complete -->
                                                                     <?php if ($show_adjustments_button): ?>
-                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="addVacationAdjustments(<?= $req['id']; ?>, '<?= htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>', '<?= $req['overtime_hours'] ?? '0'; ?>', '<?= $req['deduction_hours'] ?? '0'; ?>', '<?= $req['deduction_days'] ?? '0'; ?>', '<?= $req['other_earnings'] ?? '0'; ?>', `<?= htmlspecialchars($req['payroll_note'] ?? '', ENT_QUOTES); ?>`)">
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="addVacationAdjustments(<?= $req['id']; ?>, '<?= htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>', '<?= $req['overtime_hours'] ?? '0'; ?>', '<?= $req['deduction_hours'] ?? '0'; ?>', '<?= $req['deduction_days'] ?? '0'; ?>', '<?= $req['other_earnings'] ?? '0'; ?>', `<?= htmlspecialchars($req['payroll_note'] ?? '', ENT_QUOTES); ?>`, '<?= $req['other_deductions'] ?? '0'; ?>')">
                                                                             <i class="fa fa-calculator text-info"></i> <?= __('add_deduction_overtime') ?: 'Add deduction/overtime' ?>
                                                                         </a>
                                                                     <?php endif; ?>
@@ -1445,8 +1446,37 @@ if ($can_see_all_depts) {
                 return;
             }
 
-            // If Finance Manager, show payer selection modal instead
-            if (isFinanceManager) {
+            // If Finance Manager, check if this is Encashed vacation and if HR Payroll has approved
+            // Finance Manager should only see "Assign Payer" modal for Encashed vacations AFTER HR Payroll approval
+            if (isFinanceManager && vacType === 'Encashed') {
+                // First check if HR Payroll has already approved this request
+                $.ajax({
+                    url: './includes/ajaxFile/ajaxVacation.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        ajaxType: 'checkHRPayrollApproval',
+                        vacation_id: vacationId
+                    },
+                    success: function(response) {
+                        if (response.hr_approved) {
+                            // HR Payroll has approved, show the "Assign Payer" modal
+                            showAssignPayerModal(vacationId);
+                        } else {
+                            // HR Payroll hasn't approved yet, show normal approval modal
+                            showNormalApprovalModal(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays);
+                        }
+                    },
+                    error: function() {
+                        // On error, default to normal approval
+                        showNormalApprovalModal(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays);
+                    }
+                });
+                return;
+            }
+
+            // Helper function to show the Assign Payer modal
+            function showAssignPayerModal(vacId) {
                 $.ajax({
                     url: './includes/ajaxFile/ajaxLoan.php',
                     type: 'POST',
@@ -1518,19 +1548,50 @@ if ($can_see_all_depts) {
                     // Fallback to simple approval if staff fetch fails
                     Swal.fire({
                         title: 'Are you sure?',
-                        text: "Do you want to approve this vacation request?",
-                        icon: 'warning',
+                        text: 'Do you want to approve this vacation request?',
+                        icon: 'question',
                         showCancelButton: true,
-                        confirmButtonColor: '#50e3c2',
-                        cancelButtonColor: '#e35050',
-                        confirmButtonText: 'Yes, approve it!'
+                        confirmButtonText: 'Approve',
+                        confirmButtonColor: '#28a745',
+                        cancelButtonColor: '#dc3545'
                     }).then((result) => {
                         if (result.isConfirmed) {
-                            sendApproval(vacationId, userRole);
+                            sendApproval(vacId, currentUserType, '', '');
                         }
                     });
                 });
-                return;
+            }
+
+            // Helper function to show normal approval modal
+            function showNormalApprovalModal(vacId, empId, empName, vType, sDate, eDate, tDays) {
+                Swal.fire({
+                    title: 'Approve Vacation Request',
+                    html: `
+                        <div class="text-left">
+                            <p><strong>Employee:</strong> ${empName} (${empId})</p>
+                            <p><strong>Type:</strong> ${vType}</p>
+                            <p><strong>Period:</strong> ${sDate} to ${eDate} (${tDays} days)</p>
+                            <hr>
+                            <div class="form-group">
+                                <label>Approval Comment (Optional)</label>
+                                <textarea id="approval_comment" class="form-control" rows="3" placeholder="Add your comment..."></textarea>
+                            </div>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: 'Approve',
+                    confirmButtonColor: '#28a745',
+                    cancelButtonColor: '#dc3545',
+                    preConfirm: () => {
+                        return {
+                            approval_comment: document.getElementById('approval_comment').value
+                        };
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        sendApproval(vacId, currentUserType, '', result.value.approval_comment);
+                    }
+                });
             }
 
             const assetDeptMap = { it: 6, admin: 1, transport: 17 };
@@ -2022,6 +2083,29 @@ if ($can_see_all_depts) {
                 `;
             }
 
+            // Show Finance Team CC selector for GR Officer (to notify Finance about exit & re-entry fee)
+            let financeTeamCCHtml = '';
+            if (isGR_Officer) {
+                financeTeamCCHtml = `
+                    <div class="swal-finance-team-cc text-left mt-3">
+                        <hr>
+                        <h6 class="text-primary mb-3"><i class="fa fa-users"></i> ${__('notify_finance_team') || 'Notify Finance Team'}</h6>
+                        <div class="form-group">
+                            <label for="finance_team_cc_select" class="font-weight-bold">
+                                <i class="fa fa-envelope"></i> ${__('select_finance_team_members_cc') || 'Select finance team members CC'}
+                                <span class="text-muted">(${__('optional')})</span>
+                            </label>
+                            <select id="finance_team_cc_select" class="form-control swal-select2-dynamic" multiple="multiple" style="width: 100%;">
+                                <option value="">${__('loading_finance_team') || 'Loading finance team...'}</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                <i class="fa fa-info-circle"></i> ${__('finance_team_cc_note') || 'Selected Finance team members will receive email notifications (CC) to process exit & re-entry fee.'}
+                            </small>
+                        </div>
+                    </div>
+                `;
+            }
+
             // --- Condition 2: Show Chain Builder? ---
             if (isSimpleLeave) {
                 // SIMPLE LEAVE APPROVAL LOGIC
@@ -2099,7 +2183,7 @@ if ($can_see_all_depts) {
 
             Swal.fire({
                 title: isAssetClearanceRole ? (__('asset_clearance_confirmation') || 'Asset Clearance Confirmation') : __('confirm_approval'),
-                html: infoHtml + paymentHtml + hrPayrollHtml + hrTeamCCHtml + commentHtml + chainHtml, // Combine all HTML parts
+                html: infoHtml + paymentHtml + hrPayrollHtml + hrTeamCCHtml + financeTeamCCHtml + commentHtml + chainHtml, // Combine all HTML parts
                 icon: 'warning',
                 // width: '40%', // Set modal width
                 showCancelButton: true,
@@ -2304,6 +2388,36 @@ if ($can_see_all_depts) {
                             error: (xhr, status, error) => {
                                 console.error('Error loading HR team:', status, error);
                                 $hrTeamCCSelect.html(`<option value="">${__('error_loading_hr_team')}</option>`);
+                            }
+                        });
+                    }
+
+                    // --- FINANCE TEAM CC LOADING (for GR Officer) ---
+                    if (isGR_Officer) {
+                        initSelect2('#finance_team_cc_select', __('select_finance_team_members_cc') || 'Select finance team members');
+                        let $financeTeamCCSelect = $('#finance_team_cc_select');
+
+                        $.ajax({
+                            url: './includes/ajaxFile/ajaxLoan.php',
+                            dataType: 'JSON',
+                            type: 'POST',
+                            data: { ajaxType: 'get_finance_staff' },
+                            success: function(res) {
+                                if (res.status === 'success' && Array.isArray(res.staff)) {
+                                    let finOptions = ``;
+                                    for (let i in res.staff) {
+                                        if (String(res.staff[i].emp_id) !== String(<?= $empid ?>)) {
+                                            finOptions += `<option value="${res.staff[i].emp_id}">${res.staff[i].name} (${res.staff[i].emp_id})</option>`;
+                                        }
+                                    }
+                                    $financeTeamCCSelect.html(finOptions || `<option value="">${__('no_finance_team_found') || 'No finance team found'}</option>`);
+                                } else {
+                                    $financeTeamCCSelect.html(`<option value="">${__('no_finance_team_found') || 'No finance team found'}</option>`);
+                                }
+                            },
+                            error: function(xhr, status) {
+                                console.error('Error loading finance team:', status);
+                                $financeTeamCCSelect.html(`<option value="">${__('error_loading_finance_team') || 'Error loading finance team'}</option>`);
                             }
                         });
                     }
@@ -2587,6 +2701,7 @@ if ($can_see_all_depts) {
                     let overtime_hours = $(swalModal).find('#swal_overtime_hours').val() || null;
                     let deduction_hours = $(swalModal).find('#swal_deduction_hours').val() || null;
                     let deduction_days = $(swalModal).find('#swal_deduction_days').val() || null;
+                    let other_deductions = $(swalModal).find('#swal_other_deductions').val() || null;
                     let payroll_note = $(swalModal).find('#swal_payroll_note').val() || null;
 
                     // A.5) Get HR Team CC members (if HR Senior BP is approving)
@@ -2595,6 +2710,15 @@ if ($can_see_all_depts) {
                         let selectedCC = $(swalModal).find('#hr_team_cc_select').val();
                         if (selectedCC && Array.isArray(selectedCC)) {
                             hr_team_cc = selectedCC;
+                        }
+                    }
+
+                    // A.6) Get Finance Team CC members (if GR Officer is approving)
+                    let finance_team_cc = [];
+                    if (isGR_Officer) {
+                        let selectedFinCC = $(swalModal).find('#finance_team_cc_select').val();
+                        if (selectedFinCC && Array.isArray(selectedFinCC)) {
+                            finance_team_cc = selectedFinCC;
                         }
                     }
 
@@ -2704,6 +2828,7 @@ if ($can_see_all_depts) {
                                     overtime_hours: $(swalModal).find('#swal_overtime_hours').val() || null,
                                     deduction_hours: $(swalModal).find('#swal_deduction_hours').val() || null,
                                     deduction_days: $(swalModal).find('#swal_deduction_days').val() || null,
+                                    other_deductions: $(swalModal).find('#swal_other_deductions').val() || null,
                                     payroll_note: $(swalModal).find('#swal_payroll_note').val() || null,
                                     hr_team_cc: []
                                 });
@@ -2750,6 +2875,7 @@ if ($can_see_all_depts) {
                         ticket_pay: ticket_pay,
                         permit_fee: permit_fee, // [UPDATED] Include permit_fee for GR Officer
                         hr_team_cc: hr_team_cc,
+                        finance_team_cc: finance_team_cc,
                         overtime_hours: overtime_hours,
                         deduction_hours: deduction_hours,
                         deduction_days: deduction_days,
@@ -2807,9 +2933,11 @@ if ($can_see_all_depts) {
                         permit_fee: approveData.permit_fee || null, // Send permit fee
                         permit_fee: approveData.permit_fee || null, // [UPDATED] Send permit_fee for GR Officer
                         hr_team_cc: approveData.hr_team_cc || [], // Send HR team CC
+                        finance_team_cc: approveData.finance_team_cc || [], // Send Finance team CC
                         overtime_hours: approveData.overtime_hours || null, // Send overtime hours
                         deduction_hours: approveData.deduction_hours || null, // Send deduction hours
                         deduction_days: approveData.deduction_days || null, // Send deduction days
+                        other_deductions: approveData.other_deductions || null, // Send other deductions
                         payroll_note: approveData.payroll_note || null, // Send payroll note
                         approval_comment: approveData.approval_comment || '' // Send approval comment
                     },

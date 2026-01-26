@@ -1086,7 +1086,7 @@ elseif ($ajaxType == 'applyVacation') {
         $sql = "INSERT INTO `emp_vacation` 
                     (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`,`review`) 
                 VALUES 
-                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
+                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, 'A', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
 
         if (!mysqli_query($conDB, $sql)) {
 
@@ -1489,10 +1489,13 @@ elseif ($ajaxType == 'approveVacation') {
         $overtime_hours = (float)($_POST['overtime_hours'] ?? 0);
         $deduction_hours = (float)($_POST['deduction_hours'] ?? 0);
         $deduction_days = (float)($_POST['deduction_days'] ?? 0);
+        $other_deductions = (float)($_POST['other_deductions'] ?? 0);
         $payroll_note = trim($_POST['payroll_note'] ?? '');
 
         // HR Team CC recipients (only sent by HR Senior BP)
         $hr_team_cc = (array)($_POST['hr_team_cc'] ?? []);
+        // Finance Team CC recipients (sent by GR Officer)
+        $finance_team_cc = (array)($_POST['finance_team_cc'] ?? []);
 
         // Log for debugging
 
@@ -1608,12 +1611,34 @@ elseif ($ajaxType == 'approveVacation') {
             mysqli_free_result($type_detect_query);
         }
         
-        // 2.1 Check if Finance Manager is selecting a payer for this vacation
+        // 2.1 Check if Finance Manager is assigning a payer for Encashed vacation
+        // This happens AFTER HR Payroll has approved the Encashed vacation
+        // Finance Manager assigns a Finance employee to process the payment
         $payer_emp_id = (int)($_POST['payer_emp_id'] ?? 0);
         $is_finance_manager = ($user_role === 'finance');
+        $is_encashed_vacation = (strtolower(trim($vac_type)) === 'encashed');
         
-        if ($is_finance_manager && $payer_emp_id > 0) {
-            // Finance Manager is approving and selecting a payer
+        // CRITICAL: Finance Manager should only see "Assign Payer" modal AFTER HR Payroll has approved
+        // Check if HR Payroll has already approved this request
+        $hr_payroll_approved = false;
+        if ($is_finance_manager && $is_encashed_vacation) {
+            $hr_check_query = mysqli_query($conDB, "SELECT 
+                `ra`.`status` 
+                FROM `request_approvers` `ra`
+                INNER JOIN `admin_login` `al` ON `ra`.`approver_id` = `al`.`emp_id`
+                WHERE `ra`.`request_inv_no` = '" . mysqli_real_escape_string($conDB, $request_inv_no) . "'
+                AND `al`.`user_type` = 'hr_payroll'
+                AND `ra`.`status` = 'approved'
+                LIMIT 1
+            ");
+            if ($hr_check_query && mysqli_num_rows($hr_check_query) > 0) {
+                $hr_payroll_approved = true;
+            }
+            if ($hr_check_query) mysqli_free_result($hr_check_query);
+        }
+        
+        if ($is_finance_manager && $payer_emp_id > 0 && $is_encashed_vacation && $hr_payroll_approved) {
+            // Finance Manager is assigning a Finance payer for Encashed vacation (AFTER HR Payroll approval)
             require_once __DIR__ . '/../ApprovalChainManager.php';
             $chainManager = new ApprovalChainManager($conDB, $pdo);
             
@@ -1633,8 +1658,8 @@ elseif ($ajaxType == 'approveVacation') {
                 // Notify payer about assignment via browser notification
                 $chainManager->notifyApprover(
                     $payer_emp_id,
-                    'Vacation Request - Payment Processing Assignment',
-                    'You have been assigned to process payment for vacation request. Please record the payment amount and proof.',
+                    'Encashed Vacation - Payment Processing Assignment',
+                    'You have been assigned to process payment for encashed vacation request. Please record the payment amount and proof.',
                     'all_applied_vac.php'
                 );
                 
@@ -1677,10 +1702,10 @@ elseif ($ajaxType == 'approveVacation') {
                             'VACATION_DAYS' => $vacation_days,
                             'REPLACEMENT_PERSON' => $replacement,
                             'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending',
-                            'EMAIL_MESSAGE' => 'You have been assigned by Finance Manager to process the payment for this vacation request. Please review all details, record the payment amount, confirm the salary deduction details, and upload payment proof to complete the transaction. Click the link above to process this request.'
+                            'EMAIL_MESSAGE' => 'You have been assigned by Finance Manager to process the payment for this encashed vacation request. Please review all details, record the payment amount, confirm the salary deduction details, and upload payment proof to complete the transaction. Click the link above to process this request.'
                         ];
                         
-                        $email_subject = "Vacation Payment Processing Assignment - " . $request_inv_no . " (" . $employee_name . ")";
+                        $email_subject = "Encashed Vacation Payment Assignment - " . $request_inv_no . " (" . $employee_name . ")";
                         send_approval_email($conDB, $payerSelectionResult['payer']['email'], $payer_name, $email_subject, 'vacation_request', $template_data);
                     }
                 }
@@ -1689,7 +1714,7 @@ elseif ($ajaxType == 'approveVacation') {
                 echo json_encode([
                     'status' => 'success',
                     'title' => 'Payer Assigned Successfully',
-                    'message' => 'Finance payer has been assigned. Awaiting payment details.',
+                    'message' => 'Finance payer has been assigned for encashed vacation. Awaiting payment processing.',
                     'type' => 'success'
                 ]);
                 return;
@@ -2054,7 +2079,7 @@ elseif ($ajaxType == 'approveVacation') {
         }
 
         // 3.1 If payroll adjustments were included (by HR Payroll), save them
-        if ($overtime_hours > 0 || $deduction_hours > 0 || $deduction_days > 0 || !empty($payroll_note)) {
+        if ($overtime_hours > 0 || $deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0 || !empty($payroll_note)) {
             // Get employee ID from vacation record
             $sql_emp = "SELECT emp_id FROM emp_vacation WHERE id = ?";
             $stmt_emp = mysqli_prepare($conDB, $sql_emp);
@@ -2068,11 +2093,11 @@ elseif ($ajaxType == 'approveVacation') {
                     // Save payroll adjustments to vacation record or a separate table
                     // Update emp_vacation with payroll adjustments (assuming columns exist)
                     $sql_payroll = "UPDATE `emp_vacation` 
-                                   SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `payroll_note` = ? 
+                                   SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `other_deductions` = ?, `payroll_note` = ?, `review` = IF(`review` IS NULL OR `review` = '', 'A', `review`) 
                                    WHERE `id` = ?";
                     $stmt_payroll = mysqli_prepare($conDB, $sql_payroll);
                     if ($stmt_payroll) {
-                        mysqli_stmt_bind_param($stmt_payroll, "dddsi", $overtime_hours, $deduction_hours, $deduction_days, $payroll_note, $vacation_id);
+                        mysqli_stmt_bind_param($stmt_payroll, "ddddsi", $overtime_hours, $deduction_hours, $deduction_days, $other_deductions, $payroll_note, $vacation_id);
                         if (!mysqli_stmt_execute($stmt_payroll)) {
 
                             // Don't fail the whole approval, just log this error
@@ -2170,6 +2195,74 @@ elseif ($ajaxType == 'approveVacation') {
             }
         }
 
+        // 4.b Send email notifications to Finance Team CC recipients (if any)
+        if (!empty($finance_team_cc) && is_array($finance_team_cc)) {
+            // Filter out empty values and ensure valid employee IDs
+            $finance_team_cc = array_filter(array_map('intval', $finance_team_cc), function($id) { return $id > 0; });
+            if (!empty($finance_team_cc)) {
+                // Get vacation details for email
+                $sql_vac2 = "SELECT ev.*, e.name as emp_name, e.email as emp_email, e.emp_id as emp_id, d.dep_nme as dept_name 
+                             FROM emp_vacation ev 
+                             JOIN employees e ON ev.emp_id = e.emp_id 
+                             LEFT JOIN department d ON e.dept = d.id 
+                             WHERE ev.id = ?";
+                $stmt_vac2 = mysqli_prepare($conDB, $sql_vac2);
+                if ($stmt_vac2) {
+                    mysqli_stmt_bind_param($stmt_vac2, "i", $vacation_id);
+                    mysqli_stmt_execute($stmt_vac2);
+                    $result_vac2 = mysqli_stmt_get_result($stmt_vac2);
+                    if ($vac_data2 = mysqli_fetch_assoc($result_vac2)) {
+                        // Get CC recipient details
+                        $cc_ids2 = implode(',', $finance_team_cc);
+                        $sql_fin_cc = "SELECT e.emp_id, e.name, al.email 
+                                       FROM employees e 
+                                       LEFT JOIN admin_login al ON e.emp_id = al.emp_id 
+                                       WHERE e.emp_id IN ($cc_ids2) AND e.status = 1";
+                        $result_fin_cc = mysqli_query($conDB, $sql_fin_cc);
+                        if ($result_fin_cc && mysqli_num_rows($result_fin_cc) > 0) {
+                            // Build request type description
+                            $vac_type2 = trim($vac_data2['vac_type'] ?? 'Vacation Request');
+                            $fly_type2 = trim($vac_data2['fly_type'] ?? '');
+                            $reqType2 = $vac_type2;
+                            if (!empty($fly_type2)) { $reqType2 .= ' (' . ucfirst($fly_type2) . ')'; }
+
+                            $subject2 = ($fly_type2 ? 'Exit & Re-Entry Fee' : 'Vacation Fee') . " - {$vac_data2['emp_name']} ({$vac_data2['request_inv_no']})";
+                            $base_url2 = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+
+                            $sent_count2 = 0;
+                            while ($fin_cc = mysqli_fetch_assoc($result_fin_cc)) {
+                                if (!empty($fin_cc['email']) && function_exists('send_approval_email')) {
+                                    $cc_template_data2 = [
+                                        'APPROVER_NAME' => $fin_cc['name'],
+                                        'REQUEST_TYPE' => $reqType2 . ' (Finance CC)',
+                                        'REQUEST_TYPE_LOWER' => strtolower($reqType2) . ' (finance cc)',
+                                        'REQUEST_ID' => $vac_data2['request_inv_no'],
+                                        'EMPLOYEE_NAME' => $vac_data2['emp_name'],
+                                        'START_DATE' => date('d M Y', strtotime($vac_data2['start_date'])),
+                                        'END_DATE' => date('d M Y', strtotime($vac_data2['return_date'])),
+                                        'DURATION' => $vac_data2['vacdays'],
+                                        'REQUEST_URL' => $base_url2 . '/all_applied_vac.php',
+                                        'EMAIL_MESSAGE' => 'Please review the vacation details and process the Exit & Re-Entry visa fee payment for the applicant. This is a CC notification from GR Officer.'
+                                    ];
+                                    if (send_approval_email($conDB, $fin_cc['email'], $fin_cc['name'], $subject2, 'vacation_request', $cc_template_data2)) {
+                                        $sent_count2++;
+                                    }
+                                }
+                            }
+
+                            if ($sent_count2 > 0) {
+                                ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id,
+                                    "Sent Finance CC notification to {$sent_count2} members for request {$vac_data2['request_inv_no']}",
+                                    'emp_vacation');
+                            }
+                            mysqli_free_result($result_fin_cc);
+                        }
+                    }
+                    mysqli_stmt_close($stmt_vac2);
+                }
+            }
+        }
+
         // 5. Send success response
         // Log approval to smt_request_status with level-wise information
         $log_status = 'approved';
@@ -2177,13 +2270,12 @@ elseif ($ajaxType == 'approveVacation') {
         // Get the approval level and approver details from request_approvers table
         $approval_level = 1; // Default
         $approver_role = '';
-        $level_query = $conDB->prepare("
-            SELECT ra.approval_level, ra.approver_id,
-                   COALESCE(e.name, al.fullname, al.username) AS approver_name
-            FROM request_approvers ra
-            LEFT JOIN employees e ON ra.approver_id = e.emp_id
-            LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
-            WHERE ra.request_inv_no = ? AND ra.approver_id = ?
+        $level_query = $conDB->prepare("SELECT 
+            `ra`.`approval_level`, `ra`.`approver_id`, COALESCE(`e`.`name`, `al`.`fullname`, `al`.`username`) AS `approver_name`
+            FROM `request_approvers` `ra`
+            LEFT JOIN `employees` `e` ON `ra`.`approver_id` = `e`.`emp_id`
+            LEFT JOIN `admin_login` `al` ON `al`.`emp_id` = `ra`.`approver_id`
+            WHERE `ra`.`request_inv_no` = ? AND `ra`.`approver_id` = ?
             LIMIT 1
         ");
         if ($level_query) {
@@ -2241,7 +2333,7 @@ elseif ($ajaxType == 'processPayment') {
         }
         
         // Verify current user is HR Payroll
-        $user_check = mysqli_query($conDB, "SELECT user_type FROM admin_login WHERE emp_id = '{$current_user_id}'");
+        $user_check = mysqli_query($conDB, "SELECT `user_type` FROM `admin_login` WHERE `emp_id` = '{$current_user_id}'");
         if (!$user_check || mysqli_num_rows($user_check) === 0) {
             throw new Exception("User not found or unauthorized");
         }
@@ -2252,7 +2344,7 @@ elseif ($ajaxType == 'processPayment') {
         mysqli_free_result($user_check);
         
         // 1. Verify vacation exists and is in correct status
-        $vac_query = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
+        $vac_query = mysqli_query($conDB, "SELECT * FROM `emp_vacation` WHERE `id` = {$vacation_id}");
         if (!$vac_query || mysqli_num_rows($vac_query) === 0) {
             throw new Exception("Vacation request not found");
         }
@@ -2266,11 +2358,11 @@ elseif ($ajaxType == 'processPayment') {
         
         // 2. Update payment status to "paid"
         $payment_date = date('Y-m-d H:i:s');
-        $update_query = "UPDATE emp_vacation 
-                        SET payment_status = 'paid',
-                            payment_date = ?,
-                            is_payment_completed = 1
-                        WHERE id = ?";
+        $update_query = "UPDATE `emp_vacation` 
+                        SET `payment_status` = 'paid',
+                            `payment_date` = ?,
+                            `is_payment_completed` = 1
+                        WHERE `id` = ?";
         
         $stmt = mysqli_prepare($conDB, $update_query);
         if (!$stmt) {
@@ -2317,7 +2409,7 @@ elseif ($ajaxType == 'modifyPayment') {
         }
         
         // Verify current user is HR Payroll
-        $user_check = mysqli_query($conDB, "SELECT user_type FROM admin_login WHERE emp_id = '{$current_user_id}'");
+        $user_check = mysqli_query($conDB, "SELECT `user_type` FROM `admin_login` WHERE `emp_id` = '{$current_user_id}'");
         if (!$user_check || mysqli_num_rows($user_check) === 0) {
             throw new Exception("User not found or unauthorized");
         }
@@ -2328,7 +2420,7 @@ elseif ($ajaxType == 'modifyPayment') {
         mysqli_free_result($user_check);
         
         // 1. Verify vacation exists
-        $vac_query = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
+        $vac_query = mysqli_query($conDB, "SELECT * FROM `emp_vacation` WHERE `id` = {$vacation_id}");
         if (!$vac_query || mysqli_num_rows($vac_query) === 0) {
             throw new Exception("Vacation request not found");
         }
@@ -2337,12 +2429,12 @@ elseif ($ajaxType == 'modifyPayment') {
         
         // 2. Mark payment as "needs_modification"
         $modified_date = date('Y-m-d H:i:s');
-        $update_query = "UPDATE emp_vacation 
-                        SET payment_status = 'needs_modification',
-                            payment_modified_date = ?,
-                            payment_modified_by = ?,
-                            payroll_note = CONCAT(COALESCE(payroll_note, ''), '\n[PAYMENT MODIFICATION] ', ?)
-                        WHERE id = ?";
+        $update_query = "UPDATE `emp_vacation` 
+                        SET `payment_status` = 'needs_modification',
+                            `payment_modified_date` = ?,
+                            `payment_modified_by` = ?,
+                            `payroll_note` = CONCAT(COALESCE(`payroll_note`, ''), '\n[PAYMENT MODIFICATION] ', ?)
+                        WHERE `id` = ?";
         
         $stmt = mysqli_prepare($conDB, $update_query);
         if (!$stmt) {
@@ -2399,7 +2491,11 @@ elseif ($ajaxType == 'rejectVacation') {
         mysqli_free_result($query_inv);
 
         // 2. Detect the actual request type (vacation_request or excuse_leave)
-        $type_detect_query = mysqli_query($conDB, "SELECT art.type_name FROM request_approvers ra JOIN approval_request_types art ON ra.request_type_id = art.id WHERE ra.request_inv_no = '" . escape_string($request_inv_no) . "' LIMIT 1");
+        $type_detect_query = mysqli_query($conDB, "SELECT 
+            `art`.`type_name` 
+            FROM `request_approvers` `ra` 
+            JOIN `approval_request_types` `art` ON `ra`.`request_type_id` = `art`.`id` 
+            WHERE `ra`.`request_inv_no` = '" . escape_string($request_inv_no) . "' LIMIT 1");
         $detected_type = 'vacation_request'; // Default fallback
         if ($type_detect_query && mysqli_num_rows($type_detect_query) > 0) {
             $type_row = mysqli_fetch_assoc($type_detect_query);
@@ -2441,13 +2537,13 @@ elseif ($ajaxType == 'rejectVacation') {
         // Get the approval level and approver details from request_approvers table
         $approval_level = 1; // Default
         $approver_role = '';
-        $level_query = $conDB->prepare("
-            SELECT ra.approval_level, ra.approver_id,
-                   COALESCE(e.name, al.fullname, al.username) AS approver_name
-            FROM request_approvers ra
-            LEFT JOIN employees e ON ra.approver_id = e.emp_id
-            LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
-            WHERE ra.request_inv_no = ? AND ra.approver_id = ?
+        $level_query = $conDB->prepare("SELECT 
+        `ra`.`approval_level`, `ra`.`approver_id`,
+                   COALESCE(`e`.`name`, `al`.`fullname`, `al`.`username`) AS `approver_name`
+            FROM `request_approvers` `ra`
+            LEFT JOIN `employees` `e` ON `ra`.`approver_id` = `e`.`emp_id`
+            LEFT JOIN `admin_login` `al` ON `al`.`emp_id` = `ra`.`approver_id`
+            WHERE `ra`.`request_inv_no` = ? AND `ra`.`approver_id` = ?
             LIMIT 1
         ");
         if ($level_query) {
@@ -2741,6 +2837,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         $deduction_hours = (float)($_POST['deduction_hours'] ?? 0);
         $deduction_days = (float)($_POST['deduction_days'] ?? 0);
         $other_earnings = (float)($_POST['other_earnings'] ?? 0);
+        $other_deductions = (float)($_POST['other_deductions'] ?? 0);
         $payroll_note = trim($_POST['payroll_note'] ?? '');
 
         if (empty($vacation_id)) {
@@ -2748,14 +2845,14 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         }
 
         // Basic validation for negative values
-        if ($overtime_hours < 0 || $deduction_hours < 0 || $deduction_days < 0 || $other_earnings < 0) {
+        if ($overtime_hours < 0 || $deduction_hours < 0 || $deduction_days < 0 || $other_earnings < 0 || $other_deductions < 0) {
             throw new Exception(__("invalid_negative_values_not_allowed"));
         }
 
         // Ensure vacation exists and get employee salary info
-        $exists_sql = "SELECT ev.id, ev.emp_id, es.basic, es.housing FROM emp_vacation ev 
-                       LEFT JOIN emp_salary es ON ev.emp_id = es.emp_id AND es.status = 1
-                       WHERE ev.id = ?";
+        $exists_sql = "SELECT `ev`.`id`, `ev`.`emp_id`, `es`.`basic`, `es`.`housing` FROM `emp_vacation` `ev` 
+                       LEFT JOIN `emp_salary` `es` ON `ev`.`emp_id` = `es`.`emp_id` AND `es`.`status` = 1
+                       WHERE `ev`.`id` = ?";
         $exists_stmt = mysqli_prepare($conDB, $exists_sql);
         if (!$exists_stmt) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
@@ -2771,8 +2868,8 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         mysqli_stmt_close($exists_stmt);
 
         // Get full salary base for calculation
-        $salary_sql = "SELECT basic, housing, transport, food, misc, cashier, fuel, tel, guard, other 
-                       FROM emp_salary WHERE emp_id = ? AND status = 1";
+        $salary_sql = "SELECT `basic`, `housing`, `transport`, `food`, `misc`, `cashier`, `fuel`, `tel`, `guard`, `other` 
+                       FROM `emp_salary` WHERE `emp_id` = ? AND `status` = 1";
         $salary_stmt = mysqli_prepare($conDB, $salary_sql);
         if ($salary_stmt) {
             mysqli_stmt_bind_param($salary_stmt, "s", $vacation_row['emp_id']);
@@ -2812,18 +2909,18 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         $hourly_rate_deduction = $daily_rate_deduction > 0 ? $daily_rate_deduction / 8 : 0;
         
         $overtime_amount = ($overtime_hours * $overtime_hourly_rate);
-        $deduction_amount = ($deduction_hours * $hourly_rate_deduction) + ($deduction_days * $daily_rate_deduction);
+        $deduction_amount = ($deduction_hours * $hourly_rate_deduction) + ($deduction_days * $daily_rate_deduction) + $other_deductions;
         
         // DEBUG: Log calculation details
         error_log("OVERTIME CALC - Emp: {$vacation_row['emp_id']}, Basic: {$basic_salary}, Total: {$salary_base}, Hours: {$overtime_hours}, Rate: {$overtime_hourly_rate}, Amount: {$overtime_amount}");
         
         // Update adjustments with calculation fields
-        $sql_adj = "UPDATE emp_vacation SET overtime_hours = ?, deduction_hours = ?, deduction_days = ?, other_earnings = ?, payroll_note = ?, overtime_amount = ?, deduction_amount = ? WHERE id = ?";
+        $sql_adj = "UPDATE `emp_vacation` SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `other_earnings` = ?, `other_deductions` = ?, `payroll_note` = ?, `overtime_amount` = ?, `deduction_amount` = ?, `review` = IF(`review` IS NULL OR `review` = '', 'A', `review`) WHERE `id` = ?";
         $stmt_adj = mysqli_prepare($conDB, $sql_adj);
         if (!$stmt_adj) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
         }
-        mysqli_stmt_bind_param($stmt_adj, "ddddsddi", $overtime_hours, $deduction_hours, $deduction_days, $other_earnings, $payroll_note, $overtime_amount, $deduction_amount, $vacation_id);
+        mysqli_stmt_bind_param($stmt_adj, "dddddsddi", $overtime_hours, $deduction_hours, $deduction_days, $other_earnings, $other_deductions, $payroll_note, $overtime_amount, $deduction_amount, $vacation_id);
         if (!mysqli_stmt_execute($stmt_adj)) {
             $err = mysqli_stmt_error($stmt_adj);
             mysqli_stmt_close($stmt_adj);
@@ -2846,11 +2943,12 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                 'hourly_rate_deduction' => round($hourly_rate_deduction, 4),
                 'daily_rate_deduction' => round($daily_rate_deduction, 2),
                 'deduction_amount' => round($deduction_amount, 2),
+                'other_deductions' => round($other_deductions, 2),
                 'formula' => "overtime_rate = (basic/{$basic_salary}/240/2) + (total/{$salary_base}/240) = " . round($overtime_hourly_rate, 4)
             ];
             
             // Check vacation type and decide completion + balance update rules
-            $check_complete_sql = "SELECT vac_type, fly_type, ticket_pay, permit_fee, overtime_hours, deduction_hours FROM emp_vacation WHERE id = ?";
+            $check_complete_sql = "SELECT `vac_type`, `fly_type`, `ticket_pay`, `permit_fee`, `overtime_hours`, `deduction_hours` FROM `emp_vacation` WHERE `id` = ?";
             $check_complete_stmt = mysqli_prepare($conDB, $check_complete_sql);
             if ($check_complete_stmt) {
                 mysqli_stmt_bind_param($check_complete_stmt, "i", $vacation_id);
@@ -2871,7 +2969,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     // Rule 1: Local | Annual vacation -> Booking button hidden; complete on adjustments update
                     // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
                     if (!$is_fly && $is_annual && $has_adjustment) {
-                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed' WHERE `id` = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -2884,7 +2982,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     // Rule 2: Fly | Annual vacation -> complete when booking (payment) AND adjustments are updated
                     // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
                     if ($is_fly && $is_annual && $has_payment && $has_adjustment) {
-                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed' WHERE `id` = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -2903,7 +3001,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     // CRITICAL: Emergency vacations are NON-DEDUCTIBLE - NO balance deduction
                     if ($is_fly && $is_emergency && $has_adjustment) {
                         // Mark completed
-                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed' WHERE `id` = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -2923,7 +3021,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                         $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
                         
                         if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
-                            $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
+                            $stmtFly = mysqli_prepare($conDB, "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?");
                             if ($stmtFly) {
                                 mysqli_stmt_bind_param($stmtFly, "s", $vacation_row['emp_id']);
                                 mysqli_stmt_execute($stmtFly);
@@ -2955,7 +3053,7 @@ elseif ($ajaxType == 'getVacationDetails') {
             throw new Exception(__("vacation_id_is_missing"));
         }
 
-        $sql = "SELECT id, departure_date, arrival_date, ticket_pay, permit_fee, encashment_amount, vac_type, emp_id, request_inv_no FROM emp_vacation WHERE id = ?";
+        $sql = "SELECT `id`, `departure_date`, `arrival_date`, `ticket_pay`, `permit_fee`, `encashment_amount`, `vac_type`, `emp_id`, `request_inv_no` FROM `emp_vacation` WHERE `id` = ?";
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
@@ -2977,7 +3075,7 @@ elseif ($ajaxType == 'getVacationDetails') {
             $asset_checker_emp_id = null;
             if (!empty($row['request_inv_no'])) {
                 // First, get the vacation_request type ID
-                $type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'vacation_request' LIMIT 1");
+                $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'vacation_request' LIMIT 1");
                 $type_id = null;
                 if ($type_query && mysqli_num_rows($type_query) > 0) {
                     $type_row = mysqli_fetch_assoc($type_query);
@@ -2987,12 +3085,12 @@ elseif ($ajaxType == 'getVacationDetails') {
 
                 // If we found the type, look for asset checker
                 if ($type_id) {
-                    $checker_sql = "SELECT ra.approver_id, e.dept
-                                   FROM request_approvers ra
-                                   JOIN employees e ON ra.approver_id = e.emp_id
-                                   WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
-                                   AND e.dept IN (1, 6, 17)
-                                   ORDER BY ra.approval_level DESC
+                    $checker_sql = "SELECT `ra`.`approver_id`, `e`.`dept`
+                                   FROM `request_approvers` `ra`
+                                   JOIN `employees` `e` ON `ra`.`approver_id` = `e`.`emp_id`
+                                   WHERE `ra`.`request_inv_no` = ? AND `ra`.`request_type_id` = ?
+                                   AND `e`.`dept` IN (1, 6, 17)
+                                   ORDER BY `ra`.`approval_level` DESC
                                    LIMIT 1";
                     $checker_stmt = mysqli_prepare($conDB, $checker_sql);
                     if ($checker_stmt) {
@@ -3013,7 +3111,7 @@ elseif ($ajaxType == 'getVacationDetails') {
             $current_user_emp_type = null;
             $current_empid = $_SESSION['empid'] ?? null;
             if ($current_empid) {
-                $emp_type_sql = "SELECT emp_type FROM admin_login WHERE emp_id = ?";
+                $emp_type_sql = "SELECT `emp_type` FROM `admin_login` WHERE `emp_id` = ?";
                 $emp_type_stmt = mysqli_prepare($conDB, $emp_type_sql);
                 if ($emp_type_stmt) {
                     mysqli_stmt_bind_param($emp_type_stmt, "i", $current_empid);
@@ -4321,6 +4419,7 @@ elseif ($ajaxType == 'addManualHistory') {
                     `used_days` = :used_days,
                     `remaining_balance` = :remaining_balance,
                     `available_balance` = :available_balance,
+                    `opening_balance` = :opening_balance,
                     `carryover_days` = :carryover_days,
                     `last_updated` = NOW()
                  WHERE `id` = :id");
@@ -4330,13 +4429,14 @@ elseif ($ajaxType == 'addManualHistory') {
                 ':used_days' => $used_days,
                 ':remaining_balance' => $rem_balance,
                 ':available_balance' => $rem_balance,
+                ':opening_balance' => $rem_balance,
                 ':carryover_days' => 0,
                 ':id' => (int)$existing['id'],
             ]);
         } else {
             $ins = $pdo->prepare("INSERT INTO `emp_vacation_balance` 
-            (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `last_updated`) 
-            VALUES (:emp_id, 0, :contract_id, :period_start, :period_end, :total_days, :used_days, :remaining_balance, :available_balance, :carryover_days, NOW())");
+            (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, `total_days`, `used_days`, `remaining_balance`, `available_balance`, `opening_balance`, `carryover_days`, `last_updated`) 
+            VALUES (:emp_id, 0, :contract_id, :period_start, :period_end, :total_days, :used_days, :remaining_balance, :available_balance, :opening_balance, :carryover_days, NOW())");
             $ins->execute([
                 ':emp_id' => $emp_id,
                 ':contract_id' => $contract_id,
@@ -4346,6 +4446,7 @@ elseif ($ajaxType == 'addManualHistory') {
                 ':used_days' => $used_days,
                 ':remaining_balance' => $rem_balance,
                 ':available_balance' => $rem_balance,
+                ':opening_balance' => $rem_balance,
                 ':carryover_days' => 0,
             ]);
         }
@@ -5799,6 +5900,53 @@ elseif ($ajaxType == 'processRejoinApproval') {
 
 // ============================================================================
 // SUBMIT ADJUSTED REJOIN DATE
+// ============================================================================
+// CHECK IF HR PAYROLL HAS APPROVED (for Finance Manager payer assignment)
+// ============================================================================
+elseif ($ajaxType == 'checkHRPayrollApproval') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        
+        if (empty($vacation_id)) {
+            echo json_encode(['hr_approved' => false, 'error' => 'Invalid vacation ID']);
+            exit;
+        }
+        
+        // Get request_inv_no from vacation ID
+        $vac_query = mysqli_query($conDB, "SELECT `request_inv_no` FROM `emp_vacation` WHERE `id` = " . $vacation_id);
+        if (!$vac_query || mysqli_num_rows($vac_query) == 0) {
+            echo json_encode(['hr_approved' => false, 'error' => 'Vacation not found']);
+            exit;
+        }
+        $vac_row = mysqli_fetch_assoc($vac_query);
+        $request_inv_no = $vac_row['request_inv_no'];
+        mysqli_free_result($vac_query);
+        
+        // Check if HR Payroll has approved this request
+        $hr_check_query = mysqli_query($conDB, "
+            SELECT `ra`.`status` 
+            FROM `request_approvers` `ra`
+            INNER JOIN `admin_login` `al` ON `ra`.`approver_id` = `al`.`emp_id`
+            WHERE `ra`.`request_inv_no` = '" . mysqli_real_escape_string($conDB, $request_inv_no) . "'
+            AND `al`.`user_type` = 'hr_payroll'
+            AND `ra`.`status` = 'approved'
+            LIMIT 1
+        ");
+        
+        $hr_approved = false;
+        if ($hr_check_query && mysqli_num_rows($hr_check_query) > 0) {
+            $hr_approved = true;
+        }
+        if ($hr_check_query) mysqli_free_result($hr_check_query);
+        
+        echo json_encode(['hr_approved' => $hr_approved]);
+        
+    } catch (Exception $e) {
+        echo json_encode(['hr_approved' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // ============================================================================
 elseif ($ajaxType == 'submitAdjustedRejoinDate') {
     try {

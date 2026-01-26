@@ -23,7 +23,17 @@ $sql = "SELECT v.*,
                e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
-               b.remaining_balance, b.available_balance
+               b.remaining_balance, b.available_balance,
+               (SELECT basic FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_basic,
+               (SELECT housing FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_housing,
+               (SELECT transport FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_transport,
+               (SELECT food FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_food,
+               (SELECT misc FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_misc,
+               (SELECT cashier FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_cashier,
+               (SELECT fuel FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_fuel,
+               (SELECT tel FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_tel,
+               (SELECT other FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_other,
+               (SELECT guard FROM emp_salary WHERE emp_id = v.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_guard
         FROM emp_vacation v
         JOIN employees e ON v.emp_id = e.emp_id
         LEFT JOIN department d ON e.dept = d.id
@@ -337,14 +347,165 @@ if ($vacation['fly_type'] === 'annual') {
                 </div>
                 <?php endif; ?>
 
-                <?php if ($vacation['vac_type'] == 'Fly' && ($vacation['ticket_pay'] > 0 || $vacation['permit_fee'] > 0)): ?>
+                <?php 
+                // Show payment information for Fly vacations OR if any payment-related fields have values
+                $has_payment_info = ($vacation['vac_type'] == 'Fly') || 
+                                   !empty($vacation['ticket_pay']) || 
+                                   !empty($vacation['permit_fee']) ||
+                                   !empty($vacation['overtime_hours']) ||
+                                   !empty($vacation['deduction_hours']) ||
+                                   !empty($vacation['deduction_days']) ||
+                                   !empty($vacation['other_deductions']) ||
+                                   !empty($vacation['other_earnings']);
+                
+                if ($has_payment_info): 
+                ?>
                 <div class="info-card mb-3">
                     <h5><i class="fas fa-money-bill-wave"></i> <?= __('payment_information') ?></h5>
+                    
+                    <?php 
+                    // Calculate salary-based amounts
+                    $working_days_salary = 0;
+                    $vacation_salary = 0;
+                    $is_fly_annual = ($vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual');
+                    $other_earnings = (float)($vacation['other_earnings'] ?? 0);
+                    
+                    $days_in_month = 30; // Fixed 30 days for all calculations
+                    
+                    // Calculate working days and vacation salary if salary_basic is available
+                    if (!empty($vacation['salary_basic'])) {
+                        $basic_salary = (float)$vacation['salary_basic'];
+                        $total_monthly_salary = $basic_salary + 
+                            (float)($vacation['salary_housing'] ?? 0) + 
+                            (float)($vacation['salary_transport'] ?? 0) + 
+                            (float)($vacation['salary_food'] ?? 0) + 
+                            (float)($vacation['salary_misc'] ?? 0) + 
+                            (float)($vacation['salary_cashier'] ?? 0) + 
+                            (float)($vacation['salary_fuel'] ?? 0) + 
+                            (float)($vacation['salary_tel'] ?? 0) + 
+                            (float)($vacation['salary_other'] ?? 0) + 
+                            (float)($vacation['salary_guard'] ?? 0);
+                        
+                        $daily_rate = $total_monthly_salary / $days_in_month;
+                        
+                        // Working days salary (days before vacation starts) - Only for Fly Annual
+                        if ($is_fly_annual && !empty($vacation['start_date'])) {
+                            $start_date_obj = new DateTime($vacation['start_date']);
+                            $working_days = (int)$start_date_obj->format('d') - 1;
+                            if ($working_days > 0) {
+                                $working_days_salary = $daily_rate * $working_days;
+                            }
+                        }
+                        
+                        // Vacation salary (approved days) - Only for Fly Annual with vacation_salary_type = payroll
+                        if ($is_fly_annual) {
+                            $vacation_salary_type = $vacation['vacation_salary_type'] ?? 'payroll';
+                            if ($vacation_salary_type === 'payroll') {
+                                $approved_days = (float)($vacation['vacdays'] ?? 0);
+                                if ($approved_days > 0) {
+                                    $vacation_salary = $daily_rate * $approved_days;
+                                }
+                            }
+                        }
+                    }
+                    
+                    $overtime_amount = 0;
+                    $deduction_amount = 0;
+                    
+                    if (!empty($vacation['salary_basic'])) {
+                        $basic_salary = (float)$vacation['salary_basic'];
+                        $total_monthly_salary = $basic_salary + 
+                            (float)($vacation['salary_housing'] ?? 0) + 
+                            (float)($vacation['salary_transport'] ?? 0) + 
+                            (float)($vacation['salary_food'] ?? 0) + 
+                            (float)($vacation['salary_misc'] ?? 0) + 
+                            (float)($vacation['salary_cashier'] ?? 0) + 
+                            (float)($vacation['salary_fuel'] ?? 0) + 
+                            (float)($vacation['salary_tel'] ?? 0) + 
+                            (float)($vacation['salary_other'] ?? 0) + 
+                            (float)($vacation['salary_guard'] ?? 0);
+                        
+                        // OVERTIME CALCULATION (per EOS file): per-hour overtime rate = (basic/240)/2 + (full/240)
+                        $overtimeHourlyRate = (($basic_salary / 240) / 2) + ($total_monthly_salary / 240);
+                        
+                        // DEDUCTION CALCULATION (EOS Logic)
+                        $DEDUCTION_BASE = $total_monthly_salary;
+                        $dailyRateDeduction = $DEDUCTION_BASE / $days_in_month;
+                        $hourlyRateDeduction = $dailyRateDeduction / 8;
+                        
+                        if (!empty($vacation['overtime_hours'])) {
+                            $overtime_amount = (float)$vacation['overtime_hours'] * $overtimeHourlyRate;
+                        }
+                        
+                        if (!empty($vacation['deduction_hours']) || !empty($vacation['deduction_days']) || !empty($vacation['other_deductions'])) {
+                            $deduction_hours_amount = (float)($vacation['deduction_hours'] ?? 0) * $hourlyRateDeduction;
+                            $deduction_days_amount = (float)($vacation['deduction_days'] ?? 0) * $dailyRateDeduction;
+                            $deduction_amount = $deduction_hours_amount + $deduction_days_amount + (float)($vacation['other_deductions'] ?? 0);
+                        }
+                    }
+                    
+                    // Debug information (remove after testing)
+                    echo "<!-- DEBUG: vac_type={$vacation['vac_type']}, fly_type={$vacation['fly_type']}, ";
+                    echo "salary_basic={$vacation['salary_basic']}, total_monthly_salary=$total_monthly_salary, ";
+                    echo "vacation_salary_type={$vacation['vacation_salary_type']}, ";
+                    echo "start_date={$vacation['start_date']}, vacdays={$vacation['vacdays']}, ";
+                    echo "other_earnings={$vacation['other_earnings']}, ";
+                    echo "working_days_salary=$working_days_salary, vacation_salary=$vacation_salary -->";
+                    ?>
+                    
+                    <!-- Ticket and Permit Fees -->
                     <?php if ($vacation['ticket_pay'] > 0): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-plane"></i> <?= __('ticket_payment') ?>:</div><div class="info-value"><strong>SAR <?= number_format($vacation['ticket_pay'], 2) ?></strong></div></div>
                     <?php endif; ?>
                     <?php if ($vacation['permit_fee'] > 0): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-passport"></i> <?= __('permit_fee') ?>:</div><div class="info-value"><strong>SAR <?= number_format($vacation['permit_fee'], 2) ?></strong></div></div>
+                    <?php endif; ?>
+                    
+                    <!-- Salary Components -->
+                    <?php if ($working_days_salary > 0): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar-days"></i> <?= __('working_days_salary') ?>:</div><div class="info-value"><strong>SAR <?= number_format($working_days_salary, 2) ?></strong></div></div>
+                    <?php endif; ?>
+                    <?php if ($vacation_salary > 0): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-sun"></i> <?= __('vacation_salary') ?>:</div><div class="info-value"><strong>SAR <?= number_format($vacation_salary, 2) ?></strong></div></div>
+                    <?php endif; ?>
+                    <?php if ($other_earnings > 0): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('other_earnings') ?>:</div><div class="info-value"><strong>SAR <?= number_format($other_earnings, 2) ?></strong></div></div>
+                    <?php endif; ?>
+                    
+                    <!-- Payroll Adjustments -->
+                    <?php if (!empty($vacation['overtime_hours'])): ?>
+                    <div class="info-row">
+                        <div class="info-label"><i class="fas fa-clock"></i> <?= __('overtime_payment') ?>:</div>
+                        <div class="info-value">
+                            <strong>SAR <?= number_format($overtime_amount, 2) ?></strong>
+                            <small class="text-muted d-block"><?= number_format((float)$vacation['overtime_hours'], 2) ?> hrs</small>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($vacation['deduction_hours']) || !empty($vacation['deduction_days']) || !empty($vacation['other_deductions'])): ?>
+                    <div class="info-row">
+                        <div class="info-label"><i class="fas fa-minus-circle"></i> <?= __('deductions') ?>:</div>
+                        <div class="info-value">
+                            <div style="margin-bottom: 5px;">-SAR <?= number_format($deduction_amount, 2) ?></div>
+                            <?php if (!empty($vacation['deduction_hours'])): ?>
+                            <small class="text-muted d-block"><i class="fas fa-hourglass-half"></i> Hours: <?= number_format((float)$vacation['deduction_hours'], 2) ?></small>
+                            <?php endif; ?>
+                            <?php if (!empty($vacation['deduction_days'])): ?>
+                            <small class="text-muted d-block"><i class="fas fa-calendar-alt"></i> Days: <?= number_format((float)$vacation['deduction_days'], 2) ?></small>
+                            <?php endif; ?>
+                            <?php if (!empty($vacation['other_deductions'])): ?>
+                            <small class="text-muted d-block"><i class="fas fa-list"></i> Other: SAR <?= number_format((float)$vacation['other_deductions'], 2) ?></small>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($vacation['payroll_note'])): ?>
+                    <div class="info-row">
+                        <div class="info-label"><i class="fas fa-sticky-note"></i> <?= __('note') ?>:</div>
+                        <div class="info-value"><small><?= nl2br(htmlspecialchars(getDisplayName($vacation['payroll_note']))) ?></small></div>
+                    </div>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>

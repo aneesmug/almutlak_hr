@@ -40,6 +40,7 @@ if (mysqli_num_rows($query) == 1) {
                 v.overtime_hours,
                 v.deduction_hours,
                 v.deduction_days,
+                v.other_deductions,
                 v.payroll_note,
                 v.accommodation_provided,
                 v.transportation_provided,
@@ -123,6 +124,7 @@ if (mysqli_num_rows($query) == 1) {
     $overtime_hours = (float)($request['overtime_hours'] ?? 0);
     $deduction_hours = (float)($request['deduction_hours'] ?? 0);
     $deduction_days = (float)($request['deduction_days'] ?? 0);
+    $other_deductions = (float)($request['other_deductions'] ?? 0);
     $payroll_note = $request['payroll_note'] ?? '';
     
     // Determine vacation salary type
@@ -171,10 +173,12 @@ if (mysqli_num_rows($query) == 1) {
             $overtime_amount = $overtimeHourlyRate * $overtime_hours;
         }
         
-        if ($deduction_hours > 0 || $deduction_days > 0) {
+        if ($deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0) {
             $deduction_hours_amount = $hourlyRateDeduction * $deduction_hours;
             $deduction_days_amount = $dailyRateDeduction * $deduction_days;
-            $deduction_amount = $deduction_hours_amount + $deduction_days_amount;
+            $deduction_amount = $deduction_hours_amount + $deduction_days_amount + $other_deductions;
+        } else if ($other_deductions > 0) {
+            $deduction_amount = $other_deductions;
         }
 
         // === WORKING DAYS SALARY ===
@@ -244,6 +248,7 @@ if (mysqli_num_rows($query) == 1) {
     } elseif ($is_fly_annual) {
         // Fly + Annual: Working days + vacation salary + ticket + permit + overtime - deductions - GOSI
         // $total_payable = ($working_days_salary + $vacation_salary) + $ticket_fee + $permit_fee + $overtime_amount - $deduction_amount - $gosi_deduction;
+        // $deduction_amount already includes $other_deductions from the calculation above
         $total_payable = ($working_days_salary + $vacation_salary)  + $overtime_amount - $deduction_amount - $gosi_deduction;
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
@@ -692,6 +697,10 @@ if (mysqli_num_rows($query) == 1) {
                                                         <?php if ($deduction_days > 0): ?>
                                                             <?php if ($deduction_hours > 0) echo ' + '; ?>
                                                             <?= htmlspecialchars($deduction_days) ?> <?= __('days') ?? 'days' ?> @ <?= number_format($dailyRateDeduction ?? 0, 2) ?> SAR/day
+                                                        <?php endif; ?>
+                                                        <?php if ($other_deductions > 0): ?>
+                                                            <?php if ($deduction_hours > 0 || $deduction_days > 0) echo ' + '; ?>
+                                                            <?= __('other_deductions') ?? 'Other Deductions' ?>
                                                         <?php endif; ?>
                                                     </small>
                                                 </div>
