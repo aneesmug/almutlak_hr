@@ -152,14 +152,25 @@ try {
         // Calculate the total gross salary
         $totalGrossSalary = array_sum(array_map('floatval', $salaryComponents));
         
-        // --- LEAVE DEDUCTION LOGIC ---
-        addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
+        // --- CHECK: Skip automatic calculations if payroll already generated ---
+        // If payroll exists and has manually added benefits/deductions, preserve them
+        $stmtCheckPayroll = $pdo->prepare("SELECT id FROM payrolls WHERE emp_id = :emp_id AND month_year = :month_year");
+        $stmtCheckPayroll->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        $existingPayroll = $stmtCheckPayroll->fetch(PDO::FETCH_ASSOC);
+        
+        $isRegeneration = !empty($existingPayroll);
+        
+        if (!$isRegeneration) {
+            // Only add automatic benefits/deductions on initial payroll generation
+            // --- LEAVE DEDUCTION LOGIC ---
+            addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
 
-        // --- (NEW) VACATION WORKING DAYS SALARY ---
-        addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary);
+            // --- (NEW) VACATION WORKING DAYS SALARY ---
+            addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary);
 
-        // --- (NEW) LOAN DEDUCTION LOGIC ---
-        addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
+            // --- (NEW) LOAN DEDUCTION LOGIC ---
+            addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
+        }
 
         // --- (NEW) RECORD LOAN PAYMENTS IN emp_loan_payments FOR THIS MONTH ---
         // Scan payroll_deductions for this employee/month and persist to loan payments
@@ -255,49 +266,59 @@ try {
                 ]);
             }
         }
-        // --- Calculate total benefits (including auto-calculated ones) ---
-        $stmtBenefits = $pdo->prepare("SELECT pb.*, bt.calculation_type
-            FROM payroll_benefits pb
-            LEFT JOIN benefit_types bt ON pb.type_id = bt.id
-            WHERE pb.emp_id = :emp_id AND pb.month = :month_year AND pb.status = 1
-        ");
-        $stmtBenefits->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-        $benefits = $stmtBenefits->fetchAll(PDO::FETCH_ASSOC);
-        $totalBenefits = 0;
-        foreach ($benefits as $benefit) {
-            $amount = 0;
-            if ($benefit['calculation_type'] === 'overtime_basic') {
-                $hours = floatval($benefit['hours'] ?? 0);
-                $basicSalary = floatval($salaryComponents['basic_salary']);
-                $hourlyRate = ($basicSalary / 240 / 2) + ($totalGrossSalary / 240);
-                $amount = $hourlyRate * $hours;
-            } elseif ($benefit['calculation_type'] === 'overtime_total') {
-                $hours = floatval($benefit['hours'] ?? 0);
-                $amount = ($totalGrossSalary / 240) * $hours;
-            } else {
-                $amount = floatval($benefit['note']);
+        // --- CRITICAL FIX: Only recalculate totals on initial generation, preserve on regeneration ---
+        if (!$isRegeneration) {
+            // First-time generation: Calculate totals from scratch
+            $stmtBenefits = $pdo->prepare("SELECT pb.*, bt.calculation_type
+                FROM payroll_benefits pb
+                LEFT JOIN benefit_types bt ON pb.type_id = bt.id
+                WHERE pb.emp_id = :emp_id AND pb.month = :month_year AND pb.status = 1
+            ");
+            $stmtBenefits->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+            $benefits = $stmtBenefits->fetchAll(PDO::FETCH_ASSOC);
+            $totalBenefits = 0;
+            foreach ($benefits as $benefit) {
+                $amount = 0;
+                if ($benefit['calculation_type'] === 'overtime_basic') {
+                    $hours = floatval($benefit['hours'] ?? 0);
+                    $basicSalary = floatval($salaryComponents['basic_salary']);
+                    $hourlyRate = ($basicSalary / 240 / 2) + ($totalGrossSalary / 240);
+                    $amount = $hourlyRate * $hours;
+                } elseif ($benefit['calculation_type'] === 'overtime_total') {
+                    $hours = floatval($benefit['hours'] ?? 0);
+                    $amount = ($totalGrossSalary / 240) * $hours;
+                } else {
+                    $amount = floatval($benefit['note']);
+                }
+                $totalBenefits += $amount;
             }
-            $totalBenefits += $amount;
+            
+            // Calculate total deductions
+            $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0)
+                    FROM payroll_deductions pd
+                    WHERE pd.emp_id = :emp_id
+                        AND pd.month = :month_year
+                        AND pd.status = 1
+                        AND NOT EXISTS (
+                                SELECT 1 FROM emp_loan el
+                                WHERE el.emp_id = pd.emp_id
+                                    AND el.deduction_mode = 'manual'
+                                    AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
+                        )");
+            $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+            $totalDeductions = (float)$stmtDeductionsSum->fetchColumn();
+        } else {
+            // Regeneration: Get existing totals from payroll record to preserve manual changes
+            $stmtExisting = $pdo->prepare("SELECT total_benefits, total_deductions FROM payrolls WHERE emp_id = :emp_id AND month_year = :month_year");
+            $stmtExisting->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+            $existingTotals = $stmtExisting->fetch(PDO::FETCH_ASSOC);
+            $totalBenefits = floatval($existingTotals['total_benefits'] ?? 0);
+            $totalDeductions = floatval($existingTotals['total_deductions'] ?? 0);
         }
         
-        // --- Calculate total deductions ---
-                // Exclude loan-linked deductions when the corresponding loan's deduction_mode is 'manual'.
-                // Assumes loan-linked payroll_deductions rows include the loan inv_no in the `deduction` text.
-                $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0)
-                        FROM payroll_deductions pd
-                        WHERE pd.emp_id = :emp_id
-                            AND pd.month = :month_year
-                            AND pd.status = 1
-                            AND NOT EXISTS (
-                                    SELECT 1 FROM emp_loan el
-                                    WHERE el.emp_id = pd.emp_id
-                                        AND el.deduction_mode = 'manual'
-                                        AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
-                            )");
-        $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-        $totalDeductions = (float)$stmtDeductionsSum->fetchColumn();
         // Calculate net salary
         $netSalary = $totalGrossSalary + $totalBenefits - $totalDeductions;
+        
         // --- Insert or update the final payroll record ---
         $stmt = $pdo->prepare("INSERT INTO payrolls (
                 emp_id, month_year, basic_salary, housing_allowance, transport_allowance,
@@ -321,9 +342,9 @@ try {
                 other_allowance = VALUES(other_allowance),
                 guard_allowance = VALUES(guard_allowance),
                 total_gross_salary = VALUES(total_gross_salary),
-                total_benefits = IF(VALUES(total_benefits) > 0, VALUES(total_benefits), total_benefits),
+                total_benefits = VALUES(total_benefits),
                 total_deductions = VALUES(total_deductions),
-                net_salary = VALUES(total_gross_salary) + IF(VALUES(total_benefits) > 0, VALUES(total_benefits), total_benefits) - VALUES(total_deductions),
+                net_salary = VALUES(net_salary),
                 status = VALUES(status)
         ");
         $stmt->execute([
@@ -561,12 +582,26 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
     $stmtVacation->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $vacation = $stmtVacation->fetch(PDO::FETCH_ASSOC);
     
-    // If no vacation found, delete any existing vacation benefits and return
+    // MODIFIED: If no vacation found, only delete auto-generated vacation benefits, preserve manually added ones
+    // Check if there are any manually added benefits by looking for benefits that are NOT auto-generated
     if (!$vacation) {
+        // Only remove auto-generated vacation benefits (which will have specific ID patterns)
+        // Preserve any vacation benefits that were manually added/modified
+        // We identify auto-generated ones by their specific naming pattern
         $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits 
             WHERE emp_id = :emp_id 
             AND month = :month_year 
-            AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')");
+            AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')
+            AND id IN (
+                SELECT id FROM (
+                    SELECT pb.id FROM payroll_benefits pb
+                    LEFT JOIN emp_vacation ev ON pb.benefit LIKE CONCAT('%', CONCAT('(ID: ', ev.id, ')'))
+                    WHERE pb.emp_id = :emp_id 
+                    AND pb.month = :month_year 
+                    AND (pb.benefit LIKE 'Working Days Salary for Vacation%' OR pb.benefit LIKE 'Vacation Salary Benefit%')
+                    AND ev.id IS NULL
+                ) AS subquery
+            )");
         $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
         return;
     }
@@ -605,12 +640,23 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
         return;
     }
     
-    // Remove any old vacation-related benefits (from different vacation IDs or orphaned entries)
+    // MODIFIED: Only remove old auto-generated vacation benefits (not manually modified ones)
+    // Keep benefits that were manually added/edited by admin
     $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits 
         WHERE emp_id = :emp_id 
         AND month = :month_year 
-        AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')");
-    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')
+        AND id IN (
+            SELECT id FROM (
+                SELECT pb.id FROM payroll_benefits pb
+                LEFT JOIN emp_vacation ev ON pb.benefit LIKE CONCAT('%', CONCAT('(ID: ', ev.id, ')'))
+                WHERE pb.emp_id = :emp_id2
+                AND pb.month = :month_year2
+                AND (pb.benefit LIKE 'Working Days Salary for Vacation%' OR pb.benefit LIKE 'Vacation Salary Benefit%')
+                AND ev.id IS NULL
+            ) AS subquery
+        )");
+    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear, ':emp_id2' => $empId, ':month_year2' => $monthYear]);
 
     if ($vacation) {
         // Define non-payable leave types

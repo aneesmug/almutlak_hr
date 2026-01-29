@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/SettlementManager_Corrected.php'; // Settlement System Integration
 // $user_type, $empid, $user_dept, $is_system_admin, $isHR, $isDeptHr are available from session_check.php
 // Restrict access: Employees cannot view this detailed report page
 if (isset($isEmployee) && $isEmployee === true) {
@@ -568,6 +569,12 @@ if ($can_see_all_depts) {
         .detail-item {
             flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
         }
+        .datepicker table tr td.disabled, .datepicker table tr td.disabled:hover {
+            background: 0 0;
+            color: var(--danger);
+            background-color: #ffe6e9;
+            cursor: default;
+        }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -928,6 +935,22 @@ if ($can_see_all_depts) {
                                                                             <i class="fa fa-calculator text-info"></i> <?= __('add_deduction_overtime') ?: 'Add deduction/overtime' ?>
                                                                         </a>
                                                                     <?php endif; ?>
+                                                                <?php endif; ?>
+
+                                                                <!-- STEP 4: Settlement Button - After Full Approval -->
+                                                                <?php 
+                                                                // Check if settlement already exists for this request
+                                                                $settlementCheckQry = mysqli_query($conDB, "SELECT id FROM settlement_records WHERE request_inv_no LIKE 'SETTLEMENT-" . $req['request_inv_no'] . "%' LIMIT 1");
+                                                                $settlementExists = $settlementCheckQry && mysqli_num_rows($settlementCheckQry) > 0;
+                                                                
+                                                                // Settlement button only for Annual Fly vacations
+                                                                $isAnnualFly = (($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual') OR $req['vac_type'] === 'Encashed' );
+                                                                ?>
+                                                                <?php if (($req['current_status'] === 'approved' OR $req['current_status'] === 'completed') && $isAnnualFly && !$settlementExists): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="createSettlement(<?= $req['id']; ?>, '<?= $req['request_inv_no']; ?>', '<?= $req['emp_id']; ?>', '<?= htmlspecialchars(addslashes(getDisplayName(parseName($req['employee_name']))), ENT_QUOTES); ?>', <?= $req['vacdays']; ?>)">
+                                                                        <i class="fa fa-handshake text-success"></i> <?= __('create_settlement') ?: 'Create Settlement' ?>
+                                                                    </a>
                                                                 <?php endif; ?>
                                                             </div>
                                                         </div>
@@ -1894,8 +1917,9 @@ if ($can_see_all_depts) {
                 });
                 return;
             }
-
-
+            
+            // For Encashed vacations or any other case not handled above, proceed with normal approval
+            proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
         }
 
         /**
@@ -1991,53 +2015,10 @@ if ($can_see_all_depts) {
             // Payroll adjustments moved to post-approval action only
 
             // Helper: constrain return date to ±2 days around base return date
-            const setReturnDateBounds = (dateStr) => {
-                const base = dateStr ? new Date(dateStr) : (vacEndDate ? new Date(vacEndDate) : null);
-                if (!base || isNaN(base.getTime())) return;
-                const min = new Date(base); min.setDate(min.getDate() - 2);
-                const max = new Date(base); max.setDate(max.getDate() + 2);
-                $('#swal_return_date').datepicker('setStartDate', min);
-                $('#swal_return_date').datepicker('setEndDate', max);
-                $('#swal_return_date').datepicker('setDate', base);
-            };
-            const setStartDateBounds = (dateStr) => {
-                const base = dateStr ? new Date(dateStr) : (vacStartDate ? new Date(vacStartDate) : null);
-                if (!base || isNaN(base.getTime())) return;
-                const min = new Date(base); min.setDate(min.getDate() - 2);
-                const max = new Date(base); max.setDate(max.getDate() + 2);
-                $('#swal_start_date').datepicker('setStartDate', min);
-                $('#swal_start_date').datepicker('setEndDate', max);
-                $('#swal_start_date').datepicker('setDate', base);
-            };
-
-            // [NEW] HR Payroll: Return Date (Last Working Day)
+            // [NEW] HR Payroll: Dates moved to Add/Edit Adjustments modal
+            // Start Date and Return Date are now handled in the adjustments modal
             if (isHR_Payroll) {
-                hrPayrollHtml += `
-                    <div class="swal-hr-payroll-fields text-left mt-3">
-                        <hr>
-                        <h6 class="text-primary mb-3"><i class="fa fa-calendar"></i> ${__('start_date') || 'Start Date'}</h6>
-                        <div class="form-group">
-                            <label for="swal_start_date" class="font-weight-bold">
-                                <i class="fa fa-calendar-day"></i> ${__('start_date') || 'Start Date'}
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" id="swal_start_date" class="form-control" placeholder="${__('select_return_date') || 'Select return date'}" readonly required style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                            <small class="form-text text-muted">${__('hr_payroll_start_date_note') || 'HR Payroll can adjust the employee\'s last working day (return date) before final approval. Limit: ±2 days from current return date.'}</small>
-                        </div>
-                    </div>
-                    <div class="swal-hr-payroll-fields text-left mt-3">
-                        <hr>
-                        <h6 class="text-primary mb-3"><i class="fa fa-calendar"></i> ${__('return_date') || 'Return Date (Last Working Day)'}</h6>
-                        <div class="form-group">
-                            <label for="swal_return_date" class="font-weight-bold">
-                                <i class="fa fa-calendar-day"></i> ${__('return_date') || 'Return Date / Last Working Day'}
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" id="swal_return_date" class="form-control" placeholder="${__('select_return_date') || 'Select return date'}" readonly required style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                            <small class="form-text text-muted">${__('hr_payroll_return_date_note') || 'HR Payroll can adjust the employee\'s last working day (return date) before final approval. Limit: ±2 days from current return date.'}</small>
-                        </div>
-                    </div>
-                `;
+                hrPayrollHtml += ``;
             }
 
             // [NEW] --- GR Officer Visa/Re-Entry Fee Section ---
@@ -2241,48 +2222,12 @@ if ($can_see_all_depts) {
                                         $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
                                     });
 
-                                    // Initialize start_date and return_date datepickers for HR Payroll
-                                    if (isHR_Payroll) {
-                                        // Initialize start_date datepicker
-                                        $('#swal_start_date').datepicker({
-                                            format: "yyyy-mm-dd",
-                                            todayHighlight: true,
-                                            autoclose: true
-                                        });
-                                        
-                                        // Initialize return_date datepicker
-                                        $('#swal_return_date').datepicker({
-                                            format: "yyyy-mm-dd",
-                                            todayHighlight: true,
-                                            autoclose: true
-                                        });
-                                    }
-
                                     // Set initial values if they exist
                                     if (res.departure_date) {
                                         $('#swal_departure_date').datepicker('setDate', res.departure_date);
                                     }
                                     if (res.arrival_date) {
                                         $('#swal_arrival_date').datepicker('setDate', res.arrival_date);
-                                    }
-                                    
-                                    // Set start_date and return_date for HR Payroll
-                                    if (isHR_Payroll) {
-                                        if (res.start_date) {
-                                            $('#swal_start_date').datepicker('setDate', res.start_date);
-                                            setStartDateBounds(res.start_date);
-                                        } else if (vacStartDate) {
-                                            $('#swal_start_date').datepicker('setDate', vacStartDate);
-                                            setStartDateBounds(vacStartDate);
-                                        }
-                                        
-                                        if (res.return_date) {
-                                            $('#swal_return_date').datepicker('setDate', res.return_date);
-                                            setReturnDateBounds(res.return_date);
-                                        } else if (vacEndDate) {
-                                            $('#swal_return_date').datepicker('setDate', vacEndDate);
-                                            setReturnDateBounds(vacEndDate);
-                                        }
                                     }
                                 }
                             },
@@ -2309,46 +2254,8 @@ if ($can_see_all_depts) {
                                     var arrivalDate = e.date;
                                     $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
                                 });
-
-                                // Initialize start_date and return_date for HR Payroll even if fetch fails
-                                if (isHR_Payroll) {
-                                    // Initialize start_date datepicker
-                                    $('#swal_start_date').datepicker({
-                                        format: "yyyy-mm-dd",
-                                        todayHighlight: true,
-                                        autoclose: true
-                                    }).datepicker('setDate', vacStartDate);
-                                    setStartDateBounds(vacStartDate);
-                                    
-                                    // Initialize return_date datepicker
-                                    $('#swal_return_date').datepicker({
-                                        format: "yyyy-mm-dd",
-                                        todayHighlight: true,
-                                        autoclose: true
-                                    }).datepicker('setDate', vacEndDate);
-                                    setReturnDateBounds(vacEndDate);
-                                }
                             }
                         });
-                    }
-
-                    // Initialize return date picker for HR Payroll even when not Fly/annual
-                    if (isHR_Payroll) {
-                        // Initialize start_date datepicker
-                        $('#swal_start_date').datepicker({
-                            format: "yyyy-mm-dd",
-                            todayHighlight: true,
-                            autoclose: true
-                        }).datepicker('setDate', vacStartDate);
-                        setStartDateBounds(vacStartDate);
-                        
-                        // Initialize return_date datepicker
-                        $('#swal_return_date').datepicker({
-                            format: "yyyy-mm-dd",
-                            todayHighlight: true,
-                            autoclose: true
-                        }).datepicker('setDate', vacEndDate);
-                        setReturnDateBounds(vacEndDate);
                     }
 
                     // --- SIMPLE LEAVE LOGIC ---
@@ -2694,8 +2601,8 @@ if ($can_see_all_depts) {
                     let ticket_pay = $(swalModal).find('#swal_ticket_fares').val() || null;
                     let permit_fee = $(swalModal).find('#swal_permit_fee').val() || null;
 
-                    // A.0) HR Payroll return date (last working day)
-                    let return_date = $(swalModal).find('#swal_return_date').val() || null;
+                    // A.0) HR Payroll details - dates are now handled in Add/Edit Adjustments modal
+                    // let return_date = $(swalModal).find('#swal_return_date').val() || null;
 
                     // A.1) Get HR Payroll details (if they exist)
                     let overtime_hours = $(swalModal).find('#swal_overtime_hours').val() || null;
@@ -2748,18 +2655,8 @@ if ($can_see_all_depts) {
                         }
                     }
                     
-                    // HR Payroll must set start_date and return_date
-                    if (isHR_Payroll) {
-                        const start_date = $(swalModal).find('#swal_start_date').val();
-                        if (!start_date || start_date.trim() === '') {
-                            Swal.showValidationMessage(__('start_date_required') || 'Start date is required for HR Payroll approval');
-                            return false;
-                        }
-                        if (!return_date || return_date.trim() === '') {
-                            Swal.showValidationMessage(__('return_date_required') || 'Return date is required for HR Payroll approval');
-                            return false;
-                        }
-                    }
+                    // NOTE: Start Date and Return Date are now validated in Add/Edit Adjustments modal
+                    // HR Payroll will set these dates through the adjustments modal, not the approval modal
 
                     // [UPDATED] Validate GR Officer required fields if GR Officer is approving Fly | Annual
                     if ((isGR_Officer && isAnnualFly)) {
@@ -2855,23 +2752,18 @@ if ($can_see_all_depts) {
                     // Return all gathered data
                     const departureDateVal = $(swalModal).find('#swal_departure_date').val() || '';
                     const arrivalDateVal = $(swalModal).find('#swal_arrival_date').val() || '';
-                    const returnDateVal = $(swalModal).find('#swal_return_date').val() || '';
-                    const startDateVal = $(swalModal).find('#swal_start_date').val() || '';
+                    // NOTE: Start Date and Return Date are now handled in Add/Edit Adjustments modal
 
                     // Log for debugging
                     console.log('sendApproval preConfirm - departure_date:', departureDateVal);
                     console.log('sendApproval preConfirm - arrival_date:', arrivalDateVal);
                     console.log('sendApproval preConfirm - ticket_pay:', ticket_pay);
                     console.log('sendApproval preConfirm - permit_fee:', permit_fee);
-                    console.log('sendApproval preConfirm - return_date:', returnDateVal);
-                    console.log('sendApproval preConfirm - start_date:', startDateVal);
 
                     return {
                         approver_chain: approver_chain,
                         departure_date: departureDateVal,
                         arrival_date: arrivalDateVal,
-                        return_date: returnDateVal,
-                        start_date: startDateVal,
                         ticket_pay: ticket_pay,
                         permit_fee: permit_fee, // [UPDATED] Include permit_fee for GR Officer
                         hr_team_cc: hr_team_cc,
@@ -3084,7 +2976,7 @@ if ($can_see_all_depts) {
          * addVacationPayments - This is for editing/adding payments *outside* the approval flow
          */
         function addVacationPayments(vacationId, employeeName, currentTicketPay, currentPermitFee) {
-            // First fetch current departure and arrival dates
+            // First fetch current vacation details including dates and applied days
             $.ajax({
                 url: './includes/ajaxFile/ajaxVacation.php',
                 type: 'POST',
@@ -3095,13 +2987,23 @@ if ($can_see_all_depts) {
                 },
                 success: function(data) {
                     if (data.status === 200) {
-                        showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, data.departure_date, data.arrival_date);
+                        showPaymentModal(
+                            vacationId, 
+                            employeeName, 
+                            currentTicketPay, 
+                            currentPermitFee, 
+                            data.departure_date, 
+                            data.arrival_date,
+                            data.start_date,           // Applied start date
+                            data.return_date,          // Applied end date
+                            data.no_of_days            // Applied days
+                        );
                     } else {
-                        showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, '', '');
+                        showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, '', '', '', '', 0);
                     }
                 },
                 error: function() {
-                    showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, '', '');
+                    showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, '', '', '', '', 0);
                 }
             });
         }
@@ -3110,12 +3012,47 @@ if ($can_see_all_depts) {
         // It now supports: vacationId, employeeName, overtimeHours, deductionHours, deductionDays, otherEarnings, payrollNote
         // With calculation display and backward compatibility
 
-        function showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, currentDepartureDate, currentArrivalDate) {
+        function showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, currentDepartureDate, currentArrivalDate, appliedStartDate, appliedEndDate, appliedDays) {
             Swal.fire({
                 title: __('add_edit_payments_for').replace('{0}', employeeName),
                 html: `
                     <div class="text-left" style="padding: 10px 20px;">
                         <p class="mt-3 mb-4"><strong>${__('enter_update_payment_details')}</strong></p>
+                        
+                        <!-- Applied Days Info Section -->
+                        <div class="alert alert-info" role="alert" style="margin-bottom: 1.5rem;">
+                            <strong><i class="fa fa-calendar-check"></i> Applied Vacation Period:</strong><br>
+                            <strong>${appliedStartDate} to ${appliedEndDate}</strong> (${appliedDays} days)
+                        </div>
+                        
+                        <!-- Start Date Field (for adjusting after ticket reservation) -->
+                        <div class="form-group mb-3">
+                            <label for="start_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                <i class="fa fa-calendar-alt"></i> ${__('start_date') || 'Start Date'}
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="start_date_update" class="form-control" placeholder="Select start date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                            <small class="form-text text-muted">First day of vacation period (within applied dates)</small>
+                        </div>
+                        
+                        <!-- Return Date Field (for adjusting after ticket reservation) -->
+                        <div class="form-group mb-3">
+                            <label for="return_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                <i class="fa fa-calendar-alt"></i> ${__('return_date') || 'Return Date (Last Working Day)'}
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="return_date_update" class="form-control" placeholder="Select return date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                            <small class="form-text text-muted">Last working day (days calculated must equal ${appliedDays} days)</small>
+                        </div>
+                        
+                        <!-- Days Calculation Display -->
+                        <div class="form-group mb-3 p-3 bg-light rounded">
+                            <small class="text-muted">New Vacation Period:</small>
+                            <div id="days_calculation_display" style="font-weight: bold; color: #007bff; margin-top: 5px;">
+                                To be calculated...
+                            </div>
+                            <div id="days_status_message" style="margin-top: 8px; padding: 8px; border-radius: 4px; display: none;"></div>
+                        </div>
                         
                         <div class="form-group mb-3">
                             <label for="departure_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
@@ -3123,6 +3060,7 @@ if ($can_see_all_depts) {
                                 <span class="text-danger">*</span>
                             </label>
                             <input type="text" id="departure_date_update" class="form-control" placeholder="Select departure date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                            <small class="form-text text-muted">Must be within vacation period (${appliedStartDate} to ${appliedEndDate})</small>
                         </div>
                         
                         <div class="form-group mb-3">
@@ -3131,6 +3069,7 @@ if ($can_see_all_depts) {
                                 <span class="text-danger">*</span>
                             </label>
                             <input type="text" id="arrival_date_update" class="form-control" placeholder="Select arrival date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                            <small class="form-text text-muted">Must be within vacation period (${appliedStartDate} to ${appliedEndDate})</small>
                         </div>
                         
                         <div class="form-group mb-3">
@@ -3151,42 +3090,322 @@ if ($can_see_all_depts) {
                 confirmButtonText: __('update_payments'),
                 showCancelButton: true,
                 allowOutsideClick: false,
-                width: '500px',
+                width: '550px',
                 didOpen: () => {
-                    // Initialize departure date picker
+                    // Helper function to format date object to "yyyy-mm-dd" string
+                    function formatDateForInput(dateObj) {
+                        const year = dateObj.getFullYear();
+                        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                        const day = String(dateObj.getDate()).padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                    }
+                    
+                    // Disable submit button initially until dates are properly selected
+                    const confirmBtn = Swal.getConfirmButton();
+                    if (confirmBtn) {
+                        confirmBtn.disabled = true;
+                        confirmBtn.style.opacity = '0.6';
+                        confirmBtn.style.cursor = 'not-allowed';
+                    }
+                    
+                    // Parse applied dates - handle string format "yyyy-mm-dd"
+                    let appliedStart, appliedEnd;
+                    
+                    if (appliedStartDate && appliedStartDate !== '') {
+                        const [year1, month1, day1] = appliedStartDate.split('-');
+                        appliedStart = new Date(year1, parseInt(month1) - 1, day1);
+                    } else {
+                        appliedStart = new Date();
+                    }
+                    
+                    if (appliedEndDate && appliedEndDate !== '') {
+                        const [year2, month2, day2] = appliedEndDate.split('-');
+                        appliedEnd = new Date(year2, parseInt(month2) - 1, day2);
+                    } else {
+                        appliedEnd = new Date();
+                    }
+                    
+                    // Calculate boundaries for start_date picker (should allow ±5 from appliedStart)
+                    const startPickerStart = new Date(appliedStart);
+                    startPickerStart.setDate(startPickerStart.getDate() - 5);
+                    const startPickerEnd = new Date(appliedStart);
+                    startPickerEnd.setDate(startPickerEnd.getDate() + 5);
+                    
+                    // Calculate boundaries for return_date picker (should allow ±5 from appliedEnd)
+                    const returnPickerStart = new Date(appliedEnd);
+                    returnPickerStart.setDate(returnPickerStart.getDate() - 5);
+                    const returnPickerEnd = new Date(appliedEnd);
+                    returnPickerEnd.setDate(returnPickerEnd.getDate() + 5);
+                    
+                    // Initialize start_date picker (with ±5 day flexibility around applied start)
+                    $('#start_date_update').datepicker({
+                        format: "yyyy-mm-dd",
+                        startDate: startPickerStart,
+                        endDate: startPickerEnd,
+                        todayHighlight: true,
+                        autoclose: true
+                    }).on('changeDate', function(e) {
+                        calculateVacationDays();
+                        
+                        // Automatically update Departure Date to match Start Date
+                        const selectedStart = new Date(e.date);
+                        const departureInput = $('#departure_date_update');
+                        departureInput.datepicker('setDate', selectedStart);
+                        departureInput.val(formatDateForInput(selectedStart));
+                        
+                        // Get current return date
+                        const returnDateVal = document.getElementById('return_date_update').value;
+                        
+                        // Adjust return_date picker minimum to be after selected start date
+                        const minReturnDate = new Date(selectedStart);
+                        minReturnDate.setDate(minReturnDate.getDate() + (appliedDays - 1)); // Set to minimum required return date
+                        $('#return_date_update').datepicker('setStartDate', minReturnDate);
+                        
+                        // Keep returnPickerEnd as the maximum for return_date picker
+                        $('#return_date_update').datepicker('setEndDate', returnPickerEnd);
+                        
+                        // Adjust departure_date picker to start from selected start date
+                        $('#departure_date_update').datepicker('setStartDate', selectedStart);
+                        
+                        // If return date is set, adjust arrival picker max date
+                        if (returnDateVal) {
+                            const returnDate = new Date(returnDateVal);
+                            $('#arrival_date_update').datepicker('setEndDate', returnDate);
+                        }
+                    });
+                    
+                    // Initialize return_date picker (with ±5 day flexibility around applied end)
+                    $('#return_date_update').datepicker({
+                        format: "yyyy-mm-dd",
+                        startDate: returnPickerStart,
+                        endDate: returnPickerEnd,
+                        todayHighlight: true,
+                        autoclose: true
+                    }).on('changeDate', function(e) {
+                        calculateVacationDays();
+                        
+                        // Automatically update Arrival Date to match Return Date
+                        const selectedReturn = new Date(e.date);
+                        const arrivalInput = $('#arrival_date_update');
+                        arrivalInput.datepicker('setDate', selectedReturn);
+                        arrivalInput.val(formatDateForInput(selectedReturn));
+                        
+                        // Get current start date
+                        const startDateVal = document.getElementById('start_date_update').value;
+                        
+                        // Adjust start_date picker maximum
+                        const maxStartDate = new Date(selectedReturn);
+                        maxStartDate.setDate(maxStartDate.getDate() - (appliedDays - 1));
+                        $('#start_date_update').datepicker('setEndDate', maxStartDate);
+                        
+                        // Keep startPickerStart as the minimum for start_date picker
+                        $('#start_date_update').datepicker('setStartDate', startPickerStart);
+                        
+                        // Adjust arrival_date picker to end at selected return date
+                        $('#arrival_date_update').datepicker('setEndDate', selectedReturn);
+                        
+                        // If start date is set, adjust departure picker min date
+                        if (startDateVal) {
+                            const startDate = new Date(startDateVal);
+                            $('#departure_date_update').datepicker('setStartDate', startDate);
+                        }
+                    });
+
+                    // Initialize departure date picker (constrained between start and return dates with ±5 flexibility)
                     $('#departure_date_update').datepicker({
                         format: "yyyy-mm-dd",
+                        startDate: startPickerStart,
+                        endDate: returnPickerEnd,
                         todayHighlight: true,
                         autoclose: true
                     }).on('changeDate', function(e) {
                         var departureDate = e.date;
-                        $('#arrival_date_update').datepicker('setStartDate', departureDate);
+                        // Only update arrival picker if departure date is valid
+                        if (departureDate && departureDate instanceof Date) {
+                            $('#arrival_date_update').datepicker('setStartDate', departureDate);
+                        }
                     });
 
-                    // Initialize arrival date picker
+                    // Initialize arrival date picker (with ±5 day flexibility)
                     $('#arrival_date_update').datepicker({
                         format: "yyyy-mm-dd",
+                        startDate: startPickerStart,
+                        endDate: returnPickerEnd,
                         todayHighlight: true,
                         autoclose: true
                     }).on('changeDate', function(e) {
                         var arrivalDate = e.date;
+                        
+                        // Exit if arrivalDate is not valid
+                        if (!arrivalDate || !(arrivalDate instanceof Date)) {
+                            return;
+                        }
+                        
+                        // Ensure arrival date is within start/return bounds
+                        if (appliedStart && arrivalDate < appliedStart) {
+                            arrivalDate.setTime(appliedStart.getTime());
+                        }
+                        if (appliedEnd && arrivalDate > appliedEnd) {
+                            arrivalDate.setTime(appliedEnd.getTime());
+                        }
+                        
+                        // Update the input value with proper format
+                        const year = arrivalDate.getFullYear();
+                        const month = String(arrivalDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(arrivalDate.getDate()).padStart(2, '0');
+                        const formattedArrivalDate = `${year}-${month}-${day}`;
+                        $('#arrival_date_update').val(formattedArrivalDate);
+                        
+                        // Adjust departure_date picker maximum
                         $('#departure_date_update').datepicker('setEndDate', arrivalDate);
+                        
+                        // Ensure departure date is not after arrival date
+                        const departureInput = $('#departure_date_update').val();
+                        if (departureInput) {
+                            const [depYear, depMonth, depDay] = departureInput.split('-');
+                            const departureDate = new Date(depYear, parseInt(depMonth) - 1, depDay);
+                            if (departureDate > arrivalDate) {
+                                $('#departure_date_update').datepicker('setDate', arrivalDate);
+                                $('#departure_date_update').val(formattedArrivalDate);
+                            }
+                        }
+                        
+                        // Trigger days calculation
+                        calculateVacationDays();
                     });
 
-                    // Set initial values if they exist
-                    if (currentDepartureDate) {
-                        $('#departure_date_update').datepicker('setDate', currentDepartureDate);
+                    // Set initial values
+                    // For start_date and return_date, use applied dates initially
+                    if (appliedStartDate && appliedStartDate !== '') {
+                        $('#start_date_update').datepicker('setDate', appliedStart);
+                        $('#start_date_update').val(appliedStartDate);
                     }
-                    if (currentArrivalDate) {
-                        $('#arrival_date_update').datepicker('setDate', currentArrivalDate);
+                    if (appliedEndDate && appliedEndDate !== '') {
+                        $('#return_date_update').datepicker('setDate', appliedEnd);
+                        $('#return_date_update').val(appliedEndDate);
+                    }
+                    if (currentDepartureDate && currentDepartureDate !== '') {
+                        $('#departure_date_update').val(currentDepartureDate);
+                    }
+                    if (currentArrivalDate && currentArrivalDate !== '') {
+                        $('#arrival_date_update').val(currentArrivalDate);
+                    } else if (appliedEndDate && appliedEndDate !== '') {
+                        // Default to applied end date if no current arrival date
+                        $('#arrival_date_update').val(appliedEndDate);
+                    }
+                    
+                    // Initial calculation
+                    calculateVacationDays();
+                    
+                    // Helper function to calculate and validate vacation days
+                    function calculateVacationDays() {
+                        const startDateVal = document.getElementById('start_date_update').value;
+                        const returnDateVal = document.getElementById('return_date_update').value;
+                        const calcDisplay = document.getElementById('days_calculation_display');
+                        const statusMsg = document.getElementById('days_status_message');
+                        const confirmBtn = Swal.getConfirmButton();
+                        
+                        if (startDateVal && returnDateVal) {
+                            const start = new Date(startDateVal);
+                            const returnDate = new Date(returnDateVal);
+                            const timeDiff = returnDate.getTime() - start.getTime();
+                            const calculatedDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end days
+                            
+                            calcDisplay.textContent = `${startDateVal} to ${returnDateVal} = ${calculatedDays} days`;
+                            
+                            if (calculatedDays === appliedDays) {
+                                statusMsg.style.display = 'block';
+                                statusMsg.style.backgroundColor = '#d4edda';
+                                statusMsg.style.color = '#155724';
+                                statusMsg.style.borderLeft = '4px solid #28a745';
+                                statusMsg.innerHTML = '<strong>✓ Valid:</strong> Days match applied vacation period';
+                                // Enable submit button
+                                if (confirmBtn) {
+                                    confirmBtn.disabled = false;
+                                    confirmBtn.style.opacity = '1';
+                                    confirmBtn.style.cursor = 'pointer';
+                                }
+                            } else if (calculatedDays < appliedDays) {
+                                statusMsg.style.display = 'block';
+                                statusMsg.style.backgroundColor = '#f8d7da';
+                                statusMsg.style.color = '#721c24';
+                                statusMsg.style.borderLeft = '4px solid #dc3545';
+                                statusMsg.innerHTML = `<strong>✗ Invalid:</strong> Selected period is ${calculatedDays} days but applied vacation is ${appliedDays} days. Must match exactly.`;
+                                // Disable submit button
+                                if (confirmBtn) {
+                                    confirmBtn.disabled = true;
+                                    confirmBtn.style.opacity = '0.6';
+                                    confirmBtn.style.cursor = 'not-allowed';
+                                }
+                            } else {
+                                statusMsg.style.display = 'block';
+                                statusMsg.style.backgroundColor = '#f8d7da';
+                                statusMsg.style.color = '#721c24';
+                                statusMsg.style.borderLeft = '4px solid #dc3545';
+                                statusMsg.innerHTML = `<strong>✗ Invalid:</strong> Selected period is ${calculatedDays} days but applied vacation is ${appliedDays} days. Cannot exceed.`;
+                                // Disable submit button
+                                if (confirmBtn) {
+                                    confirmBtn.disabled = true;
+                                    confirmBtn.style.opacity = '0.6';
+                                    confirmBtn.style.cursor = 'not-allowed';
+                                }
+                            }
+                        } else {
+                            // If dates not filled, disable button
+                            if (confirmBtn) {
+                                confirmBtn.disabled = true;
+                                confirmBtn.style.opacity = '0.6';
+                                confirmBtn.style.cursor = 'not-allowed';
+                            }
+                        }
                     }
                 },
                 preConfirm: () => {
+                    const startDate = document.getElementById('start_date_update').value;
+                    const returnDate = document.getElementById('return_date_update').value;
+                    const departureDate = document.getElementById('departure_date_update').value;
+                    const arrivalDate = document.getElementById('arrival_date_update').value;
+                    const ticketPay = document.getElementById('ticket_pay_update').value;
+                    const permitFee = document.getElementById('permit_fee_update').value;
+                    
+                    // Validate all required fields
+                    if (!startDate || !returnDate || !departureDate || !arrivalDate) {
+                        Swal.showValidationMessage('All date fields are required');
+                        return false;
+                    }
+                    
+                    // Validate that new vacation period equals applied days
+                    const start = new Date(startDate);
+                    const returnDateObj = new Date(returnDate);
+                    const timeDiff = returnDateObj.getTime() - start.getTime();
+                    const calculatedDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1;
+                    
+                    if (calculatedDays !== appliedDays) {
+                        Swal.showValidationMessage(`Invalid: New vacation period is ${calculatedDays} days but applied vacation is ${appliedDays} days. Must match exactly.`);
+                        return false;
+                    }
+                    
+                    // Validate departure and arrival dates are within applied period
+                    const departureObj = new Date(departureDate);
+                    const arrivalObj = new Date(arrivalDate);
+                    
+                    if (departureObj < start || departureObj > returnDateObj) {
+                        Swal.showValidationMessage(`Departure date must be within vacation period (${appliedStartDate} to ${appliedEndDate})`);
+                        return false;
+                    }
+                    
+                    if (arrivalObj < start || arrivalObj > returnDateObj) {
+                        Swal.showValidationMessage(`Arrival date must be within vacation period (${appliedStartDate} to ${appliedEndDate})`);
+                        return false;
+                    }
+                    
                     return {
-                        departure_date: document.getElementById('departure_date_update').value,
-                        arrival_date: document.getElementById('arrival_date_update').value,
-                        ticket_pay: document.getElementById('ticket_pay_update').value,
-                        permit_fee: document.getElementById('permit_fee_update').value
+                        start_date: startDate,
+                        return_date: returnDate,
+                        departure_date: departureDate,
+                        arrival_date: arrivalDate,
+                        ticket_pay: ticketPay,
+                        permit_fee: permitFee
                     }
                 }
             }).then((result) => {
@@ -3198,6 +3417,8 @@ if ($can_see_all_depts) {
                             data: {
                                 ajaxType: 'updateVacationPayments',
                                 vacation_id: vacationId,
+                                start_date: result.value.start_date,
+                                return_date: result.value.return_date,
                                 departure_date: result.value.departure_date,
                                 arrival_date: result.value.arrival_date,
                                 ticket_pay: result.value.ticket_pay,
@@ -3716,6 +3937,214 @@ if ($can_see_all_depts) {
                 error: function() {
                     Swal.fire(__('error') || 'Error', __('error_loading_vacation_details') || 'Could not load vacation details', 'error');
                 }
+            });
+        }
+
+        /**
+         * =====================================================================
+         * == CREATE SETTLEMENT FUNCTION
+         * =====================================================================
+         * Creates a settlement record for an approved vacation request
+         * Initiates the settlement approval chain process
+         */
+        function createSettlement(vacationId, requestInvNo, employeeId, employeeName, vacationDays) {
+            // Fetch vacation details to calculate total payable
+            $.ajax({
+                url: './includes/ajaxFile/ajaxVacation.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: {
+                    ajaxType: 'getVacationDetailsForSettlement',
+                    vacation_id: vacationId
+                },
+                success: function(vacationData) {
+                    if (vacationData.status === 200) {
+                        // Check if this is an Encashed vacation
+                        const vacType = vacationData.vac_type || '';
+                        const isEncashed = (vacType.toLowerCase() === 'encashed');
+                        
+                        if (isEncashed) {
+                            // For Encashed vacations, use encashment-specific data
+                            const encashmentAmount = parseFloat(vacationData.encashment_amount || 0);
+                            const encashGosi = parseFloat(vacationData.encash_gosi || 0);
+                            const netEncashment = parseFloat(vacationData.net_encashment || encashmentAmount - encashGosi);
+                            
+                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, netEncashment, 0, 0, 0, 0, 0, true, encashmentAmount, encashGosi);
+                        } else {
+                            // For Annual Fly vacations, use the normal total_payable calculation
+                            const totalPayable = parseFloat(vacationData.total_payable || 0);
+                            const workingDaysSalary = parseFloat(vacationData.working_days_salary || 0);
+                            const vacationSalary = parseFloat(vacationData.vacation_salary || 0);
+                            const overtimeAmount = parseFloat(vacationData.overtime_amount || 0);
+                            const deductionAmount = parseFloat(vacationData.deduction_amount || 0);
+                            const gosiDeduction = parseFloat(vacationData.gosi_deduction || 0);
+                            
+                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, false, 0, 0);
+                        }
+                    } else {
+                        // Fallback if data fetch fails
+                        const settlementAmount = vacationDays * 350;
+                        showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, false, 0, 0);
+                    }
+                },
+                error: function() {
+                    // Fallback calculation
+                    const settlementAmount = vacationDays * 350;
+                    showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, false, 0, 0);
+                }
+            });
+        }
+        
+        function showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi) {
+            // Fetch settlement approval chain from app_settings
+            $.ajax({
+                url: './includes/ajaxFile/settlement_handler.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: {
+                    action: 'get_settlement_chain',
+                    request_type: 'settlement'
+                },
+                success: function(chainResponse) {
+                    let approvalChain = [];
+                    let approvalChainText = 'Settlement approval chain pending';
+                    
+                    if (chainResponse.chain && chainResponse.chain.length > 0) {
+                        approvalChain = chainResponse.chain;
+                        const chainSteps = approvalChain.map(step => {
+                            // Format the user type name for display
+                            let displayName = step.role_label || step.user_type || '';
+                            displayName = displayName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            return displayName;
+                        });
+                        approvalChainText = chainSteps.join(' → ');
+                    }
+                    
+                    displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText, approvalChain);
+                },
+                error: function() {
+                    // Fallback if chain fetch fails
+                    displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, 'Configured settlement approval chain', []);
+                }
+            });
+        }
+        
+        function displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText) {
+            // Build the breakdown HTML based on vacation type
+            let breakdownHtml = '';
+            
+            if (isEncashed) {
+                // Encashed vacation breakdown
+                breakdownHtml = `
+                    <div class="alert alert-info" style="font-size: 0.85rem;">
+                        <strong><i class="fa fa-money-bill-wave"></i> ${__('encashment_breakdown')}:</strong>
+                        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #dee2e6;">
+                            <span>${__('encashment_amount_gross')}:</span>
+                            <span><strong>${parseFloat(encashmentAmount).toFixed(2)} SAR</strong></span>
+                        </div>
+                        ${encashGosi > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;">
+                            <span>- ${__('gosi_deduction')}:</span>
+                            <span>-${parseFloat(encashGosi).toFixed(2)} SAR</span>
+                        </div>` : ''}
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0; margin-top: 8px; border-top: 2px solid #28a745; font-weight: bold; color: #28a745;">
+                            <span>${__('net_encashment')}:</span>
+                            <span>${parseFloat(totalPayable).toFixed(2)} SAR</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Annual Fly vacation breakdown
+                breakdownHtml = `
+                    <div class="alert alert-info" style="font-size: 0.85rem;">
+                        <strong><i class="fa fa-calculator"></i> ${__('settlement_breakdown')}:</strong>
+                        ${workingDaysSalary > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0;"><span>${__('working_days_salary')}:</span><span>${parseFloat(workingDaysSalary).toFixed(2)} SAR</span></div>` : ''}
+                        ${vacationSalary > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0;"><span>${__('vacation_salary')}:</span><span>${parseFloat(vacationSalary).toFixed(2)} SAR</span></div>` : ''}
+                        ${overtimeAmount > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: green;"><span>+ ${__('overtime')}:</span><span>+${parseFloat(overtimeAmount).toFixed(2)} SAR</span></div>` : ''}
+                        ${deductionAmount > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;"><span>- ${__('deductions')}:</span><span>-${parseFloat(deductionAmount).toFixed(2)} SAR</span></div>` : ''}
+                        ${gosiDeduction > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;"><span>- ${__('gosi_deduction')}:</span><span>-${parseFloat(gosiDeduction).toFixed(2)} SAR</span></div>` : ''}
+                    </div>
+                `;
+            }
+            
+            Swal.fire({
+                title: __('create_settlement') || 'Create Settlement',
+                html: `
+                    <div class="text-left">
+                        <p><strong>${__('employee')}:</strong> ${employeeName}</p>
+                        <p><strong>${__('request')}:</strong> ${requestInvNo}</p>
+                        <p><strong>${__('vacation_days')}:</strong> ${vacationDays} ${__('days')}</p>
+                        <hr>
+                        ${breakdownHtml}
+                        <p><strong>${__('total_payable')}:</strong> <span class="badge badge-success" style="font-size: 1.1rem;">SAR ${parseFloat(totalPayable).toFixed(2)}</span></p>
+                        <hr>
+                        <p class="text-muted"><small>${__('settlement_creation_note')}: <strong>${approvalChainText}</strong></small></p>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                confirmButtonText: '<i class="fa fa-check"></i> ' + (__('create_settlement') || 'Create Settlement'),
+                cancelButtonColor: '#dc3545',
+                cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
+                allowOutsideClick: false,
+                showLoaderOnConfirm: true,
+                preConfirm: () => {
+                    return new Promise((resolve, reject) => {
+                        $.ajax({
+                            url: './includes/ajaxFile/settlement_handler.php',
+                            type: 'POST',
+                            dataType: 'JSON',
+                            xhrFields: {
+                                withCredentials: true
+                            },
+                            data: {
+                                action: 'create_settlement',
+                                request_inv_no: requestInvNo,
+                                request_type: 'annual_vacation',
+                                emp_id: employeeId,
+                                settlement_amount: totalPayable,
+                                user_id: <?= (int)$empid; ?>
+                            },
+                            success: function(response) {
+                                if (response.success === true) {
+                                    resolve(response);
+                                } else {
+                                    reject(response.message || 'Failed to create settlement');
+                                }
+                            },
+                            error: function(xhr) {
+                                const response = xhr.responseJSON || {};
+                                reject(response.message || 'Error creating settlement');
+                            }
+                        });
+                    });
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: __('success') || 'Success',
+                        html: `
+                            <p>Settlement created successfully!</p>
+                            <p><strong>Settlement Ref:</strong> ${result.value.settlement_inv_no || requestInvNo}</p>
+                            <p><strong>Total Payable:</strong> SAR ${parseFloat(totalPayable).toFixed(2)}</p>
+                            <p class="text-muted"><small>The settlement request has been initiated and is now pending approval from the settlement approval chain: <strong>${approvalChainText}</strong></small></p>
+                        `,
+                        icon: 'success',
+                        confirmButtonColor: '#28a745',
+                        confirmButtonText: __('ok') || 'OK',
+                        allowOutsideClick: false
+                    }).then(() => {
+                        location.reload();
+                    });
+                }
+            }).catch((error) => {
+                Swal.fire({
+                    title: __('error') || 'Error',
+                    html: error,
+                    icon: 'error',
+                    confirmButtonColor: '#dc3545',
+                    confirmButtonText: __('ok') || 'OK'
+                });
             });
         }
     </script>

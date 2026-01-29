@@ -463,6 +463,24 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                             <i class="fa fa-times text-danger"></i> <?=__('reject')?>
                                                                         </button>
                                                                     <?php endif; ?>
+
+                                                                    <!-- Settlement Button - After Full Approval -->
+                                                                    <?php 
+                                                                    // Check if settlement already exists for this request
+                                                                    $loanSettlementCheckQry = mysqli_query($conDB, "SELECT id FROM settlement_records WHERE request_inv_no LIKE 'SETTLEMENT-" . $loan['inv_no'] . "%' LIMIT 1");
+                                                                    $loanSettlementExists = $loanSettlementCheckQry && mysqli_num_rows($loanSettlementCheckQry) > 0;
+                                                                    ?>
+                                                                    <?php if ($loan['status'] === 'approved' && !$loanSettlementExists): ?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="createLoanSettlement(<?=$loan['id']; ?>, '<?=$loan['inv_no']; ?>', '<?=$loan['emp_id']; ?>', '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES); ?>', <?=(float)$loan['loan_amount']; ?>)">
+                                                                            <i class="fa fa-handshake text-success"></i> <?=__('create_settlement') ?: 'Create Settlement'?>
+                                                                        </button>
+                                                                    <?php elseif ($loan['status'] === 'approved' && $loanSettlementExists): ?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <button type="button" class="dropdown-item disabled" style="cursor: not-allowed; background: none; border: none; width: 100%; text-align: left; color: #999;" disabled>
+                                                                            <i class="fa fa-check-circle text-success"></i> <?=__('settlement_created') ?: 'Settlement Created'?>
+                                                                        </button>
+                                                                    <?php endif; ?>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -518,6 +536,91 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
             document.getElementById('searchFilter').addEventListener('keypress', function (e) {
                 if (e.key === 'Enter') { applyFilters(); }
             });
+
+            /**
+             * =====================================================================
+             * == CREATE LOAN SETTLEMENT FUNCTION
+             * =====================================================================
+             * Creates a settlement record for an approved loan request
+             * Initiates the settlement approval chain process
+             */
+            function createLoanSettlement(loanId, loanInvNo, employeeId, employeeName, loanAmount) {
+                Swal.fire({
+                    title: __('create_settlement') || 'Create Settlement',
+                    html: `
+                        <div class="text-left">
+                            <p><strong>Employee:</strong> ${employeeName}</p>
+                            <p><strong>Loan Ref:</strong> ${loanInvNo}</p>
+                            <p><strong>Settlement Amount:</strong> <span class="badge badge-success">SAR ${parseFloat(loanAmount).toFixed(2)}</span></p>
+                            <hr>
+                            <p class="text-muted"><small>This will create a settlement record and initiate the settlement approval chain (Department Manager → Finance Officer → HR Payroll).</small></p>
+                        </div>
+                    `,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#28a745',
+                    confirmButtonText: '<i class="fa fa-check"></i> ' + (__('create_settlement') || 'Create Settlement'),
+                    cancelButtonColor: '#dc3545',
+                    cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
+                    allowOutsideClick: false,
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => {
+                        return new Promise((resolve, reject) => {
+                            $.ajax({
+                                url: './includes/api/settlement_handler.php',
+                                type: 'POST',
+                                dataType: 'JSON',
+                                xhrFields: {
+                                    withCredentials: true
+                                },
+                                data: {
+                                    action: 'create_settlement',
+                                    request_inv_no: loanInvNo,
+                                    request_type: 'loan_request',
+                                    emp_id: employeeId,
+                                    settlement_amount: loanAmount,
+                                    user_id: <?= (int)$_SESSION['empid']; ?>
+                                },
+                                success: function(response) {
+                                    if (response.success === true) {
+                                        resolve(response);
+                                    } else {
+                                        reject(response.message || 'Failed to create settlement');
+                                    }
+                                },
+                                error: function(xhr) {
+                                    const response = xhr.responseJSON || {};
+                                    reject(response.message || 'Error creating settlement');
+                                }
+                            });
+                        });
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        Swal.fire({
+                            title: __('success') || 'Success',
+                            html: `
+                                <p>Settlement created successfully!</p>
+                                <p><strong>Settlement Ref:</strong> ${result.value.settlement_inv_no || loanInvNo}</p>
+                                <p class="text-muted"><small>The settlement request has been initiated and is now pending approval from the settlement approval chain.</small></p>
+                            `,
+                            icon: 'success',
+                            confirmButtonColor: '#28a745',
+                            confirmButtonText: __('ok') || 'OK'
+                        }).then(() => {
+                            location.reload();
+                        });
+                    }
+                }).catch((error) => {
+                    Swal.fire({
+                        title: __('error') || 'Error',
+                        html: error,
+                        icon: 'error',
+                        confirmButtonColor: '#dc3545',
+                        confirmButtonText: __('ok') || 'OK'
+                    });
+                });
+            }
         </script>
     </body>
     </html>

@@ -163,7 +163,10 @@
 		}
 		// Sanitize the ID to prevent SQL injection
 		$empidget = (int)$empidget;
-		// Get FIRST active vacation (oldest first) - for sequential rejoin
+		// Get LAST active vacation (most recent return_date) - for multiple active vacations
+		// This ensures we use the most recent vacation when employee has multiple active vacations
+		// Example: Employee has Annual vacation (returns Feb 15) + Emergency vacation (returns Feb 10)
+		// We need the Emergency vacation (LAST by return_date)
 		$query = "SELECT 
 			`id` AS `vacid`,
 			`return_date` AS `returndate`,
@@ -173,7 +176,7 @@
 			`vacdays`
 			FROM `emp_vacation`
 			WHERE `emp_id` = {$empidget} AND `current_status` IN  ('approved','completed') AND `review` = 'A'
-			ORDER BY `start_date` ASC, `id` ASC
+			ORDER BY `return_date` DESC, `id` DESC
 			LIMIT 1";
 		$result = mysqli_query($conDB, $query);
 		// Return null if query fails
@@ -194,7 +197,8 @@
 		}
 		// Sanitize the ID to prevent SQL injection
 		$empidget = (int)$empidget;
-		// Get ALL active vacations ordered by start date (oldest first)
+		// Get ALL active vacations ordered by return date (LAST active vacation first)
+		// This ensures we prioritize the most recent vacation when multiple are active
 		$query = "SELECT 
 			`id` AS `vacid`,
 			`request_inv_no`,
@@ -208,7 +212,7 @@
 			WHERE `emp_id` = {$empidget} 
 			AND `current_status` IN ('approved','completed') 
 			AND `review` = 'A'
-			ORDER BY `start_date` ASC, `id` ASC";
+			ORDER BY `return_date` DESC, `id` DESC";
 		$result = mysqli_query($conDB, $query);
 		// Return empty array if query fails
 		if (!$result) {

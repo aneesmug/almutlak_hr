@@ -1,0 +1,7 @@
+# EOS Calc Table Extraction
+
+This file will be used to store the extracted contents of the `eos_calc` table for both contract types (Limited and Unlimited Period) to reconstruct the official HRSD reasons list.
+
+---
+
+(Extraction in progress...)

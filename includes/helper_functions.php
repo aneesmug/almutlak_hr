@@ -1404,7 +1404,9 @@ if (!function_exists('load_email_template')) {
             'resignation_request' => 'resignation_request_email_template.html',
             'modification_request' => 'modification_request_email_template.html',
             'rejoin_request' => 'rejoin_request_email_template.html',
-            'new_employee' => 'new_employee_email_template.html'
+            'new_employee' => 'new_employee_email_template.html',
+            'settlement_approval' => 'settlement_approval_email_template.html',
+            'settlement_rejection' => 'settlement_rejection_email_template.html'
         ];
 
         $template_file = $template_map[$request_type] ?? 'smart_request_email_template.html';
@@ -1458,7 +1460,12 @@ if (!function_exists('load_email_template')) {
             'JOINING_DATE' => 'N/A',
             'SALARY' => 'N/A',
             'COMPANY_NAME' => 'N/A',
-            'ALL_EMPLOYEES_URL' => $base_url . '/all_employee_list.php'
+            'ALL_EMPLOYEES_URL' => $base_url . '/reg_employee.php',
+            // Settlement email template fields
+            'SETTLEMENT_AMOUNT' => 'N/A',
+            'REQUEST_SOURCE' => 'N/A',
+            'REJECTED_BY' => 'N/A',
+            'REJECTION_REASON' => ''
         ];
 
         // Merge so passed data overrides defaults
@@ -1476,6 +1483,14 @@ if (!function_exists('load_email_template')) {
                 // Normal approval request
                 $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'A new loan request has been submitted and requires your approval.';
             }
+        } elseif ($request_type === 'settlement_rejection') {
+            // Settlement rejection - show rejection info
+            $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'Unfortunately, your settlement has been rejected.';
+            $data['REJECTION_BORDER'] = 'border-bottom: 1px solid #404040;';
+            $data['REJECTION_INFO'] = '<tr><td style="padding: 12px 0;"><span style="color: #a0a0a0; font-size: 14px; display: block; margin-bottom: 8px;">Rejection Reason:</span><div style="background-color: #1e1e1e; padding: 12px; border-radius: 4px; border-left: 3px solid #ff6b6b;"><p style="margin: 0; color: #ffffff; font-size: 14px; line-height: 1.6;">' . nl2br(htmlspecialchars($data['REJECTION_REASON'], ENT_QUOTES, 'UTF-8')) . '</p></div></td></tr>';
+        } elseif ($request_type === 'settlement_approval') {
+            // Settlement approval - normal request
+            $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'A settlement requires your approval.';
         }
 
         // Replace template placeholders
@@ -2214,6 +2229,7 @@ if (!function_exists('handle_approval_action')) {
                                     } else {
                                     }
                                 }
+                                // --- [END SETTLEMENT INTEGRATION] ---
 
                                 // --- [UPDATED] Fly Status Management ---
                                 // Set fly=1 at final HR_Payroll approval, except Encashment and Excuse Leave types

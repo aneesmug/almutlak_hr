@@ -9975,3 +9975,581 @@ function initSessionTimeoutAlert() {
         setInterval(checkTimeout, 500);
     })();
 }
+
+/**
+ * =====================================================================
+ * SETTLEMENT MANAGEMENT FUNCTIONS (Global - Reusable across all pages)
+ * =====================================================================
+ * These functions handle viewing, approving, rejecting, and processing
+ * settlement records across all pages (loans, vacations, advances, etc.)
+ */
+
+function viewSettlementDetails(settlementId, settlementInvNo) {
+    // Show loading indicator
+    Swal.fire({
+        title: 'Loading Settlement Details...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    $.ajax({
+        url: './includes/ajaxFile/settlement_handler.php',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            action: 'get_settlement_details',
+            settlement_id: settlementId
+        },
+        success: function(response) {
+            if (response.success) {
+                const s = response.data.settlement;
+                const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
+                
+                // Build approval chain HTML
+                let approvalChainHtml = '<div style="margin-top: 15px;"><h6>' + (window.lang && window.lang['approval_chain'] ? window.lang['approval_chain'] : 'Approval Chain') + ':</h6><table style="width: 100%; font-size: 13px;" dir="' + (isRtl ? 'rtl' : 'ltr') + '"><tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">' + (window.lang && window.lang['level'] ? window.lang['level'] : 'Level') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + (window.lang && window.lang['status'] ? window.lang['status'] : 'Status') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + (window.lang && window.lang['approver'] ? window.lang['approver'] : 'Approver') + '</th></tr>';
+                if (response.data.approval_chain && response.data.approval_chain.length > 0) {
+                    response.data.approval_chain.forEach((level, idx) => {
+                        const statusBadge = level.status === 'approved' ? '<span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 3px;">✓ ' + (window.lang && window.lang['approved'] ? window.lang['approved'] : 'Approved') + '</span>' :
+                                           level.status === 'pending' ? '<span style="background: #ffc107; color: black; padding: 3px 8px; border-radius: 3px;">⏳ ' + (window.lang && window.lang['pending'] ? window.lang['pending'] : 'Pending') + '</span>' :
+                                           level.status === 'rejected' ? '<span style="background: #dc3545; color: white; padding: 3px 8px; border-radius: 3px;">✗ ' + (window.lang && window.lang['rejected'] ? window.lang['rejected'] : 'Rejected') + '</span>' :
+                                           '<span style="background: #6c757d; color: white; padding: 3px 8px; border-radius: 3px;">' + (window.lang && window.lang['awaiting'] ? window.lang['awaiting'] : 'Awaiting') + '</span>';
+                        approvalChainHtml += `<tr><td style="padding: 8px; border: 1px solid #ddd;">` + (window.lang && window.lang['level'] ? window.lang['level'] : 'Level') + ` ${level.approval_level}</td><td style="padding: 8px; border: 1px solid #ddd;">${statusBadge}</td><td style="padding: 8px; border: 1px solid #ddd;">${level.approver_name || (window.lang && window.lang['not_assigned'] ? window.lang['not_assigned'] : 'Not Assigned')}</td></tr>`;
+                    });
+                }
+                approvalChainHtml += '</table></div>';
+                
+                // Build report link and payment proof button based on request type
+                let reportLink = '';
+                let downloadProofButton = '';
+                const requestType = s.request_type ? s.request_type.toLowerCase() : '';
+                const requestId = response.data.settlement.related_request_id || s.id;
+                const empId = s.emp_id;
+                
+                if (requestType.includes('vacation')) {
+                    reportLink = '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_vacation_report'] ? window.lang['view_vacation_report'] : 'View Vacation Report') + '</a>';
+                } else if (requestType.includes('loan')) {
+                    reportLink = '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_loan_report'] ? window.lang['view_loan_report'] : 'View Loan Report') + '</a>';
+                } else if (requestType.includes('advance')) {
+                    reportLink = '<a href="./advance_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_advances_report'] ? window.lang['view_advances_report'] : 'View Advances Report') + '</a>';
+                } else {
+                    reportLink = '<a href="./all_general_requests.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_requests_report'] ? window.lang['view_requests_report'] : 'View Request Report') + '</a>';
+                }
+                
+                // Build payment proof download button if available
+                if (s.payment_reference && s.payment_reference.trim() !== '') {
+                    const proofPath = s.payment_reference;
+                    const isImage = /\.(jpg|jpeg|png|gif|bmp)$/i.test(proofPath);
+                    const buttonText = 'Download Proof';
+                    const marginDir = isRtl ? 'right' : 'left';
+                    downloadProofButton = `<a href="./${proofPath}" target="_blank" class="btn btn-sm btn-primary" style="margin-top: 10px; margin-${marginDir}: 5px;"><i class="fa fa-download"></i> ${buttonText}</a>`;
+                }
+                
+                let historyHtml = '<div style="margin-top: 15px;">' + reportLink + downloadProofButton + '</div>';
+                
+                const contentHtml = `
+                    <div style="text-align: ` + (isRtl ? 'right' : 'left') + `; font-size: 14px; direction: ` + (isRtl ? 'rtl' : 'ltr') + `;">
+                        <h5 style="margin-bottom: 15px; color: #333;">` + (window.lang && window.lang['settlement_information'] ? window.lang['settlement_information'] : 'Settlement Information') + `</h5>
+                        <table style="width: 100%; margin-bottom: 10px;" dir="` + (isRtl ? 'rtl' : 'ltr') + `">
+                            <tr><td style="padding: 8px; font-weight: bold; width: 35%;">` + (window.lang && window.lang['settlement_id'] ? window.lang['settlement_id'] : 'Settlement ID') + `:</td><td style="padding: 8px; color: #007bff; font-weight: 600;">${htmlspecialcharsJs(s.request_inv_no)}</td></tr>
+                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['employee_name'] ? window.lang['employee_name'] : 'Employee Name') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_name)}</td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['employee_id'] ? window.lang['employee_id'] : 'Employee ID') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_id)}</td></tr>
+                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['settlement_amount'] ? window.lang['settlement_amount'] : 'Settlement Amount') + `:</td><td style="padding: 8px; color: #28a745; font-weight: 600;">SAR ${parseFloat(s.settlement_amount).toFixed(2)}</td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['settlement_method'] ? window.lang['settlement_method'] : 'Settlement Method') + `:</td><td style="padding: 8px;">${s.settlement_method || (window.lang && window.lang['not_available'] ? window.lang['not_available'] : 'Not Available')}</td></tr>
+                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['status'] ? window.lang['status'] : 'Status') + `:</td><td style="padding: 8px;"><span style="background: #007bff; color: white; padding: 3px 8px; border-radius: 3px;">${(s.settlement_status || '').toUpperCase()}</span></td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['created'] ? window.lang['created'] : 'Created') + `:</td><td style="padding: 8px;">${new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td></tr>
+                        </table>
+                        ${approvalChainHtml}
+                        ${historyHtml}
+                    </div>
+                `;
+                
+                Swal.fire({
+                    title: window.lang && window.lang['settlement_details'] ? window.lang['settlement_details'] : 'Settlement Details',
+                    html: contentHtml,
+                    width: 700,
+                    allowOutsideClick: false,
+                    confirmButtonText: window.lang && window.lang['close'] ? window.lang['close'] : 'Close'
+                });
+            } else {
+                Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_to_load_settlement_details'] ? window.lang['failed_to_load_settlement_details'] : 'Failed to load settlement details'), 'error');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('AJAX Error:', status, error);
+            console.error('Response:', xhr.responseText);
+            Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_to_load_settlement_details'] ? window.lang['failed_to_load_settlement_details'] : 'Failed to load settlement details') + ': ' + error, 'error');
+        }
+    });
+}
+
+function approveSettlement(settlementId, settlementInvNo, empId) {
+    // First, check if this is the final approval level
+    $.ajax({
+        url: './includes/ajaxFile/settlement_handler.php',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            action: 'check_final_approval',
+            settlement_id: settlementId
+        },
+        success: function(checkResponse) {
+            const isFinalApproval = checkResponse.is_final_approval || false;
+            const settlementAmount = checkResponse.settlement_amount || 0;
+            const isFinanceManager = checkResponse.is_finance_manager || false;
+            const isFinanceEmployee = checkResponse.is_finance_employee || false;
+            
+            let formHtml = `<div style="text-align: left;">
+                <div class="form-group">
+                    <label>` + (window.lang && window.lang['approval_comment'] ? window.lang['approval_comment'] : 'Approval Comment') + `:</label>
+                    <textarea id="approvalComment" class="form-control" placeholder="` + (window.lang && window.lang['add_approval_comment'] ? window.lang['add_approval_comment'] : 'Add comment') + `" rows="3"></textarea>
+                </div>`;
+            
+            // Show payer selection if Finance Manager at final approval
+            if (isFinalApproval && isFinanceManager) {
+                formHtml += `
+                <div class="form-group">
+                    <label style="color: #dc3545;">Select Payer: <span style="color: red;">*</span></label>
+                    <div style="margin: 10px 0;">
+                        <label style="display: block; margin: 8px 0;">
+                            <input type="radio" name="payerType" value="self" checked> Myself
+                        </label>
+                        <label style="display: block; margin: 8px 0;">
+                            <input type="radio" name="payerType" value="other"> Other Finance Employee
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" id="otherPayerGroup" style="display: none;">
+                    <label style="color: #dc3545;">Finance Department Employee: <span style="color: red;">*</span></label>
+                    <select id="payerSelect" class="form-control form-control-lg select2-hidden-accessible" style="width: 100%;" required>
+                        <option value="">Select Finance Employee</option>
+                    </select>
+                </div>
+                <div class="form-group" id="approvedAmountGroup">
+                    <label style="color: #dc3545;">Approved Amount (SAR): <span style="color: red;">*</span></label>
+                    <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
+                    <small class="text-muted">Settlement Amount: SAR ${parseFloat(settlementAmount).toFixed(2)}</small>
+                    <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
+                </div>
+                <div class="form-group" id="paymentProofGroup">
+                    <label style="color: #dc3545;">Payment Proof: <span style="color: red;">*</span></label>
+                    <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
+                    <small class="text-muted">Attach payment receipt/proof (PDF or Image)</small>
+                </div>`;
+            } else if (isFinalApproval && isFinanceEmployee) {
+                // Finance Officer at final approval - show payment form only
+                formHtml += `
+                <div class="form-group" id="approvedAmountGroup">
+                    <label style="color: #dc3545;">Approved Amount (SAR): <span style="color: red;">*</span></label>
+                    <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
+                    <small class="text-muted">Settlement Amount: SAR ${parseFloat(settlementAmount).toFixed(2)}</small>
+                    <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
+                </div>
+                <div class="form-group" id="paymentProofGroup">
+                    <label style="color: #dc3545;">Payment Proof: <span style="color: red;">*</span></label>
+                    <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
+                    <small class="text-muted">Attach payment receipt/proof (PDF or Image)</small>
+                </div>`;
+            }
+            
+            formHtml += `</div>`;
+            
+            // Store payer type to persist across modal lifecycle
+            let selectedPayerType = 'self';
+            let formValues = {};
+            let isFinanceManagerUser = isFinanceManager;
+            let isFinanceEmployeeUser = isFinanceEmployee;
+            
+            Swal.fire({
+                title: (isFinalApproval && (isFinanceManager || isFinanceEmployee)) ? 'Final Approval & Payment' : (window.lang && window.lang['approve_settlement'] ? window.lang['approve_settlement'] : 'Approve Settlement'),
+                html: formHtml,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: window.lang && window.lang['approve'] ? window.lang['approve'] : 'Approve',
+                confirmButtonColor: '#28a745',
+                cancelButtonText: window.lang && window.lang['cancel'] ? window.lang['cancel'] : 'Cancel',
+                allowOutsideClick: false,
+                preConfirm: () => {
+                    const comment = document.getElementById('approvalComment').value;
+                    
+                    // Only get payer type if Finance Manager
+                    if (isFinanceManagerUser) {
+                        selectedPayerType = document.querySelector('input[name="payerType"]:checked').value;
+                    }
+                    
+                    // Store all form values for later use
+                    formValues = {
+                        comment: comment,
+                        payerType: selectedPayerType
+                    };
+                    
+                    if (isFinalApproval && isFinanceManagerUser) {
+                        const payerType = selectedPayerType;
+                        
+                        if (payerType === 'other') {
+                            const payer = document.getElementById('payerSelect').value;
+                            if (!payer) {
+                                Swal.showValidationMessage('Please select a finance employee');
+                                return false;
+                            }
+                            formValues.payerSelect = payer;
+                        } else {
+                            // Validate amount and payment proof only when "Myself" is selected
+                            const approvedAmt = parseFloat(document.getElementById('approvedAmount').value || 0);
+                            const paymentProof = document.getElementById('paymentProof').files[0];
+                            
+                            if (!approvedAmt || approvedAmt <= 0) {
+                                Swal.showValidationMessage('Please enter approved amount');
+                                return false;
+                            }
+                            
+                            if (Math.abs(approvedAmt - settlementAmount) > 0.01) {
+                                Swal.showValidationMessage('Approved amount must match settlement amount exactly');
+                                return false;
+                            }
+                            
+                            if (!paymentProof) {
+                                Swal.showValidationMessage('Please attach payment proof');
+                                return false;
+                            }
+                            
+                            formValues.approvedAmount = approvedAmt;
+                            formValues.paymentProof = paymentProof;
+                        }
+                    } else if (isFinalApproval && isFinanceEmployeeUser) {
+                        // Finance Officer validation - require amount and payment proof
+                        const approvedAmt = parseFloat(document.getElementById('approvedAmount').value || 0);
+                        const paymentProof = document.getElementById('paymentProof').files[0];
+                        
+                        if (!approvedAmt || approvedAmt <= 0) {
+                            Swal.showValidationMessage('Please enter approved amount');
+                            return false;
+                        }
+                        
+                        if (Math.abs(approvedAmt - settlementAmount) > 0.01) {
+                            Swal.showValidationMessage('Approved amount must match settlement amount exactly');
+                            return false;
+                        }
+                        
+                        if (!paymentProof) {
+                            Swal.showValidationMessage('Please attach payment proof');
+                            return false;
+                        }
+                        
+                        formValues.approvedAmount = approvedAmt;
+                        formValues.paymentProof = paymentProof;
+                        formValues.payerType = 'self'; // Finance Officer is always the payer
+                    }
+                    
+                    return true;
+                },
+                didOpen: () => {
+                    if (isFinalApproval && isFinanceManagerUser) {
+                        // Fetch finance employees and populate Select2
+                        setTimeout(() => {
+                            $.ajax({
+                                url: './includes/ajaxFile/settlement_handler.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: {
+                                    action: 'get_finance_employees'
+                                },
+                                success: function(response) {
+                                    if (response.success && response.employees) {
+                                        // Clear existing options except the first one
+                                        $('#payerSelect').find('option:not(:first)').remove();
+                                        
+                                        response.employees.forEach(emp => {
+                                            $('#payerSelect').append(`<option value="${emp.emp_id}">${emp.name} (${emp.emp_id})</option>`);
+                                        });
+                                        
+                                        // Destroy existing Select2 if any
+                                        if ($('#payerSelect').data('select2')) {
+                                            $('#payerSelect').select2('destroy');
+                                        }
+                                        
+                                        // Initialize Select2 with better options
+                                        $('#payerSelect').select2({
+                                            placeholder: 'Select Finance Employee',
+                                            allowClear: true,
+                                            width: '100%'
+                                        });
+                                        
+                                        // Adjust dropdown positioning
+                                        $('.select2-container').css({
+                                            'position': 'relative',
+                                            'z-index': '9999'
+                                        });
+                                    }
+                                },
+                                error: function() {
+                                    console.error('Failed to load finance employees');
+                                }
+                            });
+                        }, 150);
+                        
+                        // Handle payer type change
+                        $('input[name="payerType"]').on('change', function() {
+                            if ($(this).val() === 'other') {
+                                $('#otherPayerGroup').show();
+                                $('#approvedAmountGroup').hide();
+                                $('#paymentProofGroup').hide();
+                                // Trigger Select2 to show dropdown properly
+                                setTimeout(() => {
+                                    $('#payerSelect').select2('open');
+                                    $('#payerSelect').select2('close');
+                                }, 100);
+                            } else {
+                                $('#otherPayerGroup').hide();
+                                $('#approvedAmountGroup').show();
+                                $('#paymentProofGroup').show();
+                            }
+                        });
+                        
+                        // Validate amount on input
+                        $('#approvedAmount').on('input', function() {
+                            const enteredAmt = parseFloat($(this).val() || 0);
+                            if (Math.abs(enteredAmt - settlementAmount) > 0.01) {
+                                $('#amountError').show();
+                                $('.swal2-confirm').prop('disabled', true);
+                            } else {
+                                $('#amountError').hide();
+                                $('.swal2-confirm').prop('disabled', false);
+                            }
+                        });
+                    } else if (isFinalApproval && isFinanceEmployeeUser) {
+                        // Finance Officer - apply amount validation
+                        $('#approvedAmount').on('input', function() {
+                            const enteredAmt = parseFloat($(this).val() || 0);
+                            if (Math.abs(enteredAmt - settlementAmount) > 0.01) {
+                                $('#amountError').show();
+                                $('.swal2-confirm').prop('disabled', true);
+                            } else {
+                                $('#amountError').hide();
+                                $('.swal2-confirm').prop('disabled', false);
+                            }
+                        });
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const comment = formValues.comment;
+                    const payerType = formValues.payerType;
+                    
+                    // Show loading indicator
+                    Swal.fire({
+                        title: window.lang && window.lang['processing'] ? window.lang['processing'] : 'Processing...',
+                        text: window.lang && window.lang['approving_settlement'] ? window.lang['approving_settlement'] : 'Approving settlement, please wait',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    let formData = new FormData();
+                    formData.append('action', 'approve_settlement');
+                    formData.append('settlement_id', settlementId);
+                    formData.append('settlement_inv_no', settlementInvNo);
+                    formData.append('emp_id', empId);
+                    formData.append('approval_comment', comment);
+                    
+                    if (isFinalApproval && isFinanceManagerUser) {
+                        formData.append('is_final_approval', '1');
+                        formData.append('payer_type', payerType);
+                        
+                        // Get current user's emp_id from body data attribute or global variable
+                        const currentEmpId = document.body.getAttribute('data-empid') || (typeof window.currentEmpId !== 'undefined' ? window.currentEmpId : '');
+                        const payerId = payerType === 'self' ? currentEmpId : formValues.payerSelect;
+                        formData.append('payer_id', payerId);
+                        
+                        // Only send amount and proof if "Myself" is selected
+                        if (payerType === 'self') {
+                            formData.append('approved_amount', formValues.approvedAmount);
+                            formData.append('payment_proof', formValues.paymentProof);
+                        }
+                    } else if (isFinalApproval && isFinanceEmployeeUser) {
+                        // Finance Officer at final approval - always send amount and proof
+                        formData.append('is_final_approval', '1');
+                        formData.append('payer_type', 'self'); // Finance Officer is always the payer
+                        
+                        const currentEmpId = document.body.getAttribute('data-empid') || (typeof window.currentEmpId !== 'undefined' ? window.currentEmpId : '');
+                        formData.append('payer_id', currentEmpId);
+                        formData.append('approved_amount', formValues.approvedAmount);
+                        formData.append('payment_proof', formValues.paymentProof);
+                    }
+                    
+                    $.ajax({
+                        url: './includes/ajaxFile/settlement_handler.php',
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                Swal.fire(window.lang && window.lang['success'] ? window.lang['success'] : 'Success', response.message || (window.lang && window.lang['settlement_approved'] ? window.lang['settlement_approved'] : 'Settlement approved successfully'), 'success')
+                                    .then(() => location.reload());
+                            } else {
+                                Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_approve_settlement'] ? window.lang['failed_approve_settlement'] : 'Failed to approve settlement'), 'error');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Approval error:', xhr.responseText);
+                            Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_approve_settlement'] ? window.lang['failed_approve_settlement'] : 'Failed to approve settlement') + ': ' + error, 'error');
+                        }
+                    });
+                }
+            });
+        },
+        error: function() {
+            Swal.fire('Error', 'Failed to check approval status', 'error');
+        }
+    });
+}
+
+function rejectSettlement(settlementId, settlementInvNo) {
+    Swal.fire({
+        title: window.lang && window.lang['reject_settlement'] ? window.lang['reject_settlement'] : 'Reject Settlement',
+        html: `<textarea id="rejectionReason" class="form-control" placeholder="` + (window.lang && window.lang['provide_rejection_reason'] ? window.lang['provide_rejection_reason'] : 'Provide rejection reason...') + `" rows="4"></textarea>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: window.lang && window.lang['reject'] ? window.lang['reject'] : 'Reject',
+        confirmButtonColor: '#dc3545',
+        cancelButtonText: window.lang && window.lang['cancel'] ? window.lang['cancel'] : 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const reason = document.getElementById('rejectionReason').value;
+            if (!reason.trim()) {
+                Swal.fire('Error', window.lang && window.lang['provide_rejection_reason'] ? window.lang['provide_rejection_reason'] : 'Please provide a rejection reason', 'error');
+                return;
+            }
+            
+            // Show loading indicator
+            Swal.fire({
+                title: window.lang && window.lang['processing'] ? window.lang['processing'] : 'Processing...',
+                text: window.lang && window.lang['rejecting_settlement'] ? window.lang['rejecting_settlement'] : 'Rejecting settlement, please wait',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            $.ajax({
+                url: './includes/ajaxFile/settlement_handler.php',
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'reject_settlement',
+                    settlement_id: settlementId,
+                    settlement_inv_no: settlementInvNo,
+                    rejection_reason: reason
+                },
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire(window.lang && window.lang['success'] ? window.lang['success'] : 'Success', response.message || (window.lang && window.lang['settlement_rejected'] ? window.lang['settlement_rejected'] : 'Settlement rejected successfully'), 'success')
+                            .then(() => location.reload());
+                    } else {
+                        Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_reject_settlement'] ? window.lang['failed_reject_settlement'] : 'Failed to reject settlement'), 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Rejection error:', xhr.responseText);
+                    Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_reject_settlement'] ? window.lang['failed_reject_settlement'] : 'Failed to reject settlement') + ': ' + error, 'error');
+                }
+            });
+        }
+    });
+}
+
+function processSettlementPayment(settlementId, settlementInvNo) {
+    Swal.fire({
+        title: window.lang && window.lang['clear_settlement'] ? window.lang['clear_settlement'] : 'Clear Settlement',
+        html: `
+            <div style="text-align: left;">
+                <p>` + (window.lang && window.lang['select_payment_method'] ? window.lang['select_payment_method'] : 'Select payment method to clear this settlement:') + `</p>
+                <div style="margin: 15px 0;">
+                    <label style="display: block; margin: 8px 0;">
+                        <input type="radio" name="paymentMethod" value="bank_transfer" checked> ` + (window.lang && window.lang['bank_transfer'] ? window.lang['bank_transfer'] : 'Bank Transfer') + `
+                    </label>
+                    <label style="display: block; margin: 8px 0;">
+                        <input type="radio" name="paymentMethod" value="check"> ` + (window.lang && window.lang['check'] ? window.lang['check'] : 'Check') + `
+                    </label>
+                    <label style="display: block; margin: 8px 0;">
+                        <input type="radio" name="paymentMethod" value="cash"> ` + (window.lang && window.lang['cash'] ? window.lang['cash'] : 'Cash') + `
+                    </label>
+                </div>
+                <div style="margin-top: 15px;">
+                    <label>` + (window.lang && window.lang['payment_reference'] ? window.lang['payment_reference'] : 'Payment Reference') + ` (` + (window.lang && window.lang['optional'] ? window.lang['optional'] : 'Optional') + `):</label>
+                    <input type="text" id="paymentReference" class="form-control" placeholder="` + (window.lang && window.lang['eg_transaction_id'] ? window.lang['eg_transaction_id'] : 'e.g., Transaction ID, Check Number') + `">
+                </div>
+            </div>
+        `,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: window.lang && window.lang['clear_settlement'] ? window.lang['clear_settlement'] : 'Clear Settlement',
+        confirmButtonColor: '#28a745',
+        cancelButtonText: window.lang && window.lang['cancel'] ? window.lang['cancel'] : 'Cancel',
+        allowOutsideClick: false
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const method = document.querySelector('input[name="paymentMethod"]:checked').value;
+            const reference = document.getElementById('paymentReference').value;
+            
+            // Show loading
+            Swal.fire({
+                title: window.lang && window.lang['processing'] ? window.lang['processing'] : 'Processing...',
+                text: window.lang && window.lang['clearing_settlement'] ? window.lang['clearing_settlement'] : 'Clearing settlement, please wait',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            $.ajax({
+                url: './includes/ajaxFile/settlement_handler.php',
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'process_payment',
+                    settlement_inv_no: settlementInvNo,
+                    payment_method: method,
+                    payment_reference: reference
+                },
+                success: function(response) {
+                    if (response.success || response.status === 'success') {
+                        Swal.fire(window.lang && window.lang['success'] ? window.lang['success'] : 'Success', response.message || (window.lang && window.lang['settlement_cleared'] ? window.lang['settlement_cleared'] : 'Settlement cleared successfully'), 'success')
+                            .then(() => location.reload());
+                    } else {
+                        Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_clear_settlement'] ? window.lang['failed_clear_settlement'] : 'Failed to clear settlement'), 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Payment error:', xhr.responseText);
+                    Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_clear_settlement'] ? window.lang['failed_clear_settlement'] : 'Failed to process payment') + ': ' + error, 'error');
+                }
+            });
+        }
+    });
+}
+
+/**
+ * HTML entity encoder/decoder for JavaScript
+ * Used in settlement functions to safely display data
+ */
+function htmlspecialcharsJs(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, function (match) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        }[match];
+    });
+}

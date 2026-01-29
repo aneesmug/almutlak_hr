@@ -441,6 +441,7 @@
                 { id: 'vacation_request', name: 'Vacation Request', description: 'Annual vacation and fly vacation approval chain' },
                 { id: 'excuse_leave', name: 'Excuse Leave', description: 'Sick leave, exam leave, and other excuse types' },
                 { id: 'loan_request', name: 'Loan Request', description: 'Employee loan application approval chain' },
+                { id: 'settlement', name: 'Settlement/Payment', description: 'Settlement/Payment processing approval chain (after request final approval)' },
                 { id: 'resignation_request', name: 'Resignation Request', description: 'Employee resignation approval chain' },
                 { id: 'rejoin_request', name: 'Rejoin Request', description: 'Employee rejoin after resignation approval chain' }
             ];

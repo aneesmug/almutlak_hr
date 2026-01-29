@@ -167,16 +167,19 @@ elseif ($ajaxType == 'canApplyVacation') {
         }
         
         // ALSO check for any active/approved vacation (for Emergency vacation date restriction)
-        // FIX: Get the MOST RECENT approved/completed vacation (past or future)
-        // to ensure proper date restriction for next vacation application
+        // FIX: Get the LAST (MOST RECENT) active vacation by return_date DESC
+        // This ensures we use the correct return date when employee has multiple active vacations
+        // Example: Employee applies Annual vacation, then Emergency vacation while on Annual
+        // We need the Emergency vacation's return_date (the LAST one) for proper date restriction
         $active_vacation_inv = null;
         if (empty($active_return_date)) {
-            // Get the most recent approved/completed vacation (regardless of past/future)
-            $sql_active = "SELECT `return_date`, `request_inv_no` FROM `emp_vacation` 
+            // Get the LAST active vacation (by latest return_date)
+            // This handles multiple active vacations scenario (Annual + Emergency, etc.)
+            $sql_active = "SELECT `return_date`, `request_inv_no`, `vac_type`, `fly_type` FROM `emp_vacation` 
                           WHERE `emp_id` = ? 
                           AND `current_status` IN ('approved', 'completed') 
                           AND `review` IN ('A')
-                          ORDER BY `return_date` DESC LIMIT 1";
+                          ORDER BY `return_date` DESC, `id` DESC LIMIT 1";
             $stmt_active = mysqli_prepare($conDB, $sql_active);
             if ($stmt_active) {
                 mysqli_stmt_bind_param($stmt_active, "s", $emp_id);
@@ -185,6 +188,7 @@ elseif ($ajaxType == 'canApplyVacation') {
                     if ($row_active = mysqli_fetch_assoc($res_active)) {
                         $active_return_date = $row_active['return_date'] ?? null;
                         $active_vacation_inv = $row_active['request_inv_no'] ?? null;
+                        error_log("VACATION_CHECK: Found LAST active vacation for emp {$emp_id}: {$active_vacation_inv} (Type: {$row_active['vac_type']}/{$row_active['fly_type']}, Return: {$active_return_date})");
                     }
                     if ($res_active) mysqli_free_result($res_active);
                 }
@@ -527,7 +531,8 @@ elseif ($ajaxType == 'applyVacation') {
             }
         }
 
-        // ENCASHED VACATION: separate logic, always follow app_settings and append Finance Manager at the end
+        // ENCASHED VACATION: Use configured approval chain from app_settings
+        // Note: Finance Manager is NO LONGER auto-appended - payments handled via settlement function
         if ($is_encashed_vacation) {
             // Reset chain for encashed flow
             $approver_chain = [];
@@ -1086,7 +1091,7 @@ elseif ($ajaxType == 'applyVacation') {
         $sql = "INSERT INTO `emp_vacation` 
                     (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`,`review`) 
                 VALUES 
-                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, 'A', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
+                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
 
         if (!mysqli_query($conDB, $sql)) {
 
@@ -1275,67 +1280,6 @@ elseif ($ajaxType == 'applyVacation') {
         }
         
         $first_approver = $chainResult['first_approver'];
-
-        // ENCASHED: ensure Finance Manager is appended at the end of the approval chain (per requirement)
-        if ($is_encashed_vacation) {
-            // Resolve Finance Manager (user_type = finance, emp_type = Manager, dept = 2)
-            $finance_mgr_id = null;
-            $stmt_fm = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = 'finance' AND al.emp_type = 'Manager' AND al.dept = 2 AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
-            if ($stmt_fm) {
-                mysqli_stmt_execute($stmt_fm);
-                $res_fm = mysqli_stmt_get_result($stmt_fm);
-                if ($res_fm && ($row_fm = mysqli_fetch_assoc($res_fm))) {
-                    $finance_mgr_id = (int)$row_fm['emp_id'];
-                }
-                if ($res_fm) mysqli_free_result($res_fm);
-                mysqli_stmt_close($stmt_fm);
-            }
-
-            if ($finance_mgr_id) {
-                // Determine request_type_id for vacation_request
-                $request_type_id = 3; // default fallback
-                $type_q = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name='vacation_request' LIMIT 1");
-                if ($type_q && ($type_row = mysqli_fetch_assoc($type_q))) {
-                    $request_type_id = (int)$type_row['id'];
-                    mysqli_free_result($type_q);
-                }
-
-                // Skip if Finance Manager already present
-                $exists_stmt = mysqli_prepare($conDB, "SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? LIMIT 1");
-                $already_present = false;
-                if ($exists_stmt) {
-                    mysqli_stmt_bind_param($exists_stmt, "sii", $request_inv_no, $request_type_id, $finance_mgr_id);
-                    mysqli_stmt_execute($exists_stmt);
-                    mysqli_stmt_store_result($exists_stmt);
-                    $already_present = mysqli_stmt_num_rows($exists_stmt) > 0;
-                    mysqli_stmt_close($exists_stmt);
-                }
-
-                if (!$already_present) {
-                    // Find current max approval level
-                    $max_level = 1;
-                    $max_stmt = mysqli_prepare($conDB, "SELECT MAX(approval_level) as max_lvl FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ?");
-                    if ($max_stmt) {
-                        mysqli_stmt_bind_param($max_stmt, "si", $request_inv_no, $request_type_id);
-                        mysqli_stmt_execute($max_stmt);
-                        $max_res = mysqli_stmt_get_result($max_stmt);
-                        if ($max_res && ($max_row = mysqli_fetch_assoc($max_res))) {
-                            $max_level = (int)($max_row['max_lvl'] ?? 1);
-                        }
-                        if ($max_res) mysqli_free_result($max_res);
-                        mysqli_stmt_close($max_stmt);
-                    }
-
-                    $insert_stmt = mysqli_prepare($conDB, "INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')");
-                    if ($insert_stmt) {
-                        $next_level = $max_level + 1;
-                        mysqli_stmt_bind_param($insert_stmt, "siii", $request_inv_no, $request_type_id, $finance_mgr_id, $next_level);
-                        mysqli_stmt_execute($insert_stmt);
-                        mysqli_stmt_close($insert_stmt);
-                    }
-                }
-            }
-        }
 
         // FLY | ANNUAL: ensure GR Officer is appended at the end of the approval chain (for visa/exit re-entry fee)
         if ($is_fly_annual) {
@@ -2518,6 +2462,15 @@ elseif ($ajaxType == 'rejectVacation') {
             throw new Exception($result['message']);
         }
         
+        // Update emp_vacation to mark as reviewed when rejected
+        $update_review_query = "UPDATE `emp_vacation` SET `review` = 'C' WHERE `id` = ?";
+        $update_review_stmt = mysqli_prepare($conDB, $update_review_query);
+        if ($update_review_stmt) {
+            mysqli_stmt_bind_param($update_review_stmt, "i", $vacation_id);
+            mysqli_stmt_execute($update_review_stmt);
+            mysqli_stmt_close($update_review_stmt);
+        }
+        
         // Log vacation rejection
         $vacation_details = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
         $old_vacation = mysqli_fetch_assoc($vacation_details);
@@ -2736,40 +2689,88 @@ elseif ($ajaxType == 'updateVacationPayments') {
         // We assume the session check in all_applied_vac.php already handled this.
 
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $start_date = trim($_POST['start_date'] ?? '');
+        $return_date = trim($_POST['return_date'] ?? '');
         $departure_date = trim($_POST['departure_date'] ?? '');
         $arrival_date = trim($_POST['arrival_date'] ?? '');
         $ticket_pay = (float)($_POST['ticket_pay'] ?? 0);
         $permit_fee = (float)($_POST['permit_fee'] ?? 0);
 
-
-
         if (empty($vacation_id)) {
             throw new Exception(__("vacation_id_is_missing"));
         }
 
-        // Convert empty strings to NULL for date fields
+        // Validate dates are provided
+        if (empty($start_date) || empty($return_date)) {
+            throw new Exception(__("start_date_and_return_date_are_required"));
+        }
+
+        // Convert empty strings to NULL for optional date fields
+        $start_date_val = (!empty($start_date) ? $start_date : null);
+        $return_date_val = (!empty($return_date) ? $return_date : null);
         $departure_date_val = (!empty($departure_date) ? $departure_date : null);
         $arrival_date_val = (!empty($arrival_date) ? $arrival_date : null);
 
+        // Validate that start_date and return_date are within applied vacation period
+        // Fetch applied dates for validation
+        $check_sql = "SELECT start_date, return_date, vacdays FROM emp_vacation WHERE id = ?";
+        $check_stmt = mysqli_prepare($conDB, $check_sql);
+        if (!$check_stmt) {
+            throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($check_stmt, "i", $vacation_id);
+        mysqli_stmt_execute($check_stmt);
+        $check_res = mysqli_stmt_get_result($check_stmt);
+        $vacation_data = mysqli_fetch_assoc($check_res);
+        mysqli_stmt_close($check_stmt);
 
+        if (!$vacation_data) {
+            throw new Exception(__("vacation_record_not_found"));
+        }
 
-        $sql_pay = "UPDATE `emp_vacation` SET `departure_date` = ?, `arrival_date` = ?, `ticket_pay` = ?, `permit_fee` = ? WHERE `id` = ?";
+        $applied_start = new DateTime($vacation_data['start_date']);
+        $applied_end = new DateTime($vacation_data['return_date']);
+        $applied_days = (int)$vacation_data['vacdays'];
+
+        $new_start = new DateTime($start_date);
+        $new_return = new DateTime($return_date);
+
+        // Calculate flexibility boundaries (±5 days from applied dates)
+        $flex_start = clone $applied_start;
+        $flex_start->modify('-5 days');
+        $flex_end = clone $applied_end;
+        $flex_end->modify('+5 days');
+
+        // Validate new dates are within flexible period (±5 days)
+        if ($new_start < $flex_start || $new_start > $flex_end) {
+            throw new Exception(__("start_date_must_be_within_applied_vacation_period"));
+        }
+        if ($new_return < $flex_start || $new_return > $flex_end) {
+            throw new Exception(__("return_date_must_be_within_applied_vacation_period"));
+        }
+
+        // Validate that new vacation period equals applied days
+        $interval = $new_start->diff($new_return);
+        $calculated_days = $interval->days + 1; // +1 to include both start and end days
+
+        if ($calculated_days != $applied_days) {
+            throw new Exception("Invalid: New vacation period is {$calculated_days} days but applied vacation is {$applied_days} days. Must match exactly.");
+        }
+
+        // Update vacation with new dates and payment information
+        $sql_pay = "UPDATE `emp_vacation` SET `start_date` = ?, `return_date` = ?, `departure_date` = ?, `arrival_date` = ?, `ticket_pay` = ?, `permit_fee` = ? WHERE `id` = ?";
         $stmt_pay = mysqli_prepare($conDB, $sql_pay);
         if (!$stmt_pay) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
         }
 
-        mysqli_stmt_bind_param($stmt_pay, "ssddi", $departure_date_val, $arrival_date_val, $ticket_pay, $permit_fee, $vacation_id);
-
-
+        mysqli_stmt_bind_param($stmt_pay, "sssdddi", $start_date_val, $return_date_val, $departure_date_val, $arrival_date_val, $ticket_pay, $permit_fee, $vacation_id);
 
         if (!mysqli_stmt_execute($stmt_pay)) {
-
             throw new Exception(__('database_prepare_error') . ": " . mysqli_stmt_error($stmt_pay));
         }
 
         $rows_affected = mysqli_stmt_affected_rows($stmt_pay);
-
         mysqli_stmt_close($stmt_pay);
 
         if ($rows_affected > 0) {
@@ -3053,7 +3054,7 @@ elseif ($ajaxType == 'getVacationDetails') {
             throw new Exception(__("vacation_id_is_missing"));
         }
 
-        $sql = "SELECT `id`, `departure_date`, `arrival_date`, `ticket_pay`, `permit_fee`, `encashment_amount`, `vac_type`, `emp_id`, `request_inv_no` FROM `emp_vacation` WHERE `id` = ?";
+        $sql = "SELECT `id`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `ticket_pay`, `permit_fee`, `encashment_amount`, `vac_type`, `emp_id`, `request_inv_no`, `vacdays` FROM `emp_vacation` WHERE `id` = ?";
         $stmt = mysqli_prepare($conDB, $sql);
         if (!$stmt) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
@@ -3128,6 +3129,8 @@ elseif ($ajaxType == 'getVacationDetails') {
 
             echo json_encode([
                 'status' => 200,
+                'start_date' => $row['start_date'] ?? '',
+                'return_date' => $row['return_date'] ?? '',
                 'departure_date' => $row['departure_date'] ?? '',
                 'arrival_date' => $row['arrival_date'] ?? '',
                 'ticket_pay' => (float)($row['ticket_pay'] ?? 0),
@@ -3135,6 +3138,7 @@ elseif ($ajaxType == 'getVacationDetails') {
                 'encashment_amount' => (float)($row['encashment_amount'] ?? 0),
                 'vac_type' => $row['vac_type'] ?? '',
                 'emp_id' => $row['emp_id'] ?? '',
+                'no_of_days' => (int)($row['vacdays'] ?? 0),
                 'asset_checker_emp_id' => $asset_checker_emp_id,
                 'current_user_emp_type' => $current_user_emp_type
             ]);
@@ -3143,6 +3147,188 @@ elseif ($ajaxType == 'getVacationDetails') {
         }
     } catch (Exception $e) {
 
+        echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// --- [NEW] BLOCK TO HANDLE FETCHING VACATION DETAILS FOR SETTLEMENT ---
+// Calculate and return total_payable amount based on vacation report logic
+// ================================================================
+elseif ($ajaxType == 'getVacationDetailsForSettlement') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+
+        if (empty($vacation_id)) {
+            throw new Exception(__("vacation_id_is_missing"));
+        }
+
+        // Fetch vacation and employee data
+        $sql = "SELECT 
+                    v.id,
+                    v.start_date,
+                    v.return_date,
+                    v.vac_type,
+                    v.fly_type,
+                    v.vacation_salary_type,
+                    v.vacdays,
+                    v.overtime_hours,
+                    v.deduction_hours,
+                    v.deduction_days,
+                    v.other_deductions,
+                    v.ticket_pay,
+                    v.permit_fee,
+                    v.encashment_amount,
+                    v.emp_id,
+                    e.country,
+                    e.gosi,
+                    s.basic,
+                    s.housing,
+                    s.transport,
+                    s.food,
+                    s.misc,
+                    s.cashier,
+                    s.fuel,
+                    s.tel,
+                    s.other,
+                    s.guard
+                FROM emp_vacation v
+                JOIN employees e ON v.emp_id = e.emp_id
+                LEFT JOIN emp_salary s ON e.emp_id = s.emp_id
+                WHERE v.id = ?
+                ORDER BY s.id DESC
+                LIMIT 1";
+        
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
+        }
+
+        mysqli_stmt_bind_param($stmt, "i", $vacation_id);
+
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception(__('database_prepare_error') . ": " . mysqli_stmt_error($stmt));
+        }
+
+        $result = mysqli_stmt_get_result($stmt);
+        $vacation_data = mysqli_fetch_assoc($result);
+        mysqli_stmt_close($stmt);
+
+        if (!$vacation_data) {
+            throw new Exception(__("vacation_record_not_found"));
+        }
+
+        // === PAYROLL CALCULATION LOGIC (Same as vacation_report_details.php) ===
+        $vac_type = $vacation_data['vac_type'] ?? '';
+        $fly_type = $vacation_data['fly_type'] ?? '';
+        $vacation_salary_type = $vacation_data['vacation_salary_type'] ?? 'payroll';
+        
+        $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+        $is_emergency = ($fly_type === 'emergency');
+        $is_encashment = ($vac_type === 'Encashed');
+        
+        $total_payable = 0;
+        $working_days_salary = 0;
+        $vacation_salary = 0;
+        $overtime_amount = 0;
+        $deduction_amount = 0;
+        $gosi_deduction = 0;
+        $encashment_amount = 0;
+        $encash_gosi = 0;
+        $net_encashment = 0;
+        
+        // Handle Encashment separately
+        if ($is_encashment) {
+            $encashment_amount = (float)($vacation_data['encashment_amount'] ?? 0);
+            
+            // Calculate GOSI on encashment (if Saudi Arabia - country_id = 191)
+            if ($vacation_data['country'] == 191 && isset($vacation_data['gosi'])) {
+                $gosi_percentage = (float)$vacation_data['gosi'];
+                $encash_gosi = ($encashment_amount * $gosi_percentage) / 100;
+            }
+            
+            $net_encashment = $encashment_amount - $encash_gosi;
+            $total_payable = $net_encashment;
+        }
+        else if (!$is_emergency) {
+            // Get salary data
+            $basic_salary = (float)($vacation_data['basic'] ?? 0);
+            $total_monthly_salary = $basic_salary + 
+                ($vacation_data['housing'] ?? 0) + 
+                ($vacation_data['transport'] ?? 0) + 
+                ($vacation_data['food'] ?? 0) + 
+                ($vacation_data['misc'] ?? 0) + 
+                ($vacation_data['cashier'] ?? 0) + 
+                ($vacation_data['fuel'] ?? 0) + 
+                ($vacation_data['tel'] ?? 0) + 
+                ($vacation_data['other'] ?? 0) + 
+                ($vacation_data['guard'] ?? 0);
+            
+            $days_in_month = 30;
+            $daily_rate = $total_monthly_salary / $days_in_month;
+            $hourly_rate_deduction = ($daily_rate / 8);
+            
+            $approved_days = (float)($vacation_data['vacdays'] ?? 0);
+            
+            // Calculate working days salary (if Fly + Annual)
+            if ($is_fly_annual && !empty($vacation_data['start_date'])) {
+                $start_date_obj = new DateTime($vacation_data['start_date']);
+                $working_days = (int)$start_date_obj->format('d') - 1;
+                $working_days_salary = $daily_rate * $working_days;
+            }
+            
+            // Calculate vacation salary (if Fly + Annual and vacation_salary_type = 'payroll')
+            if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                $vacation_salary = $daily_rate * $approved_days;
+            }
+            
+            // Calculate overtime and deductions
+            $overtime_hours = (float)($vacation_data['overtime_hours'] ?? 0);
+            $deduction_hours = (float)($vacation_data['deduction_hours'] ?? 0);
+            $deduction_days = (float)($vacation_data['deduction_days'] ?? 0);
+            $other_deductions = (float)($vacation_data['other_deductions'] ?? 0);
+            
+            $overtimeHourlyRate = (($basic_salary / 240) / 2) + ($total_monthly_salary / 240);
+            
+            if ($overtime_hours > 0) {
+                $overtime_amount = $overtimeHourlyRate * $overtime_hours;
+            }
+            
+            if ($deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0) {
+                $deduction_hours_amount = $hourly_rate_deduction * $deduction_hours;
+                $deduction_days_amount = $daily_rate * $deduction_days;
+                $deduction_amount = $deduction_hours_amount + $deduction_days_amount + $other_deductions;
+            }
+            
+            // Calculate GOSI (if Saudi Arabia - country_id = 191)
+            if ($vacation_data['country'] == 191 && isset($vacation_data['gosi'])) {
+                $gosi_percentage = (float)$vacation_data['gosi'];
+                if ($is_fly_annual) {
+                    $gosi_base = $working_days_salary + $vacation_salary;
+                    $gosi_deduction = ($gosi_base * $gosi_percentage) / 100;
+                }
+            }
+            
+            // Calculate total payable
+            if ($is_fly_annual) {
+                $total_payable = ($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction;
+            }
+        }
+
+        echo json_encode([
+            'status' => 200,
+            'vac_type' => $vac_type,
+            'total_payable' => round($total_payable, 2),
+            'working_days_salary' => round($working_days_salary, 2),
+            'vacation_salary' => round($vacation_salary, 2),
+            'overtime_amount' => round($overtime_amount, 2),
+            'deduction_amount' => round($deduction_amount, 2),
+            'gosi_deduction' => round($gosi_deduction, 2),
+            'encashment_amount' => round($encashment_amount, 2),
+            'encash_gosi' => round($encash_gosi, 2),
+            'net_encashment' => round($net_encashment, 2)
+        ]);
+    } catch (Exception $e) {
         echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
     }
     exit;
@@ -5187,7 +5373,8 @@ elseif ($ajaxType == 'getAllActiveVacationsForRejoin') {
             exit;
         }
         
-        // Get ALL active vacations ordered by start date (oldest first)
+        // Get ALL active vacations ordered by return date (LAST active vacation first)
+        // This ensures we prioritize the most recent vacation when multiple are active
         // Include rejoin request status if it exists
         $query = "SELECT 
             v.id,
@@ -5209,7 +5396,7 @@ elseif ($ajaxType == 'getAllActiveVacationsForRejoin') {
         WHERE v.emp_id = ? 
         AND v.current_status IN ('approved', 'completed')
         AND v.review = 'A'
-        ORDER BY v.start_date ASC, v.id ASC";
+        ORDER BY v.return_date DESC, v.id DESC";
         
         $stmt = $conDB->prepare($query);
         $stmt->bind_param('s', $emp_id);
@@ -5242,29 +5429,51 @@ elseif ($ajaxType == 'submitRejoinRequest') {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
         $rejoin_date = escape_string($_POST['rejoin_date'] ?? '');
         $rejoin_reason = escape_string($_POST['rejoin_reason'] ?? '');
+        $emp_id = (int)($_POST['emp_id'] ?? $current_user_id);
         
-        // Get employee ID from vacation record
-        $emp_id_query = "SELECT emp_id FROM emp_vacation WHERE id = ? LIMIT 1";
-        $emp_stmt = $conDB->prepare($emp_id_query);
-        $emp_stmt->bind_param('i', $vacation_id);
-        $emp_stmt->execute();
-        $emp_result = $emp_stmt->get_result();
-        $emp_row = $emp_result->fetch_assoc();
-        $emp_stmt->close();
-        
-        if (!$emp_row) {
-            send_json_response(__('error'), __('vacation_not_found'), 'error', 404);
-            exit;
+        // If vacation_id is not provided or is 0, fetch the LAST active vacation for the employee
+        if (empty($vacation_id) && !empty($emp_id)) {
+            $last_vacation_query = "SELECT id FROM emp_vacation 
+                                   WHERE emp_id = ? 
+                                   AND current_status IN ('approved', 'completed')
+                                   AND review = 'A'
+                                   ORDER BY return_date DESC, id DESC
+                                   LIMIT 1";
+            $last_vac_stmt = $conDB->prepare($last_vacation_query);
+            $last_vac_stmt->bind_param('s', $emp_id);
+            $last_vac_stmt->execute();
+            $last_vac_result = $last_vac_stmt->get_result();
+            $last_vac_row = $last_vac_result->fetch_assoc();
+            $last_vac_stmt->close();
+            
+            if ($last_vac_row) {
+                $vacation_id = (int)$last_vac_row['id'];
+            }
         }
         
-        $emp_id = $emp_row['emp_id'];
+        // Get employee ID from vacation record if not already set
+        if (empty($emp_id) && !empty($vacation_id)) {
+            $emp_id_query = "SELECT emp_id FROM emp_vacation WHERE id = ? LIMIT 1";
+            $emp_stmt = $conDB->prepare($emp_id_query);
+            $emp_stmt->bind_param('i', $vacation_id);
+            $emp_stmt->execute();
+            $emp_result = $emp_stmt->get_result();
+            $emp_row = $emp_result->fetch_assoc();
+            $emp_stmt->close();
+            
+            if (!$emp_row) {
+                send_json_response(__('error'), __('vacation_not_found'), 'error', 404);
+                exit;
+            }
+            
+            $emp_id = $emp_row['emp_id'];
+        }
         
         // Validate supervisor assignment FIRST
         $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
         if (!$supervisor_check['valid']) {
             send_supervisor_validation_error($supervisor_check['message']);
         }
-        $emp_id = (int)($_POST['emp_id'] ?? $current_user_id);
 
         // Validation: vacation_id and emp_id are required
         if (empty($vacation_id) || empty($emp_id)) {
@@ -5315,18 +5524,40 @@ elseif ($ajaxType == 'submitRejoinRequest') {
 
         $pdo->beginTransaction();
 
-        // Get vacation details
+        // Get vacation details - prioritize the LAST active vacation for this employee
+        // This handles cases where employee has multiple active vacations (e.g., Annual + Emergency)
         $stmt = $pdo->prepare("
             SELECT v.*, e.emp_id, e.supervisor_id, e.name 
             FROM emp_vacation v
             JOIN employees e ON v.emp_id = e.emp_id
             WHERE v.id = :vacation_id
+            AND v.emp_id = :emp_id
         ");
-        $stmt->execute([':vacation_id' => $vacation_id]);
+        $stmt->execute([':vacation_id' => $vacation_id, ':emp_id' => $emp_id]);
         $vacation = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$vacation) {
-            throw new Exception(__("vacation_record_not_found"));
+            // If vacation not found, try to get the LAST active vacation for this employee
+            $stmt_last = $pdo->prepare("
+                SELECT v.*, e.emp_id, e.supervisor_id, e.name 
+                FROM emp_vacation v
+                JOIN employees e ON v.emp_id = e.emp_id
+                WHERE v.emp_id = :emp_id
+                AND v.current_status IN ('approved', 'completed')
+                AND v.review = 'A'
+                ORDER BY v.return_date DESC, v.id DESC
+                LIMIT 1
+            ");
+            $stmt_last->execute([':emp_id' => $emp_id]);
+            $vacation = $stmt_last->fetch(PDO::FETCH_ASSOC);
+            
+            if ($vacation) {
+                // Update vacation_id to the LAST active vacation
+                $vacation_id = (int)$vacation['id'];
+                error_log("REJOIN: Auto-selected LAST active vacation ID {$vacation_id} for employee {$emp_id} (return_date: {$vacation['return_date']})");
+            } else {
+                throw new Exception(__("vacation_record_not_found"));
+            }
         }
 
         // Use vacation return_date if rejoin_date not provided

@@ -342,7 +342,7 @@ class VacationCalculator {
     private function updateBalanceRecord($emp_id, $vacation_id, $contract_id, $period_start, $period_end, $total_days, $used_days, $remaining_balance, $available_balance, $carryover) {
         $query = "INSERT INTO `emp_vacation_balance` 
                     (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`, `total_days`, 
-                     `used_days`, `remaining_balance`, `available_balance`, `carryover_days`)
+                     `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `opening_balance`)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON DUPLICATE KEY UPDATE
                      `used_days` = VALUES(`used_days`),
@@ -624,7 +624,8 @@ function update_vacation_balance_on_approval(mysqli $conDB, $vacation_id) {
                        SET available_balance = ?,
                            remaining_balance  = ?,
                            total_days  = ?,
-                           used_days = ?, 
+                           used_days = ?,
+                           opening_balance = ?, 
                            vac_id = ?, 
                            last_updated = NOW() 
                        WHERE id = ?";
@@ -636,15 +637,17 @@ function update_vacation_balance_on_approval(mysqli $conDB, $vacation_id) {
         // Bind variables (expressions are not allowed in bind_param)
         $new_remaining_balance = $new_available_balance; // remaining = available after deduction
         $total_days_by_balance = $new_available_balance + $new_used_days; // for reporting/consistency
+        $new_opening_balance = $new_available_balance; // Set opening_balance to new available for cron job baseline
 
         // Use correct types: doubles for balances and used, ints for IDs
         mysqli_stmt_bind_param(
             $stmt_update,
-            "ddddii",
+            "dddddii",
             $new_available_balance,
             $new_remaining_balance,
             $total_days_by_balance,
             $new_used_days,
+            $new_opening_balance,
             $vacation_id,
             $balance_id
         );

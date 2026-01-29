@@ -13,6 +13,7 @@ $yearlyEOSLink = 'employee_audit_gen.php';
 $payrollLink = 'generate_payroll.php';
 $appliedVacationsLink = 'all_applied_vac.php';
 $appliedLoanLink = 'all_applied_loan.php';
+$settlementsLink = 'all_settlements.php';
 $rejoinApprovalsLink = 'rejoin_approvals.php';
 $allResignationsLink = 'all_resignations.php';
 $carsLink = 'all_cars.php';
@@ -66,6 +67,7 @@ $page_roles = [
     'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
+    'all_settlements.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'rejoin_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_resignations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'add_manual_loan.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
@@ -152,6 +154,13 @@ $can_see_loan_approvals_page = [
     'HR_Manager', 'Finance_Manager','IT_Team_Manager'
 ];
 
+$can_see_settlements_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor', 'DPT_Manager',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
+
 $can_see_resignations_page = [
     'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll','HR_Recruitment',
     'DPT_Manager', 'IT_Team_Manager',
@@ -226,6 +235,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
 
 $show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_loan_approvals_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_settlements_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_content_approvals_page));
@@ -523,6 +533,43 @@ if ($resignation_type_id > 0) {
 }
 // --- END NEW RESIGNATION PENDING COUNT ---
 
+// --- Fetch Settlement Pending Approval Count (NEW) ---
+$settlement_pending_count = 0;
+$settlement_type_id = 0;
+$settlement_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'settlement' LIMIT 1");
+if ($row = mysqli_fetch_assoc($settlement_type_query)) {
+    $settlement_type_id = (int)$row['id'];
+}
+if ($settlement_type_id > 0) {
+    if ($is_system_admin || $user_role == 'Administrator') {
+        // Admin: count all distinct settlement requests still pending anywhere
+        $settlement_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count FROM request_approvers ra WHERE ra.request_type_id = $settlement_type_id AND ra.status = 'pending'";
+        $res_settlement_admin = mysqli_query($conDB, $settlement_pending_query_admin);
+        if ($res_settlement_admin && ($rsa = mysqli_fetch_assoc($res_settlement_admin))) {
+            $settlement_pending_count = (int)$rsa['count'];
+        }
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+        // Department Manager: count all settlement requests from their department employees
+        $settlement_pending_query_dept = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count FROM request_approvers ra 
+                                         JOIN settlement_records s ON s.request_inv_no = ra.request_inv_no 
+                                         JOIN employees e ON e.emp_id = s.emp_id 
+                                         WHERE e.dept = " . (int)$user_dept . " AND ra.request_type_id = $settlement_type_id AND ra.status = 'pending'";
+        $res_settlement_dept = mysqli_query($conDB, $settlement_pending_query_dept);
+        if ($res_settlement_dept && ($rsd = mysqli_fetch_assoc($res_settlement_dept))) {
+            $settlement_pending_count = (int)$rsd['count'];
+        }
+    } else {
+        // Regular user: count requests awaiting THIS user's approval
+        $settlement_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count FROM request_approvers ra 
+                                     WHERE ra.request_type_id = $settlement_type_id AND ra.approver_id = " . (int)$empid . " AND ra.status = 'pending'";
+        $res_settlement = mysqli_query($conDB, $settlement_pending_query);
+        if ($res_settlement && ($rs = mysqli_fetch_assoc($res_settlement))) {
+            $settlement_pending_count = (int)$rs['count'];
+        }
+    }
+}
+// --- END NEW SETTLEMENT PENDING COUNT ---
+
 // Initialize counts to 0
 $status_cont_vacapl = 0;
 $status_cont_vacaphr = 0;
@@ -555,7 +602,7 @@ if ($rec = mysqli_fetch_assoc($sql_count_aprl)) {
 
 // --- CALCULATE TOTAL COUNTS FOR PARENT MENUS ---
 // Total count for Approvals menu
-$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $status_cont_contaprl;
+$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $status_cont_contaprl;
 
 // Total count for Requests menu
 $requests_total_count = $smart_request_count + $general_request_count;
@@ -657,6 +704,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)): ?>
                     <li><a href="<?= $appliedLoanLink ?>"><i class="fa fa-money-bill-trend-up"></i><span><?=__('loans') ?></span><?= ($loan_pending_count > 0) ? "<span class='badgez badge-danger'>$loan_pending_count</span>" : "" ?></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_settlements_page) || in_array($user_type, $can_see_settlements_page)): ?>
+                    <li><a href="<?= $settlementsLink ?>"><i class="fa fa-file-invoice-dollar"></i><span><?=__('settlements', 'Settlements') ?></span><?= ($settlement_pending_count > 0) ? "<span class='badgez badge-danger'>$settlement_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_resignations_page) || in_array($user_type, $can_see_resignations_page)): ?>
                     <li><a href="<?= $allResignationsLink ?>"><i class="fa fa-user-times"></i><span><?=__('resignations') ?></span><?= ($resignation_pending_count > 0) ? "<span class='badgez badge-danger'>$resignation_pending_count</span>" : "" ?></a></li>
