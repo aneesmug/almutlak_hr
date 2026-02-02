@@ -303,11 +303,13 @@ try {
                 continue;
             }
             
-            // Skip if already updated today (unless force_level=1 or force_level=2)
+            // For mode 0: Skip if already updated today (prevent duplicates)
             if ($force_level === 0 && $last_updated && substr($last_updated, 0, 10) === $today_str) {
-                log_message("  [emp_id: $emp_id] SKIPPED: Already updated today ($last_updated)", 'warning');
+                log_message("  [emp_id: $emp_id] ⏭️ SKIPPED: Already updated today ($last_updated)", 'warning');
                 continue;
             }
+            
+            // Mode 0 (normal) and Mode 2 (force) both continue to update
 
             // Calculate live balance for this employee using VacationCalculator
             $live_balance = get_live_vacation_balance($conDB, $emp_id);
@@ -320,64 +322,46 @@ try {
 
             $live_balance = (float)$live_balance;
             $balance_changed = (abs($old_balance - $live_balance) > 0.001);
-            // Update the record with new balance and track when it was last updated
-            // ✅ CRITICAL: Daily cron MUST SYNC all 3 balance columns to keep them equal
-            // available_balance, opening_balance, and remaining_balance all set to live_balance
-            // This ensures consistency across all balance tracking columns
-            // 
-            // ✅ IMPORTANT: Set last_updated based on force_level:
-            // - force_level=0 (normal): Set to NOW (today) to prevent duplicate daily updates
-            // - force_level=1 (check missing): Keep current last_updated value (don't change)
-            // - force_level=2 (full bypass): Set to TODAY so next accrual starts fresh tomorrow
             
+            // Determine last_updated timestamp based on force_level
             $now = new DateTime();
             $now_str = $now->format('Y-m-d H:i:s');
             
-            // Determine what last_updated value to use
             if ($force_level === 2) {
-                // Full bypass (force): ALWAYS update with current datetime NOW()
-                $new_last_updated = $now_str;
-            } elseif ($force_level === 1) {
-                // Check missing mode: keep as is (don't update last_updated)
-                $new_last_updated = $last_updated;
+                // Mode 2: Set to YESTERDAY at midnight so next calculation includes 1 day of accrual
+                $yesterday = new DateTime('yesterday');
+                $new_last_updated = $yesterday->format('Y-m-d 00:00:00');
             } else {
-                // Normal mode (0): set to now (today with current time)
+                // Mode 0: Set to NOW() to prevent duplicate same-day runs
                 $new_last_updated = $now_str;
             }
             
-            // For modes 0 and 2: Actually update the database
-            if ($force_level === 0 || $force_level === 2) {
-                $update_sql = "UPDATE `emp_vacation_balance` 
-                              SET `available_balance` = ?, 
-                                  `opening_balance` = ?,
-                                  `remaining_balance` = ?,
-                                  `last_updated` = ? 
-                              WHERE `id` = ?";
+            // Update the database (mode 1 already exited above)
+            $update_sql = "UPDATE `emp_vacation_balance` 
+                          SET `available_balance` = ?, 
+                              `opening_balance` = ?,
+                              `remaining_balance` = ?,
+                              `last_updated` = ? 
+                          WHERE `id` = ?";
 
-                $stmt = mysqli_prepare($conDB, $update_sql);
-                if (!$stmt) {
-                    log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
-                    $error_count++;
-                    continue;
-                }
-                
-                // Sync all 3 columns to the same live_balance value
-                // Format: dddsi = 3 doubles (available_balance, opening_balance, remaining_balance) + 1 string (last_updated) + 1 integer (id)
-                mysqli_stmt_bind_param($stmt, 'dddsi', $live_balance, $live_balance, $live_balance, $new_last_updated, $balance_record_id);
-
-                if (!mysqli_stmt_execute($stmt)) {
-                    log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt), 'error');
-                    mysqli_stmt_close($stmt);
-                    $error_count++;
-                    continue;
-                }
-
-                $affected = mysqli_stmt_affected_rows($stmt);
-                mysqli_stmt_close($stmt);
-            } else {
-                // Mode 1: Don't update database, just show refreshed values
-                $affected = 0;
+            $stmt = mysqli_prepare($conDB, $update_sql);
+            if (!$stmt) {
+                log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
+                $error_count++;
+                continue;
             }
+            
+            mysqli_stmt_bind_param($stmt, 'dddsi', $live_balance, $live_balance, $live_balance, $new_last_updated, $balance_record_id);
+
+            if (!mysqli_stmt_execute($stmt)) {
+                log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt), 'error');
+                mysqli_stmt_close($stmt);
+                $error_count++;
+                continue;
+            }
+
+            $affected = mysqli_stmt_affected_rows($stmt);
+            mysqli_stmt_close($stmt);
 
             if ($affected > 0) {
                 $updated_count++;
@@ -496,9 +480,9 @@ try {
         foreach ($updates_log as $log) {
             $is_changed = abs($log['old_value'] - $log['new_value']) > 0.001;
             if ($log['type'] === 'refresh') {
-                $status = 'REFRESHED (not updated)';
+                $status = '🔄 REFRESHED ❌';
             } else {
-                $status = $is_changed ? 'UPDATED (VALUE CHANGED)' : 'UPDATED (SYNCED)';
+                $status = $is_changed ? '✅ UPDATED (VALUE CHANGED)' : '🔄 UPDATED (SYNCED)';
             }
             printf("[%s] %s (%s) - Old: %.2f → New: %.2f [%s]\n", 
                 $log['timestamp'],
