@@ -308,9 +308,30 @@ function approveSettlement($settlementManager, $currentUserId) {
         // Check if "Other Finance Employee" was selected
         $payerType = $_POST['payer_type'] ?? 'self';
         $isOtherEmployeePaying = ($payerType === 'other');
+
+        // If payer_id is missing, try to resolve it from settlement_records
+        if (empty($payerId) && !empty($settlementInvNo)) {
+            $payerQry = mysqli_query($conDB, "
+                SELECT settlement_approver
+                FROM settlement_records
+                WHERE request_inv_no = '$settlementInvNo'
+                LIMIT 1
+            ");
+            $payerRow = $payerQry ? mysqli_fetch_assoc($payerQry) : null;
+            if ($payerQry) mysqli_free_result($payerQry);
+
+            if (!empty($payerRow['settlement_approver'])) {
+                $payerId = $payerRow['settlement_approver'];
+            }
+        }
+
+        // If still empty and payer is self, default to current user
+        if (empty($payerId) && !$isOtherEmployeePaying) {
+            $payerId = $currentUserId;
+        }
         
         // Validate final approval fields
-        if (empty($payerId)) {
+        if (empty($payerId) && $isOtherEmployeePaying) {
             echo json_encode(['success' => false, 'message' => 'Payer ID required for final approval']);
             return;
         }
@@ -743,7 +764,7 @@ function approveSettlement($settlementManager, $currentUserId) {
         
         echo json_encode([
             'success' => true,
-            'message' => $allApprovalsComplete ? 'Settlement approved - all approvals complete!' : 'Settlement approved - forwarded to next approver',
+            'message' => $allApprovalsComplete ? __('settlement_approved_all_approvals_complete') : __('settlement_approved_forwarded_to_next_approver'),
             'all_approvals_complete' => $allApprovalsComplete
         ]);
         
@@ -751,7 +772,7 @@ function approveSettlement($settlementManager, $currentUserId) {
         error_log("Settlement approval error: " . $e->getMessage());
         echo json_encode([
             'success' => false,
-            'message' => 'Error: ' . $e->getMessage()
+            'message' => __('error') . ': ' . $e->getMessage()
         ]);
     }
 }
@@ -952,6 +973,10 @@ function getSettlementDetails($settlementManager) {
         }
         
         $settlement = mysqli_fetch_assoc($detailQry);
+        $settlement['emp_name'] = getDisplayName($settlement['emp_name']);
+        $settlement['settlement_method'] = getDisplayName(strtoupper(preg_replace('/_/', ' ', $settlement['settlement_method'])));
+        $settlement['settlement_status'] = getDisplayName(preg_replace('/_/', ' ', $settlement['settlement_status']));
+
         mysqli_free_result($detailQry);
         
         // Get the related request ID based on request type

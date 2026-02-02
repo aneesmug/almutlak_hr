@@ -454,7 +454,7 @@ if ($canSeeAllDepts) {
                                             <div class="col-lg-4 col-md-6 mb-4">
                                                 <div class="card request-card h-100">
                                                     <div class="card-header">
-                                                        <?= htmlspecialchars($settlement['emp_name'], ENT_QUOTES); ?>
+                                                        <?= htmlspecialchars(getDisplayName($settlement['emp_name']), ENT_QUOTES); ?>
                                                         <span class="float-right"><?= __('emp_id') ?>: <?= htmlspecialchars($settlement['emp_id'], ENT_QUOTES); ?></span>
                                                     </div>
                                                     <div class="card-body">
@@ -468,6 +468,7 @@ if ($canSeeAllDepts) {
                                                                 <?php
                                                                 $badge_class = 'secondary';
                                                                 $status_text = '';
+                                                                $status_icon = '';
                                                                 
                                                                 switch ($settlement['settlement_status']) {
                                                                     case 'pending':
@@ -475,26 +476,31 @@ if ($canSeeAllDepts) {
                                                                         $badge_class = 'warning';
                                                                         $approver = $settlement['current_approver_name'] ? getDisplayName($settlement['current_approver_name']) : __('next_approver');
                                                                         $status_text = __('pending_with') . ' ' . htmlspecialchars($approver);
+                                                                        $status_icon = "<i class='fa fa-solid fa-hourglass-half text-white'></i>";
                                                                         break;
                                                                     case 'approved':
                                                                         $badge_class = 'success';
                                                                         $status_text = __('approved');
+                                                                        $status_icon = "<i class='fa fa-solid fa-check text-white'></i>";
                                                                         break;
                                                                     case 'rejected':
                                                                         $badge_class = 'danger';
                                                                         $status_text = __('rejected');
+                                                                        $status_icon = "<i class='fa fa-solid fa-times text-white'></i>";
                                                                         break;
                                                                     case 'completed':
                                                                         $badge_class = 'primary';
                                                                         $status_text = __('completed');
+                                                                        $status_icon = "<i class='fa fa-solid fa-badge-check text-white'></i>";
                                                                         break;
                                                                     default:
                                                                         $status_text = __($settlement['settlement_status']);
+                                                                        $status_icon = "";
                                                                         break;
                                                                 }
                                                                 ?>
                                                                 <span class="badge badge-<?= $badge_class; ?> p-2" style="display: inline-block; width: fit-content;">
-                                                                    <?= htmlspecialchars($status_text); ?>
+                                                                    <?= $status_icon . " " . htmlspecialchars($status_text); ?>
                                                                 </span>
                                                             </div>
                                                         </div>

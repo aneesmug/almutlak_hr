@@ -9987,7 +9987,7 @@ function initSessionTimeoutAlert() {
 function viewSettlementDetails(settlementId, settlementInvNo) {
     // Show loading indicator
     Swal.fire({
-        title: 'Loading Settlement Details...',
+        title: __('loading_settlement_details'),
         allowOutsideClick: false,
         allowEscapeKey: false,
         didOpen: () => {
@@ -10009,14 +10009,14 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                 const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
                 
                 // Build approval chain HTML
-                let approvalChainHtml = '<div style="margin-top: 15px;"><h6>' + (window.lang && window.lang['approval_chain'] ? window.lang['approval_chain'] : 'Approval Chain') + ':</h6><table style="width: 100%; font-size: 13px;" dir="' + (isRtl ? 'rtl' : 'ltr') + '"><tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">' + (window.lang && window.lang['level'] ? window.lang['level'] : 'Level') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + (window.lang && window.lang['status'] ? window.lang['status'] : 'Status') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + (window.lang && window.lang['approver'] ? window.lang['approver'] : 'Approver') + '</th></tr>';
+                let approvalChainHtml = '<div style="margin-top: 15px;"><h6>' + __('approval_chain') + ':</h6><table style="width: 100%; font-size: 13px;" dir="' + (isRtl ? 'rtl' : 'ltr') + '"><tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">' + __('level') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('status') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('approver') + '</th></tr>';
                 if (response.data.approval_chain && response.data.approval_chain.length > 0) {
                     response.data.approval_chain.forEach((level, idx) => {
-                        const statusBadge = level.status === 'approved' ? '<span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 3px;">✓ ' + (window.lang && window.lang['approved'] ? window.lang['approved'] : 'Approved') + '</span>' :
-                                           level.status === 'pending' ? '<span style="background: #ffc107; color: black; padding: 3px 8px; border-radius: 3px;">⏳ ' + (window.lang && window.lang['pending'] ? window.lang['pending'] : 'Pending') + '</span>' :
-                                           level.status === 'rejected' ? '<span style="background: #dc3545; color: white; padding: 3px 8px; border-radius: 3px;">✗ ' + (window.lang && window.lang['rejected'] ? window.lang['rejected'] : 'Rejected') + '</span>' :
-                                           '<span style="background: #6c757d; color: white; padding: 3px 8px; border-radius: 3px;">' + (window.lang && window.lang['awaiting'] ? window.lang['awaiting'] : 'Awaiting') + '</span>';
-                        approvalChainHtml += `<tr><td style="padding: 8px; border: 1px solid #ddd;">` + (window.lang && window.lang['level'] ? window.lang['level'] : 'Level') + ` ${level.approval_level}</td><td style="padding: 8px; border: 1px solid #ddd;">${statusBadge}</td><td style="padding: 8px; border: 1px solid #ddd;">${level.approver_name || (window.lang && window.lang['not_assigned'] ? window.lang['not_assigned'] : 'Not Assigned')}</td></tr>`;
+                        const statusBadge = level.status === 'approved' ? '<span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 3px;">✓ ' + __('approved') + '</span>' :
+                                           level.status === 'pending' ? '<span style="background: #ffc107; color: black; padding: 3px 8px; border-radius: 3px;">⏳ ' + __('pending') + '</span>' :
+                                           level.status === 'rejected' ? '<span style="background: #dc3545; color: white; padding: 3px 8px; border-radius: 3px;">✗ ' + __('rejected') + '</span>' :
+                                           '<span style="background: #6c757d; color: white; padding: 3px 8px; border-radius: 3px;">' + __('awaiting') + '</span>';
+                        approvalChainHtml += `<tr><td style="padding: 8px; border: 1px solid #ddd;">` + __('level') + ` ${level.approval_level}</td><td style="padding: 8px; border: 1px solid #ddd;">${statusBadge}</td><td style="padding: 8px; border: 1px solid #ddd;">${level.approver_name || __('not_assigned')}</td></tr>`;
                     });
                 }
                 approvalChainHtml += '</table></div>';
@@ -10029,13 +10029,13 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                 const empId = s.emp_id;
                 
                 if (requestType.includes('vacation')) {
-                    reportLink = '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_vacation_report'] ? window.lang['view_vacation_report'] : 'View Vacation Report') + '</a>';
+                    reportLink = '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_vacation_report') + '</a>';
                 } else if (requestType.includes('loan')) {
-                    reportLink = '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_loan_report'] ? window.lang['view_loan_report'] : 'View Loan Report') + '</a>';
+                    reportLink = '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_loan_report') + '</a>';
                 } else if (requestType.includes('advance')) {
-                    reportLink = '<a href="./advance_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_advances_report'] ? window.lang['view_advances_report'] : 'View Advances Report') + '</a>';
+                    reportLink = '<a href="./advance_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_advances_report') + '</a>';
                 } else {
-                    reportLink = '<a href="./all_general_requests.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + (window.lang && window.lang['view_requests_report'] ? window.lang['view_requests_report'] : 'View Request Report') + '</a>';
+                    reportLink = '<a href="./all_general_requests.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_requests_report') + '</a>';
                 }
                 
                 // Build payment proof download button if available
@@ -10051,15 +10051,15 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                 
                 const contentHtml = `
                     <div style="text-align: ` + (isRtl ? 'right' : 'left') + `; font-size: 14px; direction: ` + (isRtl ? 'rtl' : 'ltr') + `;">
-                        <h5 style="margin-bottom: 15px; color: #333;">` + (window.lang && window.lang['settlement_information'] ? window.lang['settlement_information'] : 'Settlement Information') + `</h5>
+                        <h5 style="margin-bottom: 15px; color: #333;">` + __('settlement_information') + `</h5>
                         <table style="width: 100%; margin-bottom: 10px;" dir="` + (isRtl ? 'rtl' : 'ltr') + `">
-                            <tr><td style="padding: 8px; font-weight: bold; width: 35%;">` + (window.lang && window.lang['settlement_id'] ? window.lang['settlement_id'] : 'Settlement ID') + `:</td><td style="padding: 8px; color: #007bff; font-weight: 600;">${htmlspecialcharsJs(s.request_inv_no)}</td></tr>
-                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['employee_name'] ? window.lang['employee_name'] : 'Employee Name') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_name)}</td></tr>
-                            <tr><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['employee_id'] ? window.lang['employee_id'] : 'Employee ID') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_id)}</td></tr>
-                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['settlement_amount'] ? window.lang['settlement_amount'] : 'Settlement Amount') + `:</td><td style="padding: 8px; color: #28a745; font-weight: 600;">SAR ${parseFloat(s.settlement_amount).toFixed(2)}</td></tr>
-                            <tr><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['settlement_method'] ? window.lang['settlement_method'] : 'Settlement Method') + `:</td><td style="padding: 8px;">${s.settlement_method || (window.lang && window.lang['not_available'] ? window.lang['not_available'] : 'Not Available')}</td></tr>
-                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['status'] ? window.lang['status'] : 'Status') + `:</td><td style="padding: 8px;"><span style="background: #007bff; color: white; padding: 3px 8px; border-radius: 3px;">${(s.settlement_status || '').toUpperCase()}</span></td></tr>
-                            <tr><td style="padding: 8px; font-weight: bold;">` + (window.lang && window.lang['created'] ? window.lang['created'] : 'Created') + `:</td><td style="padding: 8px;">${new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold; width: 35%;">` + __('settlement_id') + `:</td><td style="padding: 8px; color: #007bff; font-weight: 600;">${htmlspecialcharsJs(s.request_inv_no)}</td></tr>
+                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('employee_name') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_name)}</td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold;">` + __('employee_id') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_id)}</td></tr>
+                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('settlement_amount') + `:</td><td style="padding: 8px; color: #28a745; font-weight: 600;">SAR ${parseFloat(s.settlement_amount).toFixed(2)}</td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold;">` + __('settlement_method') + `:</td><td style="padding: 8px;">${s.settlement_method || __('not_available')}</td></tr>
+                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('status') + `:</td><td style="padding: 8px;"><span style="background: #007bff; color: white; padding: 3px 8px; border-radius: 3px;">${(s.settlement_status || '').toUpperCase()}</span></td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold;">` + __('created') + `:</td><td style="padding: 8px;">${new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td></tr>
                         </table>
                         ${approvalChainHtml}
                         ${historyHtml}
@@ -10067,20 +10067,20 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                 `;
                 
                 Swal.fire({
-                    title: window.lang && window.lang['settlement_details'] ? window.lang['settlement_details'] : 'Settlement Details',
+                    title: __('settlement_details'),
                     html: contentHtml,
                     width: 700,
                     allowOutsideClick: false,
-                    confirmButtonText: window.lang && window.lang['close'] ? window.lang['close'] : 'Close'
+                    confirmButtonText: __('close')
                 });
             } else {
-                Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_to_load_settlement_details'] ? window.lang['failed_to_load_settlement_details'] : 'Failed to load settlement details'), 'error');
+                Swal.fire(__('error'), response.message || __('failed_to_load_settlement_details'), 'error');
             }
         },
         error: function(xhr, status, error) {
             console.error('AJAX Error:', status, error);
             console.error('Response:', xhr.responseText);
-            Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_to_load_settlement_details'] ? window.lang['failed_to_load_settlement_details'] : 'Failed to load settlement details') + ': ' + error, 'error');
+            Swal.fire(__('error'), __('failed_to_load_settlement_details') + ': ' + error, 'error');
         }
     });
 }
@@ -10101,56 +10101,58 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
             const isFinanceManager = checkResponse.is_finance_manager || false;
             const isFinanceEmployee = checkResponse.is_finance_employee || false;
             
-            let formHtml = `<div style="text-align: left;">
+            const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
+            
+            let formHtml = `<div style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
                 <div class="form-group">
-                    <label>` + (window.lang && window.lang['approval_comment'] ? window.lang['approval_comment'] : 'Approval Comment') + `:</label>
-                    <textarea id="approvalComment" class="form-control" placeholder="` + (window.lang && window.lang['add_approval_comment'] ? window.lang['add_approval_comment'] : 'Add comment') + `" rows="3"></textarea>
+                    <label>` + __('approval_comment') + `:</label>
+                    <textarea id="approvalComment" class="form-control" placeholder="` + __('add_approval_comment') + `" rows="3"></textarea>
                 </div>`;
             
             // Show payer selection if Finance Manager at final approval
             if (isFinalApproval && isFinanceManager) {
                 formHtml += `
                 <div class="form-group">
-                    <label style="color: #dc3545;">Select Payer: <span style="color: red;">*</span></label>
+                    <label style="color: #dc3545;">` + __('select_payer') + `: <span style="color: red;">*</span></label>
                     <div style="margin: 10px 0;">
                         <label style="display: block; margin: 8px 0;">
-                            <input type="radio" name="payerType" value="self" checked> Myself
+                            <input type="radio" name="payerType" value="self" checked> ` + __('myself') + `
                         </label>
                         <label style="display: block; margin: 8px 0;">
-                            <input type="radio" name="payerType" value="other"> Other Finance Employee
+                            <input type="radio" name="payerType" value="other"> ` + __('other_finance_employee') + `
                         </label>
                     </div>
                 </div>
                 <div class="form-group" id="otherPayerGroup" style="display: none;">
-                    <label style="color: #dc3545;">Finance Department Employee: <span style="color: red;">*</span></label>
+                    <label style="color: #dc3545;">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
                     <select id="payerSelect" class="form-control form-control-lg select2-hidden-accessible" style="width: 100%;" required>
-                        <option value="">Select Finance Employee</option>
+                        <option value="">` + __('select_finance_employee') + `</option>
                     </select>
                 </div>
-                <div class="form-group" id="approvedAmountGroup">
-                    <label style="color: #dc3545;">Approved Amount (SAR): <span style="color: red;">*</span></label>
+                <div class="form-group" id="approvedAmountGroup" style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
+                    <label style="color: #dc3545;">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
                     <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
-                    <small class="text-muted">Settlement Amount: SAR ${parseFloat(settlementAmount).toFixed(2)}</small>
+                    <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(settlementAmount).toFixed(2)}</small>
                     <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
                 </div>
                 <div class="form-group" id="paymentProofGroup">
-                    <label style="color: #dc3545;">Payment Proof: <span style="color: red;">*</span></label>
+                    <label style="color: #dc3545;">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
                     <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
-                    <small class="text-muted">Attach payment receipt/proof (PDF or Image)</small>
+                    <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>`;
             } else if (isFinalApproval && isFinanceEmployee) {
                 // Finance Officer at final approval - show payment form only
                 formHtml += `
                 <div class="form-group" id="approvedAmountGroup">
-                    <label style="color: #dc3545;">Approved Amount (SAR): <span style="color: red;">*</span></label>
+                    <label style="color: #dc3545;">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
                     <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
-                    <small class="text-muted">Settlement Amount: SAR ${parseFloat(settlementAmount).toFixed(2)}</small>
+                    <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(settlementAmount).toFixed(2)}</small>
                     <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
                 </div>
                 <div class="form-group" id="paymentProofGroup">
-                    <label style="color: #dc3545;">Payment Proof: <span style="color: red;">*</span></label>
+                    <label style="color: #dc3545;">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
                     <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
-                    <small class="text-muted">Attach payment receipt/proof (PDF or Image)</small>
+                    <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>`;
             }
             
@@ -10163,13 +10165,13 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
             let isFinanceEmployeeUser = isFinanceEmployee;
             
             Swal.fire({
-                title: (isFinalApproval && (isFinanceManager || isFinanceEmployee)) ? 'Final Approval & Payment' : (window.lang && window.lang['approve_settlement'] ? window.lang['approve_settlement'] : 'Approve Settlement'),
+                title: (isFinalApproval && (isFinanceManager || isFinanceEmployee)) ? __('approve_settlement') : __('approve_settlement'),
                 html: formHtml,
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: window.lang && window.lang['approve'] ? window.lang['approve'] : 'Approve',
+                confirmButtonText: __('approve'),
                 confirmButtonColor: '#28a745',
-                cancelButtonText: window.lang && window.lang['cancel'] ? window.lang['cancel'] : 'Cancel',
+                cancelButtonText: __('cancel'),
                 allowOutsideClick: false,
                 preConfirm: () => {
                     const comment = document.getElementById('approvalComment').value;
@@ -10191,7 +10193,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                         if (payerType === 'other') {
                             const payer = document.getElementById('payerSelect').value;
                             if (!payer) {
-                                Swal.showValidationMessage('Please select a finance employee');
+                                Swal.showValidationMessage(__('please_select_a_finance_employee'));
                                 return false;
                             }
                             formValues.payerSelect = payer;
@@ -10201,17 +10203,17 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                             const paymentProof = document.getElementById('paymentProof').files[0];
                             
                             if (!approvedAmt || approvedAmt <= 0) {
-                                Swal.showValidationMessage('Please enter approved amount');
+                                Swal.showValidationMessage(__('please_enter_approved_amount'));
                                 return false;
                             }
                             
                             if (Math.abs(approvedAmt - settlementAmount) > 0.01) {
-                                Swal.showValidationMessage('Approved amount must match settlement amount exactly');
+                                Swal.showValidationMessage(__('approved_amount_must_match_settlement_amount_exactly'));
                                 return false;
                             }
                             
                             if (!paymentProof) {
-                                Swal.showValidationMessage('Please attach payment proof');
+                                Swal.showValidationMessage(__('please_attach_payment_proof'));
                                 return false;
                             }
                             
@@ -10224,17 +10226,17 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                         const paymentProof = document.getElementById('paymentProof').files[0];
                         
                         if (!approvedAmt || approvedAmt <= 0) {
-                            Swal.showValidationMessage('Please enter approved amount');
+                            Swal.showValidationMessage(__('please_enter_approved_amount'));
                             return false;
                         }
                         
                         if (Math.abs(approvedAmt - settlementAmount) > 0.01) {
-                            Swal.showValidationMessage('Approved amount must match settlement amount exactly');
+                            Swal.showValidationMessage(__('approved_amount_must_match_settlement_amount_exactly'));
                             return false;
                         }
                         
                         if (!paymentProof) {
-                            Swal.showValidationMessage('Please attach payment proof');
+                            Swal.showValidationMessage(__('please_attach_payment_proof'));
                             return false;
                         }
                         
@@ -10272,7 +10274,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                                         
                                         // Initialize Select2 with better options
                                         $('#payerSelect').select2({
-                                            placeholder: 'Select Finance Employee',
+                                            placeholder: __('select_finance_employee'),
                                             allowClear: true,
                                             width: '100%'
                                         });
@@ -10340,8 +10342,8 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                     
                     // Show loading indicator
                     Swal.fire({
-                        title: window.lang && window.lang['processing'] ? window.lang['processing'] : 'Processing...',
-                        text: window.lang && window.lang['approving_settlement'] ? window.lang['approving_settlement'] : 'Approving settlement, please wait',
+                        title: __('processing'),
+                        text: __('approving_settlement_please_wait'),
                         allowOutsideClick: false,
                         allowEscapeKey: false,
                         didOpen: () => {
@@ -10390,47 +10392,54 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                         dataType: 'json',
                         success: function(response) {
                             if (response.success) {
-                                Swal.fire(window.lang && window.lang['success'] ? window.lang['success'] : 'Success', response.message || (window.lang && window.lang['settlement_approved'] ? window.lang['settlement_approved'] : 'Settlement approved successfully'), 'success')
+                                Swal.fire({
+                                    title: __('success'), 
+                                    text: response.message || __('settlement_approved'), 
+                                    icon: 'success',
+                                    confirmButtonText: __('ok'),
+                                    confirmButtonColor: '#28a745',
+                                    allowOutsideClick: false
+                                })
                                     .then(() => location.reload());
                             } else {
-                                Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_approve_settlement'] ? window.lang['failed_approve_settlement'] : 'Failed to approve settlement'), 'error');
+                                Swal.fire( __('error'), response.message || __('failed_approve_settlement'), 'error');
                             }
                         },
                         error: function(xhr, status, error) {
                             console.error('Approval error:', xhr.responseText);
-                            Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_approve_settlement'] ? window.lang['failed_approve_settlement'] : 'Failed to approve settlement') + ': ' + error, 'error');
+                            Swal.fire( __('error'), __('failed_approve_settlement') + ': ' + error, 'error');
                         }
                     });
                 }
             });
         },
         error: function() {
-            Swal.fire('Error', 'Failed to check approval status', 'error');
+            Swal.fire( __('error'), __('failed_check_approval_status'), 'error');
         }
     });
 }
 
 function rejectSettlement(settlementId, settlementInvNo) {
     Swal.fire({
-        title: window.lang && window.lang['reject_settlement'] ? window.lang['reject_settlement'] : 'Reject Settlement',
-        html: `<textarea id="rejectionReason" class="form-control" placeholder="` + (window.lang && window.lang['provide_rejection_reason'] ? window.lang['provide_rejection_reason'] : 'Provide rejection reason...') + `" rows="4"></textarea>`,
+        title: __('reject_settlement'),
+        html: `<textarea id="rejectionReason" class="form-control" placeholder="` + __('provide_rejection_reason') + `" rows="4"></textarea>`,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonText: window.lang && window.lang['reject'] ? window.lang['reject'] : 'Reject',
+        confirmButtonText: __('reject'),
         confirmButtonColor: '#dc3545',
-        cancelButtonText: window.lang && window.lang['cancel'] ? window.lang['cancel'] : 'Cancel'
+        cancelButtonText: __('cancel')
     }).then((result) => {
         if (result.isConfirmed) {
             const reason = document.getElementById('rejectionReason').value;
             if (!reason.trim()) {
-                Swal.fire('Error', window.lang && window.lang['provide_rejection_reason'] ? window.lang['provide_rejection_reason'] : 'Please provide a rejection reason', 'error');
+                Swal.fire(__('error'), __('provide_rejection_reason'), 'error');
                 return;
             }
             
             // Show loading indicator
             Swal.fire({
-                title: window.lang && window.lang['processing'] ? window.lang['processing'] : 'Processing...',
-                text: window.lang && window.lang['rejecting_settlement'] ? window.lang['rejecting_settlement'] : 'Rejecting settlement, please wait',
+                title: __('processing'),
+                text: __('rejecting_settlement'),
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 didOpen: () => {
@@ -10450,15 +10459,15 @@ function rejectSettlement(settlementId, settlementInvNo) {
                 },
                 success: function(response) {
                     if (response.success) {
-                        Swal.fire(window.lang && window.lang['success'] ? window.lang['success'] : 'Success', response.message || (window.lang && window.lang['settlement_rejected'] ? window.lang['settlement_rejected'] : 'Settlement rejected successfully'), 'success')
+                        Swal.fire(__('success'), response.message || __('settlement_rejected'), 'success')
                             .then(() => location.reload());
                     } else {
-                        Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_reject_settlement'] ? window.lang['failed_reject_settlement'] : 'Failed to reject settlement'), 'error');
+                        Swal.fire(__('error'), response.message || __('failed_reject_settlement'), 'error');
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('Rejection error:', xhr.responseText);
-                    Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_reject_settlement'] ? window.lang['failed_reject_settlement'] : 'Failed to reject settlement') + ': ' + error, 'error');
+                    Swal.fire(__('error'), __('failed_reject_settlement') + ': ' + error, 'error');
                 }
             });
         }
@@ -10467,32 +10476,32 @@ function rejectSettlement(settlementId, settlementInvNo) {
 
 function processSettlementPayment(settlementId, settlementInvNo) {
     Swal.fire({
-        title: window.lang && window.lang['clear_settlement'] ? window.lang['clear_settlement'] : 'Clear Settlement',
+        title: __('clear_settlement'),
         html: `
             <div style="text-align: left;">
-                <p>` + (window.lang && window.lang['select_payment_method'] ? window.lang['select_payment_method'] : 'Select payment method to clear this settlement:') + `</p>
+                <p>` + __('select_payment_method') + `</p>
                 <div style="margin: 15px 0;">
                     <label style="display: block; margin: 8px 0;">
-                        <input type="radio" name="paymentMethod" value="bank_transfer" checked> ` + (window.lang && window.lang['bank_transfer'] ? window.lang['bank_transfer'] : 'Bank Transfer') + `
+                        <input type="radio" name="paymentMethod" value="bank_transfer" checked> ` + __('bank_transfer') + `
                     </label>
                     <label style="display: block; margin: 8px 0;">
-                        <input type="radio" name="paymentMethod" value="check"> ` + (window.lang && window.lang['check'] ? window.lang['check'] : 'Check') + `
+                        <input type="radio" name="paymentMethod" value="check"> ` + __('check') + `
                     </label>
                     <label style="display: block; margin: 8px 0;">
-                        <input type="radio" name="paymentMethod" value="cash"> ` + (window.lang && window.lang['cash'] ? window.lang['cash'] : 'Cash') + `
+                        <input type="radio" name="paymentMethod" value="cash"> ` + __('cash') + `
                     </label>
                 </div>
                 <div style="margin-top: 15px;">
-                    <label>` + (window.lang && window.lang['payment_reference'] ? window.lang['payment_reference'] : 'Payment Reference') + ` (` + (window.lang && window.lang['optional'] ? window.lang['optional'] : 'Optional') + `):</label>
-                    <input type="text" id="paymentReference" class="form-control" placeholder="` + (window.lang && window.lang['eg_transaction_id'] ? window.lang['eg_transaction_id'] : 'e.g., Transaction ID, Check Number') + `">
+                    <label>` + __('payment_reference') + ` (` + __('optional') + `):</label>
+                    <input type="text" id="paymentReference" class="form-control" placeholder="` + __('eg_transaction_id') + `">
                 </div>
             </div>
         `,
         icon: 'info',
         showCancelButton: true,
-        confirmButtonText: window.lang && window.lang['clear_settlement'] ? window.lang['clear_settlement'] : 'Clear Settlement',
+        confirmButtonText: __('clear_settlement'),
         confirmButtonColor: '#28a745',
-        cancelButtonText: window.lang && window.lang['cancel'] ? window.lang['cancel'] : 'Cancel',
+        cancelButtonText: __('cancel'),
         allowOutsideClick: false
     }).then((result) => {
         if (result.isConfirmed) {
@@ -10501,8 +10510,8 @@ function processSettlementPayment(settlementId, settlementInvNo) {
             
             // Show loading
             Swal.fire({
-                title: window.lang && window.lang['processing'] ? window.lang['processing'] : 'Processing...',
-                text: window.lang && window.lang['clearing_settlement'] ? window.lang['clearing_settlement'] : 'Clearing settlement, please wait',
+                title: __('processing'),
+                text: __('clearing_settlement'),
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 didOpen: () => {
@@ -10522,15 +10531,15 @@ function processSettlementPayment(settlementId, settlementInvNo) {
                 },
                 success: function(response) {
                     if (response.success || response.status === 'success') {
-                        Swal.fire(window.lang && window.lang['success'] ? window.lang['success'] : 'Success', response.message || (window.lang && window.lang['settlement_cleared'] ? window.lang['settlement_cleared'] : 'Settlement cleared successfully'), 'success')
+                        Swal.fire(__('success'), response.message || __('settlement_cleared'), 'success')
                             .then(() => location.reload());
                     } else {
-                        Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', response.message || (window.lang && window.lang['failed_clear_settlement'] ? window.lang['failed_clear_settlement'] : 'Failed to clear settlement'), 'error');
+                        Swal.fire(__('error'), response.message || __('failed_clear_settlement'), 'error');
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('Payment error:', xhr.responseText);
-                    Swal.fire(window.lang && window.lang['error'] ? window.lang['error'] : 'Error', (window.lang && window.lang['failed_clear_settlement'] ? window.lang['failed_clear_settlement'] : 'Failed to process payment') + ': ' + error, 'error');
+                    Swal.fire(__('error'), __('failed_clear_settlement') + ': ' + error, 'error');
                 }
             });
         }

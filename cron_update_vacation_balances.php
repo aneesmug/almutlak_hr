@@ -80,8 +80,8 @@ function log_message($message, $type = 'info', $emp_id = null, $old_val = null, 
     }
     file_put_contents($log_file, $full_message, FILE_APPEND);
     
-    // Store for GUI display if this is an update record
-    if ($type === 'update' && $emp_id !== null && $old_val !== null && $new_val !== null) {
+    // Store for GUI display if this is an update or refresh record
+    if (($type === 'update' || $type === 'refresh') && $emp_id !== null && $old_val !== null && $new_val !== null) {
         $emp_name = get_employee_name($conDB_global, $emp_id);
         $updates_log[] = [
             'type' => $type,
@@ -97,44 +97,90 @@ function log_message($message, $type = 'info', $emp_id = null, $old_val = null, 
 
 log_message("========== CRON: Vacation Balance Update Started ==========", 'info');
 
-// Check for bypass flag:
-// CLI: php script.php --force
-// Browser: script.php?force=1
-$force_run = (isset($argv) && in_array('--force', $argv)) || (isset($_GET['force']) && $_GET['force'] == '1');
+// Check for force flag:
+// CLI: php script.php --force=1  or --force=2
+// Browser: script.php?force=1 or ?force=2
+// 
+// force=0: Normal - runs once per day, blocks duplicates
+// force=1: Check missing records only, refresh values, DON'T update last_updated if ran today
+// force=2: Force full update including last_updated, skip ALL checks
+$force_level = 0;
+
+// First check CLI arguments
+if (isset($argv) && is_array($argv)) {
+    foreach ($argv as $arg) {
+        if (is_string($arg) && strpos($arg, '--force=') === 0) {
+            $force_level = (int)substr($arg, 8);
+            break;
+        } elseif (is_string($arg) && $arg === '--force') {
+            $force_level = 1; // Default to level 1 for backward compatibility
+            break;
+        }
+    }
+}
+
+// Then check GET parameters (browser)
+if ($force_level === 0 && isset($_GET['force'])) {
+    $force_level = (int)$_GET['force'];
+}
+
+// Ensure force_level is valid (0, 1, or 2)
+if (!in_array($force_level, [0, 1, 2])) {
+    $force_level = 0;
+}
+
+log_message("Force level: $force_level (0=normal, 1=check missing, 2=full bypass)", 'info');
+log_message("Source: " . (isset($_GET['force']) ? "Browser (?force={$_GET['force']})" : (isset($argv) ? "CLI (argv)" : "Default")), 'info');
 
 try {
     // Include database connection
     require_once __DIR__ . '/includes/db.php';
     
-    // Check if already updated today (to prevent JSON overwrite)
+    // Check if already updated today (UNLESS force_level=2)
     $already_updated_today = false;
-    if (!$force_run && file_exists($report_file)) {
+    $should_update_last_updated = true;
+    
+    if ($force_level !== 2 && file_exists($report_file)) {
         $report_data = json_decode(file_get_contents($report_file), true);
         if ($report_data && isset($report_data['timestamp'])) {
             $report_date = substr($report_data['timestamp'], 0, 10);
             $today = date('Y-m-d');
             if ($report_date === $today) {
                 $already_updated_today = true;
-                // Set content type for browser display
-                if (php_sapi_name() !== 'cli') {
-                    header('Content-Type: text/plain; charset=utf-8');
+                
+                if ($force_level === 0) {
+                    // Normal run: skip if already updated today
+                    if (php_sapi_name() !== 'cli') {
+                        header('Content-Type: text/plain; charset=utf-8');
+                    }
+                    echo "\n========== ALREADY UPDATED TODAY ==========\n";
+                    echo "Last update: " . $report_data['timestamp'] . "\n";
+                    echo "Records Updated: " . ($report_data['updated_count'] ?? 0) . "\n";
+                    echo "Balances Changed: " . ($report_data['changed_count'] ?? 0) . "\n";
+                    echo "Errors: " . ($report_data['error_count'] ?? 0) . "\n";
+                    echo "\nTo check for missing records and refresh values (without updating last_updated):\n";
+                    echo "  CLI: php cron_update_vacation_balances.php --force=1\n";
+                    echo "  Browser: /cron_update_vacation_balances.php?force=1\n";
+                    echo "\nTo force full update with new last_updated timestamp:\n";
+                    echo "  CLI: php cron_update_vacation_balances.php --force=2\n";
+                    echo "  Browser: /cron_update_vacation_balances.php?force=2\n";
+                    echo "===========================================\n\n";
+                    exit(0);
+                } elseif ($force_level === 1) {
+                    // Force level 1: Refresh values but DON'T update last_updated
+                    log_message("FORCE LEVEL 1: Checking for missing records and refreshing values (NOT updating last_updated)", 'info');
+                    $should_update_last_updated = false;
                 }
-                echo "\n========== ALREADY UPDATED TODAY ==========\n";
-                echo "Last update: " . $report_data['timestamp'] . "\n";
-                echo "Records Updated: " . ($report_data['updated_count'] ?? 0) . "\n";
-                echo "Balances Changed: " . ($report_data['changed_count'] ?? 0) . "\n";
-                echo "Errors: " . ($report_data['error_count'] ?? 0) . "\n";
-                echo "To force re-run, use: php cron_update_vacation_balances.php --force\n";
-                echo "To force re-run, use: /cron_update_vacation_balances.php?force=1\n";
-                echo "JSON file preserved from first run.\n";
-                echo "===========================================\n\n";
-                exit(0);
             }
         }
     }
     
-    if ($force_run) {
-        log_message("FORCE RUN enabled: Bypassing once-per-day restriction", 'info');
+    if ($force_level === 2) {
+        log_message("FORCE LEVEL 2: Full bypass - updating all balances AND last_updated", 'info');
+        $should_update_last_updated = true;
+    } elseif ($force_level === 1) {
+        log_message("FORCE LEVEL 1: Checking for missing records only", 'info');
+        $should_update_last_updated = false;
     }
     
     // Make connection available globally
@@ -211,6 +257,10 @@ try {
     $changed_count = 0;
     $error_count = 0;
 
+    // Process all existing employees - but behavior depends on force_level:
+    // Mode 0: Update with yesterday's timestamp, prevents daily duplicates
+    // Mode 1: Show refreshed values only, don't update database or last_updated
+    // Mode 2: Force update with 2-days-ago timestamp, always updates everything
     while ($row = mysqli_fetch_assoc($result)) {
         $emp_id = $row['emp_id'];
         $balance_record_id = $row['balance_record_id'];
@@ -246,7 +296,15 @@ try {
 
             $last_updated = $current_record['last_updated'];
             $today_str = date('Y-m-d');
-            if (!$force_run && $last_updated && substr($last_updated, 0, 10) === $today_str) {
+            
+            // For mode 1 (check missing), only show refreshed values - don't update database
+            if ($force_level === 1) {
+                log_message("  [emp_id: $emp_id] REFRESHED: $old_balance → $old_balance (not updated)", 'refresh', $emp_id, $old_balance, $old_balance);
+                continue;
+            }
+            
+            // Skip if already updated today (unless force_level=1 or force_level=2)
+            if ($force_level === 0 && $last_updated && substr($last_updated, 0, 10) === $today_str) {
                 log_message("  [emp_id: $emp_id] SKIPPED: Already updated today ($last_updated)", 'warning');
                 continue;
             }
@@ -262,53 +320,77 @@ try {
 
             $live_balance = (float)$live_balance;
             $balance_changed = (abs($old_balance - $live_balance) > 0.001);
-            
-            // DEBUG: Log calculation details
-            if ($emp_id === '1061') {
-                error_log("DEBUG emp_1061: old_balance={$old_balance}, live_balance={$live_balance}, diff=" . abs($old_balance - $live_balance) . ", threshold=0.001, changed={$balance_changed}");
-            }
-
             // Update the record with new balance and track when it was last updated
             // ✅ CRITICAL: Daily cron MUST SYNC all 3 balance columns to keep them equal
             // available_balance, opening_balance, and remaining_balance all set to live_balance
             // This ensures consistency across all balance tracking columns
-            $update_sql = "UPDATE `emp_vacation_balance` 
-                          SET `available_balance` = ?, 
-                              `opening_balance` = ?,
-                              `remaining_balance` = ?,
-                              `last_updated` = NOW() 
-                          WHERE `id` = ?";
-
-            $stmt = mysqli_prepare($conDB, $update_sql);
-            if (!$stmt) {
-                log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
-                $error_count++;
-                continue;
+            // 
+            // ✅ IMPORTANT: Set last_updated based on force_level:
+            // - force_level=0 (normal): Set to NOW (today) to prevent duplicate daily updates
+            // - force_level=1 (check missing): Keep current last_updated value (don't change)
+            // - force_level=2 (full bypass): Set to TODAY so next accrual starts fresh tomorrow
+            
+            $now = new DateTime();
+            $now_str = $now->format('Y-m-d H:i:s');
+            
+            // Determine what last_updated value to use
+            if ($force_level === 2) {
+                // Full bypass (force): ALWAYS update with current datetime NOW()
+                $new_last_updated = $now_str;
+            } elseif ($force_level === 1) {
+                // Check missing mode: keep as is (don't update last_updated)
+                $new_last_updated = $last_updated;
+            } else {
+                // Normal mode (0): set to now (today with current time)
+                $new_last_updated = $now_str;
             }
+            
+            // For modes 0 and 2: Actually update the database
+            if ($force_level === 0 || $force_level === 2) {
+                $update_sql = "UPDATE `emp_vacation_balance` 
+                              SET `available_balance` = ?, 
+                                  `opening_balance` = ?,
+                                  `remaining_balance` = ?,
+                                  `last_updated` = ? 
+                              WHERE `id` = ?";
 
-            // Sync all 3 columns to the same live_balance value
-            // Format: dddi = 3 doubles (available_balance, opening_balance, remaining_balance) + 1 integer (id)
-            mysqli_stmt_bind_param($stmt, 'dddi', $live_balance, $live_balance, $live_balance, $balance_record_id);
+                $stmt = mysqli_prepare($conDB, $update_sql);
+                if (!$stmt) {
+                    log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
+                    $error_count++;
+                    continue;
+                }
+                
+                // Sync all 3 columns to the same live_balance value
+                // Format: dddsi = 3 doubles (available_balance, opening_balance, remaining_balance) + 1 string (last_updated) + 1 integer (id)
+                mysqli_stmt_bind_param($stmt, 'dddsi', $live_balance, $live_balance, $live_balance, $new_last_updated, $balance_record_id);
 
-            if (!mysqli_stmt_execute($stmt)) {
-                log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt), 'error');
+                if (!mysqli_stmt_execute($stmt)) {
+                    log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt), 'error');
+                    mysqli_stmt_close($stmt);
+                    $error_count++;
+                    continue;
+                }
+
+                $affected = mysqli_stmt_affected_rows($stmt);
                 mysqli_stmt_close($stmt);
-                $error_count++;
-                continue;
+            } else {
+                // Mode 1: Don't update database, just show refreshed values
+                $affected = 0;
             }
-
-            $affected = mysqli_stmt_affected_rows($stmt);
-            mysqli_stmt_close($stmt);
 
             if ($affected > 0) {
                 $updated_count++;
+                
+                // Always count as changed since we update daily for synchronization
+                $changed_count++;
                 
                 // Insert history record for audit trail
                 $change_amount = $live_balance - $old_balance;
                 $snapshot_date = date('Y-m-d');
                 $snapshot_time = date('Y-m-d H:i:s');
                 $calc_status = 'success';
-                $notes = $balance_changed ? "Cron auto-update: Balance changed" : "Cron auto-update: Timestamp refreshed";
+                $notes = "Daily cron auto-update for balance synchronization";
                 
                 $history_sql = "INSERT INTO emp_vacation_balance_history 
                                (emp_id, vac_id, contract_id, balance_record_id, 
@@ -356,14 +438,13 @@ try {
                     log_message("  [emp_id: $emp_id] WARNING: Failed to prepare history insert - " . mysqli_error($conDB), 'warning');
                 }
                 
+                // Always show as updated for daily sync
                 if ($balance_changed) {
-                    $changed_count++;
-                    $change_msg = "Updated: $old_balance → $live_balance";
-                    log_message("  [emp_id: $emp_id] ✓ $change_msg (CHANGED)", 'update', $emp_id, $old_balance, $live_balance);
+                    $change_msg = "Updated: $old_balance → $live_balance (VALUE CHANGED)";
                 } else {
-                    $refresh_msg = "Refreshed: $live_balance (unchanged value, timestamp updated)";
-                    log_message("  [emp_id: $emp_id] ✓ $refresh_msg", 'update', $emp_id, $old_balance, $live_balance);
+                    $change_msg = "Updated: $live_balance (synced daily for consistency)";
                 }
+                log_message("  [emp_id: $emp_id] ✓ $change_msg", 'update', $emp_id, $old_balance, $live_balance);
             }
 
         } catch (Exception $e) {
@@ -376,8 +457,12 @@ try {
 
     // Save updates log to persistent JSON file for later viewing
     $report_file = __DIR__ . '/cron_logs/last_vacation_update_report.json';
+    $force_mode_name = ['normal', 'check_missing', 'full_bypass'][$force_level] ?? 'unknown';
     $report_data = [
         'timestamp' => date('Y-m-d H:i:s'),
+        'force_level' => $force_level,
+        'force_mode' => $force_mode_name,
+        'updated_last_updated' => $should_update_last_updated ? 'YES' : 'NO',
         'total_employees' => $total_employees,
         'updated_count' => $updated_count,
         'changed_count' => $changed_count,
@@ -400,6 +485,8 @@ try {
 
     // Output results as text
     echo "\n========== VACATION BALANCE UPDATE RESULTS ==========\n";
+    echo "Mode: " . $force_mode_name . " (force_level=$force_level)\n";
+    echo "Updated last_updated field: " . ($should_update_last_updated ? 'YES' : 'NO') . "\n";
     echo "Total Employees: " . $total_employees . "\n";
     echo "Records Updated: " . $updated_count . "\n";
     echo "Balances Changed: " . $changed_count . "\n";
@@ -408,8 +495,12 @@ try {
     if (count($updates_log) > 0) {
         foreach ($updates_log as $log) {
             $is_changed = abs($log['old_value'] - $log['new_value']) > 0.001;
-            $status = $is_changed ? 'CHANGED' : 'REFRESHED';
-            printf("[%s] %s (%s) - Old: %.2f → New: %.2f (%s)\n", 
+            if ($log['type'] === 'refresh') {
+                $status = 'REFRESHED (not updated)';
+            } else {
+                $status = $is_changed ? 'UPDATED (VALUE CHANGED)' : 'UPDATED (SYNCED)';
+            }
+            printf("[%s] %s (%s) - Old: %.2f → New: %.2f [%s]\n", 
                 $log['timestamp'],
                 $log['emp_id'],
                 $log['emp_name'],
@@ -421,7 +512,103 @@ try {
     } else {
         echo "No updates recorded.\n";
     }
+    echo "======================================================\n";
+    echo "\nUSAGE MODES:\n";
+    echo "  Mode 0 (Normal - Default):\n";
+    echo "    - Runs ONCE per day automatically\n";
+    echo "    - Updates all balances with daily accrual (last_updated = yesterday)\n";
+    echo "    - Prevents duplicate runs on the same day\n";
+    echo "    - CLI: php cron_update_vacation_balances.php\n";
+    echo "    - Browser: /cron_update_vacation_balances.php\n";
+    echo "\n  Mode 1 (Check Missing Only):\n";
+    echo "    - Can run multiple times per day\n";
+    echo "    - Checks for missing balance records and creates them\n";
+    echo "    - Refreshes existing values but does NOT update last_updated\n";
+    echo "    - Use to sync missing records without resetting the daily counter\n";
+    echo "    - CLI: php cron_update_vacation_balances.php --force=1\n";
+    echo "    - Browser: /cron_update_vacation_balances.php?force=1\n";
+    echo "\n  Mode 2 (Full Bypass):\n";
+    echo "    - Can run multiple times per day\n";
+    echo "    - Forces full update including last_updated = yesterday\n";
+    echo "    - Bypasses all once-per-day checks\n";
+    echo "    - Use only for testing or emergency recalculations\n";
+    echo "    - CLI: php cron_update_vacation_balances.php --force=2\n";
+    echo "    - Browser: /cron_update_vacation_balances.php?force=2\n";
     echo "======================================================\n\n";
+
+    // Recalculate earned days if requested
+    // Usage: php cron_update_vacation_balances.php --recalc-earned
+    // Or via browser: /cron_update_vacation_balances.php?recalc_earned=1
+    $recalc_earned = (isset($argv) && in_array('--recalc-earned', $argv)) || (isset($_GET['recalc_earned']) && $_GET['recalc_earned'] == '1');
+    
+    if ($recalc_earned) {
+        log_message("\n========== RECALCULATING EARNED DAYS ==========\n", 'info');
+        echo "\n========== RECALCULATING EARNED DAYS ==========\n";
+        
+        $earned_update_count = 0;
+        $earned_error_count = 0;
+        
+        // Get all active employees
+        $earned_query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id
+                        FROM emp_vacation_balance evb
+                        JOIN employees e ON evb.emp_id = e.emp_id
+                        WHERE e.status = 1
+                        ORDER BY evb.emp_id";
+        
+        $earned_result = mysqli_query($conDB, $earned_query);
+        
+        if ($earned_result) {
+            while ($emp_row = mysqli_fetch_assoc($earned_result)) {
+                $emp_id_earned = $emp_row['emp_id'];
+                $balance_id = $emp_row['balance_record_id'];
+                
+                try {
+                    // Recalculate earned days using the vacation calculator
+                    $earned_days = get_live_vacation_balance($conDB, $emp_id_earned);
+                    
+                    if ($earned_days !== null) {
+                        // Update with recalculated value
+                        $earned_update_sql = "UPDATE emp_vacation_balance 
+                                           SET available_balance = ?, 
+                                               opening_balance = ?, 
+                                               remaining_balance = ?,
+                                               last_updated = NOW()
+                                           WHERE id = ?";
+                        
+                        $earned_stmt = mysqli_prepare($conDB, $earned_update_sql);
+                        if ($earned_stmt) {
+                            mysqli_stmt_bind_param($earned_stmt, 'dddi', $earned_days, $earned_days, $earned_days, $balance_id);
+                            
+                            if (mysqli_stmt_execute($earned_stmt)) {
+                                $earned_update_count++;
+                                log_message("  [emp_id: $emp_id_earned] ✓ Earned days recalculated: $earned_days days", 'info');
+                                echo "  [emp_id: $emp_id_earned] ✓ Earned days recalculated: $earned_days days\n";
+                            } else {
+                                log_message("  [emp_id: $emp_id_earned] ERROR: Failed to update earned days", 'error');
+                                $earned_error_count++;
+                            }
+                            mysqli_stmt_close($earned_stmt);
+                        } else {
+                            log_message("  [emp_id: $emp_id_earned] ERROR: Prepare failed for earned days update", 'error');
+                            $earned_error_count++;
+                        }
+                    } else {
+                        log_message("  [emp_id: $emp_id_earned] WARNING: Could not calculate earned days", 'warning');
+                        $earned_error_count++;
+                    }
+                } catch (Exception $e) {
+                    log_message("  [emp_id: $emp_id_earned] ERROR: " . $e->getMessage(), 'error');
+                    $earned_error_count++;
+                }
+            }
+            mysqli_free_result($earned_result);
+            
+            echo "Earned Days Updated: " . $earned_update_count . "\n";
+            echo "Errors: " . $earned_error_count . "\n";
+            echo "==============================================\n\n";
+            log_message("Earned days recalculation complete. Updated: $earned_update_count, Errors: $earned_error_count", 'info');
+        }
+    }
 
     // Finished update run
     exit(0);

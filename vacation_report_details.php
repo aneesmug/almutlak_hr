@@ -157,28 +157,28 @@ if (mysqli_num_rows($query) == 1) {
     if ($calculate_payments && $salary) {
         $basic_salary = (float)($salary['basic'] ?? 0);
         $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
-        $daily_rate = $total_monthly_salary / $days_in_month;
+        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
         
         // --- CALCULATE OVERTIME AND DEDUCTIONS (EOS Logic) ---
         $DEDUCTION_BASE = $total_monthly_salary;
-        $dailyRateDeduction = $DEDUCTION_BASE / $days_in_month;
-        $hourlyRateDeduction = $dailyRateDeduction / 8;
+        $dailyRateDeduction = round($DEDUCTION_BASE / $days_in_month, 2);
+        $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
         
         // OVERTIME CALCULATION (per EOS file):
         // per-hour overtime rate = (basic/240)/2 + (full/240)
-        $overtimeHourlyRate = (($basic_salary / 240) / 2) + ($total_monthly_salary / 240);
+        $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
         
         // Calculate amounts
         if ($overtime_hours > 0) {
-            $overtime_amount = $overtimeHourlyRate * $overtime_hours;
+            $overtime_amount = round($overtimeHourlyRate * $overtime_hours);
         }
         
         if ($deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0) {
-            $deduction_hours_amount = $hourlyRateDeduction * $deduction_hours;
-            $deduction_days_amount = $dailyRateDeduction * $deduction_days;
-            $deduction_amount = $deduction_hours_amount + $deduction_days_amount + $other_deductions;
+            $deduction_hours_amount = round($hourlyRateDeduction * $deduction_hours);
+            $deduction_days_amount = round($dailyRateDeduction * $deduction_days);
+            $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_deductions);
         } else if ($other_deductions > 0) {
-            $deduction_amount = $other_deductions;
+            $deduction_amount = round($other_deductions);
         }
 
         // === WORKING DAYS SALARY ===
@@ -187,7 +187,7 @@ if (mysqli_num_rows($query) == 1) {
         if ($is_fly_annual && !empty($request['start_date'])) {
             $start_date_obj = new DateTime($request['start_date']);
             $working_days = (int)$start_date_obj->format('d') - 1; // Days before vacation starts
-            $working_days_salary = $daily_rate * $working_days;
+            $working_days_salary = round($daily_rate * $working_days);
         }
 
         // === VACATION SALARY ===
@@ -198,7 +198,7 @@ if (mysqli_num_rows($query) == 1) {
         // Formula: (daily rate × vacation days) = (total_monthly_salary / 30) × approved_days
         if ($is_fly_annual && $vacation_salary_type === 'payroll') {
             // Calculate vacation salary as daily rate × vacation days
-            $vacation_salary = $daily_rate * $approved_days;
+            $vacation_salary = round($daily_rate * $approved_days);
             
             // Track salaries_earned for display purposes (how many full contract periods)
             $contract_days = isset($request['contract_vacation_days']) ? (float)$request['contract_vacation_days'] : 0;
@@ -226,7 +226,7 @@ if (mysqli_num_rows($query) == 1) {
             if ($is_fly_annual) {
                 // For Fly + Annual: Apply GOSI on working days + vacation salary
                 $gosi_base = $working_days_salary + $vacation_salary;
-                $gosi_deduction = ($gosi_base * $gosi_percentage) / 100;
+                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
             } elseif ($is_encashment) {
                 // For Encashment: GOSI calculated separately in encashment section
                 $gosi_deduction = 0;
@@ -236,8 +236,8 @@ if (mysqli_num_rows($query) == 1) {
         // === TICKET AND PERMIT FEES ===
         // Only for Fly + Annual (non-Saudi employees)
         if ($is_fly_annual && $request['country_id'] != 191) {
-            $ticket_fee = $request['ticket_pay'] ?? 0;
-            $permit_fee = $request['permit_fee'] ?? 0;
+            $ticket_fee = round($request['ticket_pay'] ?? 0);
+            $permit_fee = round($request['permit_fee'] ?? 0);
         }
     }
 
@@ -249,7 +249,7 @@ if (mysqli_num_rows($query) == 1) {
         // Fly + Annual: Working days + vacation salary + ticket + permit + overtime - deductions - GOSI
         // $total_payable = ($working_days_salary + $vacation_salary) + $ticket_fee + $permit_fee + $overtime_amount - $deduction_amount - $gosi_deduction;
         // $deduction_amount already includes $other_deductions from the calculation above
-        $total_payable = ($working_days_salary + $vacation_salary)  + $overtime_amount - $deduction_amount - $gosi_deduction;
+        $total_payable = round(($working_days_salary + $vacation_salary)  + $overtime_amount - $deduction_amount - $gosi_deduction);
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
         $total_payable = 0;
@@ -534,17 +534,15 @@ if (mysqli_num_rows($query) == 1) {
                                 
                                     <?php if ($is_encashment_request): 
                                         // Get encashment details from database
-                                        $encashment_amount = (float)($request['encashment_amount'] ?? 0);
+                                        $encashment_amount = round((float)($request['encashment_amount'] ?? 0));
                                         $days_encashed = (float)($request['vacdays'] ?? 0);
-                                        $daily_rate_display = ($days_encashed > 0) ? ($encashment_amount / $days_encashed) : 0;
-                                        
-                                        // Calculate GOSI deduction for encashment if applicable
+                                        $daily_rate_display = ($days_encashed > 0) ? round($encashment_amount / $days_encashed, 2) : 0;
                                         $encash_gosi = 0;
                                         if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
                                             $gosi_percentage = (float)$request['gosi'];
-                                            $encash_gosi = ($encashment_amount * $gosi_percentage) / 100;
+                                            $encash_gosi = round(($encashment_amount * $gosi_percentage) / 100);
                                         }
-                                        $net_encashment = $encashment_amount - $encash_gosi;
+                                        $net_encashment = round($encashment_amount - $encash_gosi);
                                     ?>
                                     <div class="report-section">
                                         <h5 class="section-title"><i class="fa fa-coins"></i><?= __('encashment_payment_details') ?? 'Encashment Payment Details' ?></h5>

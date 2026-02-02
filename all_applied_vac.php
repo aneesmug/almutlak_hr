@@ -940,8 +940,15 @@ if ($can_see_all_depts) {
                                                                 <!-- STEP 4: Settlement Button - After Full Approval -->
                                                                 <?php 
                                                                 // Check if settlement already exists for this request
-                                                                $settlementCheckQry = mysqli_query($conDB, "SELECT id FROM settlement_records WHERE request_inv_no LIKE 'SETTLEMENT-" . $req['request_inv_no'] . "%' LIMIT 1");
-                                                                $settlementExists = $settlementCheckQry && mysqli_num_rows($settlementCheckQry) > 0;
+                                                                $settlementCheckQry = mysqli_query($conDB, "SELECT id, request_inv_no, settlement_status FROM settlement_records WHERE request_inv_no LIKE 'SETL-" . $req['request_inv_no'] . "%' LIMIT 1");
+                                                                $settlementRow = $settlementCheckQry ? mysqli_fetch_assoc($settlementCheckQry) : null;
+                                                                if ($settlementCheckQry) {
+                                                                    mysqli_free_result($settlementCheckQry);
+                                                                }
+                                                                $settlementExists = !empty($settlementRow);
+                                                                $settlementId = $settlementRow['id'] ?? null;
+                                                                $settlementInvNo = $settlementRow['request_inv_no'] ?? null;
+                                                                $settlementStatus = $settlementRow['settlement_status'] ?? null;
                                                                 
                                                                 // Settlement button only for Annual Fly vacations
                                                                 $isAnnualFly = (($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual') OR $req['vac_type'] === 'Encashed' );
@@ -952,6 +959,14 @@ if ($can_see_all_depts) {
                                                                         <i class="fa fa-handshake text-success"></i> <?= __('create_settlement') ?: 'Create Settlement' ?>
                                                                     </a>
                                                                 <?php endif; ?>
+
+                                                                <?php if ($settlementExists && $settlementStatus === 'completed' && $settlementId && $settlementInvNo): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="viewSettlementDetails(<?= (int)$settlementId; ?>, '<?= htmlspecialchars($settlementInvNo, ENT_QUOTES); ?>')">
+                                                                        <i class="fa fa-file-alt text-info"></i> <?= __('settlement_report') ?: 'Settlement Report' ?>
+                                                                    </a>
+                                                                <?php endif; ?>
+                                                                
                                                             </div>
                                                         </div>
                                                     </div>
@@ -4124,10 +4139,10 @@ if ($can_see_all_depts) {
                     Swal.fire({
                         title: __('success') || 'Success',
                         html: `
-                            <p>Settlement created successfully!</p>
-                            <p><strong>Settlement Ref:</strong> ${result.value.settlement_inv_no || requestInvNo}</p>
-                            <p><strong>Total Payable:</strong> SAR ${parseFloat(totalPayable).toFixed(2)}</p>
-                            <p class="text-muted"><small>The settlement request has been initiated and is now pending approval from the settlement approval chain: <strong>${approvalChainText}</strong></small></p>
+                            <p>${__('settlement_created_successfully')}</p>
+                            <p><strong>${__('settlement_ref')}:</strong> ${result.value.settlement_inv_no || requestInvNo}</p>
+                            <p><strong>${__('total_payable')}:</strong> SAR ${parseFloat(totalPayable).toFixed(2)}</p>
+                            <p class="text-muted"><small>${__('settlement_pending_approval_chain')}: <strong>${approvalChainText}</strong></small></p>
                         `,
                         icon: 'success',
                         confirmButtonColor: '#28a745',

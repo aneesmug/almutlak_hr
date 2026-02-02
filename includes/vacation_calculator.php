@@ -215,19 +215,32 @@ class VacationCalculator {
                     $today_live = new DateTime();
                     $today_live->setTime(0, 0, 0);
 
+                    // Calculate fresh accrual from last update to today
                     $days_elapsed = 0;
-                    if ($today_live > $anchor) {
+                    if ($today_live >= $anchor) {
                         $days_elapsed = self::calculate360DayDiff($anchor, $today_live);
+                        // Ensure at least 1 day of accrual if it's a different day
+                        if ($days_elapsed == 0 && $today_live != $anchor) {
+                            $days_elapsed = 1;
+                        }
                     }
 
-                    $cp = $this->parseContractPeriod($emp_data['vac_period']);
-                    $yrs = $cp['years'];
-                    $annual_rate = ($yrs == 2) ? ($total_vac_days / 2) : $total_vac_days;
-                    $daily_rate_360 = $annual_rate / 360.0; 
-                    $accrued_raw = $days_elapsed * $daily_rate_360;
-                    $accrued_days = round($accrued_raw, 2);
-                    $available_balance = round($snapshot_available + $accrued_days, 2);
-                    error_log("360-day last_updated-accrual for emp $emp_id: opening_available={$snapshot_available}, anchor=" . $anchor->format('Y-m-d') . ", days_360={$days_elapsed}, daily_rate_360={$daily_rate_360}, accrued_days={$accrued_days}, final={$available_balance}");
+                    // If we have snapshot data, use it as the baseline and add fresh accrual
+                    if ($days_elapsed > 0 || $today_live != $anchor) {
+                        $cp = $this->parseContractPeriod($emp_data['vac_period']);
+                        $yrs = $cp['years'];
+                        $total_vac_days_contract = $cp['total_days'];
+                        $annual_rate = ($yrs == 2) ? ($total_vac_days_contract / 2) : $total_vac_days_contract;
+                        $daily_rate_360 = $annual_rate / 360.0; 
+                        $accrued_raw = $days_elapsed * $daily_rate_360;
+                        $accrued_days = round($accrued_raw, 2);
+                        $available_balance = round($snapshot_available + $accrued_days, 2);
+                        error_log("360-day last_updated-accrual for emp $emp_id: opening_available={$snapshot_available}, anchor=" . $anchor->format('Y-m-d') . ", days_360={$days_elapsed}, daily_rate_360={$daily_rate_360}, accrued_days={$accrued_days}, final={$available_balance}");
+                    } else {
+                        // Same day as last update, just use the snapshot value
+                        $available_balance = $snapshot_available;
+                        error_log("360-day snapshot for emp $emp_id: same day as last update ({$anchor->format('Y-m-d')}), using snapshot value={$available_balance}");
+                    }
                 }
 
                 error_log("Final calculations: remaining=$remaining_balance, available=$available_balance");
@@ -482,6 +495,11 @@ class VacationCalculator {
         // (e.g., May 18 to Nov 17 = 179 days)
         // (e.g., Oct 15 to Nov 17 = 32 days)
         $diff = (($y2 - $y1) * 360) + (($m2 - $m1) * 30) + ($d2 - $d1);
+        
+        // Ensure we count at least 1 day if dates are different (minimum daily accrual)
+        if ($diff == 0 && $date_start != $date_end) {
+            $diff = 1;
+        }
         
         // VALIDATION: Warn if calculating a full year boundary with unexpected result
         $interval = $date_start->diff($date_end);

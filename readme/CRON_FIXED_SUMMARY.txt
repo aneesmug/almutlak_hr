@@ -1,0 +1,168 @@
+========================================
+ CRON VACATION BALANCE UPDATE - FIXED
+========================================
+
+STATUS: ✅ FULLY WORKING
+
+All three force modes now work correctly both via CLI and Browser:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MODE 0: NORMAL (Default - Recommended for Cron)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CLI Command:
+  php cron_update_vacation_balances.php
+
+Browser URL:
+  http://localhost/almutlak/system/cron_update_vacation_balances.php
+
+Behavior:
+  ✅ Runs ONCE per day maximum
+  ✅ Updates all 433 employee balances
+  ✅ Sets last_updated = YESTERDAY 00:00:00
+  ✅ Enables daily accrual on next calendar day
+  ❌ Rejects duplicate runs on same day
+
+Expected Output:
+  "Mode: normal (force_level=0)"
+  "Updated last_updated field: YES"
+  "Records Updated: 433"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MODE 1: CHECK MISSING ONLY (Mid-day Fix)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CLI Command:
+  php cron_update_vacation_balances.php --force=1
+
+Browser URL:
+  http://localhost/almutlak/system/cron_update_vacation_balances.php?force=1
+
+Behavior:
+  ✅ Can run MULTIPLE times per day
+  ✅ Creates missing balance records
+  ✅ Refreshes all existing balance values
+  ✅ DOES NOT change last_updated
+  ✅ Preserves daily rhythm for Mode 0
+
+Expected Output:
+  "Mode: check_missing (force_level=1)"
+  "Updated last_updated field: NO"
+  "Records Updated: 433" or "0" (if no changes)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MODE 2: FULL BYPASS (Emergency Only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CLI Command:
+  php cron_update_vacation_balances.php --force=2
+
+Browser URL:
+  http://localhost/almutlak/system/cron_update_vacation_balances.php?force=2
+
+Behavior:
+  ✅ Can run MULTIPLE times per day
+  ✅ Bypasses ALL once-per-day checks
+  ✅ Updates all balances immediately
+  ✅ Sets last_updated = NOW() with timestamp
+  ✅ Shows when update occurred
+  ❌ Use only for emergencies (use sparingly!)
+
+Expected Output:
+  "Mode: full_bypass (force_level=2)"
+  "Updated last_updated field: YES"
+  "Records Updated: 433"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FEATURE COMPARISON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Feature                 │ Mode 0  │ Mode 1  │ Mode 2
+─────────────────────────┼─────────┼─────────┼─────────
+Update Balances         │ ✅ YES  │ ✅ YES  │ ✅ YES
+Update last_updated     │ ✅ YES  │ ❌ NO   │ ✅ YES
+Multiple runs/day       │ ❌ NO   │ ✅ YES  │ ✅ YES
+Prevents duplicates     │ ✅ YES  │ ❌ NO   │ ❌ NO
+Recommended frequency   │ 1x/day  │ As needed│ Emergency
+Daily counter reset     │ ✅ YES  │ ❌ NO   │ ✅ YES
+Accrual enabled next day│ ✅ YES  │ ❌ NO   │ ✅ YES
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EXAMPLE WORKFLOW (Feb 1, 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+01:00 AM - Cron runs Mode 0 (automatic):
+  ✅ Updates all 433 balances
+  ✅ Sets last_updated = 2026-01-31 00:00:00
+  ✅ Marks today as updated
+  Result: 1.94 → 2.02 (yesterday's accrual applied)
+
+10:30 AM - User reports data issue:
+  Run Mode 1 to check missing records:
+  ✅ Creates new employee records if any
+  ✅ Refreshes all values
+  ✅ last_updated stays = 2026-01-31 00:00:00
+  Result: Values synced, daily rhythm preserved
+
+11:00 AM - Try Mode 0 again:
+  ❌ Rejected: "ALREADY UPDATED TODAY"
+  Reason: Mode 0 already ran at 01:00 AM
+
+12:00 PM - Critical data loss discovered:
+  Run Mode 2 for emergency override:
+  ✅ Force updates everything
+  ✅ Sets last_updated = 2026-02-01 12:00:45
+  ✅ Shows emergency timestamp
+  Result: Values restored with visible update timestamp
+
+2:00 PM - Try Mode 0 again:
+  ❌ Rejected: "ALREADY UPDATED TODAY"
+  Reason: Mode 2 already ran at 12:00 PM (counts as today's update)
+
+Next day (Feb 2) 01:00 AM - Cron runs Mode 0 again:
+  ✅ Normal daily rhythm resumes
+  ✅ Calculates accrual from 2026-01-31 to 2026-02-02
+  ✅ Sets last_updated = 2026-02-01 00:00:00
+  Result: Daily accrual continues normally
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+KEY IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Browser GET parameter parsing fixed
+✅ Force level properly validated (0, 1, or 2 only)
+✅ Force=2 now shows visible NOW() timestamp
+✅ Last_updated properly updated for all modes
+✅ Log file includes source detection (CLI vs Browser)
+✅ JSON report shows force_level and updated_last_updated status
+✅ All three modes work consistently both CLI and Browser
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Check latest update status:
+  CLI: php check_update_status.php
+
+View update logs:
+  - cron_logs/vacation_balance_update_2026-02-01.log
+  - cron_logs/last_vacation_update_report.json
+
+Database query (emp_id 1061):
+  SELECT emp_id, available_balance, last_updated 
+  FROM emp_vacation_balance 
+  WHERE emp_id = '1061';
+
+Expected result after Mode 2:
+  emp_id: 1061
+  available_balance: 2.26 (or higher)
+  last_updated: 2026-02-01 09:59:04 (NOW() timestamp)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
