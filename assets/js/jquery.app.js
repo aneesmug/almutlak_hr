@@ -10565,55 +10565,55 @@ function htmlspecialcharsJs(str) {
 }
 
 
-    // =================================================================
-    // Copy to Clipboard Function
-    // =================================================================
-    window.copyToClipboard = function(text, iconElement) {
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.top = 0;
-        textArea.style.left = 0;
-        textArea.style.opacity = 0;
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
+// =================================================================
+// Copy to Clipboard Function
+// =================================================================
+window.copyToClipboard = function(text, iconElement) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.top = 0;
+    textArea.style.left = 0;
+    textArea.style.opacity = 0;
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        document.execCommand('copy');
         
-        try {
-            document.execCommand('copy');
-            
-            // Visual feedback - change icon temporarily
-            const $icon = $(iconElement);
-            const originalClass = $icon.attr('class');
-            $icon.removeClass('mdi-content-copy').addClass('mdi-check').css('color', '#28a745');
-            
-            // Show toast notification
-            const Toast = Swal.mixin({
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 2000,
-                timerProgressBar: true,
-            });
-            Toast.fire({
-                icon: 'success',
-                title: __('copied_to_clipboard', 'Copied to clipboard!')
-            });
-            
-            // Restore original icon after 2 seconds
-            setTimeout(function() {
-                $icon.attr('class', originalClass).css('color', '#4fa0e3');
-            }, 2000);
-            
-        } catch (err) {
-            console.error('Failed to copy:', err);
-            Swal.fire({
-                icon: 'error',
-                title: __('copy_failed', 'Copy failed'),
-                text: __('please_copy_manually', 'Please copy manually'),
-                timer: 2000
-            });
-        }
+        // Visual feedback - change icon temporarily
+        const $icon = $(iconElement);
+        const originalClass = $icon.attr('class');
+        $icon.removeClass('mdi-content-copy').addClass('mdi-check').css('color', '#28a745');
         
-        document.body.removeChild(textArea);
-    };
+        // Show toast notification
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 2000,
+            timerProgressBar: true,
+        });
+        Toast.fire({
+            icon: 'success',
+            title: __('copied_to_clipboard', 'Copied to clipboard!')
+        });
+        
+        // Restore original icon after 2 seconds
+        setTimeout(function() {
+            $icon.attr('class', originalClass).css('color', '#4fa0e3');
+        }, 2000);
+        
+    } catch (err) {
+        console.error('Failed to copy:', err);
+        Swal.fire({
+            icon: 'error',
+            title: __('copy_failed', 'Copy failed'),
+            text: __('please_copy_manually', 'Please copy manually'),
+            timer: 2000
+        });
+    }
+    
+    document.body.removeChild(textArea);
+};
