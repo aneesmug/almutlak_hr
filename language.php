@@ -261,6 +261,7 @@ $(document).ready(function(){
     // =================================================================
     let isPasting = false; // Track if user is pasting
     let clipboardText = ''; // Store the actual clipboard text
+    let arabicTranslationCompleted = false; // Track if Arabic translation is completed
     
     // Capture the clipboard data directly from paste event
     $('#lang_key_input').on('paste', function(e) {
@@ -321,7 +322,15 @@ $(document).ready(function(){
                     $status.removeClass('text-success text-muted').addClass('text-danger').text(__('already_exists', 'Already exists'));
                     const detailsHtml = `
                         <div class="alert alert-info py-2 px-3" style="margin-bottom:0;">
-                            <div><strong>${__('language_key', 'Language Key')}:</strong> ${resp.key}</div>
+                            <div>
+                                <strong>${__('language_key', 'Language Key')}:</strong> 
+                                <span style="font-family: monospace; cursor: pointer; color: #4fa0e3; text-decoration: underline dotted;" 
+                                      onclick="copyToClipboard('${resp.key}', this.nextElementSibling)" 
+                                      title="${__('click_to_copy', 'Click to copy')}">${resp.key}</span>
+                                <i class="mdi mdi-content-copy ml-2" style="cursor: pointer; color: #4fa0e3;" 
+                                   onclick="copyToClipboard('${resp.key}', this)" 
+                                   title="${__('copy_to_clipboard', 'Copy to clipboard')}"></i>
+                            </div>
                             <div><strong>${__('english_translation', 'English')}:</strong> ${enText || __('not_available', 'Not available')}</div>
                             <div><strong>${__('arabic_translation', 'Arabic')}:</strong> ${arText || __('not_available', 'Not available')}</div>
                         </div>`;
@@ -330,10 +339,11 @@ $(document).ready(function(){
                     // New key: ensure fields enabled, translate and focus Arabic
                     $('#en_translation_input').prop('disabled', false);
                     $('#ar_translation_input').prop('disabled', false);
+                    arabicTranslationCompleted = false;
                     updateArabicTranslation(formattedEnglish);
                     $('#ar_translation_input').focus();
                     $('#ar_translation_input').select();
-                    $('#addTranslationForm button[type="submit"]').show();
+                    // Don't show button yet - wait for Arabic translation to complete
 
                     // Render available status and clear details
                     $status.removeClass('text-danger text-muted').addClass('text-success').text(__('available', 'Available'));
@@ -422,14 +432,26 @@ $(document).ready(function(){
 
         if (state === 'checking') {
             $langKeyStatus.addClass('text-muted').text(__('checking', 'Checking...'));
+            // Always hide button while checking
+            $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
         } else if (state === 'available') {
             $langKeyStatus.addClass('text-success').text(__('available', 'Available'));
             $langKeyInput.addClass('is-valid');
+            // Show button only if Arabic is also completed
+            if (arabicTranslationCompleted) {
+                $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
+            } else {
+                $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
+            }
         } else if (state === 'exists') {
             $langKeyStatus.addClass('text-danger').text(__('already_exists', 'Already exists'));
             $langKeyInput.addClass('is-invalid');
+            // Always hide button when key already exists
+            $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
         } else {
             $langKeyStatus.text(text || '');
+            // Hide button during idle state
+            $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
         }
     }
 
@@ -437,8 +459,8 @@ $(document).ready(function(){
         const key = ($langKeyInput.val() || '').trim();
         if (!key) {
             setLangKeyStatus('idle', '');
-            $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
             $langKeyDetails.empty();
+            arabicTranslationCompleted = false;
             return;
         }
         if (langKeyCheckTimer) {
@@ -465,7 +487,15 @@ $(document).ready(function(){
                     const arText = (resp.translations && resp.translations.ar) ? resp.translations.ar : '';
                     const detailsHtml = `
                         <div class="alert alert-info py-2 px-3" style="margin-bottom:0;">
-                            <div><strong>${__('language_key', 'Language Key')}:</strong> ${resp.key}</div>
+                            <div>
+                                <strong>${__('language_key', 'Language Key')}:</strong> 
+                                <span style="font-family: monospace; cursor: pointer; color: #4fa0e3; text-decoration: underline dotted;" 
+                                      onclick="copyToClipboard('${resp.key}', this.nextElementSibling)" 
+                                      title="${__('click_to_copy', 'Click to copy')}">${resp.key}</span>
+                                <i class="mdi mdi-content-copy ml-2" style="cursor: pointer; color: #4fa0e3;" 
+                                   onclick="copyToClipboard('${resp.key}', this)" 
+                                   title="${__('copy_to_clipboard', 'Copy to clipboard')}"></i>
+                            </div>
                             <div><strong>${__('english_translation', 'English')}:</strong> ${enText || __('not_available', 'Not available')}</div>
                             <div><strong>${__('arabic_translation', 'Arabic')}:</strong> ${arText || __('not_available', 'Not available')}</div>
                         </div>`;
@@ -473,27 +503,31 @@ $(document).ready(function(){
                     // Disable editing when key exists and clear the fields (show values only below)
                     $('#en_translation_input').val('').prop('disabled', true);
                     $('#ar_translation_input').val('').prop('disabled', true);
+                    // Reset Arabic translation flag
+                    arabicTranslationCompleted = false;
                 } else {
                     setLangKeyStatus('available');
-                    $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
+                    // Button will show only if arabicTranslationCompleted is true (via setLangKeyStatus)
                     $langKeyDetails.empty();
                     // Ensure fields are editable when key is new
                     $('#en_translation_input').prop('disabled', false);
                     $('#ar_translation_input').prop('disabled', false);
+                    // Reset Arabic translation flag when switching to a new/available key
+                    arabicTranslationCompleted = false;
                 }
             } else {
                 setLangKeyStatus('idle', '');
-                $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
                 $langKeyDetails.empty();
                 $('#en_translation_input').prop('disabled', false);
                 $('#ar_translation_input').prop('disabled', false);
+                arabicTranslationCompleted = false;
             }
         }).fail(function(){
             setLangKeyStatus('idle', '');
-            $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
             $langKeyDetails.empty();
             $('#en_translation_input').prop('disabled', false);
             $('#ar_translation_input').prop('disabled', false);
+            arabicTranslationCompleted = false;
         });
     }
 
@@ -531,9 +565,18 @@ $(document).ready(function(){
                     if (response.success && response.translation && currentEnglish === englishText) {
                         $arabicField.val(response.translation);
                         $arabicField.css('border-color', '#28a745').css('box-shadow', '0 0 0 0.2rem rgba(40, 167, 69, 0.25)');
+                        arabicTranslationCompleted = true;
+                        
+                        // Only show button if key is also available (not exists)
+                        const keyStatus = $langKeyStatus.text();
+                        if (keyStatus.includes(__('available', 'Available'))) {
+                            $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
+                        }
                     } else {
                         console.warn('Translation failed:', response.error || 'Unknown error');
                         $arabicField.css('border-color', '#ffc107').css('box-shadow', '0 0 0 0.2rem rgba(255, 193, 7, 0.25)');
+                        arabicTranslationCompleted = false;
+                        $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
                     }
                 },
                 error: function(xhr, status, error) {
@@ -541,6 +584,8 @@ $(document).ready(function(){
                         console.error('Translation request failed:', error);
                         $arabicField.css('border-color', '#dc3545').css('box-shadow', '0 0 0 0.2rem rgba(220, 53, 69, 0.25)');
                     }
+                    arabicTranslationCompleted = false;
+                    $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
                 },
                 complete: function() {
                     currentTranslateXHR = null;
@@ -548,6 +593,9 @@ $(document).ready(function(){
                     $arabicField.attr('placeholder', originalPlaceholder);
                 }
             });
+        } else {
+            arabicTranslationCompleted = false;
+            $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
         }
     }
     
@@ -556,6 +604,8 @@ $(document).ready(function(){
         const englishText = $(this).val();
         // Immediate mirror for instant feedback
         $('#ar_translation_input').val(englishText);
+        arabicTranslationCompleted = false;
+        $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
         
         if (enToArTimer) { clearTimeout(enToArTimer); }
         enToArTimer = setTimeout(function(){ updateArabicTranslation(englishText.trim()); }, 250);
@@ -592,6 +642,18 @@ $(document).ready(function(){
         const englishText = $(this).val().trim();
         if (englishText) {
             updateArabicTranslation(englishText);
+        }
+    });
+
+    // Allow manual editing of Arabic field to enable submit
+    $('#ar_translation_input').on('input', function() {
+        const arText = $(this).val().trim();
+        if (arText.length > 0) {
+            arabicTranslationCompleted = true;
+            $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
+        } else {
+            arabicTranslationCompleted = false;
+            $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
         }
     });
 

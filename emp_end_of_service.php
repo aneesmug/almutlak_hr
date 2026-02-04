@@ -1016,6 +1016,9 @@
 
                 function performApiCalculation() {
                     const totalSalary = parseFloat($('#total_salary').val()) || 0;
+                    const basicSalary = parseFloat($('#basic_salary').val()) || 0;
+                    const calculatedHousing = parseFloat($('#calculated_housing').val()) || 0;
+                    const housingAllowance = parseFloat($('#housing_allowance').val()) || 0;
                     
                     const formData = {
                         contract_type: $('input[name="contract_type"]:checked').val(),
@@ -1024,7 +1027,18 @@
                         joining_date: $('#joining_date').val(),
                         salary: totalSalary,
                         anul_vac_days: $('#anul_vac_days').val(),
+                        calculated_housing: $('#calculated_housing').val(),
+                        housing_allowance: $('#housing_allowance').val()
                     };
+
+                    // Detailed logging of what's being sent to API
+                    console.log("=== API CALL DEBUG INFO ===");
+                    console.log("Basic Salary:", basicSalary);
+                    console.log("Calculated Housing:", calculatedHousing);
+                    console.log("Housing Allowance:", housingAllowance);
+                    console.log("Total Salary:", totalSalary);
+                    console.log("Form Data being sent:", formData);
+                    console.log("=== END DEBUG INFO ===");
 
                     if (!formData.end_date || !formData.eos_reason) {
                         $('#eos_amount_display, #vacation_salary_display').val('0.00');
@@ -1041,6 +1055,11 @@
                         dataType: 'json',
                         success: function(response) {
                             if (response.success) {
+                                // Log the response for debugging
+                                console.log("API Response:", response);
+                                console.log("EOS Amount from API:", response.eos_amount);
+                                console.log("Vacation Salary from API:", response.vacation_salary);
+                                
                                 $('#eos_amount_display').val(response.eos_amount);
                                 
                                 // --- Calculate Vacation Salary using vacation_salary_base (WITHOUT calculated housing) ---

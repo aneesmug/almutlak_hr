@@ -474,7 +474,7 @@ if ($canSeeAllDepts) {
                                                                     case 'pending':
                                                                     case 'pending_approval':
                                                                         $badge_class = 'warning';
-                                                                        $approver = $settlement['current_approver_name'] ? getDisplayName($settlement['current_approver_name']) : __('next_approver');
+                                                                        $approver = $settlement['current_approver_name'] ? getDisplayName(parseName($settlement['current_approver_name'])) : __('next_approver');
                                                                         $status_text = __('pending_with') . ' ' . htmlspecialchars($approver);
                                                                         $status_icon = "<i class='fa fa-solid fa-hourglass-half text-white'></i>";
                                                                         break;
@@ -506,7 +506,7 @@ if ($canSeeAllDepts) {
                                                         </div>
                                                     </div>
                                                     <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
-                                                        <a href="#" class="btn btn-info btn-block waves-effect" onclick="viewSettlementDetails(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
+                                                        <a href="javascript:void(0);" class="btn btn-info btn-block waves-effect" onclick="viewSettlementDetails(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
                                                             <i class="fa fa-eye"></i> <?= __('view') ?>
                                                         </a>
                                                         <div class="btn-group flex-fill">
@@ -514,7 +514,7 @@ if ($canSeeAllDepts) {
                                                                 <?= __('actions') ?> <span class="caret"></span>
                                                             </button>
                                                             <div class="dropdown-menu dropdown-menu-right">
-                                                                <a class="dropdown-item" href="javascripyt:void(0);" onclick="viewSettlementHistory(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
+                                                                <a class="dropdown-item" href="settlement_status_history.php?request_inv_no=<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>">
                                                                     <i class="fa fa-history"></i> <?= __('history') ?>
                                                                 </a>
                                                                 <?php if ($settlement['settlement_status'] === 'approved'): ?>

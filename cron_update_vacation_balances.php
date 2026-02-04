@@ -193,93 +193,44 @@ try {
     
     log_message("Database connection established", 'info');
 
-    // Ensure all active employees have a vacation balance record
-    $new_records = 0;
-    $missing_sql = "SELECT e.emp_id
-                    FROM employees e
-                    WHERE e.status = 1
-                      AND NOT EXISTS (SELECT 1 FROM emp_vacation_balance evb WHERE evb.emp_id = e.emp_id)";
-    $missing_result = mysqli_query($conDB, $missing_sql);
-    if ($missing_result) {
-        while ($emp = mysqli_fetch_assoc($missing_result)) {
-            $emp_id_missing = $emp['emp_id'];
-            $initial_balance = get_live_vacation_balance($conDB, $emp_id_missing);
-            if ($initial_balance === null) {
-                $initial_balance = 0; // fallback to zero if calculation fails
-            }
-            $insert_sql = "INSERT INTO emp_vacation_balance (
-                                emp_id, vac_id, contract_id,
-                                total_days, used_days, remaining_balance,
-                                available_balance, opening_balance, carryover_days,
-                                period_start, period_end, last_updated
-                            ) VALUES (?, 0, 0, ?, 0, ?, ?, ?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR), NOW())";
-            $insert_stmt = mysqli_prepare($conDB, $insert_sql);
-            if ($insert_stmt) {
-                mysqli_stmt_bind_param($insert_stmt, 'sdddd', $emp_id_missing, $initial_balance, $initial_balance, $initial_balance, $initial_balance);
-                if (mysqli_stmt_execute($insert_stmt)) {
-                    $new_records++;
-                    log_message("[emp_id: $emp_id_missing] Created new emp_vacation_balance with starting balance {$initial_balance}", 'info');
-                } else {
-                    log_message("[emp_id: $emp_id_missing] ERROR creating emp_vacation_balance: " . mysqli_stmt_error($insert_stmt), 'error');
-                }
-                mysqli_stmt_close($insert_stmt);
-            } else {
-                log_message("[emp_id: $emp_id_missing] ERROR preparing insert for emp_vacation_balance: " . mysqli_error($conDB), 'error');
-            }
+    // =====================================================================
+    // FUNCTION 1: Normal Mode (force=0) - Update once per day
+    // =====================================================================
+    function process_employees_normal($conDB, &$updated_count, &$changed_count, &$error_count) {
+        global $updates_log, $conDB_global;
+        
+        $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
+                  FROM emp_vacation_balance evb
+                  JOIN employees e ON evb.emp_id = e.emp_id
+                  WHERE e.status = 1
+                  ORDER BY evb.emp_id";
+        
+        $result = mysqli_query($conDB, $query);
+        if (!$result) {
+            log_message("ERROR: Query failed - " . mysqli_error($conDB), 'error');
+            return 0;
         }
-        mysqli_free_result($missing_result);
-    } else {
-        log_message("ERROR: Failed to fetch missing vacation balance records - " . mysqli_error($conDB), 'error');
-    }
-    if ($new_records > 0) {
-        log_message("Created $new_records new emp_vacation_balance record(s) for newly registered employees", 'info');
-    }
-
-    // Get all active employees (status = 1) that have vacation balance records
-    $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
-              FROM emp_vacation_balance evb
-              JOIN employees e ON evb.emp_id = e.emp_id
-              WHERE e.status = 1
-              ORDER BY evb.emp_id";
-    
-    $result = mysqli_query($conDB, $query);
-    
-    if (!$result) {
-        log_message("ERROR: Query failed - " . mysqli_error($conDB), 'error');
-        exit(1);
-    }
-    
-    $total_employees = mysqli_num_rows($result);
-    log_message("Found $total_employees active employees with balance records to update", 'info');
-    log_message("(Only employees with status=1 will be processed)", 'info');
-
-    $updated_count = 0;
-    $changed_count = 0;
-    $error_count = 0;
-
-    // Process all existing employees - but behavior depends on force_level:
-    // Mode 0: Update with yesterday's timestamp, prevents daily duplicates
-    // Mode 1: Show refreshed values only, don't update database or last_updated
-    // Mode 2: Force update with 2-days-ago timestamp, always updates everything
-    while ($row = mysqli_fetch_assoc($result)) {
-        $emp_id = $row['emp_id'];
-        $balance_record_id = $row['balance_record_id'];
-        $old_balance = (float)$row['old_balance'];
-
-        try {
-            // Get current record details for history tracking
+        
+        $total = mysqli_num_rows($result);
+        
+        while ($row = mysqli_fetch_assoc($result)) {
+            $emp_id = $row['emp_id'];
+            $balance_record_id = $row['balance_record_id'];
+            $old_balance = (float)$row['old_balance'];
+            
+            // Get current record
             $check_sql = "SELECT vac_id, contract_id, total_days, used_days, remaining_balance, 
                                  available_balance, carryover_days, period_start, period_end, last_updated 
                           FROM emp_vacation_balance WHERE id = ? LIMIT 1";
             $check_stmt = mysqli_prepare($conDB, $check_sql);
             if (!$check_stmt) {
-                log_message("  [emp_id: $emp_id] ERROR: Prepare failed for record check - " . mysqli_error($conDB), 'error');
+                log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
                 $error_count++;
                 continue;
             }
             mysqli_stmt_bind_param($check_stmt, 'i', $balance_record_id);
             if (!mysqli_stmt_execute($check_stmt)) {
-                log_message("  [emp_id: $emp_id] ERROR: Execute failed for record check - " . mysqli_stmt_error($check_stmt), 'error');
+                log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($check_stmt), 'error');
                 mysqli_stmt_close($check_stmt);
                 $error_count++;
                 continue;
@@ -287,63 +238,42 @@ try {
             $result_last = mysqli_stmt_get_result($check_stmt);
             $current_record = mysqli_fetch_assoc($result_last);
             mysqli_stmt_close($check_stmt);
-
+            
             if (!$current_record) {
-                log_message("  [emp_id: $emp_id] ERROR: Could not fetch current balance record", 'error');
+                log_message("  [emp_id: $emp_id] ERROR: Could not fetch record", 'error');
                 $error_count++;
                 continue;
             }
-
+            
             $last_updated = $current_record['last_updated'];
             $today_str = date('Y-m-d');
             
-            // For mode 1 (check missing), only show refreshed values - don't update database
-            if ($force_level === 1) {
-                log_message("  [emp_id: $emp_id] REFRESHED: $old_balance → $old_balance (not updated)", 'refresh', $emp_id, $old_balance, $old_balance);
-                continue;
-            }
-            
-            // For mode 0: Skip if already updated today (prevent duplicates)
-            if ($force_level === 0 && $last_updated && substr($last_updated, 0, 10) === $today_str) {
+            // Skip if already updated today
+            if ($last_updated && substr($last_updated, 0, 10) === $today_str) {
                 log_message("  [emp_id: $emp_id] ⏭️ SKIPPED: Already updated today ($last_updated)", 'warning');
                 continue;
             }
             
-            // Mode 0 (normal) and Mode 2 (force) both continue to update
-
-            // Calculate live balance for this employee using VacationCalculator
+            // Calculate live balance
             $live_balance = get_live_vacation_balance($conDB, $emp_id);
-
             if ($live_balance === null) {
-                log_message("  [emp_id: $emp_id] WARNING: Could not calculate balance, skipping", 'warning');
+                log_message("  [emp_id: $emp_id] WARNING: Could not calculate balance", 'warning');
                 $error_count++;
                 continue;
             }
-
+            
             $live_balance = (float)$live_balance;
             $balance_changed = (abs($old_balance - $live_balance) > 0.001);
             
-            // Determine last_updated timestamp based on force_level
+            // Set last_updated to NOW()
             $now = new DateTime();
-            $now_str = $now->format('Y-m-d H:i:s');
+            $new_last_updated = $now->format('Y-m-d H:i:s');
             
-            if ($force_level === 2) {
-                // Mode 2: Set to YESTERDAY at midnight so next calculation includes 1 day of accrual
-                $yesterday = new DateTime('yesterday');
-                $new_last_updated = $yesterday->format('Y-m-d 00:00:00');
-            } else {
-                // Mode 0: Set to NOW() to prevent duplicate same-day runs
-                $new_last_updated = $now_str;
-            }
-            
-            // Update the database (mode 1 already exited above)
+            // Update database
             $update_sql = "UPDATE `emp_vacation_balance` 
-                          SET `available_balance` = ?, 
-                              `opening_balance` = ?,
-                              `remaining_balance` = ?,
-                              `last_updated` = ? 
-                          WHERE `id` = ?";
-
+                          SET `available_balance` = ?, `opening_balance` = ?,
+                              `remaining_balance` = ?, `last_updated` = ? WHERE `id` = ?";
+            
             $stmt = mysqli_prepare($conDB, $update_sql);
             if (!$stmt) {
                 log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
@@ -352,30 +282,22 @@ try {
             }
             
             mysqli_stmt_bind_param($stmt, 'dddsi', $live_balance, $live_balance, $live_balance, $new_last_updated, $balance_record_id);
-
+            
             if (!mysqli_stmt_execute($stmt)) {
                 log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt), 'error');
                 mysqli_stmt_close($stmt);
                 $error_count++;
                 continue;
             }
-
+            
             $affected = mysqli_stmt_affected_rows($stmt);
             mysqli_stmt_close($stmt);
-
+            
             if ($affected > 0) {
                 $updated_count++;
-                
-                // Always count as changed since we update daily for synchronization
                 $changed_count++;
                 
-                // Insert history record for audit trail
-                $change_amount = $live_balance - $old_balance;
-                $snapshot_date = date('Y-m-d');
-                $snapshot_time = date('Y-m-d H:i:s');
-                $calc_status = 'success';
-                $notes = "Daily cron auto-update for balance synchronization";
-                
+                // Insert history record
                 $history_sql = "INSERT INTO emp_vacation_balance_history 
                                (emp_id, vac_id, contract_id, balance_record_id, 
                                 old_available_balance, old_used_days, old_remaining_balance,
@@ -387,57 +309,228 @@ try {
                 
                 $history_stmt = mysqli_prepare($conDB, $history_sql);
                 if ($history_stmt) {
-                    $change_reason = "CRON_DAILY_UPDATE";
+                    $change_amount = $live_balance - $old_balance;
                     $balance_changed_int = $balance_changed ? 1 : 0;
+                    $change_reason = "CRON_DAILY_UPDATE";
+                    $calc_status = "success";
+                    $notes = "Daily cron auto-update";
+                    $snapshot_date = date('Y-m-d');
+                    $snapshot_time = date('Y-m-d H:i:s');
                     
                     mysqli_stmt_bind_param($history_stmt, 'siiiddddddddssidsssss',
-                        $emp_id,
-                        $current_record['vac_id'],
-                        $current_record['contract_id'],
-                        $balance_record_id,
-                        $old_balance,
-                        $current_record['used_days'],
-                        $current_record['remaining_balance'],
-                        $live_balance,
-                        $current_record['used_days'],
-                        $current_record['remaining_balance'],
-                        $current_record['carryover_days'],
-                        $current_record['total_days'],
-                        $current_record['period_start'],
-                        $current_record['period_end'],
-                        $balance_changed_int,
-                        $change_amount,
-                        $change_reason,
-                        $calc_status,
-                        $notes,
-                        $snapshot_date,
-                        $snapshot_time
+                        $emp_id, $current_record['vac_id'], $current_record['contract_id'], $balance_record_id,
+                        $old_balance, $current_record['used_days'], $current_record['remaining_balance'],
+                        $live_balance, $current_record['used_days'], $current_record['remaining_balance'],
+                        $current_record['carryover_days'], $current_record['total_days'],
+                        $current_record['period_start'], $current_record['period_end'],
+                        $balance_changed_int, $change_amount, $change_reason,
+                        $calc_status, $notes, $snapshot_date, $snapshot_time
                     );
-                    
-                    if (!mysqli_stmt_execute($history_stmt)) {
-                        log_message("  [emp_id: $emp_id] WARNING: Failed to insert history record - " . mysqli_stmt_error($history_stmt), 'warning');
-                    }
+                    mysqli_stmt_execute($history_stmt);
                     mysqli_stmt_close($history_stmt);
-                } else {
-                    log_message("  [emp_id: $emp_id] WARNING: Failed to prepare history insert - " . mysqli_error($conDB), 'warning');
                 }
                 
-                // Always show as updated for daily sync
                 if ($balance_changed) {
                     $change_msg = "Updated: $old_balance → $live_balance (VALUE CHANGED)";
                 } else {
                     $change_msg = "Updated: $live_balance (synced daily for consistency)";
                 }
-                log_message("  [emp_id: $emp_id] ✓ $change_msg", 'update', $emp_id, $old_balance, $live_balance);
+                log_message("  [emp_id: $emp_id] ✅ $change_msg", 'update', $emp_id, $old_balance, $live_balance);
             }
-
-        } catch (Exception $e) {
-            log_message("  [emp_id: $emp_id] ERROR: " . $e->getMessage(), 'error');
-            $error_count++;
         }
+        mysqli_free_result($result);
+        return $total;
     }
 
-    mysqli_free_result($result);
+    // =====================================================================
+    // FUNCTION 2: Check Missing Mode (force=1) - Refresh values only
+    // =====================================================================
+    function process_employees_check_missing($conDB, &$updated_count, &$changed_count, &$error_count) {
+        global $updates_log, $conDB_global;
+        
+        $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
+                  FROM emp_vacation_balance evb
+                  JOIN employees e ON evb.emp_id = e.emp_id
+                  WHERE e.status = 1
+                  ORDER BY evb.emp_id";
+        
+        $result = mysqli_query($conDB, $query);
+        if (!$result) {
+            log_message("ERROR: Query failed - " . mysqli_error($conDB), 'error');
+            return 0;
+        }
+        
+        $total = mysqli_num_rows($result);
+        
+        while ($row = mysqli_fetch_assoc($result)) {
+            $emp_id = $row['emp_id'];
+            $old_balance = (float)$row['old_balance'];
+            
+            // Only show refreshed values - NO database updates
+            log_message("  [emp_id: $emp_id] 🔄 REFRESHED: $old_balance → $old_balance ❌", 'refresh', $emp_id, $old_balance, $old_balance);
+        }
+        mysqli_free_result($result);
+        return $total;
+    }
+
+    // =====================================================================
+    // FUNCTION 3: Force Update Mode (force=2) - Update all, set to yesterday
+    // =====================================================================
+    function process_employees_force_update($conDB, &$updated_count, &$changed_count, &$error_count) {
+        global $updates_log, $conDB_global;
+        
+        $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
+                  FROM emp_vacation_balance evb
+                  JOIN employees e ON evb.emp_id = e.emp_id
+                  WHERE e.status = 1
+                  ORDER BY evb.emp_id";
+        
+        $result = mysqli_query($conDB, $query);
+        if (!$result) {
+            log_message("ERROR: Query failed - " . mysqli_error($conDB), 'error');
+            return 0;
+        }
+        
+        $total = mysqli_num_rows($result);
+        
+        while ($row = mysqli_fetch_assoc($result)) {
+            $emp_id = $row['emp_id'];
+            $balance_record_id = $row['balance_record_id'];
+            $old_balance = (float)$row['old_balance'];
+            
+            // Get current record
+            $check_sql = "SELECT vac_id, contract_id, total_days, used_days, remaining_balance, 
+                                 available_balance, carryover_days, period_start, period_end, last_updated 
+                          FROM emp_vacation_balance WHERE id = ? LIMIT 1";
+            $check_stmt = mysqli_prepare($conDB, $check_sql);
+            if (!$check_stmt) {
+                log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
+                $error_count++;
+                continue;
+            }
+            mysqli_stmt_bind_param($check_stmt, 'i', $balance_record_id);
+            if (!mysqli_stmt_execute($check_stmt)) {
+                log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($check_stmt), 'error');
+                mysqli_stmt_close($check_stmt);
+                $error_count++;
+                continue;
+            }
+            $result_last = mysqli_stmt_get_result($check_stmt);
+            $current_record = mysqli_fetch_assoc($result_last);
+            mysqli_stmt_close($check_stmt);
+            
+            if (!$current_record) {
+                log_message("  [emp_id: $emp_id] ERROR: Could not fetch record", 'error');
+                $error_count++;
+                continue;
+            }
+            
+            // Calculate live balance
+            $live_balance = get_live_vacation_balance($conDB, $emp_id);
+            if ($live_balance === null) {
+                log_message("  [emp_id: $emp_id] WARNING: Could not calculate balance", 'warning');
+                $error_count++;
+                continue;
+            }
+            
+            $live_balance = (float)$live_balance;
+            $balance_changed = (abs($old_balance - $live_balance) > 0.001);
+            
+            // Set last_updated to YESTERDAY at midnight
+            $yesterday = new DateTime('yesterday');
+            $new_last_updated = $yesterday->format('Y-m-d 00:00:00');
+            
+            // Update database
+            $update_sql = "UPDATE `emp_vacation_balance` 
+                          SET `available_balance` = ?, `opening_balance` = ?,
+                              `remaining_balance` = ?, `last_updated` = ? WHERE `id` = ?";
+            
+            $stmt = mysqli_prepare($conDB, $update_sql);
+            if (!$stmt) {
+                log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
+                $error_count++;
+                continue;
+            }
+            
+            mysqli_stmt_bind_param($stmt, 'dddsi', $live_balance, $live_balance, $live_balance, $new_last_updated, $balance_record_id);
+            
+            if (!mysqli_stmt_execute($stmt)) {
+                log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($stmt), 'error');
+                mysqli_stmt_close($stmt);
+                $error_count++;
+                continue;
+            }
+            
+            $affected = mysqli_stmt_affected_rows($stmt);
+            mysqli_stmt_close($stmt);
+            
+            if ($affected > 0) {
+                $updated_count++;
+                $changed_count++;
+                
+                // Insert history record
+                $history_sql = "INSERT INTO emp_vacation_balance_history 
+                               (emp_id, vac_id, contract_id, balance_record_id, 
+                                old_available_balance, old_used_days, old_remaining_balance,
+                                new_available_balance, new_used_days, new_remaining_balance,
+                                carryover_days, total_days, period_start, period_end,
+                                balance_changed, change_amount, change_reason, 
+                                calculation_status, notes, snapshot_date, snapshot_time)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                
+                $history_stmt = mysqli_prepare($conDB, $history_sql);
+                if ($history_stmt) {
+                    $change_amount = $live_balance - $old_balance;
+                    $balance_changed_int = $balance_changed ? 1 : 0;
+                    $change_reason = "CRON_FORCE_UPDATE";
+                    $calc_status = "success";
+                    $notes = "Force update - yesterday accrual";
+                    $snapshot_date = date('Y-m-d');
+                    $snapshot_time = date('Y-m-d H:i:s');
+                    
+                    mysqli_stmt_bind_param($history_stmt, 'siiiddddddddssidsssss',
+                        $emp_id, $current_record['vac_id'], $current_record['contract_id'], $balance_record_id,
+                        $old_balance, $current_record['used_days'], $current_record['remaining_balance'],
+                        $live_balance, $current_record['used_days'], $current_record['remaining_balance'],
+                        $current_record['carryover_days'], $current_record['total_days'],
+                        $current_record['period_start'], $current_record['period_end'],
+                        $balance_changed_int, $change_amount, $change_reason,
+                        $calc_status, $notes, $snapshot_date, $snapshot_time
+                    );
+                    mysqli_stmt_execute($history_stmt);
+                    mysqli_stmt_close($history_stmt);
+                }
+                
+                if ($balance_changed) {
+                    $change_msg = "Updated: $old_balance → $live_balance (VALUE CHANGED)";
+                } else {
+                    $change_msg = "Updated: $live_balance (synced daily for consistency)";
+                }
+                log_message("  [emp_id: $emp_id] ✅ $change_msg", 'update', $emp_id, $old_balance, $live_balance);
+            }
+        }
+        mysqli_free_result($result);
+        return $total;
+    }
+
+    // =====================================================================
+    // CALL THE APPROPRIATE FUNCTION BASED ON FORCE LEVEL
+    // =====================================================================
+    $updated_count = 0;
+    $changed_count = 0;
+    $error_count = 0;
+    $total_employees = 0;
+    
+    if ($force_level === 1) {
+        log_message("Running FORCE LEVEL 1: Check missing mode", 'info');
+        $total_employees = process_employees_check_missing($conDB, $updated_count, $changed_count, $error_count);
+    } elseif ($force_level === 2) {
+        log_message("Running FORCE LEVEL 2: Force update mode", 'info');
+        $total_employees = process_employees_force_update($conDB, $updated_count, $changed_count, $error_count);
+    } else {
+        log_message("Running FORCE LEVEL 0: Normal mode", 'info');
+        $total_employees = process_employees_normal($conDB, $updated_count, $changed_count, $error_count);
+    }
 
     // Save updates log to persistent JSON file for later viewing
     $report_file = __DIR__ . '/cron_logs/last_vacation_update_report.json';
@@ -480,9 +573,9 @@ try {
         foreach ($updates_log as $log) {
             $is_changed = abs($log['old_value'] - $log['new_value']) > 0.001;
             if ($log['type'] === 'refresh') {
-                $status = '🔄 REFRESHED ❌';
+                $status = '🔄 REFRESHED (❌ NOT UPDATE)';
             } else {
-                $status = $is_changed ? '✅ UPDATED (VALUE CHANGED)' : '🔄 UPDATED (SYNCED)';
+                $status = $is_changed ? '✅ UPDATED (💰 VALUE CHANGED)' : '🔄 UPDATED (SYNCED)';
             }
             printf("[%s] %s (%s) - Old: %.2f → New: %.2f [%s]\n", 
                 $log['timestamp'],

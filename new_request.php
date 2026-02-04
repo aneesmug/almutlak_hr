@@ -298,7 +298,7 @@ if(isset($_POST['submit'])){
             }
         </script>
 <script type="text/javascript">
-    const DEFAULT_VAT_RATE = 15;
+    const DEFAULT_VAT_RATE = <?= get_setting($conDB, 'vat') ?>;
     const DEFAULT_DISCOUNT = 0;
     const DEFAULT_QTY = 1;
     const DEFAULT_PRICE = 0;

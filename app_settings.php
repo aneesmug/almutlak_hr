@@ -6,10 +6,10 @@
     }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 <head>
     <meta charset="utf-8" />
-    <title><?=$site_title ?? 'Application Settings'; ?> - App Settings</title>
+    <title><?=$site_title ?? __('Application Settings'); ?> - <?= __('App Settings') ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -131,6 +131,12 @@
              z-index: 1050; /* Ensure dropdown appears above other content */
         }
     </style>
+    <?php if ($is_rtl): ?>
+        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+    <?php endif; ?>
+    <script>
+        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+    </script>
 </head>
 <body class="enlarged" data-keep-enlarged="true">
 
@@ -166,8 +172,8 @@
                     <div class="row">
                         <div class="col-12">
                             <div class="card-box">
-                                <h4 class="m-t-0 header-title">Application Settings</h4>
-                                <p class="text-muted m-b-30 font-14">Manage your application's configuration.</p>
+                                <h4 class="m-t-0 header-title"><?= __("application_settings") ?></h4>
+                                <p class="text-muted m-b-30 font-14"><?= __("manage_your_application_s_configuration") ?></p>
 
                                 <form id="settingsForm">
                                     <div class="row">
@@ -191,7 +197,7 @@
 
                                     <div class="form-group text-right m-t-20">
                                         <button type="submit" id="saveBtn" class="btn btn-primary waves-effect waves-light">
-                                            Save Changes
+                                            <?= __("save_changes") ?>
                                         </button>
                                     </div>
                                 </form>
@@ -230,6 +236,33 @@
         const settingsContainer = document.getElementById('settings-container');
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
+
+        /**
+         * Translate text using window.lang object (from PHP __() function)
+         */
+        function translateText(key) {
+            if (!key) return key;
+            // Try the key as-is first
+            if (window.lang && window.lang[key]) {
+                return window.lang[key];
+            }
+            // Try normalized version: remove HTML tags, special chars, replace spaces with underscores, lowercase
+            const normalizedKey = key
+                .replace(/<[^>]*>/g, '')           // Remove HTML tags like <br>, <small>, etc.
+                .replace(/[()[\]{}<%>,/]/g, '')    // Remove special characters: () [] {} < > % , /
+                .replace(/\s+/g, '_')              // Replace spaces with underscores
+                .toLowerCase();
+            
+            // Debug: Log for missing translations
+            if (window.lang && window.lang[normalizedKey]) {
+                return window.lang[normalizedKey];
+            } else if (key !== normalizedKey && normalizedKey.length > 0) {
+                console.warn(`Translation key not found: "${normalizedKey}" (original: "${key}")`);
+            }
+            
+            // Return the original key if not found
+            return key;
+        }
 
         /**
          * Safely evaluate mathematical expressions for settings like session timeout
@@ -291,28 +324,38 @@
             if (result.length === 1) return result[0];
             
             // Join with commas and 'and' before last item
-            return result.slice(0, -1).join(', ') + ' and ' + result[result.length - 1];
+            return result.slice(0, -1).join(', ') + ' and ' + result[result.length - 1]
         }
 
         function renderSettingsGroup(groupName) {
             let formHtml = '';
-            const settings = groupedSettings[groupName];
+            // Normalize group name to use underscores for comparison
+            const normalizedGroupName = groupName.replace(/ /g, '_');
+            // Try to get settings with original groupName first, then with underscores replaced
+            const displayGroupName = groupName.replace(/_/g, ' ');
+            const settings = groupedSettings[groupName] || groupedSettings[displayGroupName];
             
             if (!settings) {
-                 settingsContainer.innerHTML = '<p class="text-center text-danger">Group not found.</p>';
+                 settingsContainer.innerHTML = '<p class="text-center text-danger"><?= __('Group not found.') ?></p>';
                  return;
             }
 
             // Special handling for approval chain configuration
-            if (groupName === 'approval') {
+            if (normalizedGroupName === 'approval') {
                 renderApprovalChainSettings();
+                return;
+            }
+
+            // Special handling for job titles configuration
+            if (normalizedGroupName === 'job_titles') {
+                renderJobTitlesSettings();
                 return;
             }
 
             formHtml += `<div class="tab-pane active" id="group-${groupName}" role="tabpanel">`;
             settings.forEach(setting => {
                 const id = `setting-${setting.setting_name}`;
-                const label = setting.description;
+                const label = translateText(setting.description);
                 const isImagePath = setting.setting_name.includes('logo') || setting.setting_name.includes('favicon');
                 const isEmailList = setting.setting_name === 'traveling_company_email';
                 const isSessionTimeout = setting.setting_name === 'session_timeout';
@@ -326,7 +369,7 @@
                     formHtml += `<img id="preview-${setting.setting_name}" src="${setting.setting_value || 'assets/images/placeholder.png'}" alt="Preview" class="preview-image mr-3">`;
                     formHtml += `<div class="flex-grow-1">`;
                     formHtml += `<input type="file" id="${id}" name="${setting.setting_name}" accept="image/*" class="form-control-file">`;
-                    formHtml += `<small class="form-text text-muted">Current: ${setting.setting_value || 'Not set'}</small>`;
+                    formHtml += `<small class="form-text text-muted"><?= __('current') ?> ${setting.setting_value || '<?= __('not_set') ?>'}</small>`;
                     formHtml += `</div></div>`;
                 } else if (isEmailList) {
                     // Special handling for email list
@@ -361,14 +404,14 @@
                         });
                     }
                     formHtml += `</div>`;
-                    formHtml += `<button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-email-btn"><i class="mdi mdi-plus"></i> Add Email</button>`;
+                    formHtml += `<button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-email-btn"><i class="mdi mdi-plus"></i> <?= __('add_email') ?></button>`;
                     formHtml += `<input type="hidden" id="${id}" name="${setting.setting_name}" value="">`;
                 } else if (isSessionTimeout) {
                     formHtml += `<div>`;
-                    formHtml += `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control session-timeout-input" value="${setting.setting_value || ''}" placeholder="e.g., 3600 or 60*60*2">`;
-                    formHtml += `<small class="form-text text-muted">Enter time in seconds. You can use expressions like: 60*60*2 (2 hours), 60*60*24 (1 day), etc.</small>`;
+                    formHtml += `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control session-timeout-input" value="${setting.setting_value || ''}" placeholder="<?= __('e.g., 3600 or 60*60*2') ?>">`;
+                    formHtml += `<small class="form-text text-muted"><?= __('session_note') ?></small>`;
                     formHtml += `<div id="timeout-result-${setting.setting_name}" class="mt-2" style="display:none;">`;
-                    formHtml += `<small class="text-success"><strong>Evaluated as:</strong> <span class="timeout-seconds"></span> seconds</small>`;
+                    formHtml += `<small class="text-success"><strong><?= __('evaluated_as') ?>:</strong> <span class="timeout-seconds"></span> <?= __('seconds') ?></small>`;
                     formHtml += `</div>`;
                     formHtml += `</div>`;
                 } else {
@@ -436,15 +479,335 @@
             });
         }
 
+        function renderJobTitlesSettings() {
+            let formHtml = `<div class="tab-pane active" id="group-job" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0"><?= __('job_titles_management') ?></h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-job-title"><i class="mdi mdi-plus"></i> <?= __('add_new_job_title') ?></button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4"><?= __('manage_job_titles_in_english_and_arabic') ?></p>`;
+            
+            // Search field
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="job-search-input" class="form-control" placeholder="<?= __('search_job_titles_english_or_arabic') ?>" style="max-width: 400px;">`;
+            formHtml += `<small class="form-text text-muted mt-1"><?= __('search_by_job_title_in_english_or_arabic') ?></small>`;
+            formHtml += `</div>`;
+            
+            formHtml += `<div id="job-titles-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted">`;
+            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
+            formHtml += `<span class="ml-2"><?= __('loading') ?></span>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            settingsContainer.innerHTML = formHtml;
+
+            // Load job titles
+            loadJobTitles();
+
+            // Attach event listener for "Add Job Title" button
+            const btnAddJobTitle = document.getElementById('btn-add-job-title');
+            if (btnAddJobTitle) {
+                btnAddJobTitle.addEventListener('click', showAddJobTitleModal);
+            }
+            
+            // Attach event listener for search input
+            const searchInput = document.getElementById('job-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    filterJobTitles(this.value);
+                });
+            }
+        }
+
+        async function loadJobTitles() {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_job_titles' })
+                });
+
+                if (!response.ok) throw new Error('<?= __('Failed to load job titles') ?>');
+                const data = await response.json();
+
+                const container = document.getElementById('job-titles-container');
+                if (!data.success || !data.jobs || data.jobs.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> <?= __('No job titles configured yet.') ?></p>';
+                    return;
+                }
+
+                let jobsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th><?= __('job_title_english') ?></th><th><?= __('job_title_arabic') ?></th><th><?= __('actions') ?></th></tr></thead><tbody>';
+                data.jobs.forEach((job) => {
+                    jobsHtml += `
+                        <tr>
+                            <td><strong>${job.job || 'N/A'}</strong></td>
+                            <td><strong>${job.job_ar || 'N/A'}</strong></td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary edit-job-btn" data-job-id="${job.id}" title="<?= __('edit') ?>">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-job-btn" data-job-id="${job.id}" title="<?= __('delete') ?>">
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                jobsHtml += '</tbody></table></div>';
+                container.innerHTML = jobsHtml;
+
+                // Attach event listeners
+                container.querySelectorAll('.edit-job-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        showEditJobTitleModal(this.dataset.jobId);
+                    });
+                });
+
+                container.querySelectorAll('.delete-job-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        deleteJobTitle(this.dataset.jobId);
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error loading job titles:', error);
+                const container = document.getElementById('job-titles-container');
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> <?= __('Error:') ?> ${error.message}</p>`;
+            }
+        }
+
+        function showAddJobTitleModal() {
+            Swal.fire({
+                icon: 'info',
+                title: '<?= __('add_new_job_title') ?>',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="job-title-en"><?= __('job_title_english') ?></label>
+                        <input type="text" id="job-title-en" class="form-control" placeholder="<?= __('enter_job_title_in_english') ?>">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="job-title-ar"><?= __('job_title_arabic') ?></label>
+                        <input type="text" id="job-title-ar" class="form-control" placeholder="<?= __('enter_job_title_in_arabic') ?>">
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '<?= __('add') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
+                preConfirm: () => {
+                    const titleEn = document.getElementById('job-title-en').value.trim();
+                    const titleAr = document.getElementById('job-title-ar').value.trim();
+                    
+                    if (!titleEn) {
+                        Swal.showValidationMessage('<?= __('job_title_in_english_is_required') ?>');
+                        return false;
+                    }
+                    if (!titleAr) {
+                        Swal.showValidationMessage('<?= __('job_title_in_arabic_is_required') ?>');
+                        return false;
+                    }
+                    return { titleEn, titleAr };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    await addJobTitle(result.value.titleEn, result.value.titleAr);
+                }
+            });
+        }
+
+        async function addJobTitle(titleEn, titleAr) {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'add_job_title',
+                        job_title_en: titleEn,
+                        job_title_ar: titleAr
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_add_job_title') ?>');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('<?= __('added') ?>', '<?= __('job_title_added_successfully') ?>', 'success');
+                    loadJobTitles(); // Reload the list
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_add_job_title') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function showEditJobTitleModal(jobId) {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'get_job_title',
+                        job_id: jobId
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_load_job_title') ?>');
+                const data = await response.json();
+
+                if (!data.success || !data.job) {
+                    Swal.fire('<?= __('error') ?>', '<?= __('job_title_not_found') ?>', 'error');
+                    return;
+                }
+
+                const job = data.job;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '<?= __('edit_job_title') ?>',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-job-title-en"><?= __('job_title_english') ?></label>
+                            <input type="text" id="edit-job-title-en" class="form-control" value="${job.job || ''}" placeholder="<?= __('enter_job_title_in_english') ?>">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-job-title-ar"><?= __('job_title_arabic') ?></label>
+                            <input type="text" id="edit-job-title-ar" class="form-control" value="${job.job_ar || ''}" placeholder="<?= __('enter_job_title_in_arabic') ?>">
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '<?= __('update') ?>',
+                    cancelButtonText: '<?= __('cancel') ?>',
+                    preConfirm: () => {
+                        const titleEn = document.getElementById('edit-job-title-en').value.trim();
+                        const titleAr = document.getElementById('edit-job-title-ar').value.trim();
+                        
+                        if (!titleEn) {
+                            Swal.showValidationMessage('<?= __('job_title_in_english_is_required') ?>');
+                            return false;
+                        }
+                        if (!titleAr) {
+                            Swal.showValidationMessage('<?= __('job_title_in_arabic_is_required') ?>');
+                            return false;
+                        }
+                        return { titleEn, titleAr };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                    await updateJobTitle(jobId, result.value.titleEn, result.value.titleAr);
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function updateJobTitle(jobId, titleEn, titleAr) {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'update_job_title',
+                        job_id: jobId,
+                        job_title_en: titleEn,
+                        job_title_ar: titleAr
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_update_job_title') ?>');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('<?= __('updated') ?>', '<?= __('job_title_updated_successfully') ?>', 'success');
+                    loadJobTitles(); // Reload the list
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_update_job_title') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function deleteJobTitle(jobId) {
+            const result = await Swal.fire({
+                title: '<?= __('delete_job_title') ?>',
+                text: '<?= __('this_action_cannot_be_undone') ?>',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '<?= __('yes_delete_it') ?>',
+                cancelButtonText: '<?= __('cancel') ?>'
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'delete_job_title',
+                        job_id: jobId
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_delete_job_title') ?>');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('<?= __('deleted') ?>', '<?= __('job_title_deleted_successfully') ?>', 'success');
+                    loadJobTitles(); // Reload the list
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_delete_job_title') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        function filterJobTitles(searchTerm) {
+            const rows = document.querySelectorAll('#job-titles-container tbody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const jobEn = row.cells[0].textContent.toLowerCase();
+                const jobAr = row.cells[1].textContent.toLowerCase();
+                const searchLower = searchTerm.toLowerCase();
+
+                if (jobEn.includes(searchLower) || jobAr.includes(searchLower)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // Show "no results" message if nothing matches
+            const container = document.getElementById('job-titles-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+            
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> <?= __('no_job_titles_match_your_search') ?>`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
         function renderApprovalChainSettings() {
-            const defaultRequestTypes = [
-                { id: 'vacation_request', name: 'Vacation Request', description: 'Annual vacation and fly vacation approval chain' },
-                { id: 'excuse_leave', name: 'Excuse Leave', description: 'Sick leave, exam leave, and other excuse types' },
-                { id: 'loan_request', name: 'Loan Request', description: 'Employee loan application approval chain' },
-                { id: 'settlement', name: 'Settlement/Payment', description: 'Settlement/Payment processing approval chain (after request final approval)' },
-                { id: 'resignation_request', name: 'Resignation Request', description: 'Employee resignation approval chain' },
-                { id: 'rejoin_request', name: 'Rejoin Request', description: 'Employee rejoin after resignation approval chain' }
-            ];
+            //* const defaultRequestTypes = [
+            //*     { id: 'vacation_request', name: '<?//= __('vacation_request') ?>', description: '<?//= __('annual_vacation_and_fly_vacation_approval_chain') ?>' },
+            //*     { id: 'excuse_leave', name: '<?//= __('excuse_leave') ?>', description: '<?//= __('sick_leave_exam_leave_and_other_excuse_types') ?>' },
+            //*     { id: 'loan_request', name: '<?//= __('loan_request') ?>', description: '<?//= __('employee_loan_application_approval_chain') ?>' },
+            //*     { id: 'settlement', name: '<?//= __('settlement_payment') ?>', description: '<?//= __('settlement_payment_processing_approval_chain_after_request_final_approval') ?>' },
+            //*     { id: 'resignation_request', name: '<?//= __('resignation_request') ?>', description: '<?//= __('employee_resignation_approval_chain') ?>' },
+            //*     { id: 'rejoin_request', name: '<?//= __('rejoin_request') ?>', description: '<?//= __('employee_rejoin_after_resignation_approval_chain') ?>' }
+            //* ];
 
             // Fetch all request types including custom ones
             fetch('./includes/approval_chain_handler.php', {
@@ -455,7 +818,7 @@
             .then(response => response.json())
             .then(data => {
                 const requestTypes = data.success && Array.isArray(data.types) ? data.types : defaultRequestTypes;
-                
+                //* const requestTypes = data.success && Array.isArray(data.types) ? data.types : defaultRequestTypes;
                 // Filter out request types you want to skip from the UI
                 const skipRequestTypes = ['smart_request', 'general_request']; // Add any request types to skip
                 const filteredTypes = requestTypes.filter(type => !skipRequestTypes.includes(type.id));
@@ -464,38 +827,38 @@
             })
             .catch(error => {
                 console.error('Error loading request types:', error);
-                renderApprovalChainUI(defaultRequestTypes);
+                //* renderApprovalChainUI(defaultRequestTypes);
             });
         }
 
         function renderApprovalChainUI(requestTypes) {
             let formHtml = `<div class="tab-pane active" id="group-approval" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0">Approval Chain Configuration</h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-request-type"><i class="mdi mdi-plus"></i> Add New Request Type</button>`;
+            formHtml += `<h5 class="mb-0"><?= __('approval_chain_configuration') ?></h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-request-type"><i class="mdi mdi-plus"></i> <?= __('add_new_request_type') ?></button>`;
             formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4">Configure the approval workflow steps for each request type. Drag to reorder approval levels.</p>`;
+            formHtml += `<p class="text-muted mb-4"><?= __('configure_approval_workflow') ?></p>`;
 
             requestTypes.forEach(requestType => {
                 formHtml += `
                     <div class="card mb-3">
                         <div class="card-header bg-light">
                             <h6 class="mb-0">
-                                <i class="mdi mdi-check-circle-outline mr-2"></i>${requestType.name}
-                                <small class="text-muted ml-2">${requestType.description}</small>
+                                <i class="mdi mdi-check-circle-outline mr-2"></i>${translateText(requestType.name)}
+                                <small class="text-muted ml-2">${translateText(requestType.description)}</small>
                             </h6>
                         </div>
                         <div class="card-body">
                             <div class="form-group">
-                                <label>Approval Steps (in order)</label>
+                                <label><?= __('approval_steps_in_order') ?></label>
                                 <div id="approval-chain-${requestType.id}" class="approval-chain-container border rounded p-3 bg-light">
                                     <div class="text-center text-muted">
                                         <div class="spinner-border spinner-border-sm" role="status"></div>
-                                        <span class="ml-2">Loading...</span>
+                                        <span class="ml-2"><?= __('loading') ?></span>
                                     </div>
                                 </div>
                                 <button type="button" class="btn btn-sm btn-outline-primary mt-2 add-approver-btn" data-request-type="${requestType.id}">
-                                    <i class="mdi mdi-plus"></i> Add Approver
+                                    <i class="mdi mdi-plus"></i> <?= __('add_approver') ?>
                                 </button>
                             </div>
                         </div>
@@ -537,12 +900,12 @@
                     })
                 });
 
-                if (!response.ok) throw new Error('Failed to load approval chain');
+                if (!response.ok) throw new Error('<?= __('failed_to_load_approval_chain') ?>');
                 const data = await response.json();
 
                 const container = document.getElementById(`approval-chain-${requestType}`);
                 if (!data.success || !data.chain || data.chain.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> No approval steps configured yet.</p>';
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> <?= __('no_approval_steps_configured_yet') ?></p>';
                     return;
                 }
 
@@ -551,8 +914,8 @@
                     chainHtml += `
                         <div class="approval-step d-flex align-items-center justify-content-between p-2 mb-2 bg-white border rounded" data-level="${step.level}" data-role="${step.user_type}">
                             <div class="d-flex align-items-center">
-                                <span class="badge badge-primary mr-2">Level ${step.level}</span>
-                                <span class="font-weight-bold">${step.role_label || step.user_type}</span>
+                                <span class="badge badge-primary mr-2"><?= __('level') ?> ${step.level}</span>
+                                <span class="font-weight-bold">${translateText(step.role_label)}</span>
                             </div>
                             <button type="button" class="btn btn-sm btn-outline-danger remove-approver-btn" data-request-type="${requestType}" data-level="${step.level}">
                                 <i class="mdi mdi-delete"></i>
@@ -573,49 +936,49 @@
             } catch (error) {
                 console.error('Error loading approval chain:', error);
                 const container = document.getElementById(`approval-chain-${requestType}`);
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> Error: ${error.message}</p>`;
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> <?= __('Error:') ?> ${error.message}</p>`;
             }
         }
 
         function showAddApproverModal(requestType) {
             Swal.fire({
                 icon: 'info',
-                title: 'Add Approver',
+                title: '<?= __('add_approver') ?>',
                 html: `
                     <div class="form-group text-left">
-                        <label for="approver-role">Select Approver Role</label>
+                        <label for="approver-role"><?= __('select_approver_role') ?></label>
                         <select id="approver-role" class="form-control">
-                            <option value="">-- Select Role --</option>
-                            <option value="administrator">Administrator</option>
-                            <option value="gm">General Manager (GM)</option>
-                            <option value="hr_senior_bp">HR Senior BP</option>
-                            <option value="hr_operations">HR Operations</option>
-                            <option value="hr_supervisor">HR Supervisor</option>
-                            <option value="hr_recruitment">HR Recruitment</option>
-                            <option value="hr_payroll">HR Payroll</option>
-                            <option value="hr">HR Manager</option>
-                            <option value="finance_officer">Finance Officer</option>
-                            <option value="finance">Finance Manager</option>
-                            <option value="auditor">Auditor</option>
-                            <option value="gr_officer">GR Officer</option>
-                            <option value="it">IT Manager</option>
-                            <option value="dept_user">Department User</option>
-                            <option value="assistant">Assistant</option>
-                            <option value="direct_supervisor">Direct Supervisor</option>
-                            <option value="dept_manager">Department Manager</option>
-                            <option value="admin_manager">Admin Manager</option>
-                            <option value="transportation_manager">Transportation Manager</option>
+                            <option value="">-- <?= __('select_role') ?> --</option>
+                            <option value="administrator"><?= __('administrator') ?></option>
+                            <option value="gm"><?= __('general_manager_gm') ?></option>
+                            <option value="hr_senior_bp"><?= __('hr_senior_bp') ?></option>
+                            <option value="hr_operations"><?= __('hr_operations') ?></option>
+                            <option value="hr_supervisor"><?= __('hr_supervisor') ?></option>
+                            <option value="hr_recruitment"><?= __('hr_recruitment') ?></option>
+                            <option value="hr_payroll"><?= __('hr_payroll') ?></option>
+                            <option value="hr"><?= __('hr_manager') ?></option>
+                            <option value="finance_officer"><?= __('finance_officer') ?></option>
+                            <option value="finance"><?= __('finance_manager') ?></option>
+                            <option value="auditor"><?= __('auditor') ?></option>
+                            <option value="gr_officer"><?= __('gr_officer') ?></option>
+                            <option value="it"><?= __('it_manager') ?></option>
+                            <option value="dept_user"><?= __('department_user') ?></option>
+                            <option value="assistant"><?= __('assistant') ?></option>
+                            <option value="direct_supervisor"><?= __('direct_supervisor') ?></option>
+                            <option value="dept_manager"><?= __('department_manager') ?></option>
+                            <option value="admin_manager"><?= __('admin_manager') ?></option>
+                            <option value="transportation_manager"><?= __('transportation_manager') ?></option>
                         </select>
                     </div>
                 `,
                 allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: 'Add',
-                cancelButtonText: 'Cancel',
+                confirmButtonText: '<?= __('add') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
                 preConfirm: () => {
                     const role = document.getElementById('approver-role').value;
                     if (!role) {
-                        Swal.showValidationMessage('Please select a role');
+                        Swal.showValidationMessage('<?= __('please_select_a_role') ?>');
                         return false;
                     }
                     return { role };
@@ -639,28 +1002,28 @@
                     })
                 });
 
-                if (!response.ok) throw new Error('Failed to add approval step');
+                if (!response.ok) throw new Error('<?= __('failed_to_add_approval_step') ?>');
                 const data = await response.json();
 
                 if (data.success) {
-                    Swal.fire('Added!', 'Approval step added successfully', 'success');
+                    Swal.fire('<?= __('added') ?>', '<?= __('approval_step_added_successfully') ?>', 'success');
                     loadApprovalChain(requestType); // Reload the chain
                 } else {
-                    throw new Error(data.message || 'Failed to add approval step');
+                    throw new Error(data.message || '<?= __('failed_to_add_approval_step') ?>');
                 }
             } catch (error) {
-                Swal.fire('Error!', error.message, 'error');
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
             }
         }
 
         async function removeApprovalStep(requestType, level) {
             const result = await Swal.fire({
-                title: 'Remove Approval Step?',
-                text: 'This will remove this approval level from the chain',
+                title: '<?= __('remove_approval_step') ?>',
+                text: '<?= __('this_will_remove_this_approval_level_from_the_chain') ?>',
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Yes, remove it',
-                cancelButtonText: 'Cancel'
+                confirmButtonText: '<?= __('yes_remove_it') ?>',
+                cancelButtonText: '<?= __('cancel') ?>'
             });
 
             if (!result.isConfirmed) return;
@@ -676,48 +1039,48 @@
                     })
                 });
 
-                if (!response.ok) throw new Error('Failed to remove approval step');
+                if (!response.ok) throw new Error('<?= __('failed_to_remove_approval_step') ?>');
                 const data = await response.json();
 
                 if (data.success) {
-                    Swal.fire('Removed!', 'Approval step removed successfully', 'success');
+                    Swal.fire('<?= __('removed') ?>', '<?= __('approval_step_removed_successfully') ?>', 'success');
                     loadApprovalChain(requestType); // Reload the chain
                 } else {
-                    throw new Error(data.message || 'Failed to remove approval step');
+                    throw new Error(data.message || '<?= __('failed_to_remove_approval_step') ?>');
                 }
             } catch (error) {
-                Swal.fire('Error!', error.message, 'error');
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
             }
         }
 
         async function showAddNewRequestTypeModal() {
             const result = await Swal.fire({
                 icon: 'info',
-                title: 'Add New Request Type',
+                title: '<?= __('add_new_request_type') ?>',
                 html: `
                     <div class="text-left">
                         <div class="form-group">
-                            <label for="new-request-type-id">Request Type ID <small class="text-danger">(lowercase, underscores)</small></label>
-                            <input type="text" id="new-request-type-id" class="form-control" placeholder="e.g., travel_request, business_trip" pattern="[a-z_]+" title="Use lowercase letters and underscores only">
+                            <label for="new-request-type-id"><?= __('request_type_id') ?> <small class="text-danger">(<?= __('lowercase, underscores') ?>)</small></label>
+                            <input type="text" id="new-request-type-id" class="form-control" placeholder="<?= __('e.g., travel_request, business_trip') ?>" pattern="[a-z_]+" title="<?= __('use_lowercase_letters_and_underscores_only') ?>">
                         </div>
                         <div class="form-group">
-                            <label for="new-request-type-name">Request Type Name</label>
-                            <input type="text" id="new-request-type-name" class="form-control" placeholder="e.g., Travel Request">
+                            <label for="new-request-type-name"><?= __('request_type_name') ?></label>
+                            <input type="text" id="new-request-type-name" class="form-control" placeholder="<?= __('e.g., Travel Request') ?>">
                         </div>
                         <div class="form-group">
-                            <label for="new-main-table-name">Main Table Name <small class="text-muted">(optional)</small></label>
-                            <input type="text" id="new-main-table-name" class="form-control" placeholder="e.g., travel_requests">
+                            <label for="new-main-table-name"><?= __('main_table_name') ?> <small class="text-muted">(<?= __('optional') ?>)</small></label>
+                            <input type="text" id="new-main-table-name" class="form-control" placeholder="<?= __('e.g., travel_requests') ?>">
                         </div>
                         <div class="form-group">
-                            <label for="new-request-type-description">Description</label>
-                            <textarea id="new-request-type-description" class="form-control" rows="2" placeholder="Brief description of this request type"></textarea>
+                            <label for="new-request-type-description"><?= __('description') ?></label>
+                            <textarea id="new-request-type-description" class="form-control" rows="2" placeholder="<?= __('brief_description_of_this_request_type') ?>"></textarea>
                         </div>
                     </div>
                 `,
                 allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: 'Create',
-                cancelButtonText: 'Cancel',
+                confirmButtonText: '<?= __('create') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
                 preConfirm: () => {
                     const id = document.getElementById('new-request-type-id').value.trim().toLowerCase();
                     const name = document.getElementById('new-request-type-name').value.trim();
@@ -725,15 +1088,15 @@
                     const description = document.getElementById('new-request-type-description').value.trim();
 
                     if (!id) {
-                        Swal.showValidationMessage('Request Type ID is required');
+                        Swal.showValidationMessage('<?= __('request_type_id_is_required') ?>');
                         return false;
                     }
                     if (!name) {
-                        Swal.showValidationMessage('Request Type Name is required');
+                        Swal.showValidationMessage('<?= __('request_type_name_is_required') ?>');
                         return false;
                     }
                     if (!/^[a-z_]+$/.test(id)) {
-                        Swal.showValidationMessage('Request Type ID must contain only lowercase letters and underscores');
+                        Swal.showValidationMessage('<?= __('request_type_id_must_contain_only_lowercase_letters_and_underscores') ?>');
                         return false;
                     }
                     return { id, name, mainTable, description };
@@ -763,15 +1126,15 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    Swal.fire('Created!', `New request type "${requestTypeName}" has been added successfully. You can now configure its approval chain.`, 'success')
+                    Swal.fire('<?= __('Created!') ?>', `<?= __('New request type') ?> "${requestTypeName}" <?= __('has been added successfully. You can now configure its approval chain.') ?>`, 'success')
                         .then(() => {
                             renderApprovalChainSettings(); // Reload the approval chain settings
                         });
                 } else {
-                    throw new Error(data.message || 'Failed to create request type');
+                    throw new Error(data.message || '<?= __('Failed to create request type') ?>');
                 }
             } catch (error) {
-                Swal.fire('Error!', error.message, 'error');
+                Swal.fire('<?= __('Error!') ?>', error.message, 'error');
             }
         }
 
@@ -833,7 +1196,7 @@
                         this.closest('.email-item').remove();
                         updateEmailListHiddenField();
                     } else {
-                        Swal.fire('Notice', 'At least one email field must remain', 'info');
+                        Swal.fire('<?= __('Notice') ?>', '<?= __('At least one email field must remain') ?>', 'info');
                     }
                 });
             });
@@ -864,10 +1227,10 @@
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ action: 'get_settings' })
                 });
-                if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                if (!response.ok) throw new Error(`<?= __('Network response was not ok:') ?> ${response.statusText}`);
                 
                 const data = await response.json();
-                if (!data.success) throw new Error(data.message || 'Failed to retrieve settings.');
+                if (!data.success) throw new Error(data.message || '<?= __('Failed to retrieve settings.') ?>');
 
                 appSettings = data.settings;
                 groupedSettings = appSettings.reduce((acc, setting) => {
@@ -877,17 +1240,27 @@
                     return acc;
                 }, {});
 
+                // Ensure 'job' and 'approval' tabs always exist
+                if (!groupedSettings['job titles']) {
+                    groupedSettings['job titles'] = [];
+                }
+                if (!groupedSettings['approval']) {
+                    groupedSettings['approval'] = [];
+                }
+
                 // Restore last active group from localStorage if available
                 const savedGroup = localStorage.getItem('app_settings_active_group');
-                const groups = Object.keys(groupedSettings);
+                const groups = Object.keys(groupedSettings).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
                 groups.forEach((group) => {
                     const isActive = (savedGroup === group);
+                    const displayGroup = group.replace(/_/g, ' '); // Display with spaces instead of underscores
+                    const translatedGroup = translateText(group); // Translate the group name
                     navHtml += `
                         <li class="nav-item">
                             <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
-                                <span class="text-capitalize">${group}</span>
+                                <span class="text-capitalize">${translatedGroup}</span>
                             </a>
                         </li>
                     `;
@@ -899,7 +1272,7 @@
                 if(initialGroup) {
                     renderSettingsGroup(initialGroup);
                 } else {
-                    settingsContainer.innerHTML = '<p class="text-center">No settings found.</p>';
+                    settingsContainer.innerHTML = '<p class="text-center"><?= __('No settings found.') ?></p>';
                 }
 
                 // Click handlers: render and persist active group, update nav active class
@@ -917,7 +1290,7 @@
 
             } catch (error) {
                 settingsContainer.innerHTML = `<p class="text-danger text-center">${error.message}</p>`;
-                Swal.fire('Error!', `Could not load settings: ${error.message}`, 'error');
+                Swal.fire('<?= __('Error!') ?>', `<?= __('Could not load settings:') ?> ${error.message}`, 'error');
             }
         }
 
@@ -937,7 +1310,7 @@
             });
             
             if (hasInvalidEmail) {
-                Swal.fire('Validation Error', 'Please enter valid email addresses', 'error');
+                Swal.fire('<?= __('Validation Error') ?>', '<?= __('Please enter valid email addresses') ?>', 'error');
                 return;
             }
             
@@ -965,7 +1338,7 @@
                             if (evaluated !== null) {
                                 formData.append(setting.setting_name, evaluated);
                             } else {
-                                throw new Error(`Invalid session timeout expression: "${value}". Please use only numbers and operators (+, -, *, /, parentheses).`);
+                                throw new Error(`<?= __('Invalid session timeout expression:') ?> "${value}". <?= __('Please use only numbers and operators (+, -, *, /, parentheses).') ?>`);
                             }
                         }
                     } else {
@@ -976,8 +1349,8 @@
             });
 
             Swal.fire({
-                title: 'Saving...',
-                text: 'Your settings are being updated.',
+                title: '<?= __('saving') ?>',
+                text: '<?= __('your_settings_are_being_updated') ?>',
                 allowOutsideClick: false,
                 onBeforeOpen: () => { Swal.showLoading(); }
             });
@@ -993,15 +1366,20 @@
                 Swal.close();
 
                 if (result.success) {
-                    Swal.fire('Saved!', 'Your settings have been updated successfully.', 'success')
-                        .then(() => window.location.reload());
+                    Swal.fire({
+                        title: '<?= __('saved') ?>',
+                        text: '<?= __('your_settings_have_been_updated_successfully') ?>',
+                        icon: 'success',
+                        confirmButtonText: '<?= __('ok') ?>',
+                        allowOutsideClick: false
+                    }).then(() => window.location.reload());
                 } else {
-                    Swal.fire('Error!', result.message || 'Could not save settings.', 'error');
+                    Swal.fire('<?= __('error') ?>', result.message || '<?= __('could_not_save_settings') ?>', 'error');
                 }
 
             } catch (error) {
                 Swal.close();
-                Swal.fire('Request Failed!', `An error occurred: ${error.message}`, 'error');
+                Swal.fire('<?= __('request_failed') ?>', `<?= __('an_error_occurred') ?> ${error.message}`, 'error');
             }
         });
 

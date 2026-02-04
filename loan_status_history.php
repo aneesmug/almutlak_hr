@@ -375,7 +375,7 @@ if (!empty($loan['avatar'])) {
                         }
                     ?>
                     <div class="timeline-item <?= $item_class ?>">
-                        <div class="timeline-marker"><i class="fas <?= $icon ?>"></i></div>
+                        <div class="timeline-marker" style="<?= ($is_rtl ?? false) ? 'right' : 'left' ?> : -11px !important;"><i class="fas <?= $icon ?>"></i></div>
                         <div class="timeline-content">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="status-badge bg-<?= $badge ?> text-white"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></span>

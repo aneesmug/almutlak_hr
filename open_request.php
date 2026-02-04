@@ -1080,15 +1080,15 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                         $show_assign_payer_box = false; // For Finance Manager to assign
                                                         $show_process_payment_button = false; // For assigned payer
 
-                                        if ($current_status_get == "draft" && $empid == $emp_id_get) {
-                                            $show_submit_button = true;
-                                        } elseif ($current_status_get == 'pending_approval' && $empid == $current_pending_approver_id) {
-                                            $show_action_box = true;
-                                        } elseif ($current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2 && !$payable_by_emp_id_get) { // Only Finance Manager can assign
-                                            $show_assign_payer_box = true;
-                                        } elseif (($current_status_get == 'approved' || $current_status_get == 'pending_payment') && $empid == $payable_by_emp_id_get) { // Only assigned user can pay
-                                            $show_process_payment_button = true;
-                                        }                                                        // This block is for creators to submit their draft and define the approval chain
+                                                        if ($current_status_get == "draft" && $empid == $emp_id_get) {
+                                                            $show_submit_button = true;
+                                                        } elseif ($current_status_get == 'pending_approval' && $empid == $current_pending_approver_id) {
+                                                            $show_action_box = true;
+                                                        } elseif ($current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2 && !$payable_by_emp_id_get) { // Only Finance Manager can assign
+                                                            $show_assign_payer_box = true;
+                                                        } elseif (($current_status_get == 'approved' || $current_status_get == 'pending_payment') && $empid == $payable_by_emp_id_get) { // Only assigned user can pay
+                                                            $show_process_payment_button = true;
+                                                        }                                                        // This block is for creators to submit their draft and define the approval chain
                                                         if ($show_submit_button): ?>
 
                                                             <!-- NEW DYNAMIC APPROVER UI -->
@@ -1760,7 +1760,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
             var i_item_name = $(this).data('i_item_name') || '';
             var i_quantity = $(this).data('i_quantity') || 1;
             var i_product_price = $(this).data('i_product_price') || 0;
-            var i_vat_rate = $(this).data('i_vat_rate') || 15; // Default VAT rate
+            var i_vat_rate = $(this).data('i_vat_rate') || <?= get_setting($conDB, 'vat') ?>; // Default VAT rate
             var i_idiscount = $(this).data('i_idiscount') || 0;
             var i_itmvalue = $(this).data('i_itmvalue') || 0;
             var i_vat_val = $(this).data('i_vat_val') || 0;
@@ -1833,7 +1833,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                     });
 
                     // Define VAT rate globally or fetch dynamically if needed
-                    const DEFAULT_VAT_RATE = 15;
+                    const DEFAULT_VAT_RATE = <?= get_setting($conDB, 'vat') ?>;
 
                      function calculateTotals() {
                         var qty = parseFloat($('.quantity').val()) || 0; // Use class selector inside modal
@@ -1970,7 +1970,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
 
         function request_line_HTML() {
              // Define VAT rate globally or fetch dynamically if needed
-             const DEFAULT_VAT_RATE = 15;
+             const DEFAULT_VAT_RATE = <?= get_setting($conDB, 'vat') ?>;
              // Added required and parsley attributes, min="0" for numbers
             var strView =
                 `<form id="submitEditLineForm" data-parsley-validate>

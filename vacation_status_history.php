@@ -236,7 +236,7 @@ if ($vacation['fly_type'] === 'annual') {
         .timeline-item { position: relative; padding-left: 50px; margin-bottom: 20px; }
         .timeline-item:last-child { margin-bottom: 0; }
         .timeline-marker { 
-            position: absolute; left: 8px; top: 4px; width: 24px; height: 24px; 
+            position: absolute; left: -11px; top: 15px; width: 24px; height: 24px; 
             border-radius: 50%; background: #fff; border: 2px solid #adb5bd; 
             z-index: 1; display:flex; align-items:center; justify-content:center; 
             font-size: 10px; color: #adb5bd; transition: all 0.3s ease;
@@ -563,7 +563,7 @@ if ($vacation['fly_type'] === 'annual') {
                         }
                     ?>
                     <div class="timeline-item <?= $item_class ?>">
-                        <div class="timeline-marker"><i class="fas <?= $icon ?>"></i></div>
+                        <div class="timeline-marker" style="<?= ($is_rtl ?? false) ? 'right' : 'left' ?> : -11px !important;"><i class="fas <?= $icon ?>"></i></div>
                         <div class="timeline-content">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="status-badge bg-<?= $badge ?> text-white"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
