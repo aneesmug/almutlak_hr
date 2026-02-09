@@ -29,11 +29,21 @@ if (mysqli_num_rows($query) == 1) {
 
 		// UNIFIED ACCESS CONTROL - Use centralized function only
 		// This function checks all permissions: admin, HR, IT, department manager, direct supervisor, self
+		
+		// DEBUG: Log accessible departments
+		$accessible_depts = getAccessibleDepartments(true);
+		error_log("VIEW_EMPLOYEE DEBUG: User accessible_departments = " . json_encode($accessible_depts));
+		error_log("VIEW_EMPLOYEE DEBUG: Employee dept = " . ($emprow['dept'] ?? 'NULL'));
+		error_log("VIEW_EMPLOYEE DEBUG: Employee comp_no = " . ($emprow['comp_no'] ?? 'NULL'));
+		error_log("VIEW_EMPLOYEE DEBUG: User dept = " . $user_dept);
+		error_log("VIEW_EMPLOYEE DEBUG: User empid = " . $empid);
+		
 		$user_data = [
 			'emp_id' => $_SESSION['auth_user']['emp_id'] ?? $empid,
 			'dept' => $_SESSION['auth_user']['dept'] ?? $user_dept,
 			'comp_no' => $_SESSION['auth_user']['comp_no'] ?? 1,
-			'user_type' => $user_type
+			'user_type' => $user_type,
+			'accessible_departments' => $accessible_depts
 		];
 		
 		$employee_data = [

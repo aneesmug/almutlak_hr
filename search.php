@@ -55,39 +55,25 @@ $params = [];
 $types = "";
 
 if (strlen($search_term) > 1) {
-    $search_exploded = explode(" ", $search_term);
-    $construct_parts = [];
-    foreach ($search_exploded as $search_each) {
-        $construct_parts[] = "(`name` LIKE ? OR `iqama` LIKE ? OR `mobile` LIKE ? OR `emp_id` LIKE ?)";
-        $search_param = "%{$search_each}%";
-        array_push($params, $search_param, $search_param, $search_param, $search_param);
-        $types .= "ssss";
-    }
-    $construct = implode(" AND ", $construct_parts);
+	$search_exploded = explode(" ", $search_term);
+	$construct_parts = [];
+	foreach ($search_exploded as $search_each) {
+		$construct_parts[] = "(`name` LIKE ? OR `iqama` LIKE ? OR `mobile` LIKE ? OR `emp_id` LIKE ?)";
+		$search_param = "%{$search_each}%";
+		array_push($params, $search_param, $search_param, $search_param, $search_param);
+		$types .= "ssss";
+	}
+	$construct = implode(" AND ", $construct_parts);
 
-    // DEPARTMENT-BASED ACCESS CONTROL
-    // Only HR, system admins, and administrators can see all employees
-    $can_see_all_employees = (
-        $is_system_admin || 
-        $user_type == 'administrator' ||
-        $user_dept == 5 || // HR Department
-        $isHR || 
-        $isDeptHr ||
-		$user_dept == 1 // Administration Department
-    );
-    
-    if (!$can_see_all_employees && isset($user_dept)) {
-        $construct .= " AND `dept` = ?";
-        $params[] = $user_dept;
-        $types .= "i";
-    }
-    
-    // COMPANY-BASED ACCESS CONTROL
-    // Restrict to accessible companies
-    $company_filter = getCompanyFilterSQL('comp_no', false);
-    if (!empty($company_filter)) {
-        $construct .= $company_filter;
-    }
+	// --- NEW ACCESS CONTROL: Always apply company and department filters ---
+	$company_filter = getCompanyFilterSQL('comp_no', false);
+	if (!empty($company_filter)) {
+		$construct .= $company_filter;
+	}
+	$department_filter = getDepartmentFilterSQL('dept', false);
+	if (!empty($department_filter)) {
+		$construct .= $department_filter;
+	}
 }
 
 if (!empty($construct)) {

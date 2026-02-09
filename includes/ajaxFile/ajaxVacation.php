@@ -83,8 +83,9 @@ $ajaxType = $_POST['ajaxType'] ?? null; // Use null coalescing
 if ($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('comp_no', true);
+    $department_filter = getDepartmentFilterSQL('dept', true);
     
-    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
+    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter.$department_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
     $name = [];
     while ($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -98,13 +99,14 @@ if ($ajaxType == 'emp_search') {
 } elseif ($ajaxType == 'emp_data') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`emp_id`=" . (int)$_POST['empid'] . " ".$company_filter); // Cast to int
+    WHERE `e`.`status`=1 AND `e`.`emp_id`=" . (int)$_POST['empid'] . " ".$company_filter.$department_filter); // Cast to int
     $name = [];
     while ($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -2802,10 +2804,12 @@ elseif ($ajaxType == 'updateVacationPayments') {
                         
                         // Set employees.fly = 1 except for Encashment type and Excuse Leave types
                         // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
+                        // CRITICAL: Do NOT update fly=1 for Encashed vacation type
                         $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
                         // Define excuse leave types that should NOT update fly status
                         $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
                         
+                        // Explicitly check vac_type != 'encashed' to prevent fly status update
                         if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types) && !empty($vac_data['emp_id'])) {
                             $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
                             if ($stmtFly) {
@@ -3016,11 +3020,13 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
 
                     // If completed in any branch, set employees.fly = 1 unless Encashment or Excuse Leave
                     // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
+                    // CRITICAL: Do NOT update fly=1 for Encashed vacation type
                     if ($did_complete && !empty($vacation_row['emp_id'])) {
                         $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
                         // Define excuse leave types that should NOT update fly status
                         $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
                         
+                        // Explicitly check vac_type != 'encashed' to prevent fly status update
                         if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
                             $stmtFly = mysqli_prepare($conDB, "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?");
                             if ($stmtFly) {

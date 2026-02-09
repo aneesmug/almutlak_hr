@@ -567,7 +567,7 @@ if (mysqli_num_rows($query) == 1) {
 											$query_cp = mysqli_query($conDB, "SELECT * FROM `contract_period` ORDER BY `period` REGEXP '^[^A-Za-z]' ASC, period");
 											while ($rec_con = mysqli_fetch_assoc($query_cp)) {
 											?>
-												<option value="<?= $rec_con["id"]; ?>" <?= ($rec_con["id"] == $emprow['vac_period']) ? "selected=selected" : "" ?>><?= $rec_con["period"]; ?></option>
+												<option value="<?= $rec_con["id"]; ?>" <?= ($rec_con["id"] == $emprow['vac_period']) ? "selected=selected" : "" ?>><?= getDisplayName($rec_con["period"]); ?></option>
 											<?php } ?>
 											</select>
 											</div>

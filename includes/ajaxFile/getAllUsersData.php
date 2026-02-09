@@ -41,6 +41,7 @@ try {
                 `admin_login`.`dept`,
                 `admin_login`.`email`,
                 `admin_login`.`allowed_companies`,
+                `admin_login`.`allowed_departments`,
                 `employees`.`name` AS `efullname`,
                 `employees`.`mobile`,
                 `department`.`dep_nme` AS `deptnme`
@@ -137,6 +138,7 @@ try {
         $mobile_usr = $rec["mobile"] ?? '';
         $status_usr = $rec["status"];
         $allowed_companies = $rec["allowed_companies"];
+        $allowed_departments = $rec["allowed_departments"];
         
         // Convert JSON allowed_companies to company names
         $company_names = "All Companies";
@@ -152,6 +154,19 @@ try {
             }
         }
         
+        // Convert JSON allowed_departments to department names
+        $department_names = "All Departments";
+        if (!empty($allowed_departments)) {
+            $departments_array = json_decode($allowed_departments, true);
+            if (is_array($departments_array) && !empty($departments_array)) {
+                $department_ids = implode(',', array_map('intval', $departments_array));
+                $dept_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `dep_nme` SEPARATOR ', ') AS `names` FROM `department` WHERE `id` IN ($department_ids)");
+                if ($dept_query && $dept_row = mysqli_fetch_assoc($dept_query)) {
+                    $department_names = $dept_row['names'] ?: "All Departments";
+                }
+            }
+        }
+        
         // Build row data
         $row = [
             $id_user_usr,                                    // 0: ID
@@ -163,9 +178,10 @@ try {
             htmlspecialchars($mobile_usr),                   // 6: Mobile
             $usrty_usr,                                      // 7: User Type
             htmlspecialchars($company_names),                // 8: Allowed Companies
-            $status_usr,                                      // 9: Status
-            $id_user_usr,                                     // 10: Action (ID for button)
-            $rec                                              // 11: Full record data (for edit modal) - will be JSON encoded by json_encode()
+            htmlspecialchars($department_names),             // 9: Allowed Departments
+            $status_usr,                                      // 10: Status
+            $id_user_usr,                                     // 11: Action (ID for button)
+            $rec                                              // 12: Full record data (for edit modal) - will be JSON encoded by json_encode()
         ];
         
         $data[] = $row;

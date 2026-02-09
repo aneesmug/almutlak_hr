@@ -2759,6 +2759,104 @@ function toggleCompanyAccessSection(userType) {
     }
 }
 
+/**
+ * Load departments and set up department access UI for user editing
+ * @param {int} userId - The admin_login.id of the user
+ * @param {string} userType - The user's current type
+ */
+function loadDepartmentAccess(userId, userType) {
+    // Check if user is system admin
+    var isSystemAdmin = (userType === 'administrator' || userType === 'gm');
+    
+    $.ajax({
+        url: './includes/ajaxFile/getDepartmentAccess.php',
+        type: 'POST',
+        data: { user_id: userId },
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                // Destroy any existing Select2 instance
+                if ($('#allowed_departments').data('select2')) {
+                    $('#allowed_departments').select2('destroy');
+                }
+                
+                // Populate department options
+                var departmentHTML = '';
+                $.each(response.departments, function(index, dept) {
+                    departmentHTML += '<option value="' + dept.id + '">' + dept.name + '</option>';
+                });
+                $('#allowed_departments').html(departmentHTML);
+                
+                // Initialize Select2 with search functionality
+                $('#allowed_departments').select2({
+                    placeholder: __('select_departments') || 'Search and select departments...',
+                    allowClear: false,
+                    width: '100%',
+                    dropdownParent: $('.swal2-container'),
+                    language: {
+                        searching: function () { return __('searching') || 'Searching...'; },
+                        noResults: function () { return __('no_results_found') || 'No results found'; }
+                    }
+                });
+                
+                // Set current selections
+                if (response.allowed_departments && response.allowed_departments.length > 0) {
+                    $('#allowed_departments').val(response.allowed_departments).trigger('change');
+                    $('#fullDeptAccessCheckbox').prop('checked', false);
+                    $('#allowed_departments').prop('disabled', false);
+                } else {
+                    // No restrictions = full access
+                    $('#fullDeptAccessCheckbox').prop('checked', true);
+                    $('#allowed_departments').val([]).trigger('change');
+                    $('#allowed_departments').prop('disabled', true);
+                }
+                
+                // Handle full access checkbox
+                $('#fullDeptAccessCheckbox').off('change').on('change', function() {
+                    if ($(this).is(':checked')) {
+                        $('#allowed_departments').prop('disabled', true);
+                        $('#allowed_departments').val([]).trigger('change');
+                        $('#allowed_departments').closest('.form-group').addClass('opacity-50');
+                    } else {
+                        $('#allowed_departments').prop('disabled', false);
+                        $('#allowed_departments').closest('.form-group').removeClass('opacity-50');
+                        $('#allowed_departments').focus();
+                    }
+                });
+                
+                // Show/hide department access section based on user type
+                toggleDepartmentAccessSection(userType);
+                
+                // Toggle when user type changes
+                $('#user_type').off('change.dept').on('change.dept', function() {
+                    toggleDepartmentAccessSection($(this).val());
+                });
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading department access:', error);
+        }
+    });
+}
+
+/**
+ * Toggle visibility of department access section based on user type
+ * @param {string} userType - The selected user type
+ */
+function toggleDepartmentAccessSection(userType) {
+    // Hide for system admins and employees
+    var isSystemAdmin = (userType === 'administrator' || userType === 'gm');
+    var isEmployee = (userType === 'employee');
+    
+    if (isSystemAdmin || isEmployee) {
+        $('#department-access-group').hide();
+        $('#fullDeptAccessCheckbox').removeAttr('required');
+    } else {
+        $('#department-access-group').show();
+        $('#fullDeptAccessCheckbox').attr('required', 'required');
+    }
+}
+
 ////////////////////////////////////////////////////////////////////
 ////////////             End Users Handling           //////////////
 ////////////////////////////////////////////////////////////////////
@@ -2794,6 +2892,7 @@ $(document).on('click', '.updateUserAjax', function (e) {
     Swal.fire({
         title: e_fullname, // Show user's name in title
         html: edit_user_HTML(),
+        customClass: 'swal-landscape',
         showCancelButton: true,
         confirmButtonColor: '#3085d6',
         cancelButtonColor: '#d33',
@@ -2814,18 +2913,26 @@ $(document).on('click', '.updateUserAjax', function (e) {
 
                 // Load companies and set current user's allowed companies
                 loadCompanyAccess(e_iduser, user_type);
+                
+                // Load departments and set current user's allowed departments
+                loadDepartmentAccess(e_iduser, user_type);
             }, 100);
         },
         didClose: function() {
-            // Destroy Select2 instance when modal closes
+            // Destroy Select2 instances when modal closes
             if ($('#allowed_companies').data('select2')) {
                 $('#allowed_companies').select2('destroy');
+            }
+            if ($('#allowed_departments').data('select2')) {
+                $('#allowed_departments').select2('destroy');
             }
         },
         preConfirm: function() {
             var selectedType = $('#user_type').val();
             var fullAccess = $('#fullAccessCheckbox').is(':checked');
             var selectedCompanies = $('#allowed_companies').val();
+            var fullDeptAccess = $('#fullDeptAccessCheckbox').is(':checked');
+            var selectedDepartments = $('#allowed_departments').val();
             
             // Validate user type
             if($('#user_type').val() == "") {
@@ -2847,10 +2954,19 @@ $(document).on('click', '.updateUserAjax', function (e) {
                 }
             }
             
+            // Validate department access (only for non-admin, non-employee users)
+            if($('#department-access-group').is(':visible')) {
+                if(!fullDeptAccess && (!selectedDepartments || selectedDepartments.length === 0)) {
+                    Swal.showValidationMessage(__("select_at_least_one_department") || "Please select at least one department or grant full access");
+                    return false;
+                }
+            }
+            
             return new Promise(function(reject) {
-                // Build form data with proper company handling
+                // Build form data with proper company and department handling
                 var formData = new FormData($('#submitEditUserForm')[0]);
                 
+                // Handle company access
                 // Remove allowed_companies field if full access is checked
                 if(fullAccess) {
                     formData.delete('allowed_companies');
@@ -2862,6 +2978,20 @@ $(document).on('click', '.updateUserAjax', function (e) {
                         formData.append('allowed_companies[]', companyId);
                     });
                     formData.append('full_access', '0');
+                }
+                
+                // Handle department access
+                // Remove allowed_departments field if full access is checked
+                if(fullDeptAccess) {
+                    formData.delete('allowed_departments');
+                    formData.append('full_dept_access', '1');
+                } else if(selectedDepartments && selectedDepartments.length > 0) {
+                    // Remove default serialized departments and rebuild as array
+                    formData.delete('allowed_departments');
+                    selectedDepartments.forEach(function(deptId) {
+                        formData.append('allowed_departments[]', deptId);
+                    });
+                    formData.append('full_dept_access', '0');
                 }
                 
                 // Add AJAX action type
@@ -2879,7 +3009,12 @@ $(document).on('click', '.updateUserAjax', function (e) {
                 .done(function(response){
                     Swal.fire({
                         title:response.title,text:response.message,icon:response.type,allowOutsideClick:false, confirmButtonText: __("ok")
-                    }).then(function(isConfirm){(isConfirm)?location.reload():""});
+                    }).then(function(result){
+                        // Refresh AJAX table instead of reloading page
+                        if(result.isConfirmed && typeof userTable !== 'undefined') {
+                            userTable.draw(false);
+                        }
+                    });
                 })
                 .fail(function(jqXHR, textStatus, errorThrown) {
                     reject(handleAjaxFailure(jqXHR, textStatus).message);
@@ -2934,7 +3069,12 @@ $(document).on('click', '.updatePasswordAjax', function (e) {
                 .done(function(response){
                     Swal.fire({
                         title:response.title,text:response.message,icon:response.type,allowOutsideClick:false, confirmButtonText: __("ok")
-                    }).then(function(isConfirm){(isConfirm)?location.reload():""});
+                    }).then(function(result){
+                        // Refresh AJAX table instead of reloading page
+                        if(result.isConfirmed && typeof userTable !== 'undefined') {
+                            userTable.draw(false);
+                        }
+                    });
                 })
                 .fail(function(jqXHR, textStatus, errorThrown) {
                     reject(handleAjaxFailure(jqXHR, textStatus).message);
@@ -7448,11 +7588,11 @@ function edit_user_HTML(){
     var strView =
     `<form id="submitEditUserForm">
     <div class="form-row customSweetAlertMLR">
-        <div class="form-group col-md-12">
+        <div class="form-group col-md-6">
             <label for="dept">${__('department')}</label>
             <input type="text" id="dept" name="dept" class="form-control" readonly>
         </div>
-        <div class="form-group col-md-12">
+        <div class="form-group col-md-6">
             <label for="user_type">${__('type_of_permission')}<span class="text-danger">*</span></label>
             <select class="custom-select" name="user_type" id="user_type" required>
                 <option value="">${__('select_type')}</option>
@@ -7460,29 +7600,43 @@ function edit_user_HTML(){
             </select>
             <small class="form-text text-muted">${__('user_role_note') || 'User role determines system access permissions.'}</small>
         </div>
-        <div class="form-group col-md-12" id="email-group">
+        <div class="form-group col-md-6" id="email-group">
             <label for="email">${__('email')}</label>
             <input type="email" id="email" name="email" class="form-control" required>
             <small class="form-text text-muted">${__('admin_email_note') || 'Email is optional for regular employees. Required for administrative roles.'}</small>
         </div>
         
         <!-- Company Access Control Section -->
-        <div class="form-group col-md-12" id="company-access-group">
+        <div class="form-group col-md-6" id="company-access-group">
             <label for="allowed_companies">${__('allowed_companies') || 'Allowed Companies'}<span class="text-danger">*</span></label>
             <div id="company-select-container">
-                <div class="d-flex align-items-center mb-3">
+                <div class="d-flex align-items-center mb-2">
                     <input type="checkbox" id="fullAccessCheckbox" name="full_access" value="1">
                     <label class="ml-2 mb-0" for="fullAccessCheckbox">${__('full_access_to_all_companies') || 'Full Access to All Companies'}</label>
                 </div>
-                <small class="form-text text-muted d-block mb-2">${__('full_access_note') || 'Check this to grant access to all companies (system admins only)'}</small>
             </div>
             <select class="form-control select2-multi" name="allowed_companies" id="allowed_companies" multiple="multiple" style="width: 100%">
                 <!-- Companies will be loaded dynamically -->
             </select>
-            <small class="form-text text-muted d-block mt-2">${__('company_access_note') || 'Type to search and select companies. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
+            <small class="form-text text-muted d-block mt-1">${__('company_access_note') || 'Type to search and select companies. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
         </div>
 
-        <div class="form-group col-md-12">
+        <!-- Department Access Control Section -->
+        <div class="form-group col-md-6" id="department-access-group">
+            <label for="allowed_departments">${__('allowed_departments') || 'Allowed Departments'}<span class="text-danger">*</span></label>
+            <div id="department-select-container">
+                <div class="d-flex align-items-center mb-2">
+                    <input type="checkbox" id="fullDeptAccessCheckbox" name="full_dept_access" value="1">
+                    <label class="ml-2 mb-0" for="fullDeptAccessCheckbox">${__('full_access_to_all_departments') || 'Full Access to All Departments'}</label>
+                </div>
+            </div>
+            <select class="form-control select2-multi" name="allowed_departments" id="allowed_departments" multiple="multiple" style="width: 100%">
+                <!-- Departments will be loaded dynamically -->
+            </select>
+            <small class="form-text text-muted d-block mt-1">${__('department_access_note') || 'Type to search and select departments. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
+        </div>
+
+        <div class="form-group col-md-6">
             <div class="custom-control custom-checkbox">
                 <input type="checkbox" class="custom-control-input" id="user_status" name="user_status" value="1">
                 <label class="custom-control-label" for="user_status">${__('active_user') || 'Active User'}</label>
@@ -10047,7 +10201,19 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     downloadProofButton = `<a href="./${proofPath}" target="_blank" class="btn btn-sm btn-primary" style="margin-top: 10px; margin-${marginDir}: 5px;"><i class="fa fa-download"></i> ${buttonText}</a>`;
                 }
                 
-                let historyHtml = '<div style="margin-top: 15px;">' + reportLink + downloadProofButton + '</div>';
+                // Build WPS attachment button if available (single file only)
+                let wpsAttachmentButtons = '';
+                if (s.wps_file_path && typeof s.wps_file_path === 'string' && s.wps_file_path.trim() !== '') {
+                    const filePath = s.wps_file_path;
+                    const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(filePath);
+                    const isPdf = /\.pdf$/i.test(filePath);
+                    const icon = isPdf ? 'fa-file-pdf text-danger' : isImage ? 'fa-image text-info' : 'fa-file';
+                    const displayName = isPdf ? __('wps_pdf') : isImage ? __('wps_image') : __('wps_file');
+                    const marginDir = isRtl ? 'right' : 'left';
+                    wpsAttachmentButtons = '<br><h6 style="margin-top: 15px; color: #333; font-weight: 600;">📎 ' + __('wps_attachments') + ':</h6><a href="./' + filePath + '" target="_blank" class="btn btn-sm btn-outline-primary" style="margin-top: 8px; margin-' + marginDir + ': 5px;"><i class="fa ' + icon + '"></i> ' + displayName + '</a>';
+                }
+                
+                let historyHtml = '<div style="margin-top: 15px;">' + reportLink + downloadProofButton + wpsAttachmentButtons + '</div>';
                 
                 const contentHtml = `
                     <div style="text-align: ` + (isRtl ? 'right' : 'left') + `; font-size: 14px; direction: ` + (isRtl ? 'rtl' : 'ltr') + `;">
@@ -10100,6 +10266,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
             const settlementAmount = checkResponse.settlement_amount || 0;
             const isFinanceManager = checkResponse.is_finance_manager || false;
             const isFinanceEmployee = checkResponse.is_finance_employee || false;
+            const isHRPayroll = (typeof window.currentUserType !== 'undefined') && window.currentUserType.toLowerCase().includes('hr_payroll');
             
             const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
             
@@ -10108,6 +10275,18 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                     <label>` + __('approval_comment') + `:</label>
                     <textarea id="approvalComment" class="form-control" placeholder="` + __('add_approval_comment') + `" rows="3"></textarea>
                 </div>`;
+            
+            // Add WPS file input for HR Payroll users
+            if (isHRPayroll) {
+                formHtml += `
+                <hr>
+                <h6 class="text-primary font-weight-bold">` + __('wps_file_upload_hr_payroll') + `</h6>
+                <div class="form-group">
+                    <label for="wpsFileUpload"><strong>` + __('select_wps_file_optional') + `</strong></label>
+                    <input type="file" id="wpsFileUpload" class="form-control" accept="image/*,.pdf" />
+                    <small class="form-text text-muted">` + __('accepted_formats') + ` ` + __('max_mb').replace('{{filesize}}', MAX_FILE_SIZE_MB) + `</small>
+                </div>`;
+            }
             
             // Show payer selection if Finance Manager at final approval
             if (isFinalApproval && isFinanceManager) {
@@ -10140,8 +10319,8 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                     <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
                     <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>`;
-            } else if (isFinalApproval && isFinanceEmployee) {
-                // Finance Officer at final approval - show payment form only
+            } else if (isFinanceEmployee) {
+                // Finance Officer - show payment form (at final approval or when they need to process payment)
                 formHtml += `
                 <div class="form-group" id="approvedAmountGroup">
                     <label style="color: #dc3545;">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
@@ -10161,8 +10340,6 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
             // Store payer type to persist across modal lifecycle
             let selectedPayerType = 'self';
             let formValues = {};
-            let isFinanceManagerUser = isFinanceManager;
-            let isFinanceEmployeeUser = isFinanceEmployee;
             
             Swal.fire({
                 title: (isFinalApproval && (isFinanceManager || isFinanceEmployee)) ? __('approve_settlement') : __('approve_settlement'),
@@ -10174,81 +10351,69 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                 cancelButtonText: __('cancel'),
                 allowOutsideClick: false,
                 preConfirm: () => {
+                    const swalContainer = Swal.getHtmlContainer();
                     const comment = document.getElementById('approvalComment').value;
+                    let wpsFile = null;
+                    let payerType = null;
+                    let payerSelect = null;
+                    let paymentProofFile = null;
+                    let approvedAmount = null;
                     
-                    // Only get payer type if Finance Manager
-                    if (isFinanceManagerUser) {
-                        selectedPayerType = document.querySelector('input[name="payerType"]:checked').value;
+                    // Collect WPS file if HR Payroll
+                    if (isHRPayroll) {
+                        const fileInput = swalContainer ? swalContainer.querySelector('#wpsFileUpload') : null;
+                        if (fileInput && fileInput.files && fileInput.files[0]) {
+                            const file = fileInput.files[0];
+                            const allowedFormats = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'];
+                            const fileExtension = file.name.split('.').pop().toLowerCase();
+                            if (!allowedFormats.includes(fileExtension)) {
+                                Swal.showValidationMessage(`${__('invalid_file_format')}. ${__('upload_pdf_jpg_only_validation')}`);
+                                return false;
+                            }
+                            if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                                Swal.showValidationMessage(`${__('file_size_exceeded').replace('{{filesize}}', MAX_FILE_SIZE_MB)}`);
+                                return false;
+                            }
+                            wpsFile = file;
+                        }
                     }
                     
-                    // Store all form values for later use
-                    formValues = {
-                        comment: comment,
-                        payerType: selectedPayerType
-                    };
-                    
-                    if (isFinalApproval && isFinanceManagerUser) {
-                        const payerType = selectedPayerType;
+                    // Collect Finance Manager fields
+                    if (isFinanceManager) {
+                        const payerTypeElem = document.querySelector('input[name="payerType"]:checked');
+                        payerType = payerTypeElem ? payerTypeElem.value : 'self';
                         
                         if (payerType === 'other') {
-                            const payer = document.getElementById('payerSelect').value;
-                            if (!payer) {
-                                Swal.showValidationMessage(__('please_select_a_finance_employee'));
-                                return false;
-                            }
-                            formValues.payerSelect = payer;
-                        } else {
-                            // Validate amount and payment proof only when "Myself" is selected
-                            const approvedAmt = parseFloat(document.getElementById('approvedAmount').value || 0);
-                            const paymentProof = document.getElementById('paymentProof').files[0];
-                            
-                            if (!approvedAmt || approvedAmt <= 0) {
-                                Swal.showValidationMessage(__('please_enter_approved_amount'));
-                                return false;
-                            }
-                            
-                            if (Math.abs(approvedAmt - settlementAmount) > 0.01) {
-                                Swal.showValidationMessage(__('approved_amount_must_match_settlement_amount_exactly'));
-                                return false;
-                            }
-                            
-                            if (!paymentProof) {
-                                Swal.showValidationMessage(__('please_attach_payment_proof'));
-                                return false;
-                            }
-                            
-                            formValues.approvedAmount = approvedAmt;
-                            formValues.paymentProof = paymentProof;
+                            const payerSelectElem = document.getElementById('payerSelect');
+                            payerSelect = payerSelectElem ? payerSelectElem.value : null;
                         }
-                    } else if (isFinalApproval && isFinanceEmployeeUser) {
-                        // Finance Officer validation - require amount and payment proof
-                        const approvedAmt = parseFloat(document.getElementById('approvedAmount').value || 0);
-                        const paymentProof = document.getElementById('paymentProof').files[0];
-                        
-                        if (!approvedAmt || approvedAmt <= 0) {
-                            Swal.showValidationMessage(__('please_enter_approved_amount'));
-                            return false;
-                        }
-                        
-                        if (Math.abs(approvedAmt - settlementAmount) > 0.01) {
-                            Swal.showValidationMessage(__('approved_amount_must_match_settlement_amount_exactly'));
-                            return false;
-                        }
-                        
-                        if (!paymentProof) {
-                            Swal.showValidationMessage(__('please_attach_payment_proof'));
-                            return false;
-                        }
-                        
-                        formValues.approvedAmount = approvedAmt;
-                        formValues.paymentProof = paymentProof;
-                        formValues.payerType = 'self'; // Finance Officer is always the payer
                     }
                     
-                    return true;
+                    // Collect payment proof and approved amount for Finance Manager or Finance Officer
+                    if ((isFinanceManager && isFinalApproval) || isFinanceEmployee) {
+                        const approvedAmountElem = document.getElementById('approvedAmount');
+                        if (approvedAmountElem) {
+                            approvedAmount = parseFloat(approvedAmountElem.value || 0);
+                        }
+                        
+                        const paymentProofInput = swalContainer ? swalContainer.querySelector('#paymentProof') : null;
+                        if (paymentProofInput && paymentProofInput.files && paymentProofInput.files[0]) {
+                            paymentProofFile = paymentProofInput.files[0];
+                        }
+                    }
+                    
+                    // Return all collected values
+                    return { 
+                        comment, 
+                        payerType, 
+                        wpsFile, 
+                        payerSelect, 
+                        paymentProofFile,
+                        approvedAmount
+                    };
                 },
                 didOpen: () => {
-                    if (isFinalApproval && isFinanceManagerUser) {
+                    if (isFinalApproval && isFinanceManager) {
                         // Fetch finance employees and populate Select2
                         setTimeout(() => {
                             $.ajax({
@@ -10321,7 +10486,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                                 $('.swal2-confirm').prop('disabled', false);
                             }
                         });
-                    } else if (isFinalApproval && isFinanceEmployeeUser) {
+                    } else if (isFinalApproval && isFinanceEmployee) {
                         // Finance Officer - apply amount validation
                         $('#approvedAmount').on('input', function() {
                             const enteredAmt = parseFloat($(this).val() || 0);
@@ -10337,9 +10502,9 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    const comment = formValues.comment;
-                    const payerType = formValues.payerType;
-                    
+                    const comment = result.value.comment;
+                    const payerType = result.value.payerType;
+                    const wpsFile = result.value.wpsFile;
                     // Show loading indicator
                     Swal.fire({
                         title: __('processing'),
@@ -10350,37 +10515,57 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                             Swal.showLoading();
                         }
                     });
-                    
                     let formData = new FormData();
-                    formData.append('action', 'approve_settlement');
+                    // Determine the correct action based on whether WPS file is being uploaded
+                    let action = 'approve_settlement';
+                    if (isHRPayroll && wpsFile) {
+                        formData.append('wps_file', wpsFile);
+                        action = 'approve_settlement_with_wps';
+                    }
+                    formData.append('action', action);
                     formData.append('settlement_id', settlementId);
                     formData.append('settlement_inv_no', settlementInvNo);
                     formData.append('emp_id', empId);
                     formData.append('approval_comment', comment);
-                    
-                    if (isFinalApproval && isFinanceManagerUser) {
+                    formData.append('is_hr_payroll', isHRPayroll ? '1' : '0');
+
+                    if (isFinalApproval) {
                         formData.append('is_final_approval', '1');
-                        formData.append('payer_type', payerType);
-                        
-                        // Get current user's emp_id from body data attribute or global variable
-                        const currentEmpId = document.body.getAttribute('data-empid') || (typeof window.currentEmpId !== 'undefined' ? window.currentEmpId : '');
-                        const payerId = payerType === 'self' ? currentEmpId : formValues.payerSelect;
-                        formData.append('payer_id', payerId);
-                        
-                        // Only send amount and proof if "Myself" is selected
-                        if (payerType === 'self') {
-                            formData.append('approved_amount', formValues.approvedAmount);
-                            formData.append('payment_proof', formValues.paymentProof);
+                        // Payer logic for Finance Manager
+                        if (isFinanceManager) {
+                            formData.append('payer_type', payerType);
+                            const currentEmpId = document.body.getAttribute('data-empid') || (typeof window.currentEmpId !== 'undefined' ? window.currentEmpId : '');
+                            const payerId = payerType === 'self' ? currentEmpId : result.value.payerSelect;
+                            formData.append('payer_id', payerId);
+                            if (payerType === 'self') {
+                                if (result.value.approvedAmount && result.value.approvedAmount > 0) {
+                                    formData.append('approved_amount', result.value.approvedAmount);
+                                }
+                            }
+                        } else if (isFinanceEmployee) {
+                            // Finance Officer at final approval
+                            formData.append('payer_type', 'self');
+                            const currentEmpId = document.body.getAttribute('data-empid') || (typeof window.currentEmpId !== 'undefined' ? window.currentEmpId : '');
+                            formData.append('payer_id', currentEmpId);
+                            if (result.value.approvedAmount && result.value.approvedAmount > 0) {
+                                formData.append('approved_amount', result.value.approvedAmount);
+                            }
+                            // Send payment proof file if present
+                            if (result.value.paymentProofFile) {
+                                formData.append('payment_proof', result.value.paymentProofFile);
+                            }
                         }
-                    } else if (isFinalApproval && isFinanceEmployeeUser) {
-                        // Finance Officer at final approval - always send amount and proof
+                    } else if (isFinanceEmployee && result.value.paymentProofFile) {
+                        // Finance Officer with payment proof (not marked as final approval initially)
+                        // Mark as final approval and send payment proof
                         formData.append('is_final_approval', '1');
-                        formData.append('payer_type', 'self'); // Finance Officer is always the payer
-                        
+                        formData.append('payer_type', 'self');
                         const currentEmpId = document.body.getAttribute('data-empid') || (typeof window.currentEmpId !== 'undefined' ? window.currentEmpId : '');
                         formData.append('payer_id', currentEmpId);
-                        formData.append('approved_amount', formValues.approvedAmount);
-                        formData.append('payment_proof', formValues.paymentProof);
+                        if (result.value.approvedAmount && result.value.approvedAmount > 0) {
+                            formData.append('approved_amount', result.value.approvedAmount);
+                        }
+                        formData.append('payment_proof', result.value.paymentProofFile);
                     }
                     
                     $.ajax({
@@ -10402,19 +10587,36 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                                 })
                                     .then(() => location.reload());
                             } else {
-                                Swal.fire( __('error'), response.message || __('failed_approve_settlement'), 'error');
+                                Swal.fire({
+                                    title: __('error'),
+                                    text: response.message || __('failed_approve_settlement'),
+                                    icon: 'error',
+                                    allowOutsideClick: false,
+                                    confirmButtonText: __('ok'),
+                                    confirmButtonColor: '#dc3545'
+                                });
                             }
                         },
                         error: function(xhr, status, error) {
                             console.error('Approval error:', xhr.responseText);
-                            Swal.fire( __('error'), __('failed_approve_settlement') + ': ' + error, 'error');
+                            Swal.fire({
+                                title: __('error'),
+                                text: __('failed_approve_settlement') + ': ' + error,
+                                icon: 'error',
+                                allowOutsideClick: false,
+                                confirmButtonText: __('ok'),
+                                confirmButtonColor: '#dc3545'
+                            });
                         }
                     });
                 }
             });
         },
         error: function() {
-            Swal.fire( __('error'), __('failed_check_approval_status'), 'error');
+            Swal.fire({ 
+                title: __('error'), 
+                text: __('failed_check_approval_status'), 
+                icon: 'error'});
         }
     });
 }

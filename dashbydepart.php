@@ -360,43 +360,30 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 $user_dept == 1 // Administration Department
                                             );
                                             
-                                            if (!$can_see_all_departments) {
-                                                // Department managers: show only their department
-                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
-                                                $querygrp = mysqli_query($conDB, "SELECT 
-                                                    count(`employees`.`dept`) AS `empcountgrp`,
-                                                    `employees`.`dept`, 
-                                                    `department`.`dep_nme`,
-                                                    `department`.`dep_nme_ar`,
-                                                    `dept_clr`.`color`
-                                                    FROM `employees` 
-                                                    LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
-                                                    LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
-                                                    WHERE `employees`.`status` = 1 
-                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'" . $company_filter . " 
-                                                    GROUP BY `employees`.`dept`");
-                                            } else {
-                                                // HR and System Admins: show all departments
-                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
-                                                $querygrp = mysqli_query($conDB, "SELECT 
-                                                    count(`employees`.`dept`) AS `empcountgrp`,
-                                                    `employees`.`dept`, 
-                                                    `department`.`dep_nme`, 
-                                                    `department`.`dep_nme_ar`,
-                                                    `dept_clr`.`color`
-                                                    FROM `employees` 
-                                                    LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
-                                                    LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
-                                                    WHERE `employees`.`status` = 1" . $company_filter . "
-                                                    GROUP BY `employees`.`dept`");
-                                            }
+                                            // Apply company and department filters
+                                            $company_filter = getCompanyFilterSQL('employees.comp_no', true);
+                                            $department_filter = getDepartmentFilterSQL('employees.dept', true);
+                                            
+                                            // Query to get department grouping (same query for all users, filters handle access)
+                                            $querygrp = mysqli_query($conDB, "SELECT 
+                                                count(`employees`.`dept`) AS `empcountgrp`,
+                                                `employees`.`dept`, 
+                                                `department`.`dep_nme`,
+                                                `department`.`dep_nme_ar`,
+                                                `dept_clr`.`color`
+                                                FROM `employees` 
+                                                LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
+                                                LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
+                                                WHERE `employees`.`status` = 1" . $company_filter . $department_filter . "
+                                                GROUP BY `employees`.`dept`");
+                                            
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
                                             if ($querygrp) {
                                                 $colorArr = ["primary","success","warning","danger","info","dark"];
                                                 $colorCount = count($colorArr);
                                                 $cardIndex = 0;
-                                                // Total active employees (for percentage calculation)
-                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1");
+                                                // Total active employees (for percentage calculation) - must respect access filters
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter . $department_filter);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
@@ -444,55 +431,34 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
 
                                             <?php
                                             // ================================================================
-                                            // DEPARTMENT-BASED ACCESS CONTROL FOR COMPANY GROUPING
+                                            // COMPANY-BASED ACCESS CONTROL FOR COMPANY GROUPING
                                             // ================================================================
-                                            // HR Department (dept 5) and System Admins can see all companies
-                                            // All other users can only see companies in their department
-                                            $can_see_all_companies = (
-                                                $is_system_admin || 
-                                                $user_type == 'administrator' ||
-                                                $user_dept == 5 || // HR Department
-                                                $isHR || 
-                                                $isDeptHr ||
-                                                $user_dept == 1 // Administration Department
-                                            );
+                                            // Companies tab shows allowed companies only (no department filtering here)
+                                            // Department filtering is applied separately in Departments tab and Employee list
                                             
-                                            if (!$can_see_all_companies) {
-                                                // Department managers: show only companies in their department
-                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
-                                                $querygrp = mysqli_query($conDB, "SELECT 
-                                                    count(`employees`.`dept`) AS `empcountgrp`,
-                                                    `employees`.`comp_no`, 
-                                                    `companies`.`comp_name`, 
-                                                    `companies`.`comp_name_ar`, 
-                                                    `companies`.`comp_id`
-                                                    FROM `employees` 
-                                                    LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
-                                                    WHERE `employees`.`status` = 1
-                                                    AND `employees`.`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'" . $company_filter . "
-                                                    GROUP BY `employees`.`comp_no`");
-                                            } else {
-                                                // HR and System Admins: show all companies
-                                                $company_filter = getCompanyFilterSQL('employees.comp_no', true);
-                                                $querygrp = mysqli_query($conDB, "SELECT 
-                                                    count(`employees`.`dept`) AS `empcountgrp`,
-                                                    `employees`.`comp_no`, 
-                                                    `companies`.`comp_name`, 
-                                                    `companies`.`comp_name_ar`, 
-                                                    `companies`.`comp_id`
-                                                    FROM `employees` 
-                                                    LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
-                                                    WHERE `employees`.`status` = 1" . $company_filter . "
-                                                    GROUP BY `employees`.`comp_no`");
-                                            }
+                                            // Apply only company filter for companies tab
+                                            $company_filter = getCompanyFilterSQL('employees.comp_no', true);
+                                            
+                                            // Query to get company grouping - only filter by allowed companies
+                                            $querygrp = mysqli_query($conDB, "SELECT 
+                                                count(`employees`.`dept`) AS `empcountgrp`,
+                                                `employees`.`comp_no`, 
+                                                `companies`.`comp_name`, 
+                                                `companies`.`comp_name_ar`, 
+                                                `companies`.`comp_id`
+                                                FROM `employees` 
+                                                LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
+                                                WHERE `employees`.`status` = 1" . $company_filter . "
+                                                GROUP BY `employees`.`comp_no`");
+                                            
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
                                             if ($querygrp) {
                                                 $colorArr = ["primary","success","warning","danger","info","dark"];
                                                 $colorCount = count($colorArr);
                                                 $cardIndex = 0;
-                                                // Total active employees (for percentage calculation)
-                                                $company_filter = getCompanyFilterSQL('comp_no', true);
-                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter);
+                                                // Total active employees (for percentage calculation) - only filter by company for this tab
+                                                $company_filter_total = getCompanyFilterSQL('comp_no', true);
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter_total);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
@@ -557,60 +523,29 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 // ================================================================
                                                 // DEPARTMENT-BASED ACCESS CONTROL
                                                 // ================================================================
-                                                // HR Department (dept 5) and System Admins can see all employees
-                                                // All other users can only see employees from their own department
-                                                $can_see_all_employees = (
-                                                    $is_system_admin || 
-                                                    $user_type == 'administrator' ||
-                                                    $user_dept == 5 || // HR Department
-                                                    $isHR || 
-                                                    $isDeptHr
-                                                );
-
-                                                if (!$can_see_all_employees) {
-                                                    // Department users: show only their department employees
-                                                    $company_filter = getCompanyFilterSQL('emp.comp_no', true);
-                                                    $sql = "SELECT 
-                                                            `emp`.*, 
-                                                            CASE 
-                                                                WHEN `emp`.`sex` = 1 THEN 'male' 
-                                                                WHEN `emp`.`sex` = 2 THEN 'female'
-                                                                ELSE ''
-                                                            END AS `sex`,  
-                                                            `countries`.`name` AS `country_name`,
-                                                            `countries`.`name_ar` AS `country_name_ar`,
-                                                            `department`.`dep_nme`,
-                                                            `department`.`dep_nme_ar`,
-                                                            `sponsorship`.`sponsor`,
-                                                            `sponsorship`.`sponsor_ar`
-                                                            FROM `employees` `emp`
-                                                            LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
-                                                            LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
-                                                            LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
-                                                            WHERE `emp`.`status`=1 AND `emp`.`fly`=0 
-                                                            AND `emp`.`dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'" . $company_filter . " ";
-                                                } else {
-                                                    // HR and System Admins: show all employees
-                                                    $company_filter = getCompanyFilterSQL('emp.comp_no', true);
-                                                    $sql = "SELECT 
-                                                            `emp`.*,
-                                                            CASE 
-                                                                WHEN `emp`.`sex` = 1 THEN 'male' 
-                                                                WHEN `emp`.`sex` = 2 THEN 'female'
-                                                                ELSE ''
-                                                            END AS `sex`,  
-                                                            `countries`.`name` AS `country_name`,
-                                                            `countries`.`name_ar` AS `country_name_ar`,
-                                                            `department`.`dep_nme`,
-                                                            `department`.`dep_nme_ar`,
-                                                            `sponsorship`.`sponsor`,
-                                                            `sponsorship`.`sponsor_ar`
-                                                            FROM `employees` `emp`
-                                                            LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
-                                                            LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
-                                                            LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
-                                                            WHERE `emp`.`status`=1 AND `emp`.`fly`=0" . $company_filter . " ";
-                                                }
+                                                // Apply company and department filters for all users
+                                                $company_filter = getCompanyFilterSQL('emp.comp_no', true);
+                                                $department_filter = getDepartmentFilterSQL('emp.dept', true);
+                                                
+                                                $sql = "SELECT 
+                                                        `emp`.*, 
+                                                        CASE 
+                                                            WHEN `emp`.`sex` = 1 THEN 'male' 
+                                                            WHEN `emp`.`sex` = 2 THEN 'female'
+                                                            ELSE ''
+                                                        END AS `sex`,  
+                                                        `countries`.`name` AS `country_name`,
+                                                        `countries`.`name_ar` AS `country_name_ar`,
+                                                        `department`.`dep_nme`,
+                                                        `department`.`dep_nme_ar`,
+                                                        `sponsorship`.`sponsor`,
+                                                        `sponsorship`.`sponsor_ar`
+                                                        FROM `employees` `emp`
+                                                        LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
+                                                        LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
+                                                        LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
+                                                        WHERE `emp`.`status`=1 AND `emp`.`fly`=0" . $company_filter . $department_filter . " ";
+                                                
                                                 $query = mysqli_query($conDB, $sql);
 
                                                 while ($rec = mysqli_fetch_array($query)) {

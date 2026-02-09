@@ -8,17 +8,18 @@
 if($user_type == "dept_user"){
 	// Add company filter for dept user counts
 	$company_filter = getCompanyFilterSQL('comp_no', true);
+	$department_filter = getDepartmentFilterSQL('dept', true);
 	$dept_safe = (int)$user_dept;
-	$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`=1 AND `fly`='no' AND `dept`='" . $dept_safe . "'" . $company_filter);
+	$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`=1 AND `fly`='no' AND `dept`='" . $dept_safe . "'" . $company_filter . $department_filter);
 	$status_cont_active = mysqli_fetch_array($sql_count_active)[0];
 		
-	$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`='no' AND `dept`='" . $dept_safe . "'" . $company_filter);
+	$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`='no' AND `dept`='" . $dept_safe . "'" . $company_filter . $department_filter);
 	$status_cont_ter = mysqli_fetch_array($sql_count_ter)[0];
 		
-	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `fly`='yes' AND `dept`='" . $dept_safe . "'" . $company_filter);
+	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `fly`='yes' AND `dept`='" . $dept_safe . "'" . $company_filter . $department_filter);
 	$status_cont_fly = mysqli_fetch_array($sql_count_fly)[0];
 		
-	$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `dept`='" . $dept_safe . "'" . $company_filter);
+	$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `dept`='" . $dept_safe . "'" . $company_filter . $department_filter);
 	$status_cont_tot = mysqli_fetch_array($sql_count_tot)[0];
 	
 	$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `emp_sup_type`='man_power'");

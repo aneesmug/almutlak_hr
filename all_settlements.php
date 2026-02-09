@@ -119,10 +119,11 @@ if (!$canSeeAllDepts && !$deptFilterApplied && $currentFilter !== 'my_pending') 
 
 // Add company filter to WHERE clause (same as vacation and loan pages)
 $companyFilter = getCompanyFilterSQL('e.comp_no', true);
+$departmentFilter = getDepartmentFilterSQL('e.dept', true);
 if (empty($whereClauses)) {
-    $whereClauses[] = "1=1" . $companyFilter;
+    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter;
 } else {
-    $whereClauses[] = "1=1" . $companyFilter;
+    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter;
 }
 
 
@@ -573,6 +574,20 @@ if ($canSeeAllDepts) {
     <script src="assets/js/jquery.app.js"></script>
 
     <script>
+        // Configuration constants
+        const MAX_FILE_SIZE_MB = 10;
+        
+        // Current user details - Make window-global for access in jquery.app.js
+        window.currentUserType = '<?php echo $_SESSION['user_type'] ?? ""; ?>';
+        window.currentUserId = <?= (int)$empid; ?>;
+        
+        // Also set as regular constants for backward compatibility
+        const currentUserType = window.currentUserType;
+        const currentUserId = window.currentUserId;
+        const isHRPayroll = (currentUserType === 'hr_payroll');
+        
+
+
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
             const search = document.getElementById('searchFilter').value;
@@ -580,15 +595,197 @@ if ($canSeeAllDepts) {
             window.location.href = `${baseUrl}?status=${status}&search=${encodeURIComponent(search)}&page=1`;
         }
 
+        /**
+         * Approve Settlement with WPS Upload for HR Payroll
+         * Shows approval modal, then WPS upload modal if user is HR Payroll
+         */
+        function approveSettlementWithWPS(settlementId, settlementInvNo, empId) {
+
+            
+            // Get settlement details first
+            $.ajax({
+                url: './includes/ajaxFile/settlement_handler.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: {
+                    action: 'get_settlement_details',
+                    settlement_id: settlementId
+                },
+                success: function(response) {
+
+                    if (response.success && response.data && response.data.settlement) {
+                        const settlement = response.data.settlement;
+                        const employeeName = settlement.emp_name || 'Employee';
+                        const settlementAmount = parseFloat(settlement.settlement_amount || 0);
+
+
+                        // Show approval modal
+                        showSettlementApprovalModal(settlementId, settlementInvNo, empId, employeeName, settlementAmount);
+                    } else {
+                        Swal.fire('Error', 'Failed to fetch settlement details', 'error');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Settlement details fetch failed:', xhr);
+                    Swal.fire('Error', 'Failed to fetch settlement details', 'error');
+                }
+            });
+        }
+
+        /**
+         * Show Settlement Approval Modal with WPS File Upload for HR Payroll
+         * Shows approval and WPS file selection in one modal
+         */
+        function showSettlementApprovalModal(settlementId, settlementInvNo, empId, employeeName, settlementAmount) {
+
+            
+            // Build HTML based on user type
+            let modalHTML = `
+                <div class="text-left">
+                    <p><strong><?= __("employee") ?>:</strong> ${employeeName}</p>
+                    <p><strong><?= __("settlement_id") ?>:</strong> ${settlementInvNo}</p>
+                    <p><strong><?= __("amount") ?>:</strong> <span class="badge badge-success">SAR ${parseFloat(settlementAmount).toFixed(2)}</span></p>
+                    <hr>
+                    <div class="form-group">
+                        <label for="approvalComment"><strong><?= __("approval_comment") ?> (<?= __("optional") ?>)</strong></label>
+                        <textarea id="approvalComment" class="form-control" rows="2" placeholder="<?= __("add_comments") ?>..."></textarea>
+                    </div>
+            `;
+            
+            // Add WPS file input for HR Payroll users
+            if (isHRPayroll) {
+                modalHTML += `
+                    <hr>
+                    <h6 class="text-primary font-weight-bold">${__("wps_file_upload_hr_payroll")}</h6>
+                    <div class="form-group">
+                        <label for="wpsFileUpload"><strong>${__("select_wps_file_optional")}</strong></label>
+                        <input type="file" id="wpsFileUpload" class="form-control" accept="image/*,.pdf" />
+                        <small class="form-text text-muted">${__('accepted_formats')} ${__('max_mb').replace('{{filesize}}', MAX_FILE_SIZE_MB)}</small>
+                    </div>
+                `;
+            }
+            
+            modalHTML += `</div>`;
+            
+            Swal.fire({
+                title: '<?= __("approve") ?> Settlement',
+                html: modalHTML,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                confirmButtonText: '<i class="fa fa-check"></i> <?= __("approve") ?>',
+                cancelButtonColor: '#6c757d',
+                cancelButtonText: '<i class="fa fa-times"></i> <?= __("cancel") ?>',
+                allowOutsideClick: false,
+                showLoaderOnConfirm: true,
+                preConfirm: () => {
+                    const comment = document.getElementById('approvalComment').value.trim();
+
+                    
+                    // Validate WPS file if HR Payroll
+                    if (isHRPayroll) {
+                        const fileInput = document.getElementById('wpsFileUpload');
+                        if (fileInput.files && fileInput.files[0]) {
+                            const file = fileInput.files[0];
+                            const allowedFormats = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'];
+                            const fileExtension = file.name.split('.').pop().toLowerCase();
+                            
+                            if (!allowedFormats.includes(fileExtension)) {
+                                Swal.showValidationMessage(`${__('invalid_file_format')}. ${__('upload_pdf_jpg_only_validation')}`);
+                                return false;
+                            }
+                            
+                            if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                                Swal.showValidationMessage(`${__('file_size_exceeded').replace('{{filesize}}', MAX_FILE_SIZE_MB)}`);
+                                return false;
+                            }
+                        }
+                    }
+                    
+                    return new Promise((resolve, reject) => {
+
+                        
+                        // Prepare form data for approval + WPS file
+                        const formData = new FormData();
+                        formData.append('action', 'approve_settlement_with_wps');
+                        formData.append('settlement_id', settlementId);
+                        formData.append('settlement_inv_no', settlementInvNo);
+                        formData.append('emp_id', empId);
+                        formData.append('approval_comment', comment);
+                        formData.append('is_final_approval', 0);
+                        formData.append('is_hr_payroll', isHRPayroll ? '1' : '0');
+                        
+                        // Add WPS file if HR Payroll and file selected
+                        if (isHRPayroll) {
+                            const fileInput = document.getElementById('wpsFileUpload');
+                            if (fileInput.files && fileInput.files[0]) {
+                                formData.append('wps_file', fileInput.files[0]);
+                            }
+                        }
+                        
+                        $.ajax({
+                            url: './includes/ajaxFile/settlement_handler.php',
+                            type: 'POST',
+                            dataType: 'JSON',
+                            data: formData,
+                            processData: false,
+                            contentType: false,
+                            timeout: 30000,
+                            success: function(response) {
+
+                                if (response.success === true) {
+                                    resolve(response);
+                                } else {
+                                    reject(response.message || '<?= __("error_approving_settlement") ?>');
+                                }
+                            },
+                            error: function(xhr) {
+                                console.error('Approval request failed:', xhr);
+                                const response = xhr.responseJSON || {};
+                                reject(response.message || '<?= __("error_approving_settlement") ?>');
+                            }
+                        });
+                    });
+                }
+            }).then((result) => {
+
+                
+                if (result.isConfirmed) {
+                    // Settlement approved successfully
+                    const message = result.value && result.value.message ? result.value.message : '<?= __("settlement_approved_successfully") ?>';
+                    
+                    Swal.fire({
+                        title: '<?= __("success") ?>!',
+                        html: `
+                            <p>${message}</p>
+                            <p><strong><?= __("settlement_ref") ?>:</strong> ${settlementInvNo}</p>
+                            ${isHRPayroll && result.value && result.value.wps_file_name ? `<p><strong><?= __("wps_file") ?>:</strong> ${result.value.wps_file_name}</p>` : ''}
+                        `,
+                        icon: 'success',
+                        confirmButtonColor: '#28a745',
+                        confirmButtonText: '<?= __("ok") ?>',
+                        allowOutsideClick: false
+                    }).then(() => {
+                        location.reload();
+                    });
+                }
+            }).catch((error) => {
+                console.error('Modal error:', error);
+                Swal.fire({
+                    title: '<?= __("error") ?>',
+                    html: error,
+                    icon: 'error',
+                    confirmButtonColor: '#dc3545',
+                    confirmButtonText: '<?= __("ok") ?>'
+                });
+            });
+        }
+
         // Settlement functions are now defined globally in assets/js/jquery.app.js:
         // - viewSettlementDetails(settlementId, settlementInvNo)
-        // - approveSettlement(settlementId, settlementInvNo, empId)
         // - rejectSettlement(settlementId, settlementInvNo)
         // - processSettlementPayment(settlementId, settlementInvNo)
         // - htmlspecialcharsJs(str)
-    </script>
-</body>
-</html>
     </script>
 </body>
 </html>

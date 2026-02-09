@@ -175,7 +175,46 @@ if ($isEmployee !== true) {
 			<div class="container-custom">
 				<!-- Avatar -->
 				<label class="empAvatarShow" for="img-crop" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-img="<?= $emprow['avatar'] ?>" data-name="<?= $emprow['name'] ?>" style="margin-bottom: 0; cursor: pointer;">
-					<img src="<?= $emprow['avatar'] ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
+					<?php
+					// Determine avatar image path with fallback to default
+					$avatarPath = $emprow['avatar'] ?? '';
+					$defaultImage = './assets/emp_pics/defult.png'; // Default for male (1)
+					if (isset($emprow['sex']) && $emprow['sex'] == 2) {
+						$defaultImage = './assets/emp_pics/defultFemale.jpg'; // Default for female (2)
+					}
+					// Fallback if default files are missing
+					$defaultImagePath = rtrim(dirname(__DIR__), '/\\') . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $defaultImage), DIRECTORY_SEPARATOR);
+					if (!is_file($defaultImagePath)) {
+						$defaultImage = './assets/emp_pics/defult.png';
+					}
+					// Check if avatar file exists (direct path or document-root relative), otherwise use default
+					$displayImage = $defaultImage;
+					if (!empty($avatarPath)) {
+						$avatarPath = trim($avatarPath);
+						$relativePath = ltrim(preg_replace('#^\./#', '', $avatarPath), '/');
+						$docRoot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/\\');
+						$systemRoot = rtrim(dirname(__DIR__), '/\\');
+						$pathParts = str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+						$avatarCandidates = [];
+						$avatarCandidates[] = $avatarPath;
+						if ($systemRoot) {
+							$avatarCandidates[] = $systemRoot . DIRECTORY_SEPARATOR . $pathParts;
+						}
+						if ($docRoot) {
+							$avatarCandidates[] = $docRoot . DIRECTORY_SEPARATOR . $pathParts;
+						}
+						if ($docRoot && strpos($avatarPath, '/') === 0) {
+							$avatarCandidates[] = $docRoot . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $avatarPath), DIRECTORY_SEPARATOR);
+						}
+						foreach ($avatarCandidates as $candidate) {
+							if ($candidate && is_file($candidate)) {
+								$displayImage = $avatarPath;
+								break;
+							}
+						}
+					}
+					?>
+					<img src="<?= $displayImage ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
 					<input type="file" name="image" class="image" hidden id="img-crop" accept="image/*">
 				</label>
 

@@ -52,6 +52,16 @@ if (mysqli_num_rows($query) == 1) {
             .swal-wide {
                 width: 850px !important;
             }
+            
+            .swal-landscape {
+                width: 1200px !important;
+                max-width: 95% !important;
+            }
+            
+            .swal-landscape .swal2-html-container {
+                max-height: 70vh !important;
+                overflow-y: auto !important;
+            }
 
             .dt-button-down-arrow {
                 display: none !important;
@@ -146,6 +156,10 @@ if (mysqli_num_rows($query) == 1) {
                                             <label for="filterCompany" class="form-label small font-weight-bold d-block mb-1">Filter by Company</label>
                                             <div class="user_company"></div>
                                         </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label for="filterAllowedDept" class="form-label small font-weight-bold d-block mb-1">Filter by Allowed Department</label>
+                                            <div class="user_allowed_dept"></div>
+                                        </div>
                                     </div>
 
 
@@ -161,6 +175,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 <th>Mobile</th>
                                                 <th>User Type</th>
                                                 <th>Allowed Companies</th>
+                                                <th>Allowed Departments</th>
                                                 <th>Status</th>
                                                 <th style="width: 30px">Action</th>
                                             </tr>
@@ -235,6 +250,7 @@ if (mysqli_num_rows($query) == 1) {
         <script src="assets/js/jquery.app.js"></script>
 
         <script type="text/javascript">
+            var userTable; // Global variable to store table instance
             $(document).ready(function() {
                 $('form').parsley();
             });
@@ -251,9 +267,15 @@ if (mysqli_num_rows($query) == 1) {
         <script type="text/javascript">
             $(document).ready(function() {
                 // Use event delegation for dynamically created checkboxes
-                $(document).on('change', 'input[type="checkbox"].user-status-checkbox', function() {
+                $(document).on('change', 'input[type="checkbox"].user-status-checkbox', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     var status = ($(this).is(':checked')) ? '1' : '0';
                     var id = $(this).val();
+                    
+                    console.log('Checkbox changed - Status: ' + status + ', ID: ' + id);
+                    
                     $.ajax({
                         url: "update_user.php",
                         method: "POST",
@@ -261,17 +283,41 @@ if (mysqli_num_rows($query) == 1) {
                             status: status,
                             id: id,
                         },
+                        dataType: "json",
+                        timeout: 10000,
                         success: function(data) {
+                            console.log('AJAX Success:', data);
                             Swal.fire({
                                 title: "Updated!",
                                 text: "Successfully update this user.",
                                 icon: "success",
-                                allowOutsideClick: false
-                            }).then(function(isConfirm) {
-                                (isConfirm) ? location.reload(): ""
+                                allowOutsideClick: false,
+                                confirmButtonText: 'OK',
+                                willClose: function() {
+                                    console.log('Modal closed');
+                                    // Explicitly prevent any default behavior
+                                    return false;
+                                }
+                            }).then(function(result) {
+                                console.log('Result:', result);
+                                if (result.isConfirmed && typeof userTable !== 'undefined') {
+                                    console.log('Calling table.draw()');
+                                    userTable.draw(false); // Refresh table without resetting pagination
+                                }
                             });
                         },
+                        error: function(xhr, status, error) {
+                            console.log('AJAX Error:', error, xhr.status, xhr.responseText);
+                            Swal.fire({
+                                title: "Error!",
+                                text: "Failed to update user status. " + error,
+                                icon: "error",
+                                allowOutsideClick: false
+                            });
+                        }
                     });
+                    
+                    return false;
                 });
             });
         </script>
@@ -281,7 +327,7 @@ if (mysqli_num_rows($query) == 1) {
             $(document).ready(function() {
                 //Buttons examples
                 var buttonConfig = [];
-                var columnNum = [2, 3, 4, 5, 6, 7];
+                var columnNum = [2, 3, 4, 5, 6, 7, 8, 9];
                 buttonConfig.push({
                     extend: 'copy',
                     text: '<i class="mdi mdi-content-copy text-info mr-1"></i>Copy',
@@ -355,6 +401,7 @@ if (mysqli_num_rows($query) == 1) {
                         title: 'General Manager'
                     },
                 };
+                // Store table instance globally so it can be accessed from callbacks
                 var table = $('#employee_vac').DataTable({
                     lengthChange: false,
                     dom: 'Bfrtip',
@@ -390,8 +437,8 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         },
                         {
-                            // User Status
-                            targets: 9,
+                            // User Status - Updated to column 10
+                            targets: 10,
                             render: function(data, type, row, meta) {
                                 if (statusObj[data]) {
                                     return (`<span class="badge-border ${statusObj[data].class}" text-capitalized>${statusObj[data].title}</span>`);
@@ -412,10 +459,10 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         },
                         {
-                            // Action column
-                            targets: 10,
+                            // Action column - Updated to column 11
+                            targets: 11,
                             render: function(data, type, row, meta) {
-                                var recordData = row[11];  // Already an object, no need to JSON.parse
+                                var recordData = row[12];  // Updated index for full record data
                                 var html = `<div class='btn-group dropdown'>
                                     <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                     <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
@@ -426,7 +473,8 @@ if (mysqli_num_rows($query) == 1) {
                                             data-email="${recordData.email || ''}" 
                                             data-user_type="${recordData.user_type}" 
                                             data-status="${recordData.status || 0}" 
-                                            data-allowed_companies="${(recordData.allowed_companies || '').replace(/"/g, '&quot;')}">
+                                            data-allowed_companies="${(recordData.allowed_companies || '').replace(/"/g, '&quot;')}"
+                                            data-allowed_departments="${(recordData.allowed_departments || '').replace(/"/g, '&quot;')}">
                                             <i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit
                                         </a>`;
                                 
@@ -457,10 +505,10 @@ if (mysqli_num_rows($query) == 1) {
                         var deptOptions = new Set();
                         var companyOptions = new Set();
                         
-                        // Adding status filter - Column 8
+                        // Adding status filter - Column 10 (updated from 8)
                         var statusSelect = $(selectOpt).appendTo('.user_status').on('change', function() {
                             var val = $(this).val();
-                            table.column(8).search(val, true, false).draw();
+                            table.column(10).search(val, true, false).draw();
                         });
                         statusOptions.forEach(function(status) {
                             statusSelect.append(`<option value="${status}">${status}</option>`);
@@ -471,16 +519,16 @@ if (mysqli_num_rows($query) == 1) {
                             width: '100%'
                         });
                         
-                        // Adding department filter - Column 4
+                        // Adding department filter - Column 5
                         var deptSelect = $(selectOpt).appendTo('.user_department').on('change', function() {
                             var val = $(this).val();
-                            table.column(4).search(val, true, false).draw();
+                            table.column(5).search(val, true, false).draw();
                         });
                         
-                        // Adding role filter - Column 6
+                        // Adding role filter - Column 7
                         var roleSelect = $(selectOpt).appendTo('.user_role').on('change', function() {
                             var val = $(this).val();
-                            table.column(6).search(val, true, false).draw();
+                            table.column(7).search(val, true, false).draw();
                         });
                         roleOptions.forEach(function(role) {
                             var displayText = employeeTypeObj[role].title;
@@ -492,13 +540,19 @@ if (mysqli_num_rows($query) == 1) {
                             width: '100%'
                         });
                         
-                        // Adding company filter - Column 7
+                        // Adding company filter - Column 8
                         var companySelect = $(selectOpt).appendTo('.user_company').on('change', function() {
                             var val = $(this).val();
-                            table.column(7).search(val, false, false).draw();
+                            table.column(8).search(val, false, false).draw();
                         });
                         
-                        // Fetch all data to populate departments and companies
+                        // Adding allowed department filter - Column 9
+                        var allowedDeptSelect = $(selectOpt).appendTo('.user_allowed_dept').on('change', function() {
+                            var val = $(this).val();
+                            table.column(9).search(val, false, false).draw();
+                        });
+                        
+                        // Fetch all data to populate departments, companies, and allowed departments
                         $.ajax({
                             url: './includes/ajaxFile/getAllUsersData.php',
                             type: 'POST',
@@ -510,29 +564,39 @@ if (mysqli_num_rows($query) == 1) {
                                 columns: [
                                     {data: 'id', search: {value: ''}},
                                     {data: 'checkbox', search: {value: ''}},
+                                    {data: 'iqama', search: {value: ''}},
                                     {data: 'emp_id', search: {value: ''}},
                                     {data: 'name', search: {value: ''}},
                                     {data: 'dept', search: {value: ''}},
                                     {data: 'mobile', search: {value: ''}},
                                     {data: 'user_type', search: {value: ''}},
-                                    {data: 'company', search: {value: ''}},
+                                    {data: 'allowed_companies', search: {value: ''}},
+                                    {data: 'allowed_departments', search: {value: ''}},
                                     {data: 'status', search: {value: ''}},
                                     {data: 'action', search: {value: ''}}
                                 ]
                             },
                             dataType: 'json',
                             success: function(response) {
+                                var allowedDeptOptions = new Set();
                                 if (response.data && response.data.length > 0) {
                                     response.data.forEach(function(row) {
-                                        // Collect unique departments from column 4
-                                        if (row[4] && row[4].trim()) {
-                                            deptOptions.add(row[4].trim());
+                                        // Collect unique departments from column 5
+                                        if (row[5] && row[5].trim()) {
+                                            deptOptions.add(row[5].trim());
                                         }
-                                        // Collect unique companies from column 7
-                                        if (row[7] && row[7].trim()) {
-                                            var companies = row[7].split(',').map(c => c.trim()).filter(c => c);
+                                        // Collect unique companies from column 8
+                                        if (row[8] && row[8].trim()) {
+                                            var companies = row[8].split(',').map(c => c.trim()).filter(c => c);
                                             companies.forEach(function(company) {
                                                 companyOptions.add(company);
+                                            });
+                                        }
+                                        // Collect unique allowed departments from column 9
+                                        if (row[9] && row[9].trim()) {
+                                            var depts = row[9].split(',').map(d => d.trim()).filter(d => d);
+                                            depts.forEach(function(dept) {
+                                                allowedDeptOptions.add(dept);
                                             });
                                         }
                                     });
@@ -563,11 +627,24 @@ if (mysqli_num_rows($query) == 1) {
                                     allowClear: true,
                                     width: '100%'
                                 });
+                                
+                                // Populate allowed department select
+                                Array.from(allowedDeptOptions).sort().forEach(function(dept) {
+                                    allowedDeptSelect.append(`<option value="${dept}">${dept}</option>`);
+                                });
+                                
+                                // Initialize Select2 for allowed department (after options added)
+                                allowedDeptSelect.select2({
+                                    placeholder: 'Select Allowed Department',
+                                    allowClear: true,
+                                    width: '100%'
+                                });
                             }
                         });
                     }
                 });
                 table.buttons().container().appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
+                userTable = table; // Store globally for use in callbacks
             });
             jQuery(function($) {
                 $('.autonumber').autoNumeric('init');
@@ -657,66 +734,62 @@ if (mysqli_num_rows($query) == 1) {
         <script type="text/javascript">
             $(document).ready(function() {
                 // Edit user information START
-                $("#submitForm").click(function() {
+                $(document).on('click', "#submitForm", function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     var id = $('input[name=id]').val();
                     var fullname = $('input[name=fullname]').val();
                     var username = $('input[name=username]').val();
+                    
+                    console.log('Submit form clicked - ID: ' + id);
+                    
                     if (fullname == "" || username == "") {
                         $("#response").fadeIn();
                         $("#response").html("<div class='alert alert-danger'><strong>Error!</strong> All fields are required.</div>");
                     } else {
-                        /*$("#response").html($('#submitEditUserForm').serialize());
-                        var formData = {id: id, fullname: fullname, username: username };
-                        console.log(formData);*/
                         $.ajax({
                             url: "./includes/ajaxFile/edit_user.php",
                             type: "POST",
                             data: $('#submitEditUserForm').serialize(),
                             dataType: "json",
-                            // data: formData,
+                            timeout: 10000,
                             success: function(res) {
+                                console.log('Edit AJAX Success:', res);
                                 setTimeout(function() {
-                                    // swal('Updated!','This user has been update successfully.', 'success')
                                     Swal.fire({
                                         title: res.title,
                                         text: res.message,
                                         icon: res.type,
-                                        allowOutsideClick: false
-                                    }).then(function(isConfirm) {
-                                        (isConfirm) ? location.reload(): ""
+                                        allowOutsideClick: false,
+                                        confirmButtonText: 'OK',
+                                        willClose: function() {
+                                            console.log('Edit Modal closed');
+                                            return false;
+                                        }
+                                    }).then(function(result) {
+                                        console.log('Edit Result:', result);
+                                        if (result.isConfirmed && typeof userTable !== 'undefined') {
+                                            console.log('Calling table.draw() from edit form');
+                                            userTable.draw(false); // Refresh table without resetting pagination
+                                        }
                                     });
                                 }, 1);
-                                /*if (res.status == 'success') {
-                                    window.setTimeout(function(){ 
-                                      location.reload(true);
-                                    } ,2000); 
-                                  }*/
+                            },
+                            error: function(xhr, status, error) {
+                                console.log('Edit AJAX Error:', error, xhr.status, xhr.responseText);
+                                Swal.fire({
+                                    title: "Error!",
+                                    text: "Failed to update user. " + error,
+                                    icon: "error",
+                                    allowOutsideClick: false
+                                });
                             }
                         });
                     }
+                    
+                    return false;
                 });
-                // Edit user Password
-                /*$("#edit_user_password").click(function() {
-                    var id = $('input[name=id]').val();
-                    var password = $('input[name=password]').val();
-                    if (password == "") {
-                      $("#responsePass").fadeIn();
-                      $("#responsePass").html("<div class='alert alert-danger'><strong>Error!</strong> All fields are required.</div>");
-                    } else {
-                      $.ajax({
-                        url: "./includes/ajaxFile/edit_user_password.php",
-                        type: "POST",
-                        data: {ajax: 1, id: id, password: password},
-                        dataType: "json",
-                        success: function(res){
-                          setTimeout(function () {
-                            swal({title:res.title,text:res.message,icon:res.type,allowOutsideClick:false}).then(function(isConfirm){(isConfirm)?location.reload():""});
-                          },1);
-                        }
-                      });
-                    }
-                });*/
-
             });
         </script>
 

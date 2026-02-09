@@ -252,11 +252,12 @@ if ($ajaxType == 'apply_resignation') {
         
         $lastWorkingDay = isset($_POST['last_working_day']) ? mysqli_real_escape_string($conDB, $_POST['last_working_day']) : '';
         $exitInterviewJson = isset($_POST['exit_interview']) ? $_POST['exit_interview'] : '';
+        $rejectionReason = isset($_POST['rejection_reason']) ? mysqli_real_escape_string($conDB, $_POST['rejection_reason']) : '';
         
         error_log("ajaxResignation: apply_resignation - lastWorkingDay = " . $lastWorkingDay . ", exitInterviewJson = " . substr($exitInterviewJson, 0, 50));
         
         // Validate required fields
-        if (empty($empId) || empty($lastWorkingDay) || empty($exitInterviewJson)) {
+        if (empty($empId) || empty($lastWorkingDay) || empty($exitInterviewJson) || empty($rejectionReason)) {
             error_log("ajaxResignation: apply_resignation - validation failed - empId:" . empty($empId) . ", lastWorkingDay:" . empty($lastWorkingDay) . ", exitInterview:" . empty($exitInterviewJson));
             echo json_encode([
                 'type' => 'error',
@@ -346,9 +347,9 @@ if ($ajaxType == 'apply_resignation') {
         
         // Insert resignation record
         $insertResignation = "INSERT INTO `emp_resignations` 
-            (`emp_id`, `request_inv_no`, `last_working_day`, `submission_date`, `status`, `created_at`, `updated_at`) 
+            (`emp_id`, `request_inv_no`, `last_working_day`, `submission_date`, `status`, `created_at`, `updated_at`, `rejection_reason`) 
             VALUES 
-            ('$empId', '$requestInvNo', '$lastWorkingDay', '$submissionDate', 'pending', NOW(), NOW())";
+            ('$empId', '$requestInvNo', '$lastWorkingDay', '$submissionDate', 'pending', NOW(), NOW(), '$rejectionReason')";
         
         error_log("ajaxResignation: apply_resignation - about to INSERT resignation");
         
@@ -906,7 +907,7 @@ if ($ajaxType == 'apply_resignation') {
             }
         }
         
-        // If final approval, notify employee and HR team
+        // If final approval, notify employee, HR team, and GR officer if applicable
         if ($isFinalApproval) {
             // Notify employee
             create_browser_notification(
@@ -916,16 +917,90 @@ if ($ajaxType == 'apply_resignation') {
                 'Your resignation has been approved by all required approvers. HR will contact you regarding the exit process.',
                 'all_resignations.php?inv=' . $requestInvNo
             );
+            
+            // Check employee's country - if not Saudi Arabia (191), notify GR officer for final exit process
+            $countryCheckQuery = "SELECT e.country FROM employees e WHERE e.emp_id = '" . mysqli_real_escape_string($conDB, $resignation['emp_id']) . "' LIMIT 1";
+            $countryResult = mysqli_query($conDB, $countryCheckQuery);
+            $countryData = mysqli_fetch_assoc($countryResult);
+            mysqli_free_result($countryResult);
+            
+            $employeeCountry = $countryData ? $countryData['country'] : null;
+            
+            // If employee's country is not 191 (Saudi Arabia), notify GR officers
+            if ($employeeCountry && $employeeCountry != 191) {
+                error_log("Country check: Employee country = $employeeCountry (not 191), notifying GR officers");
+                
+                // Get all active GR officers
+                $grOfficersQuery = "SELECT al.emp_id, al.fullname, al.email, e.name 
+                                   FROM admin_login al
+                                   LEFT JOIN employees e ON al.emp_id = e.emp_id
+                                   WHERE al.user_type = 'gr_officer' 
+                                   AND al.status = 1 
+                                   AND al.email IS NOT NULL
+                                   AND al.email != ''";
+                
+                $grResult = mysqli_query($conDB, $grOfficersQuery);
+                
+                if ($grResult && mysqli_num_rows($grResult) > 0) {
+                    while ($grOfficer = mysqli_fetch_assoc($grResult)) {
+                        // Send email to GR officer
+                        $grEmailData = [
+                            'EMP_ID' => $resignation['emp_id'],
+                            'EMP_NAME' => $resignation['emp_name'],
+                            'DEPARTMENT' => $resignation['department'] ?? '',
+                            'DESIGNATION' => $resignation['designation'] ?? '',
+                            'RESIGNATION_ID' => $requestInvNo,
+                            'LAST_WORKING_DAY' => isset($resignation['last_working_day']) ? date('d M Y', strtotime($resignation['last_working_day'])) : 'N/A',
+                            'SUBMISSION_DATE' => isset($resignation['submission_date']) ? date('d M Y H:i', strtotime($resignation['submission_date'])) : 'N/A',
+                            'APPROVER_NAME' => $grOfficer['fullname'] ?? $grOfficer['name'],
+                            'REQUEST_URL' => 'https://hr.almutlaksystem.com/all_resignations.php?inv=' . $requestInvNo,
+                            'COUNTRY_ID' => $employeeCountry
+                        ];
+                        
+                        send_approval_email(
+                            $conDB,
+                            $grOfficer['email'],
+                            $grOfficer['fullname'] ?? $grOfficer['name'],
+                            'Employee Resignation - for Final Exit Process',
+                            'resignation_request',
+                            $grEmailData
+                        );
+                        
+                        // Create browser notification for GR officer with approval required message
+                        if ($grOfficer['emp_id']) {
+                            create_browser_notification(
+                                $conDB,
+                                $grOfficer['emp_id'],
+                                'Employee Resignation - for Final Exit Process',
+                                'Employee ' . $resignation['emp_name'] . ' (ID: ' . $resignation['emp_id'] . ') resignation requires your approval for final exit process. Last working day: ' . (isset($resignation['last_working_day']) ? date('d M Y', strtotime($resignation['last_working_day'])) : 'N/A'),
+                                'all_resignations.php?inv=' . $requestInvNo
+                            );
+                        }
+                        
+                        error_log("Notified GR officer: " . $grOfficer['emp_id'] . " for employee: " . $resignation['emp_id']);
+                    }
+                    mysqli_free_result($grResult);
+                } else {
+                    error_log("No GR officers found to notify");
+                }
+            }
         }
         
         // Success response
         $createEOS = isset($_POST['create_eos']) && $_POST['create_eos'] == '1';
         
         if ($isFinalApproval && $createEOS) {
+            // Return resignation reason for EOS pre-fill
+            $resignation_reason = $resignation['rejection_reason'] ?? '';
             echo json_encode([
                 'type' => 'success',
                 'title' => 'Approved',
-                'message' => 'Resignation has been approved successfully. Redirecting to End of Service...'
+                'message' => 'Resignation has been approved successfully. Redirecting to End of Service...',
+                'redirect_to_eos' => true,
+                'emp_id' => $resignation['emp_id'],
+                'end_date' => $resignation['hr_last_working_day'] ?? $resignation['last_working_day'],
+                'resignation_reason' => $resignation_reason,
+                'request_inv_no' => $requestInvNo
             ]);
         } else {
             $message = $isFinalApproval 

@@ -15,7 +15,7 @@
      */
     function captureUserLocation() {
         if (!navigator.geolocation) {
-            console.log('Geolocation not supported by browser');
+            console.info('Geolocation not supported by browser');
             return;
         }
         
@@ -32,12 +32,12 @@
             maximumAge: 0              // Don't use cached position
         };
         
-        console.log('Requesting precise GPS coordinates from browser...');
+        console.info('Requesting precise GPS coordinates from browser...');
         
         navigator.geolocation.getCurrentPosition(
             function onSuccess(position) {
                 var coords = position.coords;
-                console.log('✓ GPS Location captured:', {
+                console.info('✓ GPS Location captured:', {
                     latitude: coords.latitude,
                     longitude: coords.longitude,
                     accuracy: coords.accuracy + ' meters',
@@ -89,7 +89,7 @@
             },
             success: function(response) {
                 if (response.status === 200) {
-                    console.log('✓ GPS coordinates saved to server (Accuracy: ±' + response.data.accuracy.toFixed(1) + 'm)');
+                    console.info('✓ GPS coordinates saved to server (Accuracy: ±' + response.data.accuracy.toFixed(1) + 'm)');
                 } else {
                     console.warn('Server response:', response.message);
                 }

@@ -2234,11 +2234,13 @@ if (!function_exists('handle_approval_action')) {
                                 // --- [UPDATED] Fly Status Management ---
                                 // Set fly=1 at final HR_Payroll approval, except Encashment and Excuse Leave types
                                 // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
+                                // CRITICAL: Do NOT update fly=1 for Encashed vacation type
                                 if ($final_status === 'completed' && !empty($vacation_emp_id)) {
                                     $vac_type_lower = strtolower($vacation_type ?? '');
                                     // Define excuse leave types that should NOT update fly status
                                     $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
                                     
+                                    // Check both vac_type and remarks for Encashed vacation
                                     if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
                                         $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
                                         if ($stmtFly) {
@@ -4474,6 +4476,32 @@ if (!function_exists('getCompanyFilterSQL')) {
 }
 
 /**
+ * Generate SQL WHERE clause for department filtering based on user's allowed departments
+ * 
+ * @param string $column_name The column name to filter (e.g., 'dept', 'e.dept')
+ * @param bool $use_session Use session values (default: true)
+ * @return string SQL WHERE clause fragment (e.g., " AND dept IN (1,3,5)" or "" for no restrictions)
+ */
+if (!function_exists('getDepartmentFilterSQL')) {
+    function getDepartmentFilterSQL($column_name, $use_session = true) {
+        global $conDB, $allowed_departments_array;
+        
+        $departments = $use_session && isset($_SESSION['allowed_departments_array']) 
+            ? $_SESSION['allowed_departments_array'] 
+            : $allowed_departments_array;
+        
+        // No restrictions = no WHERE clause needed
+        if (empty($departments)) {
+            return "";
+        }
+        
+        // Create IN clause for allowed departments with AND prefix for WHERE clause compatibility
+        $departments_list = implode(',', array_map('intval', $departments));
+        return " AND $column_name IN ($departments_list)";
+    }
+}
+
+/**
  * Get array of company IDs user can access
  * 
  * @param bool $use_session Use session values (default: true)
@@ -4488,6 +4516,24 @@ if (!function_exists('getAccessibleCompanies')) {
             : $allowed_companies_array;
         
         return !empty($companies) ? $companies : [];
+    }
+}
+
+/**
+ * Get array of department IDs user can access
+ * 
+ * @param bool $use_session Use session values (default: true)
+ * @return array Array of department IDs, or empty array if no restrictions (full access)
+ */
+if (!function_exists('getAccessibleDepartments')) {
+    function getAccessibleDepartments($use_session = true) {
+        global $allowed_departments_array;
+        
+        $departments = $use_session && isset($_SESSION['allowed_departments_array']) 
+            ? $_SESSION['allowed_departments_array'] 
+            : $allowed_departments_array;
+        
+        return !empty($departments) ? $departments : [];
     }
 }
 
@@ -4738,10 +4784,14 @@ if (!function_exists('canEmployeeSupervisorAccess')) {
         $user_dept = isset($user_data['dept']) ? (int)$user_data['dept'] : 0;
         $user_company = isset($user_data['comp_no']) ? (int)$user_data['comp_no'] : 0;
         $user_type = $user_data['user_type'] ?? null;
+        
+        // NEW: Get accessible departments for multi-department access
+        $accessible_departments = isset($user_data['accessible_departments']) ? $user_data['accessible_departments'] : getAccessibleDepartments(true);
+        $has_dept_access = empty($accessible_departments) || in_array($emp_dept, $accessible_departments);
 
         // DEBUG LOG - Log access attempt for troubleshooting
-        error_log("ACCESS_CONTROL: emp_id={$emp_id}, supervisor_id={$supervisor_id}, emp_dept={$emp_dept}, emp_company={$emp_company} | user_emp_id={$user_emp_id}, user_dept={$user_dept}, user_company={$user_company}, user_type={$user_type}, user_role={$user_role}");
-        if ($emp_dept !== $user_dept) error_log("ACCESS_CONTROL: Department mismatch: emp_dept={$emp_dept} vs user_dept={$user_dept}");
+        error_log("ACCESS_CONTROL: emp_id={$emp_id}, supervisor_id={$supervisor_id}, emp_dept={$emp_dept}, emp_company={$emp_company} | user_emp_id={$user_emp_id}, user_dept={$user_dept}, user_company={$user_company}, user_type={$user_type}, user_role={$user_role}, accessible_depts=" . json_encode($accessible_departments));
+        if (!$has_dept_access) error_log("ACCESS_CONTROL: Department access denied: emp_dept={$emp_dept} not in accessible_departments");
         if ($emp_company !== $user_company) error_log("ACCESS_CONTROL: Company mismatch: emp_company={$emp_company} vs user_company={$user_company}");
         
         // 1. System admin or administrator - full access
@@ -4756,10 +4806,10 @@ if (!function_exists('canEmployeeSupervisorAccess')) {
             return true;
         }
         
-        // 3. Department manager in SAME department AND same company - can view all employees in that department only
+        // 3. Department manager in accessible departments AND same company - can view all employees in those departments
         // Allow any role ending with _Manager (e.g., IT_Team_Manager, HR_Team_Manager, Finance_Team_Manager, DPT_Manager)
         if (
-            $user_dept === $emp_dept &&
+            $has_dept_access &&
             $user_company === $emp_company &&
             (
                 (is_string($user_role) && preg_match('/_Manager$/', $user_role)) ||
@@ -4767,12 +4817,12 @@ if (!function_exists('canEmployeeSupervisorAccess')) {
                 $user_type === 'dept_manager'
             )
         ) {
-            error_log("ACCESS_CONTROL: ALLOWED via rule 3 (department manager or *_Manager role)");
+            error_log("ACCESS_CONTROL: ALLOWED via rule 3 (department manager or *_Manager role with multi-dept access)");
             return true;
         }
         
-        // 4. Direct supervisor: must be supervisor AND same company AND same department
-        if ($supervisor_id > 0 && $supervisor_id === $user_emp_id && $emp_company === $user_company && $emp_dept === $user_dept) {
+        // 4. Direct supervisor: must be supervisor AND same company AND in accessible departments
+        if ($supervisor_id > 0 && $supervisor_id === $user_emp_id && $emp_company === $user_company && $has_dept_access) {
             error_log("ACCESS_CONTROL: ALLOWED via rule 4 (direct supervisor). supervisor_id=$supervisor_id, user_emp_id=$user_emp_id");
             return true;
         }
@@ -4783,9 +4833,9 @@ if (!function_exists('canEmployeeSupervisorAccess')) {
             return true;
         }
         
-        // 6. Regular employee in SAME department AND same company - can view colleagues in their department
-        if ($emp_dept > 0 && $user_dept === $emp_dept && $user_company === $emp_company) {
-            error_log("ACCESS_CONTROL: ALLOWED via rule 6 (colleague in same dept+company)");
+        // 6. Regular employee in accessible departments - can view colleagues in their accessible departments (company check removed for multi-dept access)
+        if ($emp_dept > 0 && $has_dept_access) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 6 (colleague in accessible dept, company check skipped)");
             return true;
         }
         
@@ -4999,6 +5049,171 @@ if (!function_exists('notify_hr_gr_new_employee')) {
         } catch (\Exception $e) {
             $result['message'] = 'Exception: ' . $e->getMessage();
             return $result;
+        }
+    }
+}
+
+/**
+ * =========================================
+ * SETTLEMENT APPROVAL NOTIFICATION HANDLER
+ * =========================================
+ * Sends email and browser notifications to ALL NEXT APPROVERS in the approval chain
+ * Follows role-based configuration for notification eligibility
+ * Loops through entire approval chain to notify each eligible approver
+ * 
+ * @param $conDB - Database connection
+ * @param $settlementInvNo - Settlement invoice number
+ * @param $typeId - Request type ID for settlement
+ * @param $currentApprovalLevel - Current approval level completed
+ * @return bool - True if at least one notification sent, false otherwise
+ */
+if (!function_exists('notify_settlement_next_approver')) {
+    function notify_settlement_next_approver($conDB, $settlementInvNo, $typeId, $currentApprovalLevel)
+    {
+        try {
+            // Get ALL pending approvers (entire approval chain)
+            $nextQry = mysqli_query($conDB, "
+                SELECT ra.approver_id, 
+                       ra.approval_level,
+                       e.name,
+                       al.email,
+                       al.user_type
+                FROM request_approvers ra
+                JOIN employees e ON e.emp_id = ra.approver_id
+                LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
+                WHERE ra.request_inv_no = '$settlementInvNo'
+                AND ra.request_type_id = $typeId
+                AND ra.status = 'pending'
+                ORDER BY ra.approval_level ASC
+            ");
+            
+            if (!$nextQry) {
+                error_log("Settlement Notification: Query failed - " . mysqli_error($conDB));
+                return false;
+            }
+            
+            if (mysqli_num_rows($nextQry) == 0) {
+                error_log("Settlement Notification: No pending approvers found in chain for $settlementInvNo");
+                mysqli_free_result($nextQry);
+                return false;
+            }
+            
+            // Get settlement details ONCE (reuse for all approvers)
+            $settlementDetailsQry = mysqli_query($conDB, "
+                SELECT s.*, e.name as emp_name, e.dept
+                FROM settlement_records s
+                JOIN employees e ON e.emp_id = s.emp_id
+                WHERE s.request_inv_no = '$settlementInvNo'
+                LIMIT 1
+            ");
+            
+            $settlementDetails = $settlementDetailsQry ? mysqli_fetch_assoc($settlementDetailsQry) : null;
+            if ($settlementDetailsQry) mysqli_free_result($settlementDetailsQry);
+            
+            // Prepare reusable email data
+            $settlementAmount = $settlementDetails ? number_format($settlementDetails['settlement_amount'] ?? 0, 2) : '0.00';
+            $empName = $settlementDetails ? getDisplayName($settlementDetails['emp_name']) : 'Employee';
+            $sourceRequest = $settlementDetails && !empty($settlementDetails['request_type']) ? $settlementDetails['request_type'] : 'Settlement';
+            
+            // Roles that SHOULD receive settlement approval notifications
+            $notifiable_roles = [
+                'authorized_approver',
+                'hr',
+                'hr_payroll',
+                'hr_manager',
+                'finance',
+                'finance_manager',
+                'accounts_manager',
+                'cfo',
+                'manager',
+                'administrator',
+                'system_admin'
+            ];
+            
+            $notificationCount = 0;
+            $totalApprovers = 0;
+            
+            // LOOP through ALL pending approvers and send notifications
+            while ($nextApprover = mysqli_fetch_assoc($nextQry)) {
+                $totalApprovers++;
+                $approver_id = $nextApprover['approver_id'];
+                $approval_level = $nextApprover['approval_level'];
+                
+                error_log("Settlement Notification: Processing approver #{$totalApprovers} - emp_id={$approver_id}, level={$approval_level}, email={$nextApprover['email']}");
+                
+                // Validate email exists
+                if (empty($nextApprover['email'])) {
+                    error_log("Settlement Notification: Approver emp_id={$approver_id} has no email configured - SKIPPED");
+                    continue;
+                }
+                
+                // Check if this role should receive notifications (based on user_type)
+                $userType = strtolower($nextApprover['user_type'] ?? 'employee');
+                
+                // Check if role should be notified
+                $should_notify = false;
+                foreach ($notifiable_roles as $role) {
+                    if (stripos($userType, $role) !== false) {
+                        $should_notify = true;
+                        break;
+                    }
+                }
+                
+                if (!$should_notify) {
+                    error_log("Settlement Notification: Approver emp_id={$approver_id} has user_type='$userType' (NOT eligible) - SKIPPED");
+                    continue;
+                }
+                
+                error_log("Settlement Notification: Approver emp_id={$approver_id} is eligible (user_type='$userType') - SENDING NOTIFICATION");
+                
+                // Create browser notification
+                $browserNotif = create_browser_notification($conDB, $approver_id,
+                    'Settlement Approval Required',
+                    'Settlement ' . $settlementInvNo . ' requires your approval.',
+                    'all_settlements.php?status=my_pending'
+                );
+                error_log("Settlement Notification: Browser notification for approver {$approver_id} - result=" . ($browserNotif ? 'success' : 'failed'));
+                
+                // Prepare email data with this approver's name
+                $emailData = [
+                    'APPROVER_NAME' => $nextApprover['name'],
+                    'REQUEST_ID' => $settlementInvNo,
+                    'REQUEST_TITLE' => 'Settlement Approval',
+                    'EMPLOYEE_NAME' => $empName,
+                    'EMPLOYEE_ID' => $settlementDetails['emp_id'] ?? 'N/A',
+                    'DEPARTMENT' => $settlementDetails['dept'] ?? 'N/A',
+                    'REQUEST_SOURCE' => $sourceRequest,
+                    'SETTLEMENT_AMOUNT' => $settlementAmount,
+                    'EMAIL_MESSAGE' => 'A settlement requires your approval.',
+                    'REQUEST_URL' => get_base_url() . '/all_settlements.php?status=my_pending'
+                ];
+                
+                error_log("Settlement Notification: Sending email to {$nextApprover['email']} - approver: {$nextApprover['name']}, level: {$approval_level}");
+                
+                // Send email notification
+                $emailResult = send_approval_email($conDB, $nextApprover['email'], $nextApprover['name'], 
+                    'Settlement Approval Required - ' . $settlementInvNo, 'settlement_approval', $emailData
+                );
+                
+                if ($emailResult) {
+                    error_log("Settlement Notification: ✓ Email sent successfully to {$nextApprover['email']} (emp_id={$approver_id})");
+                    $notificationCount++;
+                } else {
+                    error_log("Settlement Notification: ✗ Email send FAILED to {$nextApprover['email']} (emp_id={$approver_id})");
+                }
+            }
+            
+            mysqli_free_result($nextQry);
+            
+            // Summary log
+            error_log("Settlement Notification: SUMMARY - Processed {$totalApprovers} pending approvers, notified {$notificationCount} eligible approvers for settlement {$settlementInvNo}");
+            
+            // Return true if at least one notification was sent
+            return $notificationCount > 0;
+            
+        } catch (Exception $e) {
+            error_log("Settlement Notification: Exception - " . $e->getMessage());
+            return false;
         }
     }
 }

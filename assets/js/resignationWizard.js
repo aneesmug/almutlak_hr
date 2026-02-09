@@ -29,12 +29,22 @@ function openResignationWizard(empId, empName) {
         },
         width: '600px',
         allowOutsideClick: false,
+        didOpen: () => {
+            // Fetch resignation reasons from API
+            loadResignationReasons();
+        },
         preConfirm: () => {
             const lastWorkingDay = $('#last_working_day').val();
+            const resignationReason = $('#resignation_reason').val();
             
             // Validation
             if (!lastWorkingDay) {
                 Swal.showValidationMessage(__('select_last_working_day') || 'Please select your last working day');
+                return false;
+            }
+            
+            if (!resignationReason) {
+                Swal.showValidationMessage(__('select_resignation_reason') || 'Please select a reason for leaving');
                 return false;
             }
             
@@ -52,7 +62,8 @@ function openResignationWizard(empId, empName) {
             window.resignationData = {
                 empId: empId,
                 empName: empName,
-                lastWorkingDay: lastWorkingDay
+                lastWorkingDay: lastWorkingDay,
+                resignationReason: resignationReason
             };
             
             return true;
@@ -73,6 +84,70 @@ function openResignationWizard(empId, empName) {
             startDate: new Date()
         });
     }, 300);
+}
+
+
+/**
+ * Load resignation reasons from external API via proxy
+ */
+function loadResignationReasons() {
+    // IDs to skip/exclude from the dropdown (add IDs here that you want to skip)
+    const skipReasonIds = [4,5, 7, 9, 13, 14, 17, 19, 20, 22]; // e.g., [2, 8, 11, 15, 18] to skip specific reasons
+    
+    // Detect current language (check HTML lang attribute or session)
+    const currentLang = $('html').attr('lang') || document.documentElement.lang || 'ar';
+    const isArabic = currentLang === 'ar' || currentLang === 'ar-SA';
+    
+    $.ajax({
+        url: './includes/ajaxFile/getEndOfServiceReasons.php',
+        type: 'GET',
+        dataType: 'json',
+        success: function(response) {
+            const $select = $('#resignation_reason');
+            $select.empty();
+            
+            // Add default option
+            $select.append('<option value="">' + (__('choose_reason') || 'Choose a reason') + '</option>');
+            
+            // Check if response is successful and has data
+            if (response.success && response.data && Array.isArray(response.data)) {
+                // Preserve the exact order from API response (do not sort)
+                response.data.forEach(function(reason) {
+                    // Skip reasons in the skipReasonIds array
+                    const reasonId = parseInt(reason.ContractEndReasonCode || reason.id);
+                    if (skipReasonIds.includes(reasonId)) {
+                        return; // Skip this iteration
+                    }
+                    
+                    // Use language-appropriate description
+                    const optionText = isArabic 
+                        ? (reason.ArDescription || reason.EnDescription) 
+                        : (reason.EnDescription || reason.ArDescription);
+                    const optionValue = reason.ContractEndReasonCode || reason.id;
+                    
+                    $select.append(`<option value="${optionValue}">${optionText}</option>`);
+                });
+            }
+            
+            // Initialize select2 after options are loaded
+            $select.select2({
+                width: '100%',
+                dropdownParent: $('.swal2-container'),
+                placeholder: __('choose_reason') || 'Choose a reason'
+            });
+        },
+        error: function(xhr, status, error) {
+            console.error('Failed to load resignation reasons:', error);
+            
+            // Fallback to default option with error message
+            const $select = $('#resignation_reason');
+            $select.empty();
+            $select.append('<option value="">' + (__('error_loading_reasons') || 'Error loading reasons. Please try again.') + '</option>');
+            
+            // Show error notification
+            Swal.showValidationMessage(__('failed_to_load_reasons') || 'Failed to load resignation reasons from server.');
+        }
+    });
 }
 
 
@@ -150,6 +225,7 @@ function submitResignation() {
     formData.append('ajaxType', 'apply_resignation');
     formData.append('emp_id', window.resignationData.empId);
     formData.append('last_working_day', window.resignationData.lastWorkingDay);
+    formData.append('rejection_reason', window.resignationData.resignationReason);
     
     // Add exit interview answers
     const exitInterviewAnswers = {
@@ -294,6 +370,18 @@ function resignationStep1_HTML(empName) {
                     />
                     <small class="form-text text-muted" style="margin-top: 5px;">
                         ${__('select_your_last_working_date') || 'Please select your last working date'}
+                    </small>
+                </div>
+                
+                <div class="form-group mb-3">
+                    <label for="resignation_reason" class="form-label" style="font-weight: 500; color: #34495e;">
+                        ${__('resignation_reason') || 'Reason for Leaving'} <span style="color: red;">*</span>
+                    </label>
+                    <select id="resignation_reason" name="resignation_reason" class="form-control" required>
+                        <option value="">${__('loading') || 'Loading reasons...'}</option>
+                    </select>
+                    <small class="form-text text-muted" style="margin-top: 5px;">
+                        ${__('select_resignation_reason_hint') || 'Please select the main reason for your resignation'}
                     </small>
                 </div>
                 

@@ -73,12 +73,13 @@ if (!empty($where_clauses)) {
     $where_sql = " WHERE " . implode(" AND ", $where_clauses);
 }
 
-// Add company filter to WHERE clause
+// Add company and department filters to WHERE clause
 $company_filter = getCompanyFilterSQL('e.comp_no', true);
+$department_filter = getDepartmentFilterSQL('e.dept', true);
 if (strpos($where_sql, 'WHERE') === false) {
-    $where_sql = " WHERE 1=1" . $company_filter;
+    $where_sql = " WHERE 1=1" . $company_filter . $department_filter;
 } else {
-    $where_sql .= $company_filter;
+    $where_sql .= $company_filter . $department_filter;
 }
 
 // 3. Get total item count

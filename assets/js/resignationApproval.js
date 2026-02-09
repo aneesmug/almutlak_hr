@@ -301,9 +301,21 @@ function submitEOSApproval(resignationId, empId, finalLastWorkingDate) {
                 confirmButtonText: __('ok') || 'OK',
                 allowOutsideClick: false
             }).then(() => {
-                // Redirect to EOS page
-                const eosUrl = `./emp_end_of_service.php?emp_id=${empId}&end_date=${finalLastWorkingDate}`;
-                window.location.href = eosUrl;
+                // Check if we need to redirect to EOS
+                if (response.redirect_to_eos && response.emp_id && response.end_date) {
+                    // Build EOS URL with resignation_reason (rejection_reason from resignation)
+                    let eosUrl = `./emp_end_of_service.php?emp_id=${response.emp_id}&end_date=${response.end_date}`;
+                    if (response.request_inv_no) {
+                        eosUrl += `&request_inv_no=${encodeURIComponent(response.request_inv_no)}`;
+                    }
+                    if (response.resignation_reason) {
+                        eosUrl += `&pre_fill_reason=${encodeURIComponent(response.resignation_reason)}`;
+                    }
+                    window.location.href = eosUrl;
+                } else {
+                    // Reload current page if no EOS redirection
+                    location.reload();
+                }
             });
         },
         error: function(jqXHR, textStatus, errorThrown) {
@@ -626,6 +638,13 @@ function showHRStep3ReplacementSummary(data) {
                     <p class="text-muted text-left mb-3"><small><i class="fas fa-info-circle"></i> ${__('replacement_info_from_manager') || 'Information provided by Direct Manager'}</small></p>
                     ${replacementHTML}
                 </div>
+                <div class="wizard-section mt-4 pt-4 border-top">
+                    <div class="form-group text-left">
+                        <label for="approval_comment">${__('approval_comment') || 'Approval Comment'}</label>
+                        <textarea id="approval_comment" name="approval_comment" class="form-control" rows="4" placeholder="${__('enter_optional_approval_comment') || 'Enter optional comment for this approval...'}" maxlength="5000"></textarea>
+                        <small class="form-text text-muted"><span id="comment_char_count">0</span>/5000 ${__('characters')}</small>
+                    </div>
+                </div>
             </div>
         `,
         icon: 'info',
@@ -642,11 +661,25 @@ function showHRStep3ReplacementSummary(data) {
             popup: 'resignation-wizard-popup',
             confirmButton: 'btn-lg',
             cancelButton: 'btn-lg'
+        },
+        allowOutsideClick: false,
+        didOpen: () => {
+            // Set up character counter for approval comment
+            const commentField = document.getElementById('approval_comment');
+            if (commentField) {
+                commentField.addEventListener('input', function() {
+                    const charCountElement = document.getElementById('comment_char_count');
+                    if (charCountElement) {
+                        charCountElement.textContent = this.value.length;
+                    }
+                });
+            }
         }
-    ,allowOutsideClick:false}).then((result) => {
+    }).then((result) => {
         if (result.isConfirmed) {
-            // Approve resignation - pass the stored HR last working day
-            submitHRApproval(data.id, null, data.hrLastWorkingDay);
+            // Approve resignation - pass the stored HR last working day and comment
+            const approvalComment = document.getElementById('approval_comment')?.value || '';
+            submitHRApproval(data.id, null, data.hrLastWorkingDay, approvalComment);
         } else if (result.isDenied) {
             // Back button - return to Step 2
             showHRStep2ExitInterview(data);
@@ -660,7 +693,7 @@ function showHRStep3ReplacementSummary(data) {
 /**
  * Submit HR Operations Approval to Backend
  */
-function submitHRApproval(resignationId, replacementData, hrLastWorkingDay) {
+function submitHRApproval(resignationId, replacementData, hrLastWorkingDay, approvalComment) {
     // Note: hrLastWorkingDay is passed from the data object stored in Step 1
     
     Swal.fire({
@@ -679,6 +712,10 @@ function submitHRApproval(resignationId, replacementData, hrLastWorkingDay) {
     
     if (hrLastWorkingDay) {
         formData.append('hr_last_working_day', hrLastWorkingDay);
+    }
+    
+    if (approvalComment) {
+        formData.append('approval_comment', approvalComment);
     }
     
     if (replacementData) {

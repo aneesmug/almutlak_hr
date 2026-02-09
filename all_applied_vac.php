@@ -177,10 +177,11 @@ if (!empty($where_clauses)) {
 
 // Add company filter to WHERE clause
 $company_filter = getCompanyFilterSQL('e.comp_no', true);
+$department_filter = getDepartmentFilterSQL('e.dept', true);
 if (strpos($where_sql, 'WHERE') === false) {
-    $where_sql = " WHERE 1=1" . $company_filter;
+    $where_sql = " WHERE 1=1" . $company_filter . $department_filter;
 } else {
-    $where_sql .= $company_filter;
+    $where_sql .= $company_filter . $department_filter;
 }
 
 // Main query to select *which* vacations to show (for count and main data)
@@ -4010,6 +4011,28 @@ if ($can_see_all_depts) {
             });
         }
         
+        /**
+         * Check if current user is HR Payroll and handle WPS upload after settlement creation
+         */
+        function handleSettlementCreated(settlementData, employeeId, employeeName, totalPayable, requestInvNo) {
+            const currentUserType = '<?php echo $_SESSION['user_type'] ?? ""; ?>';
+            const isHRPayroll = (currentUserType === 'hr_payroll');
+            
+            if (isHRPayroll && settlementData.settlement_id) {
+                // Show WPS upload modal for HR Payroll
+                showWPSUploadModal(
+                    settlementData.settlement_id,
+                    settlementData.settlement_inv_no || requestInvNo,
+                    employeeId,
+                    employeeName,
+                    totalPayable
+                );
+            } else {
+                // For other users, just reload the page
+                location.reload();
+            }
+        }
+        
         function showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi) {
             // Fetch settlement approval chain from app_settings
             $.ajax({
@@ -4042,9 +4065,8 @@ if ($can_see_all_depts) {
                     displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, 'Configured settlement approval chain', []);
                 }
             });
-        }
-        
-        function displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText) {
+       
+ }        function displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText) {
             // Build the breakdown HTML based on vacation type
             let breakdownHtml = '';
             
@@ -4149,7 +4171,14 @@ if ($can_see_all_depts) {
                         confirmButtonText: __('ok') || 'OK',
                         allowOutsideClick: false
                     }).then(() => {
-                        location.reload();
+                        // Handle settlement created - check if HR Payroll needs to upload WPS
+                        handleSettlementCreated(
+                            result.value,
+                            employeeId,
+                            employeeName,
+                            totalPayable,
+                            requestInvNo
+                        );
                     });
                 }
             }).catch((error) => {

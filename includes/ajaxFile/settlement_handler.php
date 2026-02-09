@@ -50,6 +50,10 @@ switch ($action) {
         approveSettlement($settlementManager, $currentUserId);
         break;
     
+    case 'approve_settlement_with_wps':
+        approveSettlementWithWPS($settlementManager, $currentUserId);
+        break;
+    
     case 'reject_settlement':
         rejectSettlement($settlementManager, $currentUserId);
         break;
@@ -64,6 +68,10 @@ switch ($action) {
     
     case 'get_employee_settlements':
         getEmployeeSettlements($settlementManager, $currentUserId);
+        break;
+    
+    case 'upload_wps_file':
+        uploadWPSFile($conDB, $pdo, $currentUserId);
         break;
     
     default:
@@ -777,6 +785,218 @@ function approveSettlement($settlementManager, $currentUserId) {
     }
 }
 
+/**
+ * Approve Settlement with WPS File Upload (Combined Operation for HR Payroll)
+ * Handles both approval and WPS file upload in a single request
+ */
+function approveSettlementWithWPS($settlementManager, $currentUserId) {
+    global $conDB, $pdo;
+    
+    $settlementInvNo = $_POST['settlement_inv_no'] ?? '';
+    $settlementId = $_POST['settlement_id'] ?? 0;
+    $empId = $_POST['emp_id'] ?? 0;
+    $approvalComment = $_POST['approval_comment'] ?? '';
+    $isHRPayroll = ($_POST['is_hr_payroll'] ?? '0') === '1';
+    $isFinalApproval = isset($_POST['is_final_approval']) && $_POST['is_final_approval'] == '1';
+    
+    if (empty($settlementInvNo) || $settlementId <= 0) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Settlement invoice number and ID required'
+        ]);
+        return;
+    }
+    
+    try {
+        // STEP 1: First, perform the settlement approval
+        $typeQry = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'settlement' LIMIT 1");
+        if (!$typeQry || mysqli_num_rows($typeQry) == 0) {
+            echo json_encode(['success' => false, 'message' => 'Settlement request type not found']);
+            return;
+        }
+        $typeId = (int)mysqli_fetch_assoc($typeQry)['id'];
+        mysqli_free_result($typeQry);
+        
+        // Get current approval status
+        $currentQry = mysqli_query($conDB, "
+            SELECT ra.*, r.settlement_status 
+            FROM request_approvers ra
+            JOIN settlement_records r ON r.request_inv_no = ra.request_inv_no
+            WHERE ra.request_inv_no = '$settlementInvNo' 
+            AND ra.request_type_id = $typeId
+            AND ra.status = 'pending'
+            LIMIT 1
+        ");
+        
+        if (!$currentQry || mysqli_num_rows($currentQry) == 0) {
+            echo json_encode(['success' => false, 'message' => 'No pending approval found for this settlement']);
+            return;
+        }
+        
+        $current = mysqli_fetch_assoc($currentQry);
+        mysqli_free_result($currentQry);
+        
+        // Verify current user is the approver
+        if ($current['approver_id'] != $currentUserId) {
+            echo json_encode(['success' => false, 'message' => 'You are not the assigned approver for this settlement']);
+            return;
+        }
+        
+        // Update approval status to 'approved'
+        $updateQry = mysqli_query($conDB, "
+            UPDATE request_approvers 
+            SET status = 'approved', action_date = NOW(), note = '" . mysqli_real_escape_string($conDB, $approvalComment) . "'
+            WHERE request_inv_no = '$settlementInvNo' 
+            AND request_type_id = $typeId
+            AND approval_level = {$current['approval_level']}
+        ");
+        
+        if (!$updateQry) {
+            echo json_encode(['success' => false, 'message' => 'Failed to update approval status']);
+            return;
+        }
+        
+        // Activate next approval level
+        $nextLevel = $current['approval_level'] + 1;
+        mysqli_query($conDB, "
+            UPDATE request_approvers 
+            SET status = 'pending'
+            WHERE request_inv_no = '$settlementInvNo' 
+            AND request_type_id = $typeId
+            AND approval_level = $nextLevel
+            AND status = 'awaiting'
+        ");
+        
+        // Get approver details for notification
+        $approverQry = mysqli_query($conDB, "SELECT name, email FROM employees WHERE emp_id = $currentUserId LIMIT 1");
+        $approverDetails = $approverQry ? mysqli_fetch_assoc($approverQry) : null;
+        if ($approverQry) mysqli_free_result($approverQry);
+        
+        // Add approval entry to smt_request_status
+        $approverName = getDisplayName($approverDetails['name'] ?? 'System');
+        mysqli_query($conDB, "
+            INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status)
+            VALUES ('$settlementInvNo', $currentUserId, '" . mysqli_real_escape_string($conDB, $approverName) . "', 
+                    'Approved at level {$current['approval_level']}. Comment: " . mysqli_real_escape_string($conDB, $approvalComment) . "', 'approved')
+        ");
+        
+        // Check if all approval levels are complete
+        $approvedQry = mysqli_query($conDB, "
+            SELECT COUNT(*) as approved FROM request_approvers
+            WHERE request_inv_no = '$settlementInvNo'
+            AND request_type_id = $typeId
+            AND status = 'approved'
+        ");
+        $approvedCount = $approvedQry ? (int)mysqli_fetch_assoc($approvedQry)['approved'] : 0;
+        if ($approvedQry) mysqli_free_result($approvedQry);
+        
+        $allApprovalsQry = mysqli_query($conDB, "
+            SELECT COUNT(*) as total FROM request_approvers
+            WHERE request_inv_no = '$settlementInvNo'
+            AND request_type_id = $typeId
+        ");
+        $totalApprovals = $allApprovalsQry ? (int)mysqli_fetch_assoc($allApprovalsQry)['total'] : 0;
+        if ($allApprovalsQry) mysqli_free_result($allApprovalsQry);
+        
+        $allApprovalsComplete = ($approvedCount === $totalApprovals);
+        
+        // Update settlement status
+        $newSettlementStatus = $allApprovalsComplete ? 'completed' : 'pending_approval';
+        $updateSettlementQry = mysqli_query($conDB, "
+            UPDATE settlement_records 
+            SET settlement_status = '$newSettlementStatus', updated_at = NOW()
+            WHERE request_inv_no = '$settlementInvNo'
+        ");
+        
+        // Send notifications: notify next approver or employee based on approval status
+        if ($allApprovalsComplete) {
+            error_log("Settlement WPS Handler: All approvals complete, settlement status now: $newSettlementStatus");
+        } else {
+            // Notify next approver using role-based notification helper
+            error_log("Settlement WPS Handler: Not all approvals complete, notifying next approver for $settlementInvNo");
+            $notifyResult = notify_settlement_next_approver($conDB, $settlementInvNo, $typeId, $current['approval_level']);
+            error_log("Settlement WPS Handler: Notification result = " . ($notifyResult ? 'success' : 'failed/no eligible approver'));
+        }
+        
+        // STEP 2: Handle WPS file upload if provided and user is HR Payroll
+        $wpsFileName = null;
+        $wpsFilePath = null;
+        
+        if ($isHRPayroll && isset($_FILES['wps_file']) && $_FILES['wps_file']['error'] === UPLOAD_ERR_OK) {
+            $file = $_FILES['wps_file'];
+            $fileName = basename($file['name']);
+            $fileSize = $file['size'];
+            $fileTmpPath = $file['tmp_name'];
+            
+            // Validate file size (max 10MB)
+            $maxFileSize = 10 * 1024 * 1024;
+            if ($fileSize <= $maxFileSize) {
+                // Validate file type
+                $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'];
+                $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                
+                if (in_array($fileExtension, $allowedExtensions)) {
+                    // Create upload directory
+                    $uploadBaseDir = __DIR__ . '/../../uploads/wps_files';
+                    $yearMonth = date('Y/m');
+                    $uploadDir = $uploadBaseDir . '/' . $yearMonth;
+                    
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0755, true);
+                    }
+                    
+                    // Generate unique filename
+                    $timestamp = date('YmdHis');
+                    $uniqueFileName = 'settlement_' . $settlementId . '_' . $timestamp . '.' . $fileExtension;
+                    $uploadFilePath = $uploadDir . '/' . $uniqueFileName;
+                    $relativePath = '/uploads/wps_files/' . $yearMonth . '/' . $uniqueFileName;
+                    
+                    // Move uploaded file
+                    if (move_uploaded_file($fileTmpPath, $uploadFilePath)) {
+                        // Update settlement_records with WPS file info
+                        $updateWPSQry = $pdo->prepare("
+                            UPDATE settlement_records 
+                            SET 
+                                wps_file_path = :wps_file_path,
+                                wps_file_name = :wps_file_name,
+                                wps_uploaded_by = :wps_uploaded_by,
+                                wps_uploaded_at = NOW(),
+                                wps_upload_status = 'completed'
+                            WHERE id = :settlement_id
+                        ");
+                        
+                        $updateWPSQry->execute([
+                            ':wps_file_path' => $relativePath,
+                            ':wps_file_name' => $uniqueFileName,
+                            ':wps_uploaded_by' => $currentUserId,
+                            ':settlement_id' => $settlementId
+                        ]);
+                        
+                        $wpsFileName = $uniqueFileName;
+                        $wpsFilePath = $relativePath;
+                    }
+                }
+            }
+        }
+        
+        // Return success response
+        echo json_encode([
+            'success' => true,
+            'message' => $allApprovalsComplete ? __('settlement_approved_all_approvals_complete') : __('settlement_approved_forwarded_to_next_approver'),
+            'all_approvals_complete' => $allApprovalsComplete,
+            'wps_file_name' => $wpsFileName,
+            'wps_file_path' => $wpsFilePath
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Settlement approval with WPS error: " . $e->getMessage());
+        echo json_encode([
+            'success' => false,
+            'message' => __('error') . ': ' . $e->getMessage()
+        ]);
+    }
+}
+
 function rejectSettlement($settlementManager, $currentUserId) {
     global $conDB;
     
@@ -1097,4 +1317,155 @@ function getEmployeeSettlements($settlementManager, $currentUserId) {
         'count' => count($settlements)
     ]);
 }
+
+function uploadWPSFile($conDB, $pdo, $currentUserId) {
+    try {
+        // Validate inputs
+        $settlementId = intval($_POST['settlement_id'] ?? 0);
+        $requestInvNo = trim($_POST['request_inv_no'] ?? '');
+        $empId = intval($_POST['emp_id'] ?? 0);
+        $uploadNote = trim($_POST['wps_note'] ?? '');
+        
+        if ($settlementId <= 0 || empty($requestInvNo) || $empId <= 0) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Missing required parameters: settlement_id, request_inv_no, emp_id'
+            ]);
+            return;
+        }
+        
+        // Check if file was uploaded
+        if (!isset($_FILES['wps_file']) || $_FILES['wps_file']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'File upload error: ' . ($_FILES['wps_file']['error'] ?? 'Unknown error')
+            ]);
+            return;
+        }
+        
+        $file = $_FILES['wps_file'];
+        $fileName = basename($file['name']);
+        $fileSize = $file['size'];
+        $fileTmpPath = $file['tmp_name'];
+        
+        // Validate file size (max 10MB)
+        $maxFileSize = 10 * 1024 * 1024; // 10MB
+        if ($fileSize > $maxFileSize) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'File size exceeds 10MB limit'
+            ]);
+            return;
+        }
+        
+        // Validate file type
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'];
+        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        
+        if (!in_array($fileExtension, $allowedExtensions)) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Invalid file format. Allowed: Images (JPG, PNG, GIF, BMP, WebP) and PDF'
+            ]);
+            return;
+        }
+        
+        // Create upload directory with date-based structure
+        $uploadBaseDir = __DIR__ . '/../../uploads/wps_files';
+        $yearMonth = date('Y/m');
+        $uploadDir = $uploadBaseDir . '/' . $yearMonth;
+        
+        if (!is_dir($uploadDir)) {
+            if (!mkdir($uploadDir, 0755, true)) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Failed to create upload directory'
+                ]);
+                return;
+            }
+        }
+        
+        // Generate unique filename
+        $timestamp = date('YmdHis');
+        $uniqueFileName = 'settlement_' . $settlementId . '_' . $timestamp . '.' . $fileExtension;
+        $uploadFilePath = $uploadDir . '/' . $uniqueFileName;
+        $relativePath = '/uploads/wps_files/' . $yearMonth . '/' . $uniqueFileName;
+        
+        // Move uploaded file
+        if (!move_uploaded_file($fileTmpPath, $uploadFilePath)) {
+            echo json_encode([
+                'success' => false,
+                'message' => 'Failed to upload file'
+            ]);
+            return;
+        }
+        
+        // Update settlement_records table
+        try {
+            $updateQuery = $pdo->prepare("
+                UPDATE settlement_records 
+                SET 
+                    wps_file_path = :wps_file_path,
+                    wps_file_name = :wps_file_name,
+                    wps_uploaded_by = :wps_uploaded_by,
+                    wps_uploaded_at = NOW(),
+                    wps_upload_status = 'completed'
+                WHERE id = :settlement_id
+            ");
+            
+            $updateQuery->execute([
+                ':wps_file_path' => $relativePath,
+                ':wps_file_name' => $uniqueFileName,
+                ':wps_uploaded_by' => $currentUserId,
+                ':settlement_id' => $settlementId
+            ]);
+            
+        } catch (PDOException $e) {
+            error_log("WPS Upload - Database update error: " . $e->getMessage());
+            echo json_encode([
+                'success' => false,
+                'message' => 'Database update failed: ' . $e->getMessage()
+            ]);
+            return;
+        }
+        
+        // Log the upload in smt_request_status for audit trail
+        try {
+            $auditQuery = $pdo->prepare("
+                INSERT INTO smt_request_status 
+                (inv_no, status, remarks, action_by, action_date) 
+                VALUES (:inv_no, :status, :remarks, :action_by, NOW())
+            ");
+            
+            $auditQuery->execute([
+                ':inv_no' => $requestInvNo,
+                ':status' => 'wps_file_uploaded',
+                ':remarks' => 'WPS File: ' . $uniqueFileName . ($uploadNote ? ' - Note: ' . $uploadNote : ''),
+                ':action_by' => $currentUserId
+            ]);
+            
+        } catch (PDOException $e) {
+            error_log("WPS Upload - Audit log error: " . $e->getMessage());
+            // Don't fail the upload because of audit log
+        }
+        
+        // Success response
+        echo json_encode([
+            'success' => true,
+            'message' => 'WPS file uploaded successfully',
+            'file_name' => $uniqueFileName,
+            'file_path' => $relativePath,
+            'settlement_id' => $settlementId,
+            'request_inv_no' => $requestInvNo
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("WPS Upload error: " . $e->getMessage());
+        echo json_encode([
+            'success' => false,
+            'message' => 'Server error: ' . $e->getMessage()
+        ]);
+    }
+}
 ?>
+

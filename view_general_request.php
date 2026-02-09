@@ -126,8 +126,10 @@ while ($item = mysqli_fetch_assoc($items_query)) {
 
 // Fetch delivery info if exists
 $delivery_info = null;
+// Apply access control for delivery records
 $company_filter_delivery = getCompanyFilterSQL('e.comp_no', true);
-$delivery_query = mysqli_query($conDB, "SELECT d.*, e.name as received_employee_name FROM general_request_deliveries d LEFT JOIN employees e ON e.emp_id = d.received_by WHERE d.request_inv_no = '$inv_no'" . (strpos($delivery_query, 'WHERE') !== false ? " AND " : " WHERE ") . $company_filter_delivery . " LIMIT 1");
+$department_filter_delivery = getDepartmentFilterSQL('e.dept', true);
+$delivery_query = mysqli_query($conDB, "SELECT d.*, e.name as received_employee_name FROM general_request_deliveries d LEFT JOIN employees e ON e.emp_id = d.received_by WHERE d.request_inv_no = '$inv_no'" . (strpos($delivery_query, 'WHERE') !== false ? " AND " : " WHERE ") . $company_filter_delivery . $department_filter_delivery . " LIMIT 1");
 if ($delivery_query && mysqli_num_rows($delivery_query) > 0) {
     $delivery_info = mysqli_fetch_assoc($delivery_query);
 }

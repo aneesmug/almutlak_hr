@@ -3,9 +3,10 @@
 	// Add company filter for supervisor employee view
     require_once __DIR__ . '/session_check.php';
     $company_filter = getCompanyFilterSQL('comp_no', true);
+    $department_filter = getDepartmentFilterSQL('dept', true);
     $dept_get_safe = mysqli_real_escape_string($conDB, $dept_get);
     $emp_id_get_safe = mysqli_real_escape_string($conDB, $emp_id_get);
-	$sqlsup = "SELECT * FROM `employees` WHERE `dept` = '" . $dept_get_safe . "' AND `emp_id`<>'" . $emp_id_get_safe . "' AND `status`=1" . $company_filter;
+	$sqlsup = "SELECT * FROM `employees` WHERE `dept` = '" . $dept_get_safe . "' AND `emp_id`<>'" . $emp_id_get_safe . "' AND `status`=1" . $company_filter . $department_filter;
 	$querysup = mysqli_query($conDB, $sqlsup);
 
 	while ($rec = mysqli_fetch_array($querysup)) {

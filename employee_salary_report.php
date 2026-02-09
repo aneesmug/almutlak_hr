@@ -135,7 +135,7 @@ if (mysqli_num_rows($query) == 1) {
                                     LEFT JOIN bank_list AS bl ON e.bank_name = bl.bnk_id
                                     LEFT JOIN department AS d ON e.dept = d.id
                                     LEFT JOIN companies AS c ON e.comp_no = c.comp_id
-                                    WHERE e.status = 1" . getCompanyFilterSQL('e.comp_no', true) . "
+                                    WHERE e.status = 1" . getCompanyFilterSQL('e.comp_no', true) . getDepartmentFilterSQL('e.dept', true) . "
                                     ORDER BY e.name ASC";
                                     $query = mysqli_query($conDB, $sql);
 

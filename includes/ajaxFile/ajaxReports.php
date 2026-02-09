@@ -562,6 +562,12 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
+    // Department filter - restrict by accessible departments  
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
     // Date filter
     if (!empty($dateFrom)) {
         $where[] = "e.joining_date >= '" . mysqli_real_escape_string($conDB, $dateFrom) . "'";
@@ -729,6 +735,12 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
     // Date filter
     if (!empty($dateFrom)) {
         $where[] = "v.start_date >= '" . mysqli_real_escape_string($conDB, $dateFrom) . "'";
@@ -835,6 +847,12 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
     // Date filter
     if (!empty($dateFrom)) {
         $where[] = "l.start_date >= '" . mysqli_real_escape_string($conDB, $dateFrom) . "'";
@@ -920,6 +938,12 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
     $company_filter = getCompanyFilterSQL('e.comp_no', false);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Status filter
@@ -1184,6 +1208,12 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
     // Status filter
     if ($status !== '') {
         $where[] = "d.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
@@ -1404,6 +1434,12 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
     // Status filter
     if ($status !== '') {
         $where[] = "r.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
@@ -1497,6 +1533,12 @@ function generateTerminatedEmployeesReport($conDB, $columns, $departments, $date
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -1551,6 +1593,12 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
     $company_filter = getCompanyFilterSQL('e.comp_no', false);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+    
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     $whereClause = implode(' AND ', $where);
@@ -1779,6 +1827,12 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
     $company_filter = getCompanyFilterSQL('e.comp_no', false);
     if (!empty($company_filter)) {
         $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($company_filter, 5) : "WHERE " . substr($company_filter, 5);
+    }
+    
+    // Add department filter
+    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    if (!empty($department_filter)) {
+        $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($department_filter, 5) : "WHERE " . substr($department_filter, 5);
     }
     
     // Get department statistics

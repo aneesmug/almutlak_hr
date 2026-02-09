@@ -122,7 +122,7 @@
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `docs_count` FROM `emp_docu` WHERE `status`='A' GROUP BY `emp_id`) AS `emp_documents` ON `emp_documents`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT * FROM `cars_drv` WHERE `status`=1 ORDER BY `id` DESC LIMIT 1) AS `cars_drv` ON `cars_drv`.`car_user` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `empnote` FROM `emp_notice` WHERE `is_deleted` = 0 GROUP BY `emp_id`) AS `noteemp_count` ON `noteemp_count`.`emp_id` = `employees`.`emp_id`
-	WHERE `employees`.`emp_id` = {$empidget} 
+	WHERE `employees`.`emp_id` = {$empidget}
 	ORDER BY `seid` DESC 
 	LIMIT 1
 	");

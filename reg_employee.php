@@ -29,24 +29,10 @@ $params = [];
 $types = "";
 
 // ================================================================
-// DEPARTMENT-BASED ACCESS CONTROL
+// DEPARTMENT & COMPANY-BASED ACCESS CONTROL (NEW)
 // ================================================================
-// HR Department (dept 5) and System Admins can see all employees
-// All other users can only see employees from their own department
-$can_see_all_employees = (
-    $is_system_admin || 
-    $user_type == 'administrator' ||
-    $user_dept == 5 || // HR Department
-    $isHR || 
-    $isDeptHr
-);
-
-// If user cannot see all employees, restrict to their department only
-if (!$can_see_all_employees && isset($user_dept)) {
-    $where_conditions[] = "dept = ?";
-    $params[] = $user_dept;
-    $types .= "i";
-}
+$company_filter = getCompanyFilterSQL('comp_no', true);
+$department_filter = getDepartmentFilterSQL('dept', true);
 
 // Add search term filter if it exists
 if (!empty($search_term)) {
@@ -59,10 +45,12 @@ if (!empty($search_term)) {
     $types .= "ssss";
 }
 
+
 $where_sql = "";
 if (!empty($where_conditions)) {
     $where_sql = " WHERE " . implode(' AND ', $where_conditions);
 }
+$where_sql .= ($where_sql ? " " : " WHERE 1=1 ") . $company_filter . $department_filter;
 
 // Get the total count of items for pagination
 $count_query = "SELECT COUNT(*) as totalCount FROM `employees`" . $where_sql;
@@ -109,8 +97,8 @@ if ($total_items > 0) {
     $stmt->close();
 }
 
-// Get the total unfiltered count of all employees.
-$unfiltered_sql = "SELECT COUNT(id) as total FROM employees";
+// Get the total unfiltered count of all employees the user can access (with filters)
+$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $company_filter . $department_filter;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 

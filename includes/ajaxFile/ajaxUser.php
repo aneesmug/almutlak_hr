@@ -54,7 +54,36 @@ if ($ajaxType == 'add_customer') {
         ? "'" . mysqli_real_escape_string($conDB, $allowed_companies_json) . "'"
         : "NULL";
     
-    // Update admin_login with user_type, email, status, and company access
+    // Handle Department Access Control
+    $allowed_departments_json = null;
+    $full_dept_access = isset($_POST['full_dept_access']) && $_POST['full_dept_access'] === '1';
+    
+    if (!$full_dept_access) {
+        $allowed_departments_input = isset($_POST['allowed_departments']) ? $_POST['allowed_departments'] : [];
+        
+        // Validate and sanitize department IDs
+        $department_ids = [];
+        if (is_array($allowed_departments_input)) {
+            foreach ($allowed_departments_input as $dept_id) {
+                $dept_id = (int)$dept_id;
+                if ($dept_id > 0) {
+                    $department_ids[] = $dept_id;
+                }
+            }
+        }
+        
+        // Store as JSON array if there are validated department IDs
+        if (!empty($department_ids)) {
+            $allowed_departments_json = json_encode($department_ids);
+        }
+    }
+    
+    // Prepare allowed_departments column value
+    $allowed_departments_sql = ($allowed_departments_json !== null) 
+        ? "'" . mysqli_real_escape_string($conDB, $allowed_departments_json) . "'"
+        : "NULL";
+    
+    // Update admin_login with user_type, email, status, company access, and department access
     $sql = "UPDATE `admin_login` SET 
             `fullname` = '".$fullname_up."', 
             `user_type` = '".$user_type_up."', 
@@ -62,6 +91,7 @@ if ($ajaxType == 'add_customer') {
             `email` = '".$email_up."', 
             `status` = ".$user_status.", 
             `allowed_companies` = " . $allowed_companies_sql . ",
+            `allowed_departments` = " . $allowed_departments_sql . ",
             `updated_at` = '".date('Y-m-d H:i:s')."' 
             WHERE `id` = '".$user_id."'";
     
@@ -72,7 +102,8 @@ if ($ajaxType == 'add_customer') {
             'email' => $email_up,
             'status' => $user_status,
             'emp_type' => $emp_type_up,
-            'allowed_companies' => $allowed_companies_json ? json_decode($allowed_companies_json, true) : null
+            'allowed_companies' => $allowed_companies_json ? json_decode($allowed_companies_json, true) : null,
+            'allowed_departments' => $allowed_departments_json ? json_decode($allowed_departments_json, true) : null
         ];
         
         ActivityLogger::logUpdate('User', 'ajaxUser.php', $user_id, $old_user, $new_values, "Updated user: {$fullname_up}, Role: {$user_type_up}", 'admin_login');

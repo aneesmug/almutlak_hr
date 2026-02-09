@@ -17,21 +17,16 @@ $department_id = (int)$_GET['dept'];
 
 // DEPARTMENT-BASED ACCESS CONTROL
 // Check if user has permission to view this department's employees
-$can_see_all_employees = (
-    $is_system_admin || 
-    $user_type == 'administrator' ||
-    $user_dept == 5 || // HR Department
-    $isHR || 
-    $isDeptHr ||
-    $user_dept == 1 // Administration Department
-);
+// Uses the new allowed_departments array from session
+$accessible_departments = getAccessibleDepartments(true);
 
-if (!$can_see_all_employees && $user_dept != $department_id) {
+// If user has restricted access (not empty array), check if requested department is allowed
+if (!empty($accessible_departments) && !in_array($department_id, $accessible_departments)) {
     $_SESSION['error_msg'] = sprintf(
         '<div class="col-xl-12">
             <div class="alert alert-danger bg-danger text-white border-0" role="alert">
                 <b>Access Denied!</b> 
-                <h3>You don\'t have access to view employees from other departments.</h3>
+                <h3>You don\'t have access to view employees from this department.</h3>
             </div>
         </div>'
     );

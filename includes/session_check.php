@@ -269,6 +269,34 @@ $_SESSION['allowed_companies_array'] = $allowed_companies_array;
 // Determine if user has company restrictions
 $has_company_restrictions = !empty($allowed_companies_array) && count($allowed_companies_array) > 0;
 
+// --- 4b. Department Access Control (Department-Level Restrictions) ---
+// Get allowed departments from admin_login.allowed_departments JSON column
+// NULL = full access to all departments
+// JSON array = restricted access to specified department IDs only
+$allowed_departments = null;  // Default: all departments
+$allowed_departments_array = [];  // Default: empty array
+
+if (isset($emprow['allowed_departments']) && !empty($emprow['allowed_departments'])) {
+    try {
+        $decoded_departments = json_decode($emprow['allowed_departments'], true);
+        if (is_array($decoded_departments) && count($decoded_departments) > 0) {
+            $allowed_departments = $decoded_departments;
+            $allowed_departments_array = array_map('intval', $decoded_departments);
+        }
+    } catch (Exception $e) {
+        // JSON decode error - treat as full access
+        $allowed_departments = null;
+        $allowed_departments_array = [];
+    }
+}
+
+// Store in session for use throughout application
+$_SESSION['allowed_departments'] = $allowed_departments;
+$_SESSION['allowed_departments_array'] = $allowed_departments_array;
+
+// Determine if user has department restrictions
+$has_department_restrictions = !empty($allowed_departments_array) && count($allowed_departments_array) > 0;
+
 // --- 5. Log User Activity (First login only) ---
 if (!isset($_SESSION['activity_logged'])) {
     require_once __DIR__ . '/user_activity_logger.php';
@@ -405,6 +433,7 @@ function update_employee_fly_status_on_session($conDB) {
                 AND v.start_date <= ?
                 AND v.return_date >= ?
                 AND v.request_inv_no LIKE 'VAC-%'
+                AND LOWER(v.vac_type) != 'Encashed'
                 AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
                 AND v.review = 'A'
         ";

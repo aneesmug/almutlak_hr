@@ -211,7 +211,9 @@
             'Content-Type: application/json',
             'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         ]);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        // Reduced timeout to 5 seconds to prevent long page hangs
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
         // Disable SSL verification for robustness, especially in local environments like XAMPP
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -233,33 +235,128 @@
     }
 
     function fetchEndOfServiceReasons() {
+        // Check cache first (24-hour cache to reduce external API calls)
+        $cache_key = 'eos_reasons_cache';
+        $cache_duration = 24 * 60 * 60; // 24 hours in seconds
+        
+        if (isset($_SESSION[$cache_key]) && isset($_SESSION[$cache_key . '_time'])) {
+            $cache_age = time() - $_SESSION[$cache_key . '_time'];
+            if ($cache_age < $cache_duration) {
+                // Return cached data
+                return ['error' => null, 'reasons' => $_SESSION[$cache_key]];
+            }
+        }
+        
         $url = "https://knowledge-center-be.qiwa.sa/api/v1/end-of-service";
         $result = makeCurlRequest($url, 'POST', []);
 
         if ($result['error']) {
+            // Return cached data if available, even if expired
+            if (isset($_SESSION[$cache_key])) {
+                error_log("Using expired cache due to API error: " . $result['error']);
+                return ['error' => null, 'reasons' => $_SESSION[$cache_key]];
+            }
             return ['error' => __('Could not fetch initial data from the server: ') . $result['error'], 'reasons' => []];
         }
         if ($result['http_code'] !== 200 || empty($result['data'])) {
+            // Return cached data if available
+            if (isset($_SESSION[$cache_key])) {
+                error_log("Using expired cache due to HTTP error: " . $result['http_code']);
+                return ['error' => null, 'reasons' => $_SESSION[$cache_key]];
+            }
             return ['error' => __('Could not fetch initial data from the server (HTTP Status: ').$result['http_code'].')', 'reasons' => []];
         }
 
         $api_reasons_data = $result['data']['EndOfServiceRewardLookUpRs']['Body']['EndOfServiceRewardLookUp']['ContractEndReason'] ?? [];
+        
+        // Cache the successful response
+        $_SESSION[$cache_key] = $api_reasons_data;
+        $_SESSION[$cache_key . '_time'] = time();
         
         return ['error' => null, 'reasons' => $api_reasons_data];
     }
     
     $contractType = $_POST['contract_type'] ?? '1';
     $selectedReasonCode = $_POST['eos_reason'] ?? '';
-    $endDateStr = $_GET['end_date'] ?? $_POST['end_date'] ?? ''; 
+    $endDateStr = $_GET['end_date'] ?? $_POST['end_date'] ?? '';
+    $requestInvNo = $_POST['request_inv_no'] ?? ($_GET['request_inv_no'] ?? '');
+    $requestInvNo = trim($requestInvNo);
     $allReasons = [];
     $errors = [];
     $general_error_message = '';
+
+    // Fallback: if request_inv_no not provided, try to get latest resignation request for this employee
+    if (empty($requestInvNo) && !empty($emprow['empid'])) {
+        $empidEsc = mysqli_real_escape_string($conDB, $emprow['empid']);
+        $reqQry = mysqli_query($conDB, "SELECT request_inv_no FROM emp_resignations WHERE emp_id = '{$empidEsc}' ORDER BY updated_at DESC LIMIT 1");
+        if ($reqQry && mysqli_num_rows($reqQry) > 0) {
+            $reqRow = mysqli_fetch_assoc($reqQry);
+            $requestInvNo = trim($reqRow['request_inv_no'] ?? '');
+        }
+        if ($reqQry) {
+            mysqli_free_result($reqQry);
+        }
+    }
 
     $reasonsResult = fetchEndOfServiceReasons();
     if ($reasonsResult['error']) {
         $general_error_message = $reasonsResult['error'];
     } else {
         $allReasons = $reasonsResult['reasons'];
+    }
+    
+    // Get pre-fill reason from resignation (if coming from resignation approval)
+    $preFillReason = isset($_GET['pre_fill_reason']) ? trim(urldecode($_GET['pre_fill_reason'])) : '';
+    
+    // If pre-fill reason is provided, try to match it with available EOS reasons
+    if (!empty($preFillReason) && empty($selectedReasonCode) && !empty($allReasons)) {
+        // If pre-fill reason looks like a code, match by ContractEndReasonCode
+        if (is_numeric($preFillReason)) {
+            foreach ($allReasons as $reason) {
+                $code = isset($reason['ContractEndReasonCode']) ? (string)$reason['ContractEndReasonCode'] : '';
+                if ($code !== '' && $code === (string)$preFillReason) {
+                    $selectedReasonCode = $reason['ContractEndReasonCode'];
+                    break;
+                }
+            }
+        }
+
+        // If still not matched, try to find a matching reason based on the resignation reason text
+        if (empty($selectedReasonCode)) {
+            foreach($allReasons as $reason) {
+                $enDesc = $reason['EnDescription'] ?? '';
+                $arDesc = $reason['ArDescription'] ?? '';
+                // Match if the pre-fill reason contains or matches the description
+                if (stripos($preFillReason, $enDesc) !== false || stripos($preFillReason, $arDesc) !== false ||
+                    stripos($enDesc, $preFillReason) !== false || stripos($arDesc, $preFillReason) !== false) {
+                    $selectedReasonCode = $reason['ContractEndReasonCode'] ?? '';
+                    break;
+                }
+            }
+        }
+        // If no exact match found, use the pre-fill reason as display hint in JavaScript
+    }
+
+    // Build a human-readable reason label for display/notes (language-aware)
+    $preFillReasonLabel = '';
+    if (!empty($selectedReasonCode) && !empty($allReasons)) {
+        foreach ($allReasons as $reason) {
+            if (($reason['ContractEndReasonCode'] ?? '') == $selectedReasonCode) {
+                $preFillReasonLabel = ($current_lang === 'ar' && !empty($reason['ArDescription']))
+                    ? $reason['ArDescription']
+                    : ($reason['EnDescription'] ?? '');
+                break;
+            }
+        }
+    }
+    if (empty($preFillReasonLabel) && !empty($preFillReason)) {
+        $preFillReasonLabel = $preFillReason;
+    }
+
+    // Prefill notes with End of Service Reason when notes are empty
+    $notesPrefill = $_POST['notes'] ?? '';
+    if (empty($notesPrefill) && !empty($preFillReasonLabel)) {
+        $notesPrefill = "End of Service Reason: {$preFillReasonLabel}";
     }
 
     // Fetch all paid payroll months for the employee to use in JavaScript validation
@@ -371,11 +468,57 @@
                 $stmt_update = $conDB->prepare("UPDATE `employees` SET `status`='0', `ter_note`=?, `fly`='0', `ter_date`=? WHERE `emp_id`=?");
                 $stmt_update->bind_param("sss", $notes, $endDateStr, $emprow['empid']);
                 $stmt_update->execute();
+
+                // Create settlement record after EOS creation (if request_inv_no provided)
+                // IMPORTANT: This MUST complete synchronously before page redirect
+                $settlementCreated = false;
+                if (!empty($requestInvNo)) {
+                    error_log("=== EOS SETTLEMENT CREATION START ===");
+                    error_log("Request Inv No: {$requestInvNo}");
+                    error_log("Employee ID: {$emprow['empid']}");
+                    error_log("Settlement Amount: {$net_payment}");
+                    error_log("Created by (empid): {$empid}");
+                    
+                    try {
+                        require_once __DIR__ . '/includes/SettlementManager_Corrected.php';
+                        $settlementManager = new SettlementManager($conDB, $pdo);
+                        $settlementAmount = (float)$net_payment;
+                        error_log("Calling createSettlement with: requestInvNo={$requestInvNo}, type=resignation, empId={$emprow['empid']}, amount={$settlementAmount}, userId={$empid}");
+                        
+                        $settlementResult = $settlementManager->createSettlement(
+                            $requestInvNo,
+                            'resignation',
+                            $emprow['empid'],
+                            $settlementAmount,
+                            $empid
+                        );
+                        
+                        error_log("Settlement creation result: " . json_encode($settlementResult));
+                        if (empty($settlementResult['success'])) {
+                            error_log("EOS Settlement creation FAILED for {$requestInvNo}: " . ($settlementResult['message'] ?? 'Unknown error'));
+                        } else {
+                            error_log("EOS Settlement created SUCCESSFULLY for {$requestInvNo}");
+                            error_log("Approval chain and email notifications should have been sent");
+                            $settlementCreated = true;
+                        }
+                    } catch (Exception $e) {
+                        error_log("EOS Settlement creation exception for {$requestInvNo}: " . $e->getMessage());
+                        error_log("Exception trace: " . $e->getTraceAsString());
+                    }
+                    error_log("=== EOS SETTLEMENT CREATION END ===");
+                } else {
+                    error_log("WARNING: No request_inv_no provided, settlement was NOT created");
+                }
                 
                 // mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$username."','emp_end_of_service','".$_GET['emp_id']."','".date("c")."')");
                 
                 $error_1 = "<div class='alert alert-success'><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.')."</div>";
-                header("refresh:1; ./emp_end_of_service.php?emp_id=".$_GET['emp_id']."");
+                
+                // CRITICAL FIX: Do NOT redirect immediately - wait for settlement to complete
+                // Use JavaScript to delay redirect and show proper feedback
+                $_SESSION['eos_completion_time'] = time();
+                $_SESSION['eos_settlement_created'] = $settlementCreated;
+                $_SESSION['eos_request_inv'] = $requestInvNo;
             }
         }
     }
@@ -644,6 +787,9 @@
                                                                         <?php endforeach; ?>
                                                                     <?php endif; ?>
                                                                 </select>
+                                                                                                                                <?php if (!empty($preFillReasonLabel)): ?>
+                                                                                                                                    <small class="form-text text-muted d-block mt-1"><i class="fas fa-info-circle"></i> <?=__('Pre-filled from resignation');?>: <?=htmlspecialchars($preFillReasonLabel); ?></small>
+                                                                                                                                <?php endif; ?>
                                                                 <?php if (!empty($errors['eos_reason'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['eos_reason']); ?></small></div><?php endif; ?>
                                                             </div>
                                                             <div class="form-group col-lg-3">
@@ -754,7 +900,7 @@
                                                             
                                                             <div class="form-group col-lg-8">
                                                                 <label for="notes"><?=__('Notes');?>:<span class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control" id="notes" name="notes" value="<?= htmlspecialchars($_POST['notes'] ?? ''); ?>" required />
+                                                                <input type="text" class="form-control" id="notes" name="notes" value="<?= htmlspecialchars($notesPrefill); ?>" required />
                                                                 <?php if (!empty($errors['notes'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['notes']); ?></small></div><?php endif; ?>
                                                             </div>
                                                             <div class="form-group col-lg-4">
@@ -763,6 +909,7 @@
                                                         </div>
 
                                                         <!-- Hidden fields for calculation and submission -->
+                                                        <input type="hidden" name="request_inv_no" id="request_inv_no" value="<?= htmlspecialchars($requestInvNo); ?>">
                                                         <input type="hidden" name="eos_amount" id="eos_amount_hidden" value="">
                                                         <input type="hidden" name="anul_vac_salry" id="anul_vac_salry_hidden" value="">
                                                         <input type="hidden" name="net_payment" id="net_payment_hidden" value="">
@@ -852,6 +999,17 @@
         </script>
 		<script type="text/javascript">
             $(document).ready(function(){
+                // Show processing alert on EOS submit
+                $('#calculatorForm').on('submit', function() {
+                    Swal.fire({
+                        title: __('processing') || 'Processing...',
+                        html: __('please_wait_settlement_note') || 'Please wait while we process the End of Service settlement',
+                        allowOutsideClick: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                });
                 
                 $('#eos_reason').select2();
                 
@@ -1101,6 +1259,42 @@
                 }
             });
 		</script>
+        <?php if (!empty($error_1)): ?>
+        <script type="text/javascript">
+            $(document).ready(function() {
+                // Get settlement status from session
+                const settlementCreated = <?= json_encode($_SESSION['eos_settlement_created'] ?? false) ?>;
+                const requestInvNo = <?= json_encode($_SESSION['eos_request_inv'] ?? '') ?>;
+                
+                // Show success alert with settlement details
+                let successMessage = __('employee_end_of_service_has_been_registered') || 'Employee End of Service has been registered.';
+                
+                if(settlementCreated && requestInvNo) {
+                    successMessage += '\n\n✓ Settlement ' + requestInvNo + ' created and approval notifications sent.';
+                } else if(requestInvNo) {
+                    successMessage += '\n\nℹ Settlement processing initiated (Settlement: ' + requestInvNo + ')';
+                }
+                
+                Swal.fire({
+                    title: __('success') || 'Success',
+                    text: successMessage,
+                    icon: 'success',
+                    confirmButtonText: __('ok') || 'OK',
+                    allowOutsideClick: false,
+                    didOpen: function() {
+                        // Ensure email sending has time to complete
+                        // Wait minimum 2 seconds before allowing redirect
+                        setTimeout(function() {
+                            Swal.getConfirmButton().disabled = false;
+                        }, 2000);
+                    }
+                }).then(function() {
+                    // After user clicks OK, redirect back to page
+                    window.location.href = './emp_end_of_service.php?emp_id=<?=$_GET['emp_id']?>';
+                });
+            });
+        </script>
+        <?php endif; ?>
 	</body>
 	</html>
 <?php } ?>

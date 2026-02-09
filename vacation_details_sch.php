@@ -319,8 +319,10 @@ if(isset($_POST['submit'])){
                                                 <label for="last_vac_date" class="col-form-label">Replacement Person<span class="text-danger">*</span></label>
                                             <?php
 												// Add company filter for replacement person selection
-												$company_filter_rep = getCompanyFilterSQL('comp_no', true);
-												$sqlcodes = "SELECT * FROM `employees` WHERE `emp_sup_type`='mocha' AND `note`!='terminat' AND `dept`<>''" . $company_filter_rep . " ORDER BY `dept` ASC";
+								// Apply access control for replacement employee list
+								$company_filter_rep = getCompanyFilterSQL('comp_no', true);
+								$department_filter_rep = getDepartmentFilterSQL('dept', true);
+								$sqlcodes = "SELECT * FROM `employees` WHERE `emp_sup_type`='mocha' AND `note`!='terminat' AND `dept`<>''" . $company_filter_rep . $department_filter_rep . " ORDER BY `dept` ASC";
     											$resultcodes = mysqli_query($conDB, $sqlcodes);
 												echo "<select class='form-control select2' name='replacement_per' required>";
 												echo "<option value=''>Select a Person...</option>";
