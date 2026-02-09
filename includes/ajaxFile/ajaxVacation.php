@@ -5178,7 +5178,57 @@ elseif ($ajaxType == 'applyLeave') {
         $first_approver = $chainResult['first_approver'];
         
         // ================================================================
-        // SEND NOTIFICATION TO FIRST APPROVER
+        // SEND NOTIFICATIONS
+        // ================================================================
+        // 1. If someone applied on behalf of the employee, notify the employee
+        if ($current_user_id != $empid) {
+            $emp_result = mysqli_query($conDB, "SELECT e.name, al.email FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE e.emp_id = '$empid' AND al.email IS NOT NULL AND al.email != '' LIMIT 1");
+            if ($emp_result && $emp_row = mysqli_fetch_assoc($emp_result)) {
+                if (!empty($emp_row['email'])) {
+                    // Get approver name for message
+                    $applier_result = mysqli_query($conDB, "SELECT name FROM employees WHERE emp_id = '$current_user_id' LIMIT 1");
+                    $applier_name = 'Your Supervisor';
+                    if ($applier_result && $applier_row = mysqli_fetch_assoc($applier_result)) {
+                        $applier_name = $applier_row['name'];
+                    }
+                    if ($applier_result) mysqli_free_result($applier_result);
+
+                    // Get the first approver name
+                    $first_approver_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver['approver_id']);
+                    $first_approver_label = $first_approver_details['name'] ?? __('supervisor');
+
+                    // Prepare template data for employee notification
+                    $base_url = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . dirname($_SERVER['SCRIPT_NAME'], 3);
+                    $employee_template_data = [
+                        'APPROVER_NAME' => $emp_row['name'],
+                        'REQUEST_TYPE' => ucfirst($leave_type) . ' Leave Submitted on Your Behalf',
+                        'REQUEST_TYPE_LOWER' => strtolower($leave_type) . ' leave submitted on your behalf',
+                        'REQUEST_ID' => $request_inv_no,
+                        'EMPLOYEE_NAME' => $emp_row['name'],
+                        'START_DATE' => date('d M Y', strtotime($start_date)),
+                        'END_DATE' => date('d M Y', strtotime($end_date)),
+                        'DURATION' => $vacdays,
+                        'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending',
+                        'EMAIL_MESSAGE' => sprintf('%s has submitted a %s on your behalf for %d day(s) from %s to %s. The request is now pending approval from %s.',
+                            htmlspecialchars($applier_name, ENT_QUOTES, 'UTF-8'),
+                            strtolower($leave_type),
+                            $vacdays,
+                            date('d M Y', strtotime($start_date)),
+                            date('d M Y', strtotime($end_date)),
+                            htmlspecialchars($first_approver_label, ENT_QUOTES, 'UTF-8')
+                        )
+                    ];
+
+                    $employee_subject = ucfirst($leave_type) . " Leave Submitted on Your Behalf - " . $request_inv_no;
+                    if (function_exists('send_approval_email')) {
+                        send_approval_email($conDB, $emp_row['email'], $emp_row['name'], $employee_subject, 'leave_request', $employee_template_data);
+                    }
+                }
+            }
+            if ($emp_result) mysqli_free_result($emp_result);
+        }
+
+        // 2. Notify the first approver
         // Using the first approver from the database-configured chain
         // ================================================================
         if ($first_approver && !empty($first_approver['approver_id'])) {
@@ -5222,7 +5272,15 @@ elseif ($ajaxType == 'applyLeave') {
                         'START_DATE' => date('d M Y', strtotime($start_date)),
                         'END_DATE' => date('d M Y', strtotime($end_date)),
                         'DURATION' => $vacdays,
-                        'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending'
+                        'REQUEST_URL' => $base_url . '/all_applied_vac.php?status=my_pending',
+                        'EMAIL_MESSAGE' => sprintf('A new %s has been submitted by %s (ID: %s) for %d day(s) from %s to %s and requires your approval.',
+                            strtolower($leave_type),
+                            htmlspecialchars($employee_name, ENT_QUOTES, 'UTF-8'),
+                            $empid,
+                            $vacdays,
+                            date('d M Y', strtotime($start_date)),
+                            date('d M Y', strtotime($end_date))
+                        )
                     ];
 
                     $email_subject = "New " . ucfirst($leave_type) . " Leave Request Pending Approval";

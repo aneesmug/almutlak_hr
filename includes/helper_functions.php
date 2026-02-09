@@ -1449,9 +1449,14 @@ if (!function_exists('load_email_template')) {
             'UPDATE_TYPE' => 'N/A',
             'CURRENT_VALUE' => 'N/A',
             'NEW_VALUE' => 'N/A',
-            // New employee email template fields
+            // Vacation and Leave email template fields
+            'REQUEST_TYPE' => 'Request',
+            'REQUEST_TYPE_LOWER' => 'request',
             'EMPLOYEE_NAME' => 'N/A',
             'EMPLOYEE_ID' => 'N/A',
+            'START_DATE' => 'N/A',
+            'END_DATE' => 'N/A',
+            'DURATION' => 'N/A',
             'IQAMA_NUMBER' => 'N/A',
             'EMPLOYEE_EMAIL' => 'N/A',
             'EMPLOYEE_MOBILE' => 'N/A',
