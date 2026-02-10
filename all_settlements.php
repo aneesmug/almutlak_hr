@@ -170,11 +170,38 @@ if ($totalItems > 0) {
         s.*, 
         e.name as emp_name,
         e.dept,
+        e.gosi,
+        e.country as country_id,
         ra_pending.approver_id as current_approver_id,
         approver_emp.name as current_approver_name,
-        ra_pending.approval_level as current_approval_level
+        ra_pending.approval_level as current_approval_level,
+        v.vac_type,
+        v.fly_type,
+        v.vacdays,
+        v.start_date,
+        v.vacation_salary_type,
+        v.overtime_hours,
+        v.deduction_hours,
+        v.deduction_days,
+        v.other_deductions,
+        v.ticket_pay,
+        v.permit_fee,
+        sal.basic,
+        sal.housing,
+        sal.transport,
+        sal.food,
+        sal.misc,
+        sal.cashier,
+        sal.fuel,
+        sal.tel,
+        sal.other,
+        sal.guard
     FROM settlement_records s
     JOIN employees e ON s.emp_id = e.emp_id
+    LEFT JOIN emp_vacation v ON v.request_inv_no = SUBSTR(s.request_inv_no, 6)
+    LEFT JOIN emp_salary sal ON sal.emp_id = e.emp_id AND sal.status = 1 AND sal.id = (
+        SELECT MAX(sal2.id) FROM emp_salary sal2 WHERE sal2.emp_id = e.emp_id AND sal2.status = 1
+    )
     " . $mainJoinClause . "
     $whereSql
     GROUP BY s.id
@@ -250,6 +277,7 @@ if ($canSeeAllDepts) {
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.css" />
 
     <script src="assets/js/modernizr.min.js"></script>
     <style>
@@ -376,6 +404,28 @@ if ($canSeeAllDepts) {
             background-color: #ffe6e9;
             cursor: default;
         }
+        #settlementDropzone.dropzone {
+            border: 2px dotted #4e73df;
+            border-radius: 8px;
+            background: #f8f9fc;
+            min-height: 180px;
+        }
+        #settlementDropzone .dz-message {
+            margin: 2.5rem 0;
+            text-align: center;
+            color: #6c757d;
+        }
+        #settlementDropzone .dz-message i {
+            display: block;
+            font-size: 44px;
+            color: #4e73df;
+            margin-bottom: 10px;
+        }
+        #settlementDropzone .dz-message strong {
+            color: #495057;
+            display: block;
+            margin-top: 6px;
+        }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -451,6 +501,100 @@ if ($canSeeAllDepts) {
                                             // Support both 'pending' and 'pending_approval' status for backward compatibility
                                             $isPendingStatus = in_array($settlement['settlement_status'], ['pending', 'pending_approval']);
                                             $is_pending_with_me = ($isPendingStatus && !empty($settlement['current_approver_id']) && (int)$settlement['current_approver_id'] === (int)$empid);
+                                            
+                                            // Calculate payable amount from vacation data (same logic as vacation_report_details.php)
+                                            $payableAmount = 0;
+                                            
+                                            // First try to calculate from vacation data
+                                            if (!empty($settlement['vac_type']) && !empty($settlement['basic'])) {
+                                                $vac_type = $settlement['vac_type'];
+                                                $fly_type = $settlement['fly_type'];
+                                                $vacation_salary_type = $settlement['vacation_salary_type'] ?? 'payroll';
+                                                $approved_days = (float)($settlement['vacdays'] ?? 0);
+                                                
+                                                $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+                                                $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+                                                $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
+                                                $is_emergency = ($fly_type === 'emergency');
+                                                
+                                                $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+                                                $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
+                                                
+                                                $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+                                                
+                                                if ($calculate_payments) {
+                                                    $basic_salary = (float)($settlement['basic'] ?? 0);
+                                                    $total_monthly_salary = $basic_salary + ($settlement['housing'] ?? 0) + ($settlement['transport'] ?? 0) + ($settlement['food'] ?? 0) + ($settlement['misc'] ?? 0) + ($settlement['cashier'] ?? 0) + ($settlement['fuel'] ?? 0) + ($settlement['tel'] ?? 0) + ($settlement['other'] ?? 0) + ($settlement['guard'] ?? 0);
+                                                    
+                                                    if ($total_monthly_salary > 0) {
+                                                        $days_in_month = 30;
+                                                        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                                                        
+                                                        $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
+                                                        $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
+                                                        $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
+                                                        
+                                                        $working_days_salary = 0;
+                                                        $vacation_salary = 0;
+                                                        $gosi_deduction = 0;
+                                                        $overtime_amount = 0;
+                                                        $deduction_amount = 0;
+                                                        
+                                                        // Calculate working days salary (Fly + Annual only)
+                                                        if ($is_fly_annual && !empty($settlement['start_date'])) {
+                                                            try {
+                                                                $start_date_obj = new DateTime($settlement['start_date']);
+                                                                $working_days = (int)$start_date_obj->format('d') - 1;
+                                                                $working_days_salary = round($daily_rate * $working_days);
+                                                            } catch (Exception $e) {
+                                                                $working_days_salary = 0;
+                                                            }
+                                                        }
+                                                        
+                                                        // Calculate vacation salary (Fly + Annual with payroll type only)
+                                                        if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                                                            $vacation_salary = round($daily_rate * $approved_days);
+                                                        }
+                                                        
+                                                        // Calculate overtime
+                                                        if (!empty($settlement['overtime_hours']) && $settlement['overtime_hours'] > 0) {
+                                                            $overtime_amount = round($overtimeHourlyRate * $settlement['overtime_hours']);
+                                                        }
+                                                        
+                                                        // Calculate deductions
+                                                        $ded_hours = !empty($settlement['deduction_hours']) ? $settlement['deduction_hours'] : 0;
+                                                        $ded_days = !empty($settlement['deduction_days']) ? $settlement['deduction_days'] : 0;
+                                                        $other_ded = !empty($settlement['other_deductions']) ? $settlement['other_deductions'] : 0;
+                                                        
+                                                        if ($ded_hours > 0 || $ded_days > 0 || $other_ded > 0) {
+                                                            $deduction_hours_amount = round($hourlyRateDeduction * $ded_hours);
+                                                            $deduction_days_amount = round($dailyRateDeduction * $ded_days);
+                                                            $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_ded);
+                                                        }
+                                                        
+                                                        // Calculate GOSI
+                                                        if ($settlement['country_id'] == 191 && !empty($settlement['gosi']) && is_numeric($settlement['gosi'])) {
+                                                            $gosi_percentage = (float)$settlement['gosi'];
+                                                            if ($is_fly_annual) {
+                                                                $gosi_base = $working_days_salary + $vacation_salary;
+                                                                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                                                            }
+                                                        }
+                                                        
+                                                        // Calculate total payable
+                                                        if ($is_encashment) {
+                                                            $payableAmount = 0;
+                                                        } elseif ($is_fly_annual) {
+                                                            $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Fallback to stored settlement_amount if calculated amount is 0
+                                            if ($payableAmount <= 0 && !empty($settlement['settlement_amount'])) {
+                                                $payableAmount = round($settlement['settlement_amount']);
+                                            }
                                             ?>
                                             <div class="col-lg-4 col-md-6 mb-4">
                                                 <div class="card request-card h-100">
@@ -460,7 +604,7 @@ if ($canSeeAllDepts) {
                                                     </div>
                                                     <div class="card-body">
                                                         <div class="detail-item"><i class="fad fa-file-invoice"></i><strong><?= __('settlement_id') ?>:</strong> <?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES); ?></div>
-                                                        <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <?= number_format($settlement['settlement_amount'], 2); ?> SAR</div>
+                                                        <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <span class="badge badge-success" style="font-size: 0.95em; padding: 0.5rem 0.75rem;">SAR <?= number_format(round($payableAmount), 2); ?></span></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-alt"></i><strong><?= __('created') ?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($settlement['created_at'])), ENT_QUOTES); ?></div>
                                                         <div class="detail-item">
                                                             <i class="fad fa-tasks"></i>
@@ -572,6 +716,7 @@ if ($canSeeAllDepts) {
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.js"></script>
 
     <script>
         // Configuration constants
@@ -585,6 +730,9 @@ if ($canSeeAllDepts) {
         const currentUserType = window.currentUserType;
         const currentUserId = window.currentUserId;
         const isHRPayroll = (currentUserType === 'hr_payroll');
+
+        // Preserve legacy approval handler from jquery.app.js for non-HR flows
+        const approveSettlementLegacy = window.approveSettlement;
         
 
 
@@ -596,10 +744,13 @@ if ($canSeeAllDepts) {
         }
 
         /**
-         * Approve Settlement with WPS Upload for HR Payroll
-         * Shows approval modal, then WPS upload modal if user is HR Payroll
+         * Approve Settlement with Multiple Attachments
+         * Shows approval modal with Dropzone for file uploads (HR Payroll only)
          */
-        function approveSettlementWithWPS(settlementId, settlementInvNo, empId) {
+        window.approveSettlement = function (settlementId, settlementInvNo, empId) {
+            if (!isHRPayroll && typeof approveSettlementLegacy === 'function') {
+                return approveSettlementLegacy(settlementId, settlementInvNo, empId);
+            }
 
             
             // Get settlement details first
@@ -630,11 +781,11 @@ if ($canSeeAllDepts) {
                     Swal.fire('Error', 'Failed to fetch settlement details', 'error');
                 }
             });
-        }
+        };
 
         /**
-         * Show Settlement Approval Modal with WPS File Upload for HR Payroll
-         * Shows approval and WPS file selection in one modal
+         * Show Settlement Approval Modal with Multiple Attachments
+         * Shows approval and multi-file upload (Dropzone) for HR Payroll
          */
         function showSettlementApprovalModal(settlementId, settlementInvNo, empId, employeeName, settlementAmount) {
 
@@ -652,15 +803,19 @@ if ($canSeeAllDepts) {
                     </div>
             `;
             
-            // Add WPS file input for HR Payroll users
+            // Add multiple attachments upload section (HR Payroll only)
             if (isHRPayroll) {
                 modalHTML += `
                     <hr>
-                    <h6 class="text-primary font-weight-bold">${__("wps_file_upload_hr_payroll")}</h6>
+                    <h6 class="text-primary font-weight-bold">
+                        <i class="fa fa-paperclip"></i> Attachments (<?= __("optional") ?>)
+                    </h6>
                     <div class="form-group">
-                        <label for="wpsFileUpload"><strong>${__("select_wps_file_optional")}</strong></label>
-                        <input type="file" id="wpsFileUpload" class="form-control" accept="image/*,.pdf" />
-                        <small class="form-text text-muted">${__('accepted_formats')} ${__('max_mb').replace('{{filesize}}', MAX_FILE_SIZE_MB)}</small>
+                        <label for="settlementDropzone"><strong><?= __("upload_supporting_documents") ?></strong></label>
+                        <div id="settlementDropzone" class="dropzone"></div>
+                        <small class="form-text text-muted mt-2" style="display: block;">
+                            <i class="fa fa-star text-warning"></i> <strong><?= __("hr_payroll") ?>:</strong> <?= __("include_wps_payment_file_if_available", "Include WPS payment file if available") ?>
+                        </small>
                     </div>
                 `;
             }
@@ -678,49 +833,47 @@ if ($canSeeAllDepts) {
                 cancelButtonText: '<i class="fa fa-times"></i> <?= __("cancel") ?>',
                 allowOutsideClick: false,
                 showLoaderOnConfirm: true,
-                preConfirm: () => {
-                    const comment = document.getElementById('approvalComment').value.trim();
-
-                    
-                    // Validate WPS file if HR Payroll
-                    if (isHRPayroll) {
-                        const fileInput = document.getElementById('wpsFileUpload');
-                        if (fileInput.files && fileInput.files[0]) {
-                            const file = fileInput.files[0];
-                            const allowedFormats = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'];
-                            const fileExtension = file.name.split('.').pop().toLowerCase();
-                            
-                            if (!allowedFormats.includes(fileExtension)) {
-                                Swal.showValidationMessage(`${__('invalid_file_format')}. ${__('upload_pdf_jpg_only_validation')}`);
-                                return false;
-                            }
-                            
-                            if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-                                Swal.showValidationMessage(`${__('file_size_exceeded').replace('{{filesize}}', MAX_FILE_SIZE_MB)}`);
-                                return false;
-                            }
-                        }
+                width: '750px',
+                padding: '2rem',
+                scrollbarPadding: false,
+                didOpen: async (modal) => {
+                    // Ensure HTML container scrolls if needed
+                    const htmlContainer = modal.querySelector('.swal2-html-container');
+                    if (htmlContainer) {
+                        htmlContainer.style.maxHeight = 'none';
+                        htmlContainer.style.overflowY = 'visible';
+                        htmlContainer.style.textAlign = 'left';
+                        htmlContainer.style.paddingRight = '10px';
                     }
                     
+                    // Initialize Dropzone with small delay to ensure DOM is ready
+                    if (isHRPayroll) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        initializeSettlementDropzone();
+                    }
+                },
+                preConfirm: () => {
+                    const comment = document.getElementById('approvalComment').value.trim();
+                    const settlementDropzone = isHRPayroll ? Dropzone.forElement('#settlementDropzone') : null;
+                    
                     return new Promise((resolve, reject) => {
-
-                        
-                        // Prepare form data for approval + WPS file
+                        // Prepare form data for approval + attachments
                         const formData = new FormData();
-                        formData.append('action', 'approve_settlement_with_wps');
+                        formData.append('action', 'approve_settlement_with_attachments');
                         formData.append('settlement_id', settlementId);
                         formData.append('settlement_inv_no', settlementInvNo);
                         formData.append('emp_id', empId);
                         formData.append('approval_comment', comment);
                         formData.append('is_final_approval', 0);
                         formData.append('is_hr_payroll', isHRPayroll ? '1' : '0');
+                        formData.append('attachment_count', settlementDropzone ? settlementDropzone.files.length : 0);
                         
-                        // Add WPS file if HR Payroll and file selected
-                        if (isHRPayroll) {
-                            const fileInput = document.getElementById('wpsFileUpload');
-                            if (fileInput.files && fileInput.files[0]) {
-                                formData.append('wps_file', fileInput.files[0]);
-                            }
+                        // Add all uploaded files to FormData (HR Payroll only)
+                        if (settlementDropzone) {
+                            settlementDropzone.files.forEach((file, index) => {
+                                formData.append(`attachment_${index}`, file);
+                                formData.append(`attachment_${index}_name`, file.name);
+                            });
                         }
                         
                         $.ajax({
@@ -732,7 +885,6 @@ if ($canSeeAllDepts) {
                             contentType: false,
                             timeout: 30000,
                             success: function(response) {
-
                                 if (response.success === true) {
                                     resolve(response);
                                 } else {
@@ -746,6 +898,7 @@ if ($canSeeAllDepts) {
                             }
                         });
                     });
+
                 }
             }).then((result) => {
 
@@ -753,13 +906,14 @@ if ($canSeeAllDepts) {
                 if (result.isConfirmed) {
                     // Settlement approved successfully
                     const message = result.value && result.value.message ? result.value.message : '<?= __("settlement_approved_successfully") ?>';
+                    const attachmentCount = result.value && result.value.attachment_count ? result.value.attachment_count : 0;
                     
                     Swal.fire({
                         title: '<?= __("success") ?>!',
                         html: `
                             <p>${message}</p>
                             <p><strong><?= __("settlement_ref") ?>:</strong> ${settlementInvNo}</p>
-                            ${isHRPayroll && result.value && result.value.wps_file_name ? `<p><strong><?= __("wps_file") ?>:</strong> ${result.value.wps_file_name}</p>` : ''}
+                            ${attachmentCount > 0 ? `<p><i class="fa fa-check text-success"></i> <strong>${attachmentCount}</strong> attachment(s) uploaded</p>` : ''}
                         `,
                         icon: 'success',
                         confirmButtonColor: '#28a745',
@@ -781,11 +935,55 @@ if ($canSeeAllDepts) {
             });
         }
 
-        // Settlement functions are now defined globally in assets/js/jquery.app.js:
+        // Settlement functions defined in all_settlements.php:
+        // - approveSettlement(settlementId, settlementInvNo, empId) - Main approval handler with attachments
+        // - showSettlementApprovalModal(settlementId, settlementInvNo, empId, employeeName, settlementAmount) - Modal display
+        // - initializeSettlementDropzone() - Dropzone initialization for file uploads
+        // Settlement functions defined globally in assets/js/jquery.app.js:
         // - viewSettlementDetails(settlementId, settlementInvNo)
         // - rejectSettlement(settlementId, settlementInvNo)
         // - processSettlementPayment(settlementId, settlementInvNo)
         // - htmlspecialcharsJs(str)
+        
+        /**
+         * Initialize Dropzone for settlement attachments
+         * Supports multiple file uploads with validation
+         */
+        function initializeSettlementDropzone() {
+            const dropzoneElement = document.getElementById('settlementDropzone');
+            if (!dropzoneElement) {
+                console.warn('Settlement Dropzone element not found');
+                return;
+            }
+            
+            // Destroy previous instance if exists
+            if (window.settlementDropzoneInstance) {
+                window.settlementDropzoneInstance.destroy();
+            }
+            
+            try {
+                // Create new Dropzone instance
+                window.settlementDropzoneInstance = new Dropzone('#settlementDropzone', {
+                    url: './includes/ajaxFile/settlement_handler.php',
+                    autoDiscover: false,
+                    autoProcessQueue: false,
+                    maxFilesize: MAX_FILE_SIZE_MB,
+                    maxFiles: 10,
+                    acceptedFiles: '.pdf,.jpg,.jpeg',
+                    addRemoveLinks: false,
+                    clickable: true,
+                    dictDefaultMessage: `
+                        <i class="fa fa-cloud-upload-alt"></i>
+                        <strong><?= __("drag_drop_files") ?></strong>
+                        <span><?= __("or_click_to_browse") ?></span>
+                    `,
+                    dictFallbackMessage: `<?= __("or_click_to_browse") ?>`,
+                });
+                console.log('Settlement Dropzone initialized:', window.settlementDropzoneInstance);
+            } catch (e) {
+                console.error('Error initializing Settlement Dropzone:', e);
+            }
+        }
     </script>
 </body>
 </html>

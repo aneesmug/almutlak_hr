@@ -1,5 +1,7 @@
 
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js"));
+// Include shared AJAX error handling utilities
+$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/ajaxErrorHandling.js"));
 
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
@@ -2023,4 +2025,11 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
 
 ////////////////////////////////////////////////////////////////////
 ////////////       End Rejoin Request Handling        //////////////
-///////////////////////////////////////////////////////////////////;
+///////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////
+////////////    Utility Functions Moved to ajaxErrorHandling.js   ///////
+////////////////////////////////////////////////////////////////////
+// handleAjaxFailure() and errorHandling() are now defined in
+// assets/js/ajaxErrorHandling.js and included at the top of this file
+////////////////////////////////////////////////////////////////////

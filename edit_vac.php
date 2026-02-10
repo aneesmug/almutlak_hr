@@ -20,7 +20,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='".$_GET[
 			$vacation_days_get = $rec["vacation_days"];
 			$joining_date_get = $rec["joining_date"];
 			$date_reg_get = $rec["date_reg"];
-			$emp_avatar_get = $rec["avatar"];
+			$emp_avatar_get = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
 			$emp_status_get = $rec["status"];
 			$emp_ter_date_get = $rec["ter_date"];
 			$note_get = $rec["note"];
@@ -58,10 +58,10 @@ if(isset($_POST['submit'])){
 
 	
 $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."', `iqama`='".$iqama_up."', `mobile`='".$mobile_up."', `salary`='".$salary_up."', `vacation_days`='".$vacation_days_up."' WHERE `id`='".$_GET['id']."' ";
-		mysqli_query($conDB, $u) or die (mysqli_error());
+		mysqli_query($conDB, $u);
 		
 		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')") or die (mysqli_error());
+		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')");
 		/************log************/
 		$error_1 = "<div class='alert alert-success'><strong>Successfully!</strong> Your employee details will be successfully edit!</div>";
 		header("refresh:1; ./edit_employee.php?id=".$_GET['id']."");

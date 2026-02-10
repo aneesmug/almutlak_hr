@@ -20,9 +20,11 @@ if ($request_inv_no === '') {
 // Settlement details
 $settlement = null;
 $sql = "SELECT s.*, 
-               e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp,
+               e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp, e.gosi, e.country as country_id,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
+               v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
+               v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_deductions,
                (SELECT basic FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_basic,
                (SELECT housing FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_housing,
                (SELECT transport FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_transport,
@@ -36,6 +38,7 @@ $sql = "SELECT s.*,
         FROM settlement_records s
         JOIN employees e ON s.emp_id = e.emp_id
         LEFT JOIN department d ON e.dept = d.id
+        LEFT JOIN emp_vacation v ON v.request_inv_no = SUBSTR(s.request_inv_no, 6)
         WHERE s.request_inv_no = ?
         LIMIT 1";
 $stmt = $conDB->prepare($sql);
@@ -48,6 +51,98 @@ if ($res && $res->num_rows === 1) {
 $stmt->close();
 if (!$settlement) {
     die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Settlement request not found.</div>');
+}
+
+// Calculate payable amount from vacation data (same logic as vacation_report_details.php)
+$payableAmount = 0;
+if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
+    $vac_type = $settlement['vac_type'];
+    $fly_type = $settlement['fly_type'];
+    $vacation_salary_type = $settlement['vacation_salary_type'] ?? 'payroll';
+    $approved_days = (float)($settlement['vacdays'] ?? 0);
+    
+    $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+    $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+    $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
+    $is_emergency = ($fly_type === 'emergency');
+    
+    $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+    $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
+    
+    $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+    
+    if ($calculate_payments) {
+        $basic_salary = (float)($settlement['salary_basic'] ?? 0);
+        $total_monthly_salary = $basic_salary + ($settlement['salary_housing'] ?? 0) + ($settlement['salary_transport'] ?? 0) + ($settlement['salary_food'] ?? 0) + ($settlement['salary_misc'] ?? 0) + ($settlement['salary_cashier'] ?? 0) + ($settlement['salary_fuel'] ?? 0) + ($settlement['salary_tel'] ?? 0) + ($settlement['salary_other'] ?? 0) + ($settlement['salary_guard'] ?? 0);
+        
+        if ($total_monthly_salary > 0) {
+            $days_in_month = 30;
+            $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+            
+            $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
+            $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
+            $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
+            
+            $working_days_salary = 0;
+            $vacation_salary = 0;
+            $gosi_deduction = 0;
+            $overtime_amount = 0;
+            $deduction_amount = 0;
+            
+            // Calculate working days salary (Fly + Annual only)
+            if ($is_fly_annual && !empty($settlement['start_date'])) {
+                try {
+                    $start_date_obj = new DateTime($settlement['start_date']);
+                    $working_days = (int)$start_date_obj->format('d') - 1;
+                    $working_days_salary = round($daily_rate * $working_days);
+                } catch (Exception $e) {
+                    $working_days_salary = 0;
+                }
+            }
+            
+            // Calculate vacation salary (Fly + Annual with payroll type only)
+            if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                $vacation_salary = round($daily_rate * $approved_days);
+            }
+            
+            // Calculate overtime
+            if (!empty($settlement['overtime_hours']) && $settlement['overtime_hours'] > 0) {
+                $overtime_amount = round($overtimeHourlyRate * $settlement['overtime_hours']);
+            }
+            
+            // Calculate deductions
+            $ded_hours = !empty($settlement['deduction_hours']) ? $settlement['deduction_hours'] : 0;
+            $ded_days = !empty($settlement['deduction_days']) ? $settlement['deduction_days'] : 0;
+            $other_ded = !empty($settlement['other_deductions']) ? $settlement['other_deductions'] : 0;
+            
+            if ($ded_hours > 0 || $ded_days > 0 || $other_ded > 0) {
+                $deduction_hours_amount = round($hourlyRateDeduction * $ded_hours);
+                $deduction_days_amount = round($dailyRateDeduction * $ded_days);
+                $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_ded);
+            }
+            
+            // Calculate GOSI
+            if ($settlement['country_id'] == 191 && !empty($settlement['gosi']) && is_numeric($settlement['gosi'])) {
+                $gosi_percentage = (float)$settlement['gosi'];
+                if ($is_fly_annual) {
+                    $gosi_base = $working_days_salary + $vacation_salary;
+                    $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                }
+            }
+            
+            // Calculate total payable
+            if ($is_encashment) {
+                $payableAmount = 0;
+            } elseif ($is_fly_annual) {
+                $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+            }
+        }
+    }
+}
+
+// Fallback to stored settlement_amount if calculated is 0
+if ($payableAmount <= 0) {
+    $payableAmount = (float)($settlement['settlement_amount'] ?? 0);
 }
 
 // Enforce department scoping: Only HR and System Admin can view other departments,
@@ -240,9 +335,9 @@ if (!empty($settlement['avatar'])) {
                 <div class="info-card">
                     <h5><i class="fas fa-file-invoice"></i> <?= __('settlement_details')?></h5>
                     <div class="info-row"><div class="info-label"><i class="fas fa-barcode"></i> <?= __('invoice_no') ?>:</div><div class="info-value"><code><?= htmlspecialchars($settlement['request_inv_no']) ?></code></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('amount')?>:</div><div class="info-value"><strong><?= number_format($settlement['settlement_amount'], 2) ?> SAR</strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('amount')?>:</div><div class="info-value"><strong style="color: #28a745;"><?= number_format(round($payableAmount), 2) ?> SAR</strong></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-calendar-alt"></i> <?= __('created_date') ?>:</div><div class="info-value"><?= htmlspecialchars(date('d M Y', strtotime($settlement['created_at']))) ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('settlement_type') ?>:</div><div class="info-value"><strong><?= getDisplayName($settlement['settlement_type'] ?? 'N/A') ?></strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('settlement_type') ?>:</div><div class="info-value"><strong><?= ucwords(__($settlement['request_type'] ?? 'N/A')) ?></strong></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('status') ?>:</div><div class="info-value"><span class="badge badge-<?= $status_class ?>" style="font-size:14px;padding:8px 16px;"><i class="fas <?= $status_icon ?>"></i> <?= getDisplayName(ucwords(str_replace('_', ' ', $settlement['settlement_status']))) ?></span></div></div>
                     <?php if (!empty($settlement['notes'])): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-comment"></i> <?= __('notes') ?>:</div><div class="info-value"><?= (nl2br(htmlspecialchars(getDisplayName($settlement['notes'])))) ?></div></div>
@@ -280,7 +375,7 @@ if (!empty($settlement['avatar'])) {
                     <div class="info-row"><div class="info-label"><i class="fas fa-money-bill"></i> <?= __('basic_salary') ?>:</div><div class="info-value"><strong>SAR <?= number_format($settlement['salary_basic'], 2) ?></strong></div></div>
                     <?php endif; ?>
                     <?php if (!empty($settlement['settlement_amount'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('settlement_amount') ?>:</div><div class="info-value"><strong style="color:#28a745;">SAR <?= number_format($settlement['settlement_amount'], 2) ?></strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('settlement_amount') ?>:</div><div class="info-value"><strong style="color:#28a745;">SAR <?= number_format(round($payableAmount), 2) ?></strong></div></div>
                     <?php endif; ?>
                     <?php if (!empty($settlement['deductions'])): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-minus-circle"></i> <?= __('deductions') ?>:</div><div class="info-value"><strong>SAR <?= number_format($settlement['deductions'], 2) ?></strong></div></div>

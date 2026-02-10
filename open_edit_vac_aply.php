@@ -19,7 +19,7 @@ while($rec = mysqli_fetch_assoc($getquery)){
 			$vacation_days_get = $rec["vacation_days"];
 			$joining_date_get = $rec["joining_date"];
 			$date_reg_get = $rec["date_reg"];
-			$emp_avatar_get = $rec["avatar"];
+			$emp_avatar_get = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
 			$emp_status_get = $rec["status"];
 			$emp_ter_date_get = $rec["ter_date"];
 			$note_get = $rec["note"];
@@ -138,7 +138,7 @@ if(isset($_POST['submit'])){
 		
 //		mysqli_query($conDB, "UPDATE `employees` SET `fly`='yes' WHERE `emp_id`='".$_GET['emp_id']."' ") or die (mysqli_error());
 		/************log************/
-		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')") or die (mysqli_error());
+		mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['id']."','".date("c")."')") ;
 		/************log************/
 		$msg = "<div class=\"alert alert-success bg-success text-white border-0\" role=\"alert\">Updated Seccssfully!</div>
 		";		

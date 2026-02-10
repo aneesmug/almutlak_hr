@@ -235,7 +235,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                         $emptype = $rec["emptype"];
                                                         $emp_status = $rec["status"];
                                                         $emp_status_fly = $rec["fly"];
-                                                        $emp_avatar = (!empty($rec["avatar"]) && file_exists("./assets/emp_pics/" . basename($rec["avatar"]))) ? $rec["avatar"] : (($rec['sex'] == 'male') ? './assets/emp_pics/defult.png' : './assets/emp_pics/defultFemale.jpg');
+                                                        $emp_avatar = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
                                                         $c0lor = ($emp_status == 1 && $emp_status_fly == 0 ? "bg-light" : ($emp_status_fly == 1 ? "bg-warning" : "bg-danger"));
 
 														$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Fly'");

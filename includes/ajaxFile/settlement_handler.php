@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../includes/session_check.php';
 require_once __DIR__ . '/../../includes/helper_functions.php';
 require_once __DIR__ . '/../../includes/SettlementManager_Corrected.php';
 require_once __DIR__ . '/../../includes/ApprovalChainManager.php';
+require_once __DIR__ . '/../../includes/settlement_attachments_helper.php';
 
 // Initialize managers with both MySQLi and PDO connections
 $settlementManager = new SettlementManager($conDB, $pdo);
@@ -50,8 +51,9 @@ switch ($action) {
         approveSettlement($settlementManager, $currentUserId);
         break;
     
-    case 'approve_settlement_with_wps':
-        approveSettlementWithWPS($settlementManager, $currentUserId);
+    
+    case 'approve_settlement_with_attachments':
+        approveSettlementWithAttachments($settlementManager, $currentUserId);
         break;
     
     case 'reject_settlement':
@@ -69,11 +71,7 @@ switch ($action) {
     case 'get_employee_settlements':
         getEmployeeSettlements($settlementManager, $currentUserId);
         break;
-    
-    case 'upload_wps_file':
-        uploadWPSFile($conDB, $pdo, $currentUserId);
-        break;
-    
+
     default:
         echo json_encode(['status' => 'error', 'message' => 'Invalid action']);
 }
@@ -489,6 +487,115 @@ function approveSettlement($settlementManager, $currentUserId) {
         
         $allApprovalsComplete = ($approvedCount === $totalApprovals);
         
+        // CALCULATE PAYABLE AMOUNT: Fetch settlement with vacation and salary data
+        $settlementDataQry = mysqli_query($conDB, "
+            SELECT s.*, 
+                   e.gosi, e.country as country_id,
+                   v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
+                   v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_deductions,
+                   sal.basic, sal.housing, sal.transport, sal.food, sal.misc, sal.cashier,
+                   sal.fuel, sal.tel, sal.other, sal.guard
+            FROM settlement_records s
+            JOIN employees e ON s.emp_id = e.emp_id
+            LEFT JOIN emp_vacation v ON v.request_inv_no = SUBSTR(s.request_inv_no, 6)
+            LEFT JOIN emp_salary sal ON sal.emp_id = e.emp_id AND sal.status = 1 AND sal.id = (
+                SELECT MAX(sal2.id) FROM emp_salary sal2 WHERE sal2.emp_id = e.emp_id AND sal2.status = 1
+            )
+            WHERE s.request_inv_no = '$settlementInvNo'
+            LIMIT 1
+        ");
+        
+        $calculatedPayableAmount = 0;
+        if ($settlementDataQry && mysqli_num_rows($settlementDataQry) > 0) {
+            $settlementData = mysqli_fetch_assoc($settlementDataQry);
+            mysqli_free_result($settlementDataQry);
+            
+            // Calculate using same logic as all_settlements.php
+            if (!empty($settlementData['vac_type']) && !empty($settlementData['basic'])) {
+                $vac_type = $settlementData['vac_type'];
+                $fly_type = $settlementData['fly_type'];
+                $vacation_salary_type = $settlementData['vacation_salary_type'] ?? 'payroll';
+                $approved_days = (float)($settlementData['vacdays'] ?? 0);
+                
+                $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+                $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+                $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
+                $is_emergency = ($fly_type === 'emergency');
+                
+                $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+                $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
+                
+                $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+                
+                if ($calculate_payments) {
+                    $basic_salary = (float)($settlementData['basic'] ?? 0);
+                    $total_monthly_salary = $basic_salary + ($settlementData['housing'] ?? 0) + ($settlementData['transport'] ?? 0) + 
+                                          ($settlementData['food'] ?? 0) + ($settlementData['misc'] ?? 0) + ($settlementData['cashier'] ?? 0) + 
+                                          ($settlementData['fuel'] ?? 0) + ($settlementData['tel'] ?? 0) + ($settlementData['other'] ?? 0) + 
+                                          ($settlementData['guard'] ?? 0);
+                    
+                    if ($total_monthly_salary > 0) {
+                        $daily_rate = round($total_monthly_salary / 30, 2);
+                        $dailyRateDeduction = round($total_monthly_salary / 30, 2);
+                        $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
+                        $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
+                        
+                        $working_days_salary = 0;
+                        $vacation_salary = 0;
+                        $gosi_deduction = 0;
+                        $overtime_amount = 0;
+                        $deduction_amount = 0;
+                        
+                        if ($is_fly_annual && !empty($settlementData['start_date'])) {
+                            try {
+                                $start_date_obj = new DateTime($settlementData['start_date']);
+                                $working_days = (int)$start_date_obj->format('d') - 1;
+                                $working_days_salary = round($daily_rate * $working_days);
+                            } catch (Exception $e) {
+                                $working_days_salary = 0;
+                            }
+                        }
+                        
+                        if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                            $vacation_salary = round($daily_rate * $approved_days);
+                        }
+                        
+                        if (!empty($settlementData['overtime_hours']) && $settlementData['overtime_hours'] > 0) {
+                            $overtime_amount = round($overtimeHourlyRate * $settlementData['overtime_hours']);
+                        }
+                        
+                        $ded_hours = !empty($settlementData['deduction_hours']) ? $settlementData['deduction_hours'] : 0;
+                        $ded_days = !empty($settlementData['deduction_days']) ? $settlementData['deduction_days'] : 0;
+                        $other_ded = !empty($settlementData['other_deductions']) ? $settlementData['other_deductions'] : 0;
+                        
+                        if ($ded_hours > 0 || $ded_days > 0 || $other_ded > 0) {
+                            $deduction_hours_amount = round($hourlyRateDeduction * $ded_hours);
+                            $deduction_days_amount = round($dailyRateDeduction * $ded_days);
+                            $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_ded);
+                        }
+                        
+                        if ($settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
+                            $gosi_percentage = (float)$settlementData['gosi'];
+                            if ($is_fly_annual) {
+                                $gosi_base = $working_days_salary + $vacation_salary;
+                                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                            }
+                        }
+                        
+                        if ($is_encashment) {
+                            $calculatedPayableAmount = 0;
+                        } elseif ($is_fly_annual) {
+                            $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                        }
+                    }
+                }
+            }
+            
+            if ($calculatedPayableAmount <= 0 && !empty($settlementData['settlement_amount'])) {
+                $calculatedPayableAmount = round($settlementData['settlement_amount']);
+            }
+        }
+        
         // If "Other Employee" is paying at final approval level, DO NOT mark as complete yet
         // They will need to approve it as the final step
         // Only mark as complete when all approval levels are truly done
@@ -503,6 +610,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                     UPDATE settlement_records 
                     SET settlement_status = 'pending_approval',
                         settlement_approver = " . (int)$payerId . ",
+                        settlement_amount = $calculatedPayableAmount,
                         updated_at = NOW()
                     WHERE request_inv_no = '$settlementInvNo'
                 ");
@@ -520,10 +628,10 @@ function approveSettlement($settlementManager, $currentUserId) {
                 ");
             }
         } else {
-            // Regular approval - just update status
+            // Regular approval - update status AND sync settlement amount with calculated value
             $updateSettlementQry = mysqli_query($conDB, "
                 UPDATE settlement_records 
-                SET settlement_status = '$newSettlementStatus', updated_at = NOW()
+                SET settlement_status = '$newSettlementStatus', settlement_amount = $calculatedPayableAmount, updated_at = NOW()
                 WHERE request_inv_no = '$settlementInvNo'
             ");
         }
@@ -789,7 +897,11 @@ function approveSettlement($settlementManager, $currentUserId) {
  * Approve Settlement with WPS File Upload (Combined Operation for HR Payroll)
  * Handles both approval and WPS file upload in a single request
  */
-function approveSettlementWithWPS($settlementManager, $currentUserId) {
+/**
+ * Approve Settlement with Multiple Attachments
+ * Handles approval workflow and stores multiple files in settlement_attachments table
+ */
+function approveSettlementWithAttachments($settlementManager, $currentUserId) {
     global $conDB, $pdo;
     
     $settlementInvNo = $_POST['settlement_inv_no'] ?? '';
@@ -797,7 +909,7 @@ function approveSettlementWithWPS($settlementManager, $currentUserId) {
     $empId = $_POST['emp_id'] ?? 0;
     $approvalComment = $_POST['approval_comment'] ?? '';
     $isHRPayroll = ($_POST['is_hr_payroll'] ?? '0') === '1';
-    $isFinalApproval = isset($_POST['is_final_approval']) && $_POST['is_final_approval'] == '1';
+    $attachmentCount = intval($_POST['attachment_count'] ?? 0);
     
     if (empty($settlementInvNo) || $settlementId <= 0) {
         echo json_encode([
@@ -808,7 +920,7 @@ function approveSettlementWithWPS($settlementManager, $currentUserId) {
     }
     
     try {
-        // STEP 1: First, perform the settlement approval
+        // STEP 1: Approval workflow - same as approveSettlementWithWPS
         $typeQry = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'settlement' LIMIT 1");
         if (!$typeQry || mysqli_num_rows($typeQry) == 0) {
             echo json_encode(['success' => false, 'message' => 'Settlement request type not found']);
@@ -842,6 +954,9 @@ function approveSettlementWithWPS($settlementManager, $currentUserId) {
             return;
         }
         
+        // Begin transaction
+        $pdo->beginTransaction();
+        
         // Update approval status to 'approved'
         $updateQry = mysqli_query($conDB, "
             UPDATE request_approvers 
@@ -852,6 +967,7 @@ function approveSettlementWithWPS($settlementManager, $currentUserId) {
         ");
         
         if (!$updateQry) {
+            $pdo->rollBack();
             echo json_encode(['success' => false, 'message' => 'Failed to update approval status']);
             return;
         }
@@ -867,7 +983,7 @@ function approveSettlementWithWPS($settlementManager, $currentUserId) {
             AND status = 'awaiting'
         ");
         
-        // Get approver details for notification
+        // Get approver details
         $approverQry = mysqli_query($conDB, "SELECT name, email FROM employees WHERE emp_id = $currentUserId LIMIT 1");
         $approverDetails = $approverQry ? mysqli_fetch_assoc($approverQry) : null;
         if ($approverQry) mysqli_free_result($approverQry);
@@ -900,99 +1016,241 @@ function approveSettlementWithWPS($settlementManager, $currentUserId) {
         
         $allApprovalsComplete = ($approvedCount === $totalApprovals);
         
-        // Update settlement status
+        // CALCULATE PAYABLE AMOUNT: Fetch settlement with vacation and salary data
+        $settlementDataQry = mysqli_query($conDB, "
+            SELECT s.*, 
+                   e.gosi, e.country as country_id,
+                   v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
+                   v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_deductions,
+                   sal.basic, sal.housing, sal.transport, sal.food, sal.misc, sal.cashier,
+                   sal.fuel, sal.tel, sal.other, sal.guard
+            FROM settlement_records s
+            JOIN employees e ON s.emp_id = e.emp_id
+            LEFT JOIN emp_vacation v ON v.request_inv_no = SUBSTR(s.request_inv_no, 6)
+            LEFT JOIN emp_salary sal ON sal.emp_id = e.emp_id AND sal.status = 1 AND sal.id = (
+                SELECT MAX(sal2.id) FROM emp_salary sal2 WHERE sal2.emp_id = e.emp_id AND sal2.status = 1
+            )
+            WHERE s.request_inv_no = '$settlementInvNo'
+            LIMIT 1
+        ");
+        
+        $calculatedPayableAmount = 0;
+        if ($settlementDataQry && mysqli_num_rows($settlementDataQry) > 0) {
+            $settlementData = mysqli_fetch_assoc($settlementDataQry);
+            mysqli_free_result($settlementDataQry);
+            
+            // Calculate using same logic as all_settlements.php
+            if (!empty($settlementData['vac_type']) && !empty($settlementData['basic'])) {
+                $vac_type = $settlementData['vac_type'];
+                $fly_type = $settlementData['fly_type'];
+                $vacation_salary_type = $settlementData['vacation_salary_type'] ?? 'payroll';
+                $approved_days = (float)($settlementData['vacdays'] ?? 0);
+                
+                $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+                $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+                $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
+                $is_emergency = ($fly_type === 'emergency');
+                
+                $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+                $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
+                
+                $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+                
+                if ($calculate_payments) {
+                    $basic_salary = (float)($settlementData['basic'] ?? 0);
+                    $total_monthly_salary = $basic_salary + ($settlementData['housing'] ?? 0) + ($settlementData['transport'] ?? 0) + 
+                                          ($settlementData['food'] ?? 0) + ($settlementData['misc'] ?? 0) + ($settlementData['cashier'] ?? 0) + 
+                                          ($settlementData['fuel'] ?? 0) + ($settlementData['tel'] ?? 0) + ($settlementData['other'] ?? 0) + 
+                                          ($settlementData['guard'] ?? 0);
+                    
+                    if ($total_monthly_salary > 0) {
+                        $daily_rate = round($total_monthly_salary / 30, 2);
+                        $dailyRateDeduction = round($total_monthly_salary / 30, 2);
+                        $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
+                        $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
+                        
+                        $working_days_salary = 0;
+                        $vacation_salary = 0;
+                        $gosi_deduction = 0;
+                        $overtime_amount = 0;
+                        $deduction_amount = 0;
+                        
+                        if ($is_fly_annual && !empty($settlementData['start_date'])) {
+                            try {
+                                $start_date_obj = new DateTime($settlementData['start_date']);
+                                $working_days = (int)$start_date_obj->format('d') - 1;
+                                $working_days_salary = round($daily_rate * $working_days);
+                            } catch (Exception $e) {
+                                $working_days_salary = 0;
+                            }
+                        }
+                        
+                        if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                            $vacation_salary = round($daily_rate * $approved_days);
+                        }
+                        
+                        if (!empty($settlementData['overtime_hours']) && $settlementData['overtime_hours'] > 0) {
+                            $overtime_amount = round($overtimeHourlyRate * $settlementData['overtime_hours']);
+                        }
+                        
+                        $ded_hours = !empty($settlementData['deduction_hours']) ? $settlementData['deduction_hours'] : 0;
+                        $ded_days = !empty($settlementData['deduction_days']) ? $settlementData['deduction_days'] : 0;
+                        $other_ded = !empty($settlementData['other_deductions']) ? $settlementData['other_deductions'] : 0;
+                        
+                        if ($ded_hours > 0 || $ded_days > 0 || $other_ded > 0) {
+                            $deduction_hours_amount = round($hourlyRateDeduction * $ded_hours);
+                            $deduction_days_amount = round($dailyRateDeduction * $ded_days);
+                            $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_ded);
+                        }
+                        
+                        if ($settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
+                            $gosi_percentage = (float)$settlementData['gosi'];
+                            if ($is_fly_annual) {
+                                $gosi_base = $working_days_salary + $vacation_salary;
+                                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                            }
+                        }
+                        
+                        if ($is_encashment) {
+                            $calculatedPayableAmount = 0;
+                        } elseif ($is_fly_annual) {
+                            $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                        }
+                    }
+                }
+            }
+            
+            if ($calculatedPayableAmount <= 0 && !empty($settlementData['settlement_amount'])) {
+                $calculatedPayableAmount = round($settlementData['settlement_amount']);
+            }
+        }
+        
+        // Update settlement status AND settlement amount with calculated value
         $newSettlementStatus = $allApprovalsComplete ? 'completed' : 'pending_approval';
         $updateSettlementQry = mysqli_query($conDB, "
             UPDATE settlement_records 
-            SET settlement_status = '$newSettlementStatus', updated_at = NOW()
+            SET settlement_status = '$newSettlementStatus', settlement_amount = $calculatedPayableAmount, updated_at = NOW()
             WHERE request_inv_no = '$settlementInvNo'
         ");
         
-        // Send notifications: notify next approver or employee based on approval status
-        if ($allApprovalsComplete) {
-            error_log("Settlement WPS Handler: All approvals complete, settlement status now: $newSettlementStatus");
-        } else {
-            // Notify next approver using role-based notification helper
-            error_log("Settlement WPS Handler: Not all approvals complete, notifying next approver for $settlementInvNo");
-            $notifyResult = notify_settlement_next_approver($conDB, $settlementInvNo, $typeId, $current['approval_level']);
-            error_log("Settlement WPS Handler: Notification result = " . ($notifyResult ? 'success' : 'failed/no eligible approver'));
-        }
+        // STEP 2: Handle multiple attachment uploads
+        $uploadedCount = 0;
+        $uploadedFiles = [];
         
-        // STEP 2: Handle WPS file upload if provided and user is HR Payroll
-        $wpsFileName = null;
-        $wpsFilePath = null;
-        
-        if ($isHRPayroll && isset($_FILES['wps_file']) && $_FILES['wps_file']['error'] === UPLOAD_ERR_OK) {
-            $file = $_FILES['wps_file'];
-            $fileName = basename($file['name']);
-            $fileSize = $file['size'];
-            $fileTmpPath = $file['tmp_name'];
+        if ($attachmentCount > 0) {
+            $uploadBaseDir = __DIR__ . '/../../uploads/settlement_attachments';
+            $yearMonth = date('Y/m');
+            $uploadDir = $uploadBaseDir . '/' . $yearMonth;
             
-            // Validate file size (max 10MB)
-            $maxFileSize = 10 * 1024 * 1024;
-            if ($fileSize <= $maxFileSize) {
-                // Validate file type
-                $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'];
-                $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            // Create directory if not exists
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            
+            // Process each uploaded file
+            for ($i = 0; $i < $attachmentCount; $i++) {
+                $fileKey = "attachment_$i";
                 
-                if (in_array($fileExtension, $allowedExtensions)) {
-                    // Create upload directory
-                    $uploadBaseDir = __DIR__ . '/../../uploads/wps_files';
-                    $yearMonth = date('Y/m');
-                    $uploadDir = $uploadBaseDir . '/' . $yearMonth;
+                if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] === UPLOAD_ERR_OK) {
+                    $file = $_FILES[$fileKey];
+                    $originalFileName = basename($file['name']);
+                    $fileSize = $file['size'];
+                    $fileTmpPath = $file['tmp_name'];
                     
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0755, true);
+                    // Validate file
+                    $maxFileSize = 10 * 1024 * 1024; // 10MB
+                    if ($fileSize > $maxFileSize) {
+                        error_log("File $originalFileName exceeds size limit");
+                        continue;
+                    }
+                    
+                    // Check file type
+                    $allowedExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'zip', 'rar'];
+                    $fileExtension = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
+                    
+                    if (!in_array($fileExtension, $allowedExtensions)) {
+                        error_log("File type $fileExtension not allowed");
+                        continue;
                     }
                     
                     // Generate unique filename
-                    $timestamp = date('YmdHis');
-                    $uniqueFileName = 'settlement_' . $settlementId . '_' . $timestamp . '.' . $fileExtension;
-                    $uploadFilePath = $uploadDir . '/' . $uniqueFileName;
-                    $relativePath = '/uploads/wps_files/' . $yearMonth . '/' . $uniqueFileName;
+                    $uniqueFileName = uniqid('settlement_', true) . '.' . $fileExtension;
+                    $filePath = $uploadDir . '/' . $uniqueFileName;
                     
-                    // Move uploaded file
-                    if (move_uploaded_file($fileTmpPath, $uploadFilePath)) {
-                        // Update settlement_records with WPS file info
-                        $updateWPSQry = $pdo->prepare("
-                            UPDATE settlement_records 
-                            SET 
-                                wps_file_path = :wps_file_path,
-                                wps_file_name = :wps_file_name,
-                                wps_uploaded_by = :wps_uploaded_by,
-                                wps_uploaded_at = NOW(),
-                                wps_upload_status = 'completed'
-                            WHERE id = :settlement_id
+                    // Move file
+                    if (move_uploaded_file($fileTmpPath, $filePath)) {
+                        // Determine attachment category
+                        $category = ($isHRPayroll && strpos(strtolower($originalFileName), 'wps') !== false) ? 'wps_file' : 'supporting_document';
+                        
+                        // Save to settlement_attachments table using PDO
+                        $stmtInsert = $pdo->prepare("
+                            INSERT INTO settlement_attachments 
+                            (settlement_id, request_inv_no, emp_id, file_name, file_path, file_type, file_size, attachment_category, uploaded_by)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ");
                         
-                        $updateWPSQry->execute([
-                            ':wps_file_path' => $relativePath,
-                            ':wps_file_name' => $uniqueFileName,
-                            ':wps_uploaded_by' => $currentUserId,
-                            ':settlement_id' => $settlementId
+                        $mimeType = mime_content_type($filePath);
+                        $stmtInsert->execute([
+                            $settlementId,
+                            $settlementInvNo,
+                            $empId,
+                            $originalFileName,
+                            $uniqueFileName,
+                            $mimeType,
+                            $fileSize,
+                            $category,
+                            $currentUserId
                         ]);
                         
-                        $wpsFileName = $uniqueFileName;
-                        $wpsFilePath = $relativePath;
+                        $uploadedCount++;
+                        $uploadedFiles[] = $originalFileName;
+                        
+                        // Log to audit table
+                        $stmtAudit = $pdo->prepare("
+                            INSERT INTO settlement_attachments_audit 
+                            (attachment_id, settlement_id, emp_id, action, file_name, uploaded_by, ip_address)
+                            VALUES (?, ?, ?, 'uploaded', ?, ?, ?)
+                        ");
+                        $stmtAudit->execute([
+                            $pdo->lastInsertId(),
+                            $settlementId,
+                            $empId,
+                            $originalFileName,
+                            $currentUserId,
+                            $_SERVER['REMOTE_ADDR'] ?? 'UNKNOWN'
+                        ]);
                     }
                 }
             }
         }
         
+        // Commit transaction
+        $pdo->commit();
+        
+        // Send notifications
+        if ($allApprovalsComplete) {
+            error_log("Settlement: All approvals complete, status: $newSettlementStatus");
+        } else {
+            error_log("Settlement: Notifying next approver for $settlementInvNo");
+            notify_settlement_next_approver($conDB, $settlementInvNo, $typeId, $current['approval_level']);
+        }
+        
         // Return success response
         echo json_encode([
             'success' => true,
-            'message' => $allApprovalsComplete ? __('settlement_approved_all_approvals_complete') : __('settlement_approved_forwarded_to_next_approver'),
-            'all_approvals_complete' => $allApprovalsComplete,
-            'wps_file_name' => $wpsFileName,
-            'wps_file_path' => $wpsFilePath
+            'message' => 'Settlement approved successfully with ' . $uploadedCount . ' attachment(s)',
+            'attachment_count' => $uploadedCount,
+            'uploaded_files' => $uploadedFiles
         ]);
         
     } catch (Exception $e) {
-        error_log("Settlement approval with WPS error: " . $e->getMessage());
+        if (isset($pdo)) {
+            $pdo->rollBack();
+        }
+        error_log("Settlement approval with attachments error: " . $e->getMessage());
         echo json_encode([
             'success' => false,
-            'message' => __('error') . ': ' . $e->getMessage()
+            'message' => 'Error processing settlement: ' . $e->getMessage()
         ]);
     }
 }
@@ -1165,7 +1423,7 @@ function processPayment($settlementManager, $currentUserId) {
 }
 
 function getSettlementDetails($settlementManager) {
-    global $conDB;
+    global $conDB, $pdo;
     
     $settlementId = $_POST['settlement_id'] ?? 0;
     
@@ -1200,19 +1458,25 @@ function getSettlementDetails($settlementManager) {
         mysqli_free_result($detailQry);
         
         // Get the related request ID based on request type
+        // Extract the original request_inv_no from settlement's request_inv_no
+        // Settlement format: SETL-<original_request_inv_no>
+        // E.g., SETL-VAC-20260209131428-5127-509a → VAC-20260209131428-5127-509a
         $relatedRequestId = null;
         $requestType = strtolower($settlement['request_type']);
         
+        // Extract original request_inv_no by removing 'SETL-' prefix
+        $originalRequestInvNo = preg_replace('/^SETL-/', '', $settlement['request_inv_no']);
+        
         if (strpos($requestType, 'vacation') !== false) {
-            // Find the vacation ID from emp_vacation table using request_inv_no or emp_id
-            $vacQry = mysqli_query($conDB, "SELECT id FROM emp_vacation WHERE emp_id = '{$settlement['emp_id']}' ORDER BY id DESC LIMIT 1");
+            // Find the vacation ID using the extracted original request_inv_no
+            $vacQry = mysqli_query($conDB, "SELECT id FROM emp_vacation WHERE request_inv_no = '{$originalRequestInvNo}' LIMIT 1");
             if ($vacQry && mysqli_num_rows($vacQry) > 0) {
                 $relatedRequestId = (int)mysqli_fetch_assoc($vacQry)['id'];
             }
             if ($vacQry) mysqli_free_result($vacQry);
         } elseif (strpos($requestType, 'loan') !== false) {
-            // Find the loan ID from emp_loan table using request_inv_no or emp_id
-            $loanQry = mysqli_query($conDB, "SELECT id FROM emp_loan WHERE emp_id = '{$settlement['emp_id']}' ORDER BY id DESC LIMIT 1");
+            // Find the loan ID using the extracted original request_inv_no
+            $loanQry = mysqli_query($conDB, "SELECT id FROM emp_loan WHERE request_inv_no = '{$originalRequestInvNo}' LIMIT 1");
             if ($loanQry && mysqli_num_rows($loanQry) > 0) {
                 $relatedRequestId = (int)mysqli_fetch_assoc($loanQry)['id'];
             }
@@ -1220,6 +1484,129 @@ function getSettlementDetails($settlementManager) {
         }
         
         $settlement['related_request_id'] = $relatedRequestId;
+        
+        // Calculate total payable from vacation record (same calculation as vacation_report_details.php)
+        $calculatedPayableAmount = 0;
+        if (strpos($requestType, 'vacation') !== false && $relatedRequestId) {
+            $vacQry = mysqli_query($conDB, "
+                SELECT v.*, e.emp_id, e.gosi, e.country as country_id,
+                       d.id as dept_id
+                FROM emp_vacation v
+                JOIN employees e ON v.emp_id = e.emp_id
+                LEFT JOIN department d ON e.dept = d.id
+                WHERE v.id = '{$relatedRequestId}'
+                LIMIT 1
+            ");
+            
+            if ($vacQry && mysqli_num_rows($vacQry) > 0) {
+                $vacation = mysqli_fetch_assoc($vacQry);
+                
+                // Get salary details
+                $salaryQry = mysqli_query($conDB, "
+                    SELECT * FROM emp_salary WHERE emp_id = '{$vacation['emp_id']}'
+                    ORDER BY id DESC LIMIT 1
+                ");
+                $salary = $salaryQry ? mysqli_fetch_assoc($salaryQry) : null;
+                if ($salaryQry) mysqli_free_result($salaryQry);
+                
+                // Extract vacation types
+                $vac_type = $vacation['vac_type'] ?? '';
+                $fly_type = $vacation['fly_type'] ?? '';
+                $vacation_salary_type = $vacation['vacation_salary_type'] ?? 'payroll';
+                $approved_days = (float)($vacation['vacdays'] ?? 0);
+                
+                // Get payroll values
+                $overtime_hours = (float)($vacation['overtime_hours'] ?? 0);
+                $deduction_hours = (float)($vacation['deduction_hours'] ?? 0);
+                $deduction_days = (float)($vacation['deduction_days'] ?? 0);
+                $other_deductions = (float)($vacation['other_deductions'] ?? 0);
+                $ticket_pay = (float)($vacation['ticket_pay'] ?? 0);
+                $permit_fee = (float)($vacation['permit_fee'] ?? 0);
+                
+                // Determine vacation categories
+                $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
+                $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+                $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
+                $is_emergency = ($fly_type === 'emergency');
+                
+                $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
+                $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
+                
+                // Calculate only if payable
+                $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+                
+                if ($calculate_payments && $salary) {
+                    $basic_salary = (float)($salary['basic'] ?? 0);
+                    $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
+                    
+                    $days_in_month = 30; // Fixed for calculations
+                    $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                    
+                    // Deduction calculation helpers
+                    $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
+                    $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
+                    $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
+                    
+                    // Initialize amounts
+                    $working_days_salary = 0;
+                    $vacation_salary = 0;
+                    $gosi_deduction = 0;
+                    $overtime_amount = 0;
+                    $deduction_amount = 0;
+                    
+                    // Calculate working days salary (Fly + Annual only)
+                    if ($is_fly_annual && !empty($vacation['start_date'])) {
+                        $start_date_obj = new DateTime($vacation['start_date']);
+                        $working_days = (int)$start_date_obj->format('d') - 1;
+                        $working_days_salary = round($daily_rate * $working_days);
+                    }
+                    
+                    // Calculate vacation salary (Fly + Annual with payroll type only)
+                    if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                        $vacation_salary = round($daily_rate * $approved_days);
+                    }
+                    
+                    // Calculate overtime
+                    if ($overtime_hours > 0) {
+                        $overtime_amount = round($overtimeHourlyRate * $overtime_hours);
+                    }
+                    
+                    // Calculate deductions
+                    if ($deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0) {
+                        $deduction_hours_amount = round($hourlyRateDeduction * $deduction_hours);
+                        $deduction_days_amount = round($dailyRateDeduction * $deduction_days);
+                        $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_deductions);
+                    }
+                    
+                    // Calculate GOSI
+                    if ($vacation['country_id'] == 191 && isset($vacation['gosi']) && is_numeric($vacation['gosi'])) {
+                        $gosi_percentage = (float)$vacation['gosi'];
+                        if ($is_fly_annual) {
+                            $gosi_base = $working_days_salary + $vacation_salary;
+                            $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                        }
+                    }
+                    
+                    // Calculate total payable
+                    if ($is_encashment) {
+                        $calculatedPayableAmount = 0; // Handled in encashment section
+                    } elseif ($is_fly_annual) {
+                        // Fly + Annual: Working days + vacation salary + overtime - deductions - GOSI
+                        $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                    } else {
+                        // Local Vacation + Annual or other
+                        $calculatedPayableAmount = 0;
+                    }
+                }
+            }
+        }
+        
+        // Store calculated amount in settlement
+        // Fallback to stored settlement_amount if calculated is 0
+        if ($calculatedPayableAmount <= 0) {
+            $calculatedPayableAmount = (float)($settlement['settlement_amount'] ?? 0);
+        }
+        $settlement['calculated_payable_amount'] = $calculatedPayableAmount;
         
         // Get approval chain status
         $typeQry = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'settlement' LIMIT 1");
@@ -1282,13 +1669,17 @@ function getSettlementDetails($settlementManager) {
                 }
             }
         }
+
+        // Get settlement attachments
+        $attachments = getSettlementAttachments($pdo, (int)$settlementId, $settlement['request_inv_no']);
         
         echo json_encode([
             'success' => true,
             'data' => [
                 'settlement' => $settlement,
                 'approval_chain' => $approvalChain,
-                'history' => $history
+                'history' => $history,
+                'attachments' => $attachments
             ]
         ]);
         
@@ -1318,154 +1709,5 @@ function getEmployeeSettlements($settlementManager, $currentUserId) {
     ]);
 }
 
-function uploadWPSFile($conDB, $pdo, $currentUserId) {
-    try {
-        // Validate inputs
-        $settlementId = intval($_POST['settlement_id'] ?? 0);
-        $requestInvNo = trim($_POST['request_inv_no'] ?? '');
-        $empId = intval($_POST['emp_id'] ?? 0);
-        $uploadNote = trim($_POST['wps_note'] ?? '');
-        
-        if ($settlementId <= 0 || empty($requestInvNo) || $empId <= 0) {
-            echo json_encode([
-                'success' => false,
-                'message' => 'Missing required parameters: settlement_id, request_inv_no, emp_id'
-            ]);
-            return;
-        }
-        
-        // Check if file was uploaded
-        if (!isset($_FILES['wps_file']) || $_FILES['wps_file']['error'] !== UPLOAD_ERR_OK) {
-            echo json_encode([
-                'success' => false,
-                'message' => 'File upload error: ' . ($_FILES['wps_file']['error'] ?? 'Unknown error')
-            ]);
-            return;
-        }
-        
-        $file = $_FILES['wps_file'];
-        $fileName = basename($file['name']);
-        $fileSize = $file['size'];
-        $fileTmpPath = $file['tmp_name'];
-        
-        // Validate file size (max 10MB)
-        $maxFileSize = 10 * 1024 * 1024; // 10MB
-        if ($fileSize > $maxFileSize) {
-            echo json_encode([
-                'success' => false,
-                'message' => 'File size exceeds 10MB limit'
-            ]);
-            return;
-        }
-        
-        // Validate file type
-        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf'];
-        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-        
-        if (!in_array($fileExtension, $allowedExtensions)) {
-            echo json_encode([
-                'success' => false,
-                'message' => 'Invalid file format. Allowed: Images (JPG, PNG, GIF, BMP, WebP) and PDF'
-            ]);
-            return;
-        }
-        
-        // Create upload directory with date-based structure
-        $uploadBaseDir = __DIR__ . '/../../uploads/wps_files';
-        $yearMonth = date('Y/m');
-        $uploadDir = $uploadBaseDir . '/' . $yearMonth;
-        
-        if (!is_dir($uploadDir)) {
-            if (!mkdir($uploadDir, 0755, true)) {
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Failed to create upload directory'
-                ]);
-                return;
-            }
-        }
-        
-        // Generate unique filename
-        $timestamp = date('YmdHis');
-        $uniqueFileName = 'settlement_' . $settlementId . '_' . $timestamp . '.' . $fileExtension;
-        $uploadFilePath = $uploadDir . '/' . $uniqueFileName;
-        $relativePath = '/uploads/wps_files/' . $yearMonth . '/' . $uniqueFileName;
-        
-        // Move uploaded file
-        if (!move_uploaded_file($fileTmpPath, $uploadFilePath)) {
-            echo json_encode([
-                'success' => false,
-                'message' => 'Failed to upload file'
-            ]);
-            return;
-        }
-        
-        // Update settlement_records table
-        try {
-            $updateQuery = $pdo->prepare("
-                UPDATE settlement_records 
-                SET 
-                    wps_file_path = :wps_file_path,
-                    wps_file_name = :wps_file_name,
-                    wps_uploaded_by = :wps_uploaded_by,
-                    wps_uploaded_at = NOW(),
-                    wps_upload_status = 'completed'
-                WHERE id = :settlement_id
-            ");
-            
-            $updateQuery->execute([
-                ':wps_file_path' => $relativePath,
-                ':wps_file_name' => $uniqueFileName,
-                ':wps_uploaded_by' => $currentUserId,
-                ':settlement_id' => $settlementId
-            ]);
-            
-        } catch (PDOException $e) {
-            error_log("WPS Upload - Database update error: " . $e->getMessage());
-            echo json_encode([
-                'success' => false,
-                'message' => 'Database update failed: ' . $e->getMessage()
-            ]);
-            return;
-        }
-        
-        // Log the upload in smt_request_status for audit trail
-        try {
-            $auditQuery = $pdo->prepare("
-                INSERT INTO smt_request_status 
-                (inv_no, status, remarks, action_by, action_date) 
-                VALUES (:inv_no, :status, :remarks, :action_by, NOW())
-            ");
-            
-            $auditQuery->execute([
-                ':inv_no' => $requestInvNo,
-                ':status' => 'wps_file_uploaded',
-                ':remarks' => 'WPS File: ' . $uniqueFileName . ($uploadNote ? ' - Note: ' . $uploadNote : ''),
-                ':action_by' => $currentUserId
-            ]);
-            
-        } catch (PDOException $e) {
-            error_log("WPS Upload - Audit log error: " . $e->getMessage());
-            // Don't fail the upload because of audit log
-        }
-        
-        // Success response
-        echo json_encode([
-            'success' => true,
-            'message' => 'WPS file uploaded successfully',
-            'file_name' => $uniqueFileName,
-            'file_path' => $relativePath,
-            'settlement_id' => $settlementId,
-            'request_inv_no' => $requestInvNo
-        ]);
-        
-    } catch (Exception $e) {
-        error_log("WPS Upload error: " . $e->getMessage());
-        echo json_encode([
-            'success' => false,
-            'message' => 'Server error: ' . $e->getMessage()
-        ]);
-    }
-}
 ?>
 

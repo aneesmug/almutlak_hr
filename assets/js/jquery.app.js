@@ -30,6 +30,9 @@ function loadResource(src, type = 'js', attributes = {}, position = 'head') {
 
 // loadResource('assets/css/app.css', 'css', { media: 'screen' }, 'head');
 
+// Include shared AJAX error handling utilities
+loadResource('./assets/js/ajaxErrorHandling.js', 'js', {}, 'head');
+
 //Sweet Alert v2.0
 // $("head").append($("<script type='text/javascript'></script>").attr("src", "https://cdn.jsdelivr.net/npm/sweetalert2@11"));
 loadResource('https://cdn.jsdelivr.net/npm/sweetalert2@11', 'js', { async: true, defer: true }, 'head');
@@ -6121,7 +6124,22 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 Swal.showValidationMessage(__('select_vacation_type_validation'));
                 return false;
             }
+
+            const balance = parseFloat(currentBalance) || 0;
+            let isEmergencySelection = false;
+            if (selectedRadio === 'emergency') {
+                isEmergencySelection = true;
+                if (balance >= 1) {
+                    Swal.showValidationMessage(__('emergency_vacation_requires_zero_balance') || 'Emergency Vacation is only available when you have insufficient balance. Please use regular vacation.');
+                    return false;
+                }
+            }
+
             if (selectedRadio === 'Encashed') {
+                if (balance < 1) {
+                    Swal.showValidationMessage(__('only_emergency_allowed_when_balance_below_one') || 'Your available balance is below 1 day. Please apply for Emergency Vacation only.');
+                    return false;
+                }
                 const encashDays = parseFloat($('#encash_days').val()) || 0;
                 const balance = parseFloat($('#vacation_balance_display').text()) || 0;
                 if (!encashDays || encashDays < 0.01) {
@@ -6139,6 +6157,17 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 const flyType = $('input[name="fly_type"]:checked').val();
                 if (!flyType) {
                     Swal.showValidationMessage(__('select_vacation_type_validation'));
+                    return false;
+                }
+                if (flyType === 'emergency') {
+                    isEmergencySelection = true;
+                }
+                if (balance < 1 && !isEmergencySelection) {
+                    Swal.showValidationMessage(__('only_emergency_allowed_when_balance_below_one') || 'Your available balance is below 1 day. Please apply for Emergency Vacation only.');
+                    return false;
+                }
+                if (balance >= 1 && isEmergencySelection) {
+                    Swal.showValidationMessage(__('emergency_vacation_requires_zero_balance') || 'Emergency Vacation is only available when you have insufficient balance. Please use regular vacation.');
                     return false;
                 }
                 if (flyType === 'annual' || flyType === 'emergency') {
@@ -8578,39 +8607,11 @@ function round(value, decimals) {
 
 })(jQuery)
 
-function errorHandling(jqXHR, exception) {
-    var error_msg = '';
-    if (jqXHR.status === 0) {
-        error_msg = __('error_no_connection');
-    } else if (jqXHR.status == 404) {
-    // 404 page error
-        error_msg = __('error_404');
-    } else if (jqXHR.status == 500) {
-    // 500 Internal Server error
-        error_msg = __('error_500');
-    } else if (exception === 'parsererror') {
-    // Requested JSON parse
-        error_msg = __('error_parser');
-    } else if (exception === 'timeout') {
-    // Time out error
-        error_msg = __('error_timeout');
-    } else if (exception === 'abort') {
-    // request aborte
-        error_msg = __('error_abort');
-    } else {
-        error_msg = __('error_uncaught') + '\n' + jqXHR.responseText;
-    }
-    // error alert message
-    Swal.fire({
-        title: __('oops'),
-        text: error_msg,
-        icon:'error',
-        allowOutsideClick:false,
-        confirmButtonClass: 'btn btn-lg',
-        buttonsStyling: false,
-    })
-    return true;
-}
+// The following error handling functions have been moved to assets/js/ajaxErrorHandling.js
+// to allow code reuse across multiple JavaScript files:
+// - handleAjaxFailure(jqXHR, textStatus, defaultTitle, defaultMsg)
+// - errorHandling(jqXHR, exception)
+// This file can now use the shared functions without duplication.
 
 function dateDiffDay(startingDate, endingDate) {
     let startDate = new Date(new Date(startingDate).toISOString().substr(0, 10));
@@ -9000,32 +9001,6 @@ window.addEventListener('resize', adjustForSystemScaling);
 */
 
 
-/**
- * Handles AJAX failure responses and displays appropriate error messages
- * @param {jqXHR} jqXHR - The jQuery XHR object
- * @param {string} textStatus - Status text of the error
- * @param {string} defaultTitle - Default title if none found in response
- * @param {string} defaultMsg - Default message if none found in response
- */
-function handleAjaxFailure(jqXHR, textStatus, defaultTitle = __('request_failed_title'), defaultMsg = __('server_or_network_error')) {
-    let errorTitle = defaultTitle;
-    let errorMsg = defaultMsg + ': ' + textStatus;
-    let errorIcon = 'error';
-    // Check if responseText exists
-    if (jqXHR.responseText) {
-        // Find JSON in response (may be wrapped in HTML)
-        const jsonStart = jqXHR.responseText.indexOf('{');
-        if (jsonStart !== -1) {
-            const jsonString = jqXHR.responseText.substring(jsonStart);
-            const parsedResponse = JSON.parse(jsonString);
-            errorTitle = parsedResponse.title || errorTitle;
-            errorMsg = parsedResponse.message || errorMsg;
-            errorIcon = parsedResponse.type || errorIcon;
-        } else {
-            errorMsg = jqXHR.responseText;
-        }
-    }
-}
 
 /**
  * Restricts input to only allow numbers with configurable options
@@ -10161,6 +10136,16 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
             if (response.success) {
                 const s = response.data.settlement;
                 const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
+                const formatFileSize = (bytes) => {
+                    const size = parseInt(bytes || 0, 10);
+                    if (!size) {
+                        return '0 B';
+                    }
+                    const units = ['B', 'KB', 'MB', 'GB'];
+                    const idx = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+                    const value = size / Math.pow(1024, idx);
+                    return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+                };
                 
                 // Build approval chain HTML
                 let approvalChainHtml = '<div style="margin-top: 15px;"><h6>' + __('approval_chain') + ':</h6><table style="width: 100%; font-size: 13px;" dir="' + (isRtl ? 'rtl' : 'ltr') + '"><tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">' + __('level') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('status') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('approver') + '</th></tr>';
@@ -10201,19 +10186,23 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     downloadProofButton = `<a href="./${proofPath}" target="_blank" class="btn btn-sm btn-primary" style="margin-top: 10px; margin-${marginDir}: 5px;"><i class="fa fa-download"></i> ${buttonText}</a>`;
                 }
                 
-                // Build WPS attachment button if available (single file only)
-                let wpsAttachmentButtons = '';
-                if (s.wps_file_path && typeof s.wps_file_path === 'string' && s.wps_file_path.trim() !== '') {
-                    const filePath = s.wps_file_path;
-                    const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(filePath);
-                    const isPdf = /\.pdf$/i.test(filePath);
-                    const icon = isPdf ? 'fa-file-pdf text-danger' : isImage ? 'fa-image text-info' : 'fa-file';
-                    const displayName = isPdf ? __('wps_pdf') : isImage ? __('wps_image') : __('wps_file');
+                // Build settlement attachments
+                let attachmentsHtml = '';
+                const attachments = (response.data && response.data.attachments) ? response.data.attachments : [];
+                if (attachments.length > 0) {
                     const marginDir = isRtl ? 'right' : 'left';
-                    wpsAttachmentButtons = '<br><h6 style="margin-top: 15px; color: #333; font-weight: 600;">📎 ' + __('wps_attachments') + ':</h6><a href="./' + filePath + '" target="_blank" class="btn btn-sm btn-outline-primary" style="margin-top: 8px; margin-' + marginDir + ': 5px;"><i class="fa ' + icon + '"></i> ' + displayName + '</a>';
+                    attachmentsHtml = '<br><h6 style="margin-top: 15px; color: #333; font-weight: 600;">📎 ' + __('attachments') + ':</h6>';
+                    attachments.forEach((att) => {
+                        const fileName = htmlspecialcharsJs(att.file_name || att.original_name || 'file');
+                        const fileSize = formatFileSize(att.file_size || 0);
+                        const isPdf = /\.pdf$/i.test(att.file_name || '');
+                        const isImage = /\.(jpg|jpeg)$/i.test(att.file_name || '');
+                        const icon = isPdf ? 'fa-file-pdf text-danger' : isImage ? 'fa-image text-info' : 'fa-file';
+                        attachmentsHtml += '<a href="download_settlement_attachment.php?id=' + att.id + '" target="_blank" class="btn btn-sm btn-outline-primary" style="margin-top: 8px; margin-' + marginDir + ': 5px;"><i class="fa ' + icon + '"></i> ' + fileName + ' (' + fileSize + ')</a>';
+                    });
                 }
                 
-                let historyHtml = '<div style="margin-top: 15px;">' + reportLink + downloadProofButton + wpsAttachmentButtons + '</div>';
+                let historyHtml = '<div style="margin-top: 15px;">' + reportLink + downloadProofButton + attachmentsHtml + '</div>';
                 
                 const contentHtml = `
                     <div style="text-align: ` + (isRtl ? 'right' : 'left') + `; font-size: 14px; direction: ` + (isRtl ? 'rtl' : 'ltr') + `;">
@@ -10222,7 +10211,7 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                             <tr><td style="padding: 8px; font-weight: bold; width: 35%;">` + __('settlement_id') + `:</td><td style="padding: 8px; color: #007bff; font-weight: 600;">${htmlspecialcharsJs(s.request_inv_no)}</td></tr>
                             <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('employee_name') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_name)}</td></tr>
                             <tr><td style="padding: 8px; font-weight: bold;">` + __('employee_id') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_id)}</td></tr>
-                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('settlement_amount') + `:</td><td style="padding: 8px; color: #28a745; font-weight: 600;">SAR ${parseFloat(s.settlement_amount).toFixed(2)}</td></tr>
+                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('settlement_amount') + `:</td><td style="padding: 8px; color: #28a745; font-weight: 600;">SAR ${Math.round(parseFloat(s.calculated_payable_amount || s.settlement_amount || 0)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr>
                             <tr><td style="padding: 8px; font-weight: bold;">` + __('settlement_method') + `:</td><td style="padding: 8px;">${s.settlement_method || __('not_available')}</td></tr>
                             <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('status') + `:</td><td style="padding: 8px;"><span style="background: #007bff; color: white; padding: 3px 8px; border-radius: 3px;">${(s.settlement_status || '').toUpperCase()}</span></td></tr>
                             <tr><td style="padding: 8px; font-weight: bold;">` + __('created') + `:</td><td style="padding: 8px;">${new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td></tr>

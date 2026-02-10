@@ -6,7 +6,7 @@
  */
 
 require_once __DIR__ . '/ApprovalChainManager.php';
-require_once __DIR__ . '/helper_functions.php';
+// Note: helper_functions.php is included by the calling file to avoid duplicate declarations
 
 class SettlementManager {
     private $conDB;

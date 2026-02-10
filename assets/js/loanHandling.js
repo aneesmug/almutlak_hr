@@ -8,6 +8,8 @@
  * - The modal now includes input fields for "Receipt ID" and a file input for "Attachment".
  * - It now uses the `FormData` object to handle the file upload along with other form data.
  * - The AJAX call sends this `FormData` to the backend for processing.
+
+// Include shared AJAX error handling utilities
  * 3. REMOVED INTEREST CALCULATION: All client-side interest calculation logic has been removed.
  * 4. FETCH END OF SERVICE: Before showing the modal, an AJAX call is made to `ajaxLoan.php` to get the calculated End of Service and the maximum loan amount.
  * 5. DYNAMIC LOAN LIMITS: The modal now displays the total End of Service and the 40% maximum loan amount fetched from the server.
@@ -25,6 +27,9 @@
  * 17. UPDATED DISPLAY LOGIC: The decision to show End of Service details is now controlled by a boolean `show_full_details` from the server, which checks the logged-in user's session.
  * 18. ADDED MONTHLY DEDUCTION TO EMERGENCY LOAN: The emergency loan modal now also shows a real-time calculation of the monthly deduction.
  */
+
+// Include shared AJAX error handling utilities
+$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/ajaxErrorHandling.js"));
 
 $(document).on('click', '.applyLoan', async function(e) {
     e.preventDefault();
@@ -649,21 +654,10 @@ $(document).on('click', '.addManualPayment', async function(e) {
     }
 });
 
-function handleAjaxFailure(jqXHR, textStatus) {
-    let message = __('unknown_error_occurred');
-    if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
-        message = jqXHR.responseJSON.message;
-    } else if (textStatus === 'timeout') {
-        message = __('request_timed_out');
-    } else if (textStatus === 'parsererror') {
-        message = __('error_parsing_response');
-    } else if (jqXHR.status === 0) {
-        message = __('could_not_connect_server');
-    } else {
-        message = `${__('error_title')}: ${jqXHR.status} ${jqXHR.statusText}`;
-    }
-    return { title: __('error_title'), message: message, type: 'error' };
-}
+// The following function has been moved to assets/js/ajaxErrorHandling.js
+// to allow code reuse across multiple JavaScript files:
+// - handleAjaxFailure(jqXHR, textStatus, defaultTitle, defaultMsg)
+// This file can now use the shared function without duplication.
 
 // NEW: Event handler for Emergency Loan button
 $(document).on('click', '.applyEmergencyLoan', function(e) {

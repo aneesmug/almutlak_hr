@@ -29,7 +29,7 @@ if (mysqli_num_rows($query) == 1) {
         die("Invalid request parameters.");
     }
 
-    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note, accommodation_provided, transportation_provided, contract_period)
+    // 2. MODIFIED: Fetch all data with a single query (added vacation_salary_type, overtime_hours, deduction_hours, deduction_days, payroll_note, accommodation_provided, transportation_provided, contract_period, bank details from bank_list)
     $sql = "SELECT 
                 v.*, 
                 v.fly_type as raw_fly_type,
@@ -51,6 +51,10 @@ if (mysqli_num_rows($query) == 1) {
                 e.country as country_id,
                 e.passport_number,
                 e.passport_exp,
+                e.bank_name,
+                e.iban,
+                bl.name as bank_name_en,
+                bl.bank_name_ar,
                 d.dep_nme AS `deptname`,
                 d.dep_nme_ar AS `deptname_ar`,
                 s.section_name,
@@ -65,6 +69,7 @@ if (mysqli_num_rows($query) == 1) {
                 END AS `fly_type`
             FROM emp_vacation v
             JOIN employees e ON v.emp_id = e.emp_id
+            LEFT JOIN bank_list bl ON e.bank_name = bl.id
             LEFT JOIN employees re ON v.replacement_person = re.emp_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN section s ON e.sectin_nme = s.id
@@ -387,6 +392,7 @@ if (mysqli_num_rows($query) == 1) {
             .detail-item .label { font-size: 0.8rem; color: var(--muted-color); margin-bottom: 0.1rem; }
             .detail-item .value { font-weight: 500; font-size: 0.9rem; }
             .detail-item .value.highlight { font-weight: 700; color: var(--success-color); }
+            .detail-item .value.font-monospace { font-family: 'Courier New', monospace; letter-spacing: 0.5px; font-size: 0.85rem; }
 
             .payment-summary { background-color: var(--background-light); border-radius: 6px; padding: 1rem; border: 1px solid var(--border-color); }
             .payment-summary ul { list-style: none; padding-left: 0; margin-bottom: 0;}
@@ -418,6 +424,9 @@ if (mysqli_num_rows($query) == 1) {
             .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
             
             [dir="rtl"] .notes-section { border-left: none; border-right: 4px solid var(--warning-color); }
+            
+            .toggle-approval-btn { margin: 2rem 0 1rem 0; }
+            #approvalStatusContainer { display: flex; transition: all 0.3s ease-in-out; }
             
             .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
             .signature-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; text-align: center; margin-top: 2.5rem; }
@@ -467,7 +476,7 @@ if (mysqli_num_rows($query) == 1) {
 
                             <div class="report-body">
                                 <div class="employee-banner">
-                                    <img src="<?= display_or_na($request['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
+                                    <img src="<?= getAvatarImagePath($request['avatar'] ?? '', $request['sex'] ?? 1); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
                                         <h4><?= getDisplayName($request['employee_name'] ?? null); ?></h4>
                                         <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= ($is_rtl ?? false ? $request['deptname_ar'] : $request['deptname']); ?><?= getDisplayName($request['section_name']) ? ' / ' . getDisplayName($request['section_name']) : '' ?></p>
@@ -515,8 +524,46 @@ if (mysqli_num_rows($query) == 1) {
                                         <?php endif; ?>
                                     </div>
                                 </div>
-
+                                
                                 <?php 
+                                    // Show bank payment information only if:
+                                    // 1. Request is approved AND
+                                    // 2. Current user is finance officer OR system admin
+                                    $show_bank_info = false;
+                                    if ($current_status == 'approved' ||$current_status == 'completed') {
+                                        $show_bank_info = $isFinance_Officer || $is_system_admin || $isHR_Payroll;
+                                    }
+                                ?>
+
+                                <?php if ($show_bank_info): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-university"></i><?= __('bank_payment_information') ?? 'Bank Payment Information' ?></h5>
+                                    <div class="grid-details">
+                                        <div class="detail-item">
+                                            <span class="label"><?= __('bank_name') ?></span>
+                                            <span class="value">
+                                                <?php 
+                                                    $bank_display = '';
+                                                    if (!empty($request['bank_name_en']) || !empty($request['bank_name_ar'])) {
+                                                        // Prefer bank_list data
+                                                        $bank_display = ($is_rtl ?? false) ? $request['bank_name_ar'] : $request['bank_name_en'];
+                                                    } elseif (!empty($request['bank_name'])) {
+                                                        // Fallback to employee bank_name field
+                                                        $bank_display = $request['bank_name'];
+                                                    }
+                                                    echo !empty($bank_display) ? htmlspecialchars($bank_display) : '<em class="text-muted">' . __('not_provided') . '</em>';
+                                                ?>
+                                            </span>
+                                        </div>
+                                        <div class="detail-item">
+                                            <span class="label"><?= __('iban') ?? 'IBAN' ?></span>
+                                            <span class="value font-monospace">
+                                                <?= !empty($request['iban']) ? htmlspecialchars($request['iban']) : '<em class="text-muted">' . __('not_provided') . '</em>' ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php endif;
                                 // Hide payment details if:
                                 // 1. Emergency vacation, OR
                                 // 2. Encashment request (but show custom encashment section), OR
@@ -670,7 +717,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <li class="text-warning">
                                                 <div>
                                                     <span class="label"><?= __('ticket_payment') ?? 'Ticket Payment' ?></span>
-                                                    <small class="text-muted d-block">Ticket fares will not be added in total payable amount.</small>
+                                                    <small class="text-muted d-block"><?= __('ticket_fares_will_not_be_added_in_total_payable_amount') ?? 'Ticket fares will not be added in total payable amount.' ?></small>
                                                 </div>
                                                 <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span>
                                             </li>
@@ -679,7 +726,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <li class="text-warning">
                                                 <div>
                                                     <span class="label"><?= __('permit_fee') ?? 'Permit Fee' ?></span>
-                                                    <small class="text-muted d-block">Permit fees will not be added in total payable amount.</small>
+                                                    <small class="text-muted d-block"><?= __('permit_fees_will_not_be_added_in_total_payable_amount') ?? 'Permit fees will not be added in total payable amount.' ?></small>
                                                 </div>
                                                 <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span>
                                             </li>
@@ -724,7 +771,14 @@ if (mysqli_num_rows($query) == 1) {
                                     <?php endif; ?>
                                 </div>
                                 <?php endif; ?>
-                                <div class="row">
+                                
+                                <div class="text-center mb-3 no-print" style="margin-top: 2rem;">
+                                    <button type="button" class="btn btn-outline-primary waves-effect waves-light" id="toggleApprovalBtn" onclick="toggleApprovalStatus()">
+                                        <i class="fa fa-eye mr-2"></i><?= __('view_approval_status') ?? 'View Approval Status' ?>
+                                    </button>
+                                </div>
+
+                                <div class="row" id="approvalStatusContainer" style="display: none;">
                                     <div class="col-md-8">
                                         <div class="report-section">
                                             <h5 class="section-title"><i class="fa fa-tasks"></i><?= __('approval_status') ?></h5>
@@ -825,6 +879,21 @@ if (mysqli_num_rows($query) == 1) {
                                         <?php endif; ?>
                                     </div>
                                 </div>
+
+                                <script>
+                                function toggleApprovalStatus() {
+                                    const container = document.getElementById('approvalStatusContainer');
+                                    const btn = document.getElementById('toggleApprovalBtn');
+                                    
+                                    if (container.style.display === 'none' || container.style.display === '') {
+                                        container.style.display = 'flex';
+                                        btn.innerHTML = '<i class="fa fa-eye-slash mr-2"></i><?= __('hide_approval_status') ?? 'Hide Approval Status' ?>';
+                                    } else {
+                                        container.style.display = 'none';
+                                        btn.innerHTML = '<i class="fa fa-eye mr-2"></i><?= __('view_approval_status') ?? 'View Approval Status' ?>';
+                                    }
+                                }
+                                </script>
 
                                 <?php // ASSET CLEARANCE SECTION - Only show if employee has assets
                                 if (!empty($assigned_assets)): 

@@ -98,7 +98,7 @@ $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout t
     <!-- Plugins CSS -->
 
     <!-- Additional Plugins -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" />
+    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" /> -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
@@ -1936,7 +1936,14 @@ RTL Support
         <!-- HEADER SECTION -->
         <div class="<?= $header_class ?>">
             <div class="container-custom">
-                <img src="<?= $emprow['avatar'] ?>" alt="<?= $emprow['name'] ?>" class="profile-avatar">
+                <!-- Avatar (display only - no upload) -->
+                <div>
+                    <?php
+                    // Get avatar display path using centralized helper function
+                    $displayImage = getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1);
+                    ?>
+                    <img src="<?= $displayImage ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
+                </div>
 
                 <div class="profile-header-info">
                     <h1><?= getDisplayName($emprow['name']) ?></h1>
@@ -2547,11 +2554,11 @@ RTL Support
     </div>
 
     <!-- Hidden file input for image cropping -->
-    <input type="file" id="img-crop-input" accept="image/*" style="display: none;">
+    <!-- <input type="file" id="img-crop-input" accept="image/*" style="display: none;"> -->
 
     <script src="assets/js/jquery.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script> -->
 
     <!-- Dropzone JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js"></script>

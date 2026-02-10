@@ -206,8 +206,7 @@ if (mysqli_num_rows($query) == 1) {
                                 $sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='" . $emp_id . "' && `note`='Encashed' ");
                                 $cont_encashed = mysqli_fetch_array($sql_count_encashed)[0];
 
-                                $checkGander = ($sex_get == 'male') ? './assets/emp_pics/defult.png' : './assets/emp_pics/defultFemale.jpg';
-                                $emp_avatar = (file_exists("./assets/emp_pics/" . explode("/", $emp_avatar)[3])) ? $emp_avatar : $checkGander;
+                                $emp_avatar = getAvatarImagePath($rec["avatar"] ?? '', $sex_get);
 
                                 // Determine card status class
                                 $status_class = '';

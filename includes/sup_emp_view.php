@@ -19,7 +19,7 @@
 		$vacation_days = $rec["vacation_days"];
 		$joining_date = $rec["joining_date"];
 		$date_reg = $rec["date_reg"];
-		$emp_avatar = $rec["avatar"];
+		$emp_avatar = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
 		$emp_status = $rec["status"];
 		$emp_status_fly = $rec["fly"];
 		$emptype = $rec["emptype"];

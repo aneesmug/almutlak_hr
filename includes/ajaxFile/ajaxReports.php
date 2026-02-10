@@ -303,7 +303,7 @@ try {
             $result = generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status);
             break;
         case 'payroll':
-            $result = generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
+            $result = generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
             break;
         case 'attendance':
             $result = generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
@@ -986,7 +986,7 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
 }
 
 // Payroll Report
-function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
     // Build SELECT clause with column mapping aligned to actual schema
     $selectCols = [];
 
@@ -1051,11 +1051,20 @@ function generatePayrollReport($conDB, $columns, $dateFrom, $dateTo, $hasFullAcc
     if ($status !== '') {
         $where[] = "p.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
+    
+    // Department filter support
+    if (!$hasFullAccess) {
+        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!empty($departments)) {
+        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
+        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    }
 
     $whereClause = implode(' AND ', $where);
 
     $sql = "SELECT $selectClause 
             FROM payrolls p
+            LEFT JOIN employees e ON p.emp_id = e.id
             WHERE $whereClause
             ORDER BY p.month_year DESC, p.id DESC";
 

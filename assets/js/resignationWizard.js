@@ -3,6 +3,9 @@
  * Handles employee resignation application and exit interview
  */
 
+// Include shared AJAX error handling utilities
+$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/ajaxErrorHandling.js"));
+
 // ===== RESIGNATION WIZARD HANDLER =====
 $(document).on('click', '.applyResignation', function(e) {
     e.preventDefault();

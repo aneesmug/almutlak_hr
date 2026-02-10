@@ -20,7 +20,7 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `emp_id`='".$_
 			$vacation_days_get = $rec["vacation_days"];
 			$joining_date_get = $rec["joining_date"];
 			$date_reg_get = $rec["date_reg"];
-			$emp_avatar_get = $rec["avatar"];
+			$emp_avatar_get = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
 			$emp_status_get = $rec["status"];
 			$emp_ter_date_get = $rec["ter_date"];
 			$note_get = $rec["note"];

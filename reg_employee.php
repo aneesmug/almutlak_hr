@@ -183,7 +183,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 								$emp_id = $rec["emp_id"];
 								$iqama = $rec["iqama"];
 								$mobile = $rec["mobile"];
-								$emp_avatar = $rec["avatar"];
+								$emp_avatar = getAvatarImagePath($rec['avatar'] ?? '', $rec['sex'] ?? 1);
 								$emp_status = $rec["status"];
 								$emp_status_fly = $rec["fly"];
 								$emptype = $rec["emptype"];
@@ -195,10 +195,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 								$sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='" . $emp_id . "' && `note`='Encashed' ");
 								$cont_encashed = mysqli_fetch_array($sql_count_encashed)[0];
 
-								$checkGander = ($sex_get == 'male') ? './assets/emp_pics/defult.png' : './assets/emp_pics/defultFemale.jpg';
-								$emp_avatar = (!empty($emp_avatar) && file_exists("./assets/emp_pics/" . basename($emp_avatar))) ? $emp_avatar : $checkGander;
-                                
-                                // Determine card status class
+
                                 $status_class = '';
                                 if ($emp_status == 1 && $emp_status_fly == 0) {
                                     $status_class = 'status-active';

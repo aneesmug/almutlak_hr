@@ -223,7 +223,6 @@ if ($total_items > 0) {
                                         $name = $rec["name"];
                                         $emp_id = $rec["emp_id"];
                                         $iqama = $rec["iqama"];
-                                        $emp_avatar = $rec["avatar"];
                                         $emp_status = $rec["status"];
                                         $emp_status_fly = $rec["fly"];
                                         $emptype = $rec["emptype"];
@@ -233,6 +232,8 @@ if ($total_items > 0) {
 
                                         $sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Encashed'");
                                         $cont_encashed = mysqli_fetch_array($sql_count_encashed)[0] ?? 0;
+
+                                        $emp_avatar = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
 
                                         // Determine card status class
                                         $status_class = '';

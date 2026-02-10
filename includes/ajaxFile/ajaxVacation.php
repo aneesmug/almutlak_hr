@@ -957,6 +957,17 @@ elseif ($ajaxType == 'applyVacation') {
             }
         }
 
+        // If balance is below 1 day, only emergency vacation is allowed
+        if (!$is_emergency_vacation && $effective_remaining < 1) {
+            send_json_response(
+                __('insufficient_balance', 'Insufficient Balance'),
+                __('only_emergency_allowed_when_balance_below_one', 'Your available balance is below 1 day. Please apply for Emergency Vacation only.'),
+                "error",
+                400
+            );
+            exit;
+        }
+
         // [NEW] If this is an Encashment request, force today's dates and use the user-entered encash_days
         $is_encashment_request = (trim(strtolower($notes)) === 'encashment') || (trim(strtolower($vac_type)) === 'encashed');
         if ($is_encashment_request) {
@@ -3169,7 +3180,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             throw new Exception(__("vacation_id_is_missing"));
         }
 
-        // Fetch vacation and employee data
+        // Fetch vacation and employee data (use stored calculated values where available)
         $sql = "SELECT 
                     v.id,
                     v.start_date,
@@ -3179,9 +3190,11 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                     v.vacation_salary_type,
                     v.vacdays,
                     v.overtime_hours,
+                    v.overtime_amount,
                     v.deduction_hours,
                     v.deduction_days,
                     v.other_deductions,
+                    v.deduction_amount,
                     v.ticket_pay,
                     v.permit_fee,
                     v.encashment_amount,
@@ -3224,7 +3237,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             throw new Exception(__("vacation_record_not_found"));
         }
 
-        // === PAYROLL CALCULATION LOGIC (Same as vacation_report_details.php) ===
+        // === USE STORED VALUES FROM emp_vacation WHEN AVAILABLE ===
         $vac_type = $vacation_data['vac_type'] ?? '';
         $fly_type = $vacation_data['fly_type'] ?? '';
         $vacation_salary_type = $vacation_data['vacation_salary_type'] ?? 'payroll';
@@ -3250,10 +3263,10 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             // Calculate GOSI on encashment (if Saudi Arabia - country_id = 191)
             if ($vacation_data['country'] == 191 && isset($vacation_data['gosi'])) {
                 $gosi_percentage = (float)$vacation_data['gosi'];
-                $encash_gosi = ($encashment_amount * $gosi_percentage) / 100;
+                $encash_gosi = round(($encashment_amount * $gosi_percentage) / 100, 2);
             }
             
-            $net_encashment = $encashment_amount - $encash_gosi;
+            $net_encashment = round($encashment_amount - $encash_gosi, 2);
             $total_payable = $net_encashment;
         }
         else if (!$is_emergency) {
@@ -3271,8 +3284,8 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                 ($vacation_data['guard'] ?? 0);
             
             $days_in_month = 30;
-            $daily_rate = $total_monthly_salary / $days_in_month;
-            $hourly_rate_deduction = ($daily_rate / 8);
+            $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+            $hourly_rate_deduction = round(($daily_rate / 8), 2);
             
             $approved_days = (float)($vacation_data['vacdays'] ?? 0);
             
@@ -3280,30 +3293,41 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             if ($is_fly_annual && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
                 $working_days = (int)$start_date_obj->format('d') - 1;
-                $working_days_salary = $daily_rate * $working_days;
+                $working_days_salary = round($daily_rate * $working_days, 2);
             }
             
             // Calculate vacation salary (if Fly + Annual and vacation_salary_type = 'payroll')
             if ($is_fly_annual && $vacation_salary_type === 'payroll') {
-                $vacation_salary = $daily_rate * $approved_days;
+                $vacation_salary = round($daily_rate * $approved_days, 2);
             }
             
-            // Calculate overtime and deductions
+            // USE STORED overtime_amount if available, otherwise recalculate
             $overtime_hours = (float)($vacation_data['overtime_hours'] ?? 0);
+            $stored_overtime_amount = (float)($vacation_data['overtime_amount'] ?? 0);
+            
+            if ($stored_overtime_amount > 0) {
+                // Use the stored value (this was calculated during approval)
+                $overtime_amount = $stored_overtime_amount;
+            } elseif ($overtime_hours > 0) {
+                // Recalculate if not stored
+                $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
+                $overtime_amount = round($overtimeHourlyRate * $overtime_hours, 2);
+            }
+            
+            // USE STORED deduction_amount if available, otherwise recalculate
             $deduction_hours = (float)($vacation_data['deduction_hours'] ?? 0);
             $deduction_days = (float)($vacation_data['deduction_days'] ?? 0);
             $other_deductions = (float)($vacation_data['other_deductions'] ?? 0);
+            $stored_deduction_amount = (float)($vacation_data['deduction_amount'] ?? 0);
             
-            $overtimeHourlyRate = (($basic_salary / 240) / 2) + ($total_monthly_salary / 240);
-            
-            if ($overtime_hours > 0) {
-                $overtime_amount = $overtimeHourlyRate * $overtime_hours;
-            }
-            
-            if ($deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0) {
-                $deduction_hours_amount = $hourly_rate_deduction * $deduction_hours;
-                $deduction_days_amount = $daily_rate * $deduction_days;
-                $deduction_amount = $deduction_hours_amount + $deduction_days_amount + $other_deductions;
+            if ($stored_deduction_amount > 0) {
+                // Use the stored value (this was calculated during approval)
+                $deduction_amount = $stored_deduction_amount;
+            } elseif ($deduction_hours > 0 || $deduction_days > 0 || $other_deductions > 0) {
+                // Recalculate if not stored
+                $deduction_hours_amount = round($hourly_rate_deduction * $deduction_hours, 2);
+                $deduction_days_amount = round($daily_rate * $deduction_days, 2);
+                $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_deductions, 2);
             }
             
             // Calculate GOSI (if Saudi Arabia - country_id = 191)
@@ -3311,20 +3335,20 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                 $gosi_percentage = (float)$vacation_data['gosi'];
                 if ($is_fly_annual) {
                     $gosi_base = $working_days_salary + $vacation_salary;
-                    $gosi_deduction = ($gosi_base * $gosi_percentage) / 100;
+                    $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
                 }
             }
             
-            // Calculate total payable
+            // Calculate total payable - MUST MATCH vacation_report_details.php exactly
             if ($is_fly_annual) {
-                $total_payable = ($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction;
+                $total_payable = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction, 2);
             }
         }
 
         echo json_encode([
             'status' => 200,
             'vac_type' => $vac_type,
-            'total_payable' => round($total_payable, 2),
+            'total_payable' => $total_payable,
             'working_days_salary' => round($working_days_salary, 2),
             'vacation_salary' => round($vacation_salary, 2),
             'overtime_amount' => round($overtime_amount, 2),

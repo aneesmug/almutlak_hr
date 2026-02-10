@@ -37,6 +37,10 @@ if (mysqli_num_rows($query) == 1) {
                 e.avatar,
                 e.joining_date,
                 e.dept AS dept_id,
+                e.bank_name,
+                e.iban,
+                bl.name as bank_name_en,
+                bl.bank_name_ar,
                 d.dep_nme AS `deptname`,
                 d.dep_nme_ar AS `deptname_ar`,
                 s.section_name,
@@ -48,6 +52,7 @@ if (mysqli_num_rows($query) == 1) {
                 approver_emp.name as rejection_approver_name
             FROM emp_loan l
             JOIN employees e ON l.emp_id = e.emp_id
+            LEFT JOIN bank_list bl ON e.bank_name = bl.id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN section s ON e.sectin_nme = s.id
             LEFT JOIN countries c ON e.country = c.id
@@ -224,6 +229,7 @@ if (mysqli_num_rows($query) == 1) {
             .detail-item .label { font-size: 0.8rem; color: var(--muted-color); margin-bottom: 0.1rem; }
             .detail-item .value { font-weight: 500; font-size: 0.9rem; }
             .detail-item .value.highlight { font-weight: 700; color: var(--success-color); }
+            .detail-item .value.font-monospace { font-family: 'Courier New', monospace; letter-spacing: 0.5px; font-size: 0.85rem; }
             .payment-summary { background-color: var(--background-light); border-radius: 6px; padding: 1rem; border: 1px solid var(--border-color); }
             .payment-summary ul { list-style: none; padding-left: 0; margin-bottom: 0;}
             .payment-summary li { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; font-size: 0.9rem; border-bottom: 1px solid #e9ecef; }
@@ -250,6 +256,8 @@ if (mysqli_num_rows($query) == 1) {
             [dir="rtl"] .timeline-item .status { margin-left: 0; margin-right: 25px; }
             .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
             [dir="rtl"] .notes-section { border-left: none; border-right: 4px solid var(--warning-color); }
+            .toggle-approval-btn { margin: 2rem 0 1rem 0; }
+            #approvalStatusContainer { display: flex; transition: all 0.3s ease-in-out; }
             .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
             .signature-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; text-align: center; margin-top: 2.5rem; }
             .signature-box { border-top: 1px solid var(--muted-color); padding-top: 0.5rem; }
@@ -293,7 +301,7 @@ if (mysqli_num_rows($query) == 1) {
                             </div>
                             <div class="report-body">
                                 <div class="employee-banner">
-                                    <img src="<?=htmlspecialchars($loan_details['avatar'] ?? 'assets/images/users/avatar-1.jpg'); ?>" alt="Employee Avatar" class="avatar">
+                                    <img src="<?= getAvatarImagePath($loan_details['avatar'] ?? '', $loan_details['sex'] ?? 1); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
                                         <h4><?=getDisplayName($loan_details['employee_name']); ?></h4>
                                         <p><?= __('employee_id_label') ?>: <?=htmlspecialchars($loan_details['emp_id']); ?> | <?=($is_rtl ?? false ? $loan_details['deptname_ar'] : $loan_details['deptname']) ; ?><?= getDisplayName(!empty($loan_details['section_name']) ? ' / ' . htmlspecialchars($loan_details['section_name']) : '') ?></p>
@@ -436,9 +444,58 @@ if (mysqli_num_rows($query) == 1) {
                                                     <?php endif; ?>
                                                 <?php endif; ?>
                                             </div>
+                                            
+                                            <?php 
+                                                // Show bank payment information only if:
+                                                // 1. Loan is approved AND
+                                                // 2. Current user is finance officer OR system admin
+                                                $show_bank_info = false;
+                                                if ($loan_details['status'] === 'approved' || $loan_details['status'] === 'paid') {
+                                                    $show_bank_info = ($isFinance_Officer ?? false) || ($is_system_admin ?? false) || ($isHR_Payroll ?? false);
+                                                }
+                                            ?>
+
+                                            <?php if ($show_bank_info): ?>
                                             <div class="report-section">
-                                                <h5 class="section-title"><i class="fa fa-check-circle"></i> <?= __('approval_chain') ?></h5>
-                                                <div class="approval-timeline">
+                                                <h5 class="section-title"><i class="fa fa-university"></i><?= __('bank_payment_information') ?? 'Bank Payment Information' ?></h5>
+                                                <div class="grid-details">
+                                                    <div class="detail-item">
+                                                        <span class="label"><?= __('bank_name') ?></span>
+                                                        <span class="value">
+                                                            <?php 
+                                                                $bank_display = '';
+                                                                if (!empty($loan_details['bank_name_en']) || !empty($loan_details['bank_name_ar'])) {
+                                                                    // Prefer bank_list data
+                                                                    $bank_display = ($is_rtl ?? false) ? $loan_details['bank_name_ar'] : $loan_details['bank_name_en'];
+                                                                } elseif (!empty($loan_details['bank_name'])) {
+                                                                    // Fallback to employee bank_name field
+                                                                    $bank_display = $loan_details['bank_name'];
+                                                                }
+                                                                echo !empty($bank_display) ? htmlspecialchars($bank_display) : '<em class="text-muted">' . __('not_provided') . '</em>';
+                                                            ?>
+                                                        </span>
+                                                    </div>
+                                                    <div class="detail-item">
+                                                        <span class="label"><?= __('iban') ?? 'IBAN' ?></span>
+                                                        <span class="value font-monospace">
+                                                            <?= !empty($loan_details['iban']) ? htmlspecialchars($loan_details['iban']) : '<em class="text-muted">' . __('not_provided') . '</em>' ?>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <?php endif; ?>
+                                            
+                                            <div class="text-center mb-3 no-print" style="margin-top: 2rem;">
+                                                <button type="button" class="btn btn-outline-primary waves-effect waves-light" id="toggleApprovalBtn" onclick="toggleApprovalStatus()">
+                                                    <i class="fa fa-eye mr-2"></i><?= __('view_approval_status') ?? 'View Approval Status' ?>
+                                                </button>
+                                            </div>
+
+                                            <div class="row" id="approvalStatusContainer" style="display: none;">
+                                                <div class="col-md-12">
+                                                    <div class="report-section">
+                                                        <h5 class="section-title"><i class="fa fa-check-circle"></i> <?= __('approval_chain') ?></h5>
+                                                        <div class="approval-timeline">
                                                     <?php if (empty($approval_chain)): ?>
                                                         <div class="alert alert-info"><?= __('add') ?></div>
                                                     <?php else: 
@@ -485,8 +542,26 @@ if (mysqli_num_rows($query) == 1) {
                                                         </div>
                                                         <?php endforeach; ?>
                                                     <?php endif; ?>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
+
+                                            <script>
+                                            function toggleApprovalStatus() {
+                                                const container = document.getElementById('approvalStatusContainer');
+                                                const btn = document.getElementById('toggleApprovalBtn');
+                                                
+                                                if (container.style.display === 'none' || container.style.display === '') {
+                                                    container.style.display = 'flex';
+                                                    btn.innerHTML = '<i class="fa fa-eye-slash mr-2"></i><?= __('hide_approval_status') ?? 'Hide Approval Status' ?>';
+                                                } else {
+                                                    container.style.display = 'none';
+                                                    btn.innerHTML = '<i class="fa fa-eye mr-2"></i><?= __('view_approval_status') ?? 'View Approval Status' ?>';
+                                                }
+                                            }
+                                            </script>
+
                                             <?php if (!empty($loan_details['payment_proof_file']) || !empty($loan_details['final_approved_amount'])): ?>
                                             <div class="report-section">
                                                 <h5 class="section-title"><i class="fa fa-file-invoice-dollar"></i> <?= __('Payment Proof') ?></h5>

@@ -103,7 +103,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     <form id="login-form" action="./login.php" method="post" class="space-y-6">
                         <div>
                             <label for="id_iqama" class="block text-sm font-medium text-gray-700 mb-1">رقم الهوية (ID / Iqama)</label>
-                            <input class="w-full px-4 py-3 bg-white/80 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150" type="tel" inputmode="numeric" pattern="[0-9]*" name="id_iqama" id="id_iqama" required="" placeholder="أدخل رقم هويتك الوطنية" maxlength="10">
+                            <input class="w-full px-4 py-3 bg-white/80 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150" type="tel" inputmode="numeric" pattern="[0-9]*" name="id_iqama" id="id_iqama" required="" placeholder="أدخل رقم هويتك الوطنية" maxlength="10" value="<?= isset($_POST['id_iqama']) ? htmlspecialchars($_POST['id_iqama'], ENT_QUOTES) : (isset($_GET['id_iqama']) ? htmlspecialchars($_GET['id_iqama'], ENT_QUOTES) : '') ?>" >
                         </div>
                         <div id="password-field-container">
                             <div class="flex justify-between items-center">
@@ -148,6 +148,12 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         <script>
         $(document).ready(function() {
             const iqamaInput = $('#id_iqama');
+            
+            // Restore ID/Iqama from localStorage if form value is empty
+            const savedIqama = localStorage.getItem('last_used_iqama');
+            if (savedIqama && iqamaInput.val() === '') {
+                iqamaInput.val(savedIqama);
+            }
             const feedbackContainer = $('#user-feedback-container');
             const loginForm = $('#login-form');
             const submitBtn = $('#submitBtn');
@@ -224,7 +230,11 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
             }
 
             iqamaInput.on('input', function() { 
-                this.value = this.value.replace(/[^0-9]/g, ''); 
+                this.value = this.value.replace(/[^0-9]/g, '');
+                // Save value to localStorage
+                if (this.value.length > 0) {
+                    localStorage.setItem('last_used_iqama', this.value);
+                }
                 
                 if (this.value.length === 10) {
                     handleIqamaCheck();

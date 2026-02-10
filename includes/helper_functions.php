@@ -2140,7 +2140,9 @@ if (!function_exists('handle_approval_action')) {
                             $is_annual_fly = false;
                             $is_local_annual = false;
                             $is_fly_emergency = false;
+                            $is_local_emergency = false;
                             $is_asset_clearance = (stripos($note_safe, 'Asset Clearance') !== false);
+                            $is_encashed = false;
 
                             if ($stmt_vac_check) {
                                 mysqli_stmt_bind_param($stmt_vac_check, "s", $inv_no_safe);
@@ -2150,8 +2152,10 @@ if (!function_exists('handle_approval_action')) {
                                         $vac_type_val = strtolower($row_vac['vac_type']);
                                         $fly_type_val = strtolower($row_vac['fly_type']);
                                         $is_annual_fly = ($vac_type_val === 'fly' && $fly_type_val === 'annual');
-                                        $is_local_annual = ($vac_type_val !== 'fly' && $fly_type_val === 'annual');
+                                        $is_local_annual = ($vac_type_val === 'local vacation' && $fly_type_val === 'annual');
                                         $is_fly_emergency = ($vac_type_val === 'fly' && $fly_type_val === 'emergency');
+                                        $is_local_emergency = ($vac_type_val === 'local vacation' && $fly_type_val === 'emergency');
+                                        $is_encashed = ($vac_type_val === 'encashed');
                                     }
                                     if ($res_vac) mysqli_free_result($res_vac);
                                 }
@@ -2160,11 +2164,22 @@ if (!function_exists('handle_approval_action')) {
 
                             // Rules:
                             // - Fly | Annual: stay approved until travel email + payments + adjustments handled
-                            // - Local | Annual: stay approved; complete only after adjustments (handled in updateVacationAdjustments)
-                            // - Fly | Emergency: stay approved; complete on adjustments and deduct balance once
+                            // - Local | Annual: close immediately after final approval (review = 'C')
+                            // - Encashed: close immediately after final approval (review = 'C')
+                            // - Fly | Emergency: stay approved; close only on rejoin (review = 'A')
+                            // - Local | Emergency: close immediately after final approval (review = 'C')
                             // - Asset Clearance approvals must NOT complete
                             // - Other non-annual types: can complete here
-                            if (!$is_annual_fly && !$is_local_annual && !$is_fly_emergency && !$is_asset_clearance) {
+                            if ($is_encashed && !$is_asset_clearance) {
+                                $final_status = 'completed';
+                                $review_status = 'C'; // Closed
+                            } elseif ($is_local_emergency && !$is_asset_clearance) {
+                                $final_status = 'completed';
+                                $review_status = 'C'; // Closed
+                            } elseif ($is_local_annual && !$is_asset_clearance) {
+                                $final_status = 'completed';
+                                $review_status = 'C'; // Closed
+                            } elseif (!$is_annual_fly && !$is_fly_emergency && !$is_asset_clearance) {
                                 $final_status = 'completed';
                                 $review_status = 'A'; // Active
                             }
@@ -3268,6 +3283,13 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $days_to_deduct = (float)$vac_details['vacdays'];
         $remarks = trim(strtolower($vac_details['remarks'] ?? ''));
         $vac_type_lower = trim(strtolower($vac_details['vac_type'] ?? ''));
+        $fly_type_lower = trim(strtolower($vac_details['fly_type'] ?? ''));
+
+        // CRITICAL: Emergency vacations must NEVER deduct balance
+        if ($fly_type_lower === 'emergency' || strpos($vac_type_lower, 'emergency') !== false || strpos($remarks, 'emergency') !== false) {
+            error_log("DEBUG: Vacation ID {$vac_id_safe} is EMERGENCY - NO BALANCE DEDUCTION");
+            return true;
+        }
         
         // ===== NEW: HOLIDAY CALCULATION =====
         // Get vacation start and end dates to check for holidays
@@ -3295,13 +3317,15 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         
         // [NEW] Check if this is a DEDUCTIBLE vacation
         // ONLY these types will deduct from balance:
-        // - Fly with fly_type = 'annual'
-        // ALL OTHER types including Emergency, Local Vacation, Business Trip, Sick Leave, etc. are NON-DEDUCTIBLE (unpaid/emergency leave)
+        // - Local Vacation with fly_type = 'annual'
+        // - Encashed (handled below)
+        // Fly | Annual is deducted on rejoin (not here)
+        // ALL Emergency types are NON-DEDUCTIBLE
         $is_deductible_type = false;
         
-        // Only Annual Fly vacations are deductible from balance
-        if ($vac_details['vac_type'] == 'Fly' && $vac_details['fly_type'] == 'annual') {
-            $is_deductible_type = true;  // Annual fly is deductible
+        // Local Annual vacations are deductible from balance
+        if ($vac_details['vac_type'] == 'Local Vacation' && $vac_details['fly_type'] == 'annual') {
+            $is_deductible_type = true;
         }
         
         // CRITICAL: Emergency vacations (both Fly and Local) are NON-DEDUCTIBLE
@@ -5220,5 +5244,116 @@ if (!function_exists('notify_settlement_next_approver')) {
             error_log("Settlement Notification: Exception - " . $e->getMessage());
             return false;
         }
+    }
+}
+
+/**
+ * Supports legacy absolute paths and new filename-only storage.
+ *
+ * @param array $attachment Attachment record
+ * @return string Full file system path
+ */
+if (!function_exists('resolveSettlementAttachmentPath')) {
+    function resolveSettlementAttachmentPath(array $attachment, $filePath) {
+        if (empty($attachment['file_path'])) {
+            return '';
+        }
+
+        $storedPath = $attachment['file_path'];
+
+        // If an absolute or relative path is already stored, use it as-is.
+        if (strpos($storedPath, '/') !== false || strpos($storedPath, '\\') !== false || preg_match('/^[A-Za-z]:/', $storedPath)) {
+            return $storedPath;
+        }
+
+        $uploadedAt = $attachment['uploaded_at'] ?? '';
+        $yearMonth = $uploadedAt ? date('Y/m', strtotime($uploadedAt)) : date('Y/m');
+        $baseDir = __DIR__ . '/../uploads/' . $filePath;
+
+        return $baseDir . '/' . $yearMonth . '/' . $storedPath;
+    }
+}
+
+/**
+ * Resolves avatar image path with smart fallback logic
+ * 
+ * Intelligently handles avatar resolution by:
+ * - Using gender-specific default images (male vs female)
+ * - Validating file existence in multiple possible locations
+ * - Falling back to default if avatar file not found
+ * - Supporting multiple path formats (relative, absolute, document-root relative)
+ *
+ * @param string $avatarPath The avatar path stored in database (can be relative or absolute)
+ * @param mixed $gender Gender/Sex identifier (1 or 'male'=male, 2 or 'female'=female) - defaults to male
+ * @return string The display-ready image path (guaranteed to exist or be a valid fallback)
+ * 
+ * @example
+ * // In any page where you need to display an avatar:
+ * $displayImage = getAvatarImagePath($emprow['avatar'], $emprow['sex']);
+ * echo "<img src=\"{$displayImage}\" alt=\"Employee Avatar\" class=\"profile-avatar\">";
+ */
+if (!function_exists('getAvatarImagePath')) {
+    function getAvatarImagePath($avatarPath = '', $gender = 1) {
+        // Normalize gender to numeric (1=male, 2=female)
+        if (is_string($gender)) {
+            $gender = strtolower($gender);
+            $gender = ($gender === 'female' || $gender === '2') ? 2 : 1;
+        } else {
+            $gender = (int)$gender;
+            $gender = ($gender === 2) ? 2 : 1;
+        }
+        
+        // Determine gender-specific default image
+        // 1 = male, 2 = female
+        $defaultImage = './assets/emp_pics/defult.png'; // Default for male (1)
+        
+        if ($gender == 2) {
+            $defaultImage = './assets/emp_pics/defultFemale.jpg'; // Default for female (2)
+        }
+        
+        // Validate that default files exist, fallback to generic default if not
+        $defaultImagePath = rtrim(dirname(__DIR__), '/\\') . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $defaultImage), DIRECTORY_SEPARATOR);
+        if (!is_file($defaultImagePath)) {
+            $defaultImage = './assets/emp_pics/defult.png';
+        }
+        
+        // If no avatar path provided or empty, return default
+        if (empty($avatarPath)) {
+            return $defaultImage;
+        }
+        
+        // Check if avatar file exists in multiple possible locations
+        $displayImage = $defaultImage;
+        $avatarPath = trim($avatarPath);
+        $relativePath = ltrim(preg_replace('#^\./#', '', $avatarPath), '/');
+        $docRoot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/\\');
+        $systemRoot = rtrim(dirname(__DIR__), '/\\');
+        $pathParts = str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+        
+        // Build list of candidate paths to check
+        $avatarCandidates = [];
+        $avatarCandidates[] = $avatarPath;  // Original path as-is
+        
+        if ($systemRoot) {
+            $avatarCandidates[] = $systemRoot . DIRECTORY_SEPARATOR . $pathParts;
+        }
+        
+        if ($docRoot) {
+            $avatarCandidates[] = $docRoot . DIRECTORY_SEPARATOR . $pathParts;
+        }
+        
+        if ($docRoot && strpos($avatarPath, '/') === 0) {
+            $avatarCandidates[] = $docRoot . DIRECTORY_SEPARATOR . ltrim(str_replace('/', DIRECTORY_SEPARATOR, $avatarPath), DIRECTORY_SEPARATOR);
+        }
+        
+        // Test each candidate path
+        foreach ($avatarCandidates as $candidate) {
+            if ($candidate && is_file($candidate)) {
+                $displayImage = $avatarPath;
+                break;
+            }
+        }
+        
+        return $displayImage;
     }
 }
