@@ -360,7 +360,7 @@ $isSupervisor = (isset($emprow['supervisor_id']) && $emprow['supervisor_id'] !==
 $isGR_Officer = ($user_type === 'gr_officer');
 $isAssistant = ($user_type === 'assistant'); // Generic assistant role
 $isItTeam = ($user_dept == 6); // Anyone in IT Department
-$isItAssistant = ($user_type === 'assistant' && $user_dept == 6); // IT Department Assistant
+$isItAssistant = ($user_type === 'it' && $user_dept == 6 && $emp_type === 'Supporter'); // IT Department Assistant
 $isItManager = ($user_type === 'it' && $emp_type === 'Manager' && $user_dept == 6); // IT Department Manager 
 $isAdministration = ($user_dept === 1); // Anyone in Administration Department
 

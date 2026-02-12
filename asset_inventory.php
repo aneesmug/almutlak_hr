@@ -244,12 +244,14 @@
                                             </a>
                                             ` : ''}
                                             ${row.status !== 'Assigned' ? `
+                                            <?php if($is_system_admin): ?>
                                             <a href="javascript:void(0);" class="dropdown-item text-danger deleteAjax" 
                                                 data-tbl='asset_items'
                                                 data-file='0'
                                                 data-id="${row.id}">
                                                 <i class="fa fa-trash mr-2 font-18 vertical-middle"></i>${__('delete', 'Delete')}
                                             </a>
+                                            <?php endif; ?>
                                             ` : ''}
                                             ${row.status === 'Assigned' ? `
                                             <a href="javascript:void(0);" class="dropdown-item text-info print-asset-report" 
