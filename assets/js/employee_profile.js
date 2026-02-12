@@ -1,7 +1,10 @@
+const APP_COLORS = require("./colors");
 
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js"));
 // Include shared AJAX error handling utilities
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/ajaxErrorHandling.js"));
+// Load css colors for consistent theming across JS and CSS
+$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/colors.js"));
 
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
@@ -30,8 +33,8 @@ $(document).on('click', '.signout', function (e) {
         text: __("signout_warning"),
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_signout"),
         showLoaderOnConfirm: true,
@@ -132,8 +135,8 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     showCancelButton: true,
                     confirmButtonText: __('apply_emergency_vacation') || 'Apply Emergency Vacation',
                     cancelButtonText: __('cancel') || 'Cancel',
-                    confirmButtonColor: '#d33',
-                    cancelButtonColor: '#6c757d'
+                    confirmButtonColor: APP_COLORS.danger_dark,
+                    cancelButtonColor: APP_COLORS.secondary
                 }).then((result) => {
                     if (result.isConfirmed) {
                         // Open the modal for emergency vacation
@@ -164,8 +167,8 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         title: '<i class="fa fa-umbrella-beach"></i> ' + (forceEmergency ? __('apply_emergency_vacation') : __('apply_vacation_info_title')),
         html: vacationApply_HTML(country),
         showCancelButton: true,
-        confirmButtonColor: '#4e73df',
-        cancelButtonColor: '#e74a3b',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         confirmButtonText: '<i class="fa fa-check"></i> ' + __('yes_register'),
         cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
         showLoaderOnConfirm: true,
@@ -623,8 +626,8 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
         width: '50rem',
         showCancelButton: true,
         confirmButtonText: __('submit_request'),
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
@@ -645,7 +648,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                     if (res.status == 200 && res.data.length > 0) {
                         const employeeName = res.data[0].name;
                         // Update the modal title with the employee's name
-                        $('.swal2-title').html(`${__('leave_application_for')} <br><span style="color:#3085d6;">${employeeName}</span>`);
+                        $('.swal2-title').html(`${__('leave_application_for')} <br><span style="colorAPP_COLORS.primary">${employeeName}</span>`);
                         Swal.hideLoading();
                     } else {
                         // Handle case where employee is not found
@@ -1057,8 +1060,8 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             </div>
                         </div>`,
                     showCancelButton: true,
-                    confirmButtonColor: '#3085d6',
-                    cancelButtonColor: '#d33',
+                    confirmButtonColor: APP_COLORS.primary,
+                    cancelButtonColor: APP_COLORS.danger_dark,
                     cancelButtonText: __('cancel'),
                     confirmButtonText: __('yes_update'),
                     showLoaderOnConfirm: true,
@@ -1381,7 +1384,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                                         Swal.showValidationMessage(__("request_failed"));
                                     });
                                 }
-                                ,cancelButtonColor:'#d33',
+                                ,cancelButtonColor:APP_COLORS.danger_dark,
                                 cancelButtonText:__('cancel')
                             }).then((finalResult) => {
                                 if (finalResult.isConfirmed) {
@@ -1893,7 +1896,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                         }
                     },
                     allowOutsideClick: false,
-                    confirmButtonColor: '#3085d6',
+                    confirmButtonColor: APP_COLORS.primary,
                     confirmButtonText: __('ok')
                 });
                 return;
@@ -1920,7 +1923,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                 confirmButtonText: '<i class="fa fa-check"></i> ' + __('confirm'),
                 cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
                 confirmButtonColor: '#28a745',
-                cancelButtonColor: '#6c757d',
+                cancelButtonColor: APP_COLORS.secondary,
                 allowOutsideClick: false,
                 showLoaderOnConfirm: true,
                 preConfirm: () => {
@@ -2016,7 +2019,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                 icon: 'error',
                 title: __('error'),
                 text: __('request_failed_status') + ' - ' + textStatus,
-                confirmButtonColor: '#d32f2f',
+                confirmButtonColor: APP_COLORS.danger_dark,
                 confirmButtonText: __('ok')
             });
         }

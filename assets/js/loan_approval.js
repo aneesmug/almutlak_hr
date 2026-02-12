@@ -80,8 +80,8 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
             width: '40%',
             showCancelButton: true,
             confirmButtonText: __('confirm_payment_upload_proof') || 'Confirm Payment & Upload Proof',
-            confirmButtonColor: '#28a745',
-            cancelButtonColor: '#dc3545',
+            confirmButtonColor: APP_COLORS.success,
+            cancelButtonColor: APP_COLORS.danger,
             cancelButtonText: __('cancel'),
             showLoaderOnConfirm: true,
             allowOutsideClick: false,
@@ -213,7 +213,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                                 text: response.message || __('loan_approved'), 
                                 icon: response.type || 'success',
                                 confirmButtonText: __('ok'),
-                                confirmButtonColor: '#28a745',
+                                confirmButtonColor: APP_COLORS.success,
                                 allowOutsideClick: false
                             }).then(() => location.reload());
                         } else {
@@ -223,7 +223,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                                 icon: response.type || 'error',
                                 allowOutsideClick: false,
                                 confirmButtonText: __('ok'),
-                                confirmButtonColor: '#dc3545'
+                                confirmButtonColor: APP_COLORS.danger
                             });
                         }
                     },
@@ -235,7 +235,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                             icon: 'error',
                             allowOutsideClick: false,
                             confirmButtonText: __('ok'),
-                            confirmButtonColor: '#dc3545'
+                            confirmButtonColor: APP_COLORS.danger
                         });
                     }
                 });
@@ -253,7 +253,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                     <i class="fa fa-comment"></i> ${__('approval_comment') || 'Approval Comment'}
                 </h6>
                 <div class="form-group">
-                    <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Please explain your decision and any relevant observations...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;"></textarea>
+                    <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Please explain your decision and any relevant observations...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid ${APP_COLORS.border_default}; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;"></textarea>
                     <small class="form-text text-muted">
                         <span id="char-count">0</span>/5000 ${__('characters')}
                     </small>
@@ -262,8 +262,8 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
         `,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#28a745',
-        cancelButtonColor: '#dc3545',
+        confirmButtonColor: APP_COLORS.success,
+        cancelButtonColor: APP_COLORS.danger,
         confirmButtonText: __('yes_approve_it_button'),
         allowOutsideClick: false,
         willOpen: () => {
@@ -276,11 +276,11 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                 
                 // Change color if approaching limit
                 if (currentLength > maxLength * 0.9) {
-                    $('#char-count').css('color', '#dc3545'); // Red warning
+                    $('#char-count').css('color', APP_COLORS.danger); // Red warning
                 } else if (currentLength > maxLength * 0.7) {
-                    $('#char-count').css('color', '#ffc107'); // Yellow warning
+                    $('#char-count').css('color', APP_COLORS.warning); // Yellow warning
                 } else {
-                    $('#char-count').css('color', '#6c757d'); // Default gray
+                    $('#char-count').css('color', APP_COLORS.text_muted); // Default gray
                 }
             });
         },
@@ -336,7 +336,7 @@ function rejectLoanRequest(loanId, role) {
         inputPlaceholder: __('enter_rejection_reason_placeholder'),
         showCancelButton: true,
         confirmButtonText: __('submit_rejection_button'),
-        confirmButtonColor: '#dc3545',
+        confirmButtonColor: APP_COLORS.danger,
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
         inputValidator: (value) => {
@@ -345,9 +345,9 @@ function rejectLoanRequest(loanId, role) {
             }
         },
         preConfirm: (reason) => {
-            return sendLoanUpdate(loanId, role, 'reject_loan', { rejection_note: reason ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')});
+            return sendLoanUpdate(loanId, role, 'reject_loan', { rejection_note: reason ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')});
         }
-    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+    ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((result) => {
         if (result.isConfirmed) {
             const response = result.value;
             Swal.fire({
@@ -382,7 +382,7 @@ function finalizeLoan(loanId) {
         `,
         showCancelButton: true,
         confirmButtonText: __('submit_and_finalize_button'),
-        confirmButtonColor: '#17a2b8',
+        confirmButtonColor: APP_COLORS.info,
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
         preConfirm: () => {
@@ -412,7 +412,7 @@ function finalizeLoan(loanId) {
                 Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
             });
         }
-    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+    ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((result) => {
         if (result.isConfirmed) {
             const response = result.value; // AJAX response is in result.value
             Swal.fire({
@@ -516,7 +516,7 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                         </div>
                         <div class="form-group">
                             <label for="monthly_deduction_display">${__('monthly_deduction_label')}</label>
-                            <input type="text" id="monthly_deduction_display" class="form-control" readonly style="font-weight: bold; background-color: #e9ecef;">
+                            <input type="text" id="monthly_deduction_display" class="form-control" readonly style="font-weight: bold; background-color: ${APP_COLORS.bg_light};">
                         </div>
                         <div class="form-group">
                             <label for="approval_comment_gm">${__('approval_comment') || 'Approval Comment'}</label>
@@ -527,7 +527,7 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                 `,
                 showCancelButton: true,
                 confirmButtonText: __('submit_and_approve_button'),
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.success,
                 showLoaderOnConfirm: true,
                 allowOutsideClick: false,
                 didOpen: () => {
@@ -607,7 +607,7 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                         Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
                     });
                 }
-            ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+            ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((result) => {
                 if (result.isConfirmed) {
                     const response = result.value;
                     Swal.fire({
@@ -684,13 +684,13 @@ async function modifyAndApproveLoanHRAssistant(loanId, currentAmount, currentIns
                         </div>
                         <div class="form-group">
                             <label for="monthly_deduction_display_hr">${__('monthly_deduction_label')}</label>
-                            <input type="text" id="monthly_deduction_display_hr" class="form-control" readonly style="font-weight: bold; background-color: #e9ecef;">
+                            <input type="text" id="monthly_deduction_display_hr" class="form-control" readonly style="font-weight: bold; background-color: ${APP_COLORS.bg_light};">
                         </div>
                     </form>
                 `,
                 showCancelButton: true,
                 confirmButtonText: __('submit_and_approve_button'),
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.success,
                 showLoaderOnConfirm: true,
                 allowOutsideClick: false,
                 didOpen: () => {
@@ -762,7 +762,7 @@ async function modifyAndApproveLoanHRAssistant(loanId, currentAmount, currentIns
                         Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
                     });
                 }
-            ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+            ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((result) => {
                 if (result.isConfirmed) {
                     const response = result.value;
                     Swal.fire({

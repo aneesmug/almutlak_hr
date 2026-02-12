@@ -4,6 +4,8 @@
  * Module/App: Main Js
  */
 
+const APP_COLORS = require("./colors");
+
 // Option 2: Reusable function with optional attributes
 function loadResource(src, type = 'js', attributes = {}, position = 'head') {
   let element;
@@ -61,6 +63,8 @@ loadResource('./plugins/bootstrap-select/js/bootstrap-select.js', 'js', { async:
 loadResource('./assets/js/notifications.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/translation.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/geolocation-capture.js', 'js', { async: true, defer: true }, 'head');
+// Load css colors for consistent theming across JS and CSS
+loadResource('./assets/js/colors.js', 'js', { async: true, defer: true }, 'head');
 // Load responsive sidebar menu functionality
 
 function __(key, defaultText = '') {
@@ -236,8 +240,8 @@ $(document).on('click', '.deleteAjax', function (e) {
         text: __("revert_warning"),
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_delete_it"),
         showLoaderOnConfirm: true,
@@ -273,8 +277,8 @@ $(document).on('click', '.isDeleteAjax', function (e) {
         text: __("revert_warning"),
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_delete_it"),
         showLoaderOnConfirm: true,
@@ -312,8 +316,8 @@ $(document).on('click', '.deleteTblAjax', function (e) {
         text: __("revert_warning"),
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_delete_it"),
         showLoaderOnConfirm: true,
@@ -349,8 +353,8 @@ $(document).on('click', '.deleteInvAjax', function (e) {
         text: __("revert_warning"),
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_delete_it"),
         showLoaderOnConfirm: true,
@@ -416,8 +420,8 @@ $(document).on('click', '.signout', function (e) {
         text: __("signout_warning"),
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_signout"),
         showLoaderOnConfirm: true,
@@ -455,8 +459,8 @@ function addItemFunc(){
         html: item_HTML(),
         text: __("revert_warning"),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_register"),
         showLoaderOnConfirm: true,
@@ -612,8 +616,8 @@ $(document).on('click', '.editItemAttr', function (e) {
         html: item_HTML('edit'),
         text: __("revert_warning"),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_update"),
         showLoaderOnConfirm: true,
@@ -738,8 +742,8 @@ function addCategoryFunc(){
         title: __("add_category_info"),
         html: category_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_register"),
         showLoaderOnConfirm: true,
@@ -816,8 +820,8 @@ $(document).on('click', '.editCategoryAttr', function (e) {
         title: __("update_category_info"),
         html: category_HTML('edit'),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_update"),
         showLoaderOnConfirm: true,
@@ -894,8 +898,8 @@ function addCarFunc(){
         html: car_HTML(),
         text: __("revert_warning"),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_register"),
         showLoaderOnConfirm: true,
@@ -1011,8 +1015,8 @@ $(document).on('click', '.editCarAttr', function (e) {
         html: car_HTML('edit'),
         text: __("revert_warning"),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_update"),
         showLoaderOnConfirm: true,
@@ -1132,8 +1136,8 @@ $(document).on('click', '.addMaintAttr', function (e) {
         title: __("add_maintenance_info"),
         html: maintenance_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_update"),
         showLoaderOnConfirm: true,
@@ -1261,8 +1265,8 @@ $(document).on('click', '.addMaintAttr', function (e) {
         title: __("add_driver_info"),
         html: driver_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_register"),
         showLoaderOnConfirm: true,
@@ -1336,8 +1340,8 @@ $(document).on('click', '.addRtrnDrvrAtter', function (e) {
         text: __("want_to_return_car"),
         icon: 'info',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __("cancel"),
         confirmButtonText: __("yes_do_it"),
         showLoaderOnConfirm: true,
@@ -1369,8 +1373,8 @@ $(document).on('click', '.addTypeAtter', function (e) {
         title: __("add_type"),
         html: addType_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_register"),
         showLoaderOnConfirm: true,
@@ -1412,8 +1416,8 @@ $(document).on('click', '.addDocuAtter', function (e) {
         title: __("add_documents_info"),
         html: documents_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_register"),
         showLoaderOnConfirm: true,
@@ -1506,8 +1510,8 @@ function addCarModelFunc(id){
         title: __('add_car_model'),
         html: addCarModel_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __("yes_register"),
         showLoaderOnConfirm: true,
@@ -1570,8 +1574,8 @@ $(document).on('click', '.editItemLineAttr', function (e) {
         html: request_line_HTML(),
         text: __("revert_warning"),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -1694,8 +1698,8 @@ $(document).on('click', '.editReqAttr', function (e) {
         title: __('update_request_info'),
         html: request_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -1769,9 +1773,9 @@ $(document).on('click', '.smt_attachment', function (e) {
             '</form>',
         // icon: 'info',
         showCancelButton: true,
-        cancelButtonColor: '#d33',
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
-        confirmButtonColor: '#3085d6',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('yes_upload_it'),
         showLoaderOnConfirm: true,
         customClass: 'swal-wide',
@@ -1821,8 +1825,8 @@ $(document).on('click', '.deleteSmt', function (e) {
         text: __("revert_warning"),
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_delete_it'),
         showLoaderOnConfirm: true,
@@ -1884,8 +1888,8 @@ $(document).on('click', '.upload_img', function (e) {
             </div>
         </div>`,
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -1956,8 +1960,8 @@ function addlocarionFunc(){
         title: __('add_new_location'),
         html: location_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -2064,8 +2068,8 @@ $(document).on('click', '.editLocationAttr', function (e) {
         title: __('update_location_info'),
         html: location_HTML('edit'),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -2170,8 +2174,8 @@ $(document).on('click', '.addLocContractAttr', function (e) {
         title: __('add_location_contract_info'),
         html: loc_contract_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -2263,9 +2267,9 @@ $(document).on('click', '.upldLocDocuAttr', function (e) {
                 </form>`,
         icon: 'info',
         showCancelButton: true,
-        cancelButtonColor: '#d33',
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
-        confirmButtonColor: '#3085d6',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('yes_upload_it'),
         showLoaderOnConfirm: true,
         width:"40%",
@@ -2323,8 +2327,8 @@ function addCustomerAtter(){
         title: __('add_new_customer'),
         html: customer_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -2417,8 +2421,8 @@ $(document).on('click', '.editCustomerAtter', function (e) {
         title: __('update_customer_info'),
         html: customer_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -2512,8 +2516,8 @@ $(document).on('click', '.cardUpdateAttr', function (e) {
         title: __('update_vip_customer_card'),
         html: cust_upd_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -2586,8 +2590,8 @@ $(document).on('click', '.cardAddAttr', function (e) {
         title: __('add_vip_customer_card'),
         html: cust_add_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -2897,8 +2901,8 @@ $(document).on('click', '.updateUserAjax', function (e) {
         html: edit_user_HTML(),
         customClass: 'swal-landscape',
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -3037,8 +3041,8 @@ $(document).on('click', '.updatePasswordAjax', function (e) {
         html: edit_password_HTML(),
         text: __("revert_warning"),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -3096,7 +3100,7 @@ $(document).on('click', '.showPasswordAjax', function (e) {
         html: oldpass ,
         showCancelButton: true,
         showConfirmButton: false,
-        cancelButtonColor: '#d33',
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('close'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false
@@ -3112,8 +3116,8 @@ $(document).on('click', '.createUserDeptAjax', function(e) {
         title: __('create_new_user'),
         html: create_user_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('create_user'),
         showLoaderOnConfirm: true,
@@ -3469,8 +3473,8 @@ $(document).on('click', '.empAvatarShow', function (e) {
             </div>
         </div>`,
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('close'),
         confirmButtonText: __('yes_update'),
         showLoaderOnConfirm: true,
@@ -3588,8 +3592,8 @@ $(document).on('click', '.addSocial', function (e) {
         title: __('add_social_media_links'),
         html: social_add_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -3654,8 +3658,8 @@ $(document).on('click', '.addPortfolio', function (e) {
         title: __('add_portfolio_details'),
         html: portfolio_add_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -3731,8 +3735,8 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
         title: __('add_employee_documents'),
         html: empDocuments_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -3842,9 +3846,9 @@ $(document).on('click', '.contantChk', function (e) {
         html: contant_chk_HTML(),
         width: '600px',
         showCancelButton: true,
-        confirmButtonColor: '#28a745',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('submit_action'),
-        cancelButtonColor: '#d33',
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
@@ -3990,7 +3994,7 @@ function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passp
                 return __('you_need_to_select_something_validation')
             }
         }
-    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+    ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((result) => {
         // If the user clicked "Next" and selected a field
         if (result.isConfirmed && result.value) {
             const field = result.value;
@@ -4050,8 +4054,8 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             </div>
                         </div>`,
                     showCancelButton: true,
-                    confirmButtonColor: '#3085d6',
-                    cancelButtonColor: '#d33',
+                    confirmButtonColor: APP_COLORS.primary,
+                    cancelButtonColor: APP_COLORS.danger_dark,
                     cancelButtonText: __('cancel'),
                     confirmButtonText: __('yes_update'),
                     showLoaderOnConfirm: true,
@@ -4185,7 +4189,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                         }).fail(function() {
                             Swal.showValidationMessage(__("request_failed"));});
                     }
-                ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((finalResult) => {
+                ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((finalResult) => {
                     if (finalResult.isConfirmed) {
                         Swal.fire({
                             title: finalResult.value.title,
@@ -4205,8 +4209,8 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
         title: 'Employee Contant information',
         html: edit_emp_chk_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         confirmButtonText: 'Yes, Update!',
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
@@ -4302,7 +4306,7 @@ function loadDateForEOS(){
         title: __('select_date_for_calculation'),
         html: eos_select_date_HTML(),
         showCancelButton: false,
-        confirmButtonColor: '#3085d6',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('yes_select'),
         allowEscapeKey : false,
         showLoaderOnConfirm: true,
@@ -4393,7 +4397,7 @@ function assignAsset(empId) {
                     `,
                     showCancelButton: true,
                     cancelButtonText: __('cancel'),
-                    cancelButtonColor: '#d33',
+                    cancelButtonColor: APP_COLORS.danger_dark,
                     confirmButtonText: __('assign'),
                     showLoaderOnConfirm: true,
                     didOpen: () => {
@@ -4595,7 +4599,7 @@ function unassignAsset(assetRecordId) {
             }
             return formData;
         }
-    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+    ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((result) => {
         if (result.isConfirmed) {
             $.ajax({
                 type: 'POST',
@@ -4629,8 +4633,8 @@ function addVoucherFunc(empid){
         html: Voucher_HTML(),
         // text: "You won't be able to revert this!",
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -4754,7 +4758,7 @@ function addRejNote(srno){
         title: __('add_rejected_note_title'),
         html: addRejNote_HTML(),
         showCancelButton: false,
-        confirmButtonColor: '#3085d6',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('yes_add'),
         allowEscapeKey : false,
         showLoaderOnConfirm: true,
@@ -4842,7 +4846,7 @@ function addInvoiceAmount(){
         title: __('add_total_amount_title'),
         html: add_inv_mont_HTML(),
         showCancelButton: false,
-        confirmButtonColor: '#3085d6',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('yes_add'),
         allowEscapeKey : false,
         showLoaderOnConfirm: true,
@@ -4908,7 +4912,7 @@ function updateInvoiceAmount(id){
         title: __('add_total_amount_title'),
         html: add_inv_mont_HTML(),
         showCancelButton: false,
-        confirmButtonColor: '#3085d6',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('yes_add'),
         allowEscapeKey : false,
         showLoaderOnConfirm: true,
@@ -4963,7 +4967,7 @@ function approveInvoiceAmount(id,amount){
         title: __('approve_total_amount_title'),
         html: approv_inv_mont_HTML() /*`<input type="text" value="${amount}" >`*/,
         showCancelButton: false,
-        confirmButtonColor: '#3085d6',
+        confirmButtonColor: APP_COLORS.primary,
         confirmButtonText: __('yes_add'),
         allowEscapeKey : false,
         showLoaderOnConfirm: true,
@@ -5102,8 +5106,8 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
         width: '50rem',
         showCancelButton: true,
         confirmButtonText: __('submit_request'),
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
@@ -5379,8 +5383,8 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 //         title: __('apply_vacation_info_title'),
 //         html: vacationApply_HTML(country),
 //         showCancelButton: true,
-//         confirmButtonColor: '#3085d6',
-//         cancelButtonColor: '#d33',
+//         confirmButtonColor: APP_COLORS.primary,
+//         cancelButtonColor: APP_COLORS.danger_dark,
 //         confirmButtonText: __('yes_register'),
 //         cancelButtonText: __('cancel'),
 //         showLoaderOnConfirm: true,
@@ -5667,7 +5671,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     showCancelButton: true,
                     confirmButtonText: __('apply_another_vacation') || 'Apply Another Vacation',
                     cancelButtonText: __('cancel') || 'Cancel',
-                    confirmButtonColor: '#d33',
+                    confirmButtonColor: APP_COLORS.danger_dark,
                     cancelButtonColor: '#6c757d'
                 }).then((result) => {
                     if (result.isConfirmed) {
@@ -5700,8 +5704,8 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         title: '<i class="fa fa-umbrella-beach"></i> ' + (forceEmergency ? __('apply_emergency_vacation') : __('apply_vacation_info_title')),
         html: vacationApply_HTML(country),
         showCancelButton: true,
-        confirmButtonColor: '#4e73df',
-        cancelButtonColor: '#e74a3b',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         confirmButtonText: '<i class="fa fa-check"></i> ' + __('yes_register'),
         cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
         showLoaderOnConfirm: true,
@@ -6309,8 +6313,8 @@ function add_noties() {
         title: __('add_note_to_employee_title'),
         html: add_note_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
@@ -8451,13 +8455,13 @@ function add_note_HTML(){
                     settings.forEach(setting => {
                         const element = document.getElementById(`swal-${setting.setting_name}`);
                         if (element) newSettings[setting.setting_name] = element.value;
-                    ,allowOutsideClick:false,cancelButtonColor:'#d33',cancelButtonText:__('cancel')});
+                    ,allowOutsideClick:false,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')});
 
                     return fetch('/includes/settings_handler.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: new URLSearchParams({ action: 'update_settings', settings: JSON.stringify(newSettings) })
-                    ,allowOutsideClick:false,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then(response => {
+                    ,allowOutsideClick:false,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then(response => {
                         if (!response.ok) throw new Error(response.statusText);
                         return response.json();
                     }).catch(error => Swal.showValidationMessage(`Request failed: ${error}`));
@@ -8541,7 +8545,7 @@ function round(value, decimals) {
             height: 'auto',
             position: 'right',
             size: "8px",
-            color: '#9ea5ab',
+            color: APP_COLORS.primary,
             wheelStep: 5
         });
     }
@@ -8551,7 +8555,7 @@ function round(value, decimals) {
             height: 'auto',
             position: 'right',
             size: "8px",
-            color: '#9ea5ab'
+            color: APP_COLORS.primary
         });
     }
 
@@ -9371,7 +9375,7 @@ function dateofbirth(selector){
                 position: 'right',
                 size: "8px",
                 touchScrollStep: 20,
-                color: '#9ea5ab'
+                color: APP_COLORS.primary
             });
         },
 
@@ -9564,7 +9568,7 @@ function dateofbirth(selector){
             $.fn.slimScroll && $(".slimscroll-alt").slimScroll({
                 position: 'right',
                 size: "5px",
-                color: '#98a6ad',
+                color: APP_COLORS.secondary,
                 wheelStep: 10
             });
         },
@@ -9664,8 +9668,8 @@ function updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered = false)
         `,
         width: '700px',
         showCancelButton: !isAutoTriggered,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         confirmButtonText: __('yes_update') || 'Yes, Update',
         cancelButtonText: __('cancel') || 'Cancel',
         allowOutsideClick: false,
@@ -9784,7 +9788,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
         html: `
             <form id="rejoinRequestForm" class="text-left">
                 <div class="form-group">
-                    <label for="rejoin_date">${__('rejoin_date')} <span class="text-danger">*</span></label>
+                    <label for="rejoin_date">${__('rejoin_date')} <span style="color: ${APP_COLORS.danger};">*</span></label>
                     <input type="text" id="rejoin_date" name="rejoin_date" class="form-control" placeholder="YYYY-MM-DD" required>
                 </div>
                 <div class="form-group">
@@ -9793,8 +9797,8 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                 </div>
             </form>`,
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         confirmButtonText: __('submit_request'),
         showLoaderOnConfirm: true,
@@ -9858,7 +9862,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                 title: result.value.title || __('rejoin_request_submitted'),
                 text: result.value.message,
                 allowOutsideClick: false,
-                confirmButtonColor: '#3085d6',
+                confirmButtonColor: APP_COLORS.primary,
                 confirmButtonText: __('ok')
             }).then(function() {
                 location.reload();
@@ -9875,14 +9879,14 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                     icon: 'warning',
                     title: dismissReason.title || __('active_rejoin_request_exists'),
                     html: `
-                        <div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
+                        <div style="background-color: #e3f2fd; border-left: 4px solid ${APP_COLORS.primary}; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
                             <div style="margin-bottom: 10px;">
                                 <strong>${__('request_number')}:</strong> 
-                                <span style="color: #d32f2f;">${dismissReason.active_request.request_inv_no}</span>
+                                <span style="color: ${APP_COLORS.danger_dark};">${dismissReason.active_request.request_inv_no}</span>
                             </div>
                             <div style="margin-bottom: 10px;">
                                 <strong>${__('status')}:</strong> 
-                                <span style="color: #d32f2f; font-weight: bold;">${dismissReason.active_request.status.toUpperCase()}</span>
+                                <span style="color: ${APP_COLORS.danger_dark}; font-weight: bold;">${dismissReason.active_request.status.toUpperCase()}</span>
                             </div>
                             <div style="margin-bottom: 10px;">
                                 <strong>${__('requested_rejoin_date')}:</strong> 
@@ -9904,7 +9908,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                         </div>
                     `,
                     allowOutsideClick: false,
-                    confirmButtonColor: '#3085d6',
+                    confirmButtonColor: APP_COLORS.primary,
                     confirmButtonText: __('ok')
                 });
             } else if(dismissReason.type === 'error') {
@@ -9914,7 +9918,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                     title: dismissReason.title || __('error'),
                     text: dismissReason.message || __('request_failed_status'),
                     allowOutsideClick: false,
-                    confirmButtonColor: '#d32f2f',
+                    confirmButtonColor: APP_COLORS.danger_dark,
                     confirmButtonText: __('ok')
                 });
             }
@@ -10153,11 +10157,11 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                 let approvalChainHtml = '<div style="margin-top: 15px;"><h6>' + __('approval_chain') + ':</h6><table style="width: 100%; font-size: 13px;" dir="' + (isRtl ? 'rtl' : 'ltr') + '"><tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">' + __('level') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('status') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('approver') + '</th></tr>';
                 if (response.data.approval_chain && response.data.approval_chain.length > 0) {
                     response.data.approval_chain.forEach((level, idx) => {
-                        const statusBadge = level.status === 'approved' ? '<span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 3px;">✓ ' + __('approved') + '</span>' :
-                                           level.status === 'pending' ? '<span style="background: #ffc107; color: black; padding: 3px 8px; border-radius: 3px;">⏳ ' + __('pending') + '</span>' :
-                                           level.status === 'rejected' ? '<span style="background: #dc3545; color: white; padding: 3px 8px; border-radius: 3px;">✗ ' + __('rejected') + '</span>' :
-                                           '<span style="background: #6c757d; color: white; padding: 3px 8px; border-radius: 3px;">' + __('awaiting') + '</span>';
-                        approvalChainHtml += `<tr><td style="padding: 8px; border: 1px solid #ddd;">` + __('level') + ` ${level.approval_level}</td><td style="padding: 8px; border: 1px solid #ddd;">${statusBadge}</td><td style="padding: 8px; border: 1px solid #ddd;">${level.approver_name || __('not_assigned')}</td></tr>`;
+                        const statusBadge = level.status === 'approved' ? '<span style="background: '+ APP_COLORS.success +'; color: white; padding: 3px 8px; border-radius: 3px;">✓ ' + __('approved') + '</span>' :
+                                           level.status === 'pending' ? '<span style="background: '+ APP_COLORS.warning +'; color: black; padding: 3px 8px; border-radius: 3px;">⏳ ' + __('pending') + '</span>' :
+                                           level.status === 'rejected' ? '<span style="background: '+ APP_COLORS.danger_dark +'; color: white; padding: 3px 8px; border-radius: 3px;">✗ ' + __('rejected') + '</span>' :
+                                           '<span style="background: '+ APP_COLORS.secondary +'; color: white; padding: 3px 8px; border-radius: 3px;">' + __('awaiting') + '</span>';
+                        approvalChainHtml += `<tr><td style="padding: 8px; border: 1px solid ${APP_COLORS.border};">` + __('level') + ` ${level.approval_level}</td><td style="padding: 8px; border: 1px solid ${APP_COLORS.border};">${statusBadge}</td><td style="padding: 8px; border: 1px solid ${APP_COLORS.border};">${level.approver_name || __('not_assigned')}</td></tr>`;
                     });
                 }
                 approvalChainHtml += '</table></div>';
@@ -10215,7 +10219,7 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     
                     if (attachmentPaths.length > 0) {
                         const attachmentPathsJson = JSON.stringify(attachmentPaths).replace(/"/g, '&quot;');
-                        attachmentsHtml = '<br><h6 style="margin-top: 15px; color: #333; font-weight: 600;">📎 ' + __('attachments') + ' (' + attachmentPaths.length + '):</h6>';
+                        attachmentsHtml = '<br><h6 style="margin-top: 15px; color: ' + APP_COLORS.text_dark + '; font-weight: 600;">📎 ' + __('attachments') + ' (' + attachmentPaths.length + '):</h6>';
                         attachmentsHtml += '<button type="button" class="btn btn-sm btn-primary" onclick="showAttachmentsModal(' + attachmentPathsJson + ', &quot;' + __('attachments') + '&quot;)" style="margin-top: 8px;"><i class="fa fa-eye"></i> ' + __('view_attachments') + '</button>';
                     }
                 }
@@ -10224,14 +10228,14 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                 
                 const contentHtml = `
                     <div style="text-align: ` + (isRtl ? 'right' : 'left') + `; font-size: 14px; direction: ` + (isRtl ? 'rtl' : 'ltr') + `;">
-                        <h5 style="margin-bottom: 15px; color: #333;">` + __('settlement_information') + `</h5>
+                        <h5 style="margin-bottom: 15px; color: ${APP_COLORS.text_dark};">` + __('settlement_information') + `</h5>
                         <table style="width: 100%; margin-bottom: 10px;" dir="` + (isRtl ? 'rtl' : 'ltr') + `">
-                            <tr><td style="padding: 8px; font-weight: bold; width: 35%;">` + __('settlement_id') + `:</td><td style="padding: 8px; color: #007bff; font-weight: 600;">${htmlspecialcharsJs(s.request_inv_no)}</td></tr>
-                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('employee_name') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_name)}</td></tr>
+                            <tr><td style="padding: 8px; font-weight: bold; width: 35%;">` + __('settlement_id') + `:</td><td style="padding: 8px; color: ${APP_COLORS.primary}; font-weight: 600;">${htmlspecialcharsJs(s.request_inv_no)}</td></tr>
+                            <tr style="background: ${APP_COLORS.background_light};"><td style="padding: 8px; font-weight: bold;">` + __('employee_name') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_name)}</td></tr>
                             <tr><td style="padding: 8px; font-weight: bold;">` + __('employee_id') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_id)}</td></tr>
-                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('settlement_amount') + `:</td><td style="padding: 8px; color: #28a745; font-weight: 600;">SAR ${Math.round(parseFloat(s.calculated_payable_amount || s.settlement_amount || 0)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr>
+                            <tr style="background: ${APP_COLORS.background_light};"><td style="padding: 8px; font-weight: bold;">` + __('settlement_amount') + `:</td><td style="padding: 8px; color: ${APP_COLORS.success}; font-weight: 600;">SAR ${Math.round(parseFloat(s.calculated_payable_amount || s.settlement_amount || 0)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr>
                             <tr><td style="padding: 8px; font-weight: bold;">` + __('settlement_method') + `:</td><td style="padding: 8px;">${s.settlement_method || __('not_available')}</td></tr>
-                            <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold;">` + __('status') + `:</td><td style="padding: 8px;"><span style="background: #007bff; color: white; padding: 3px 8px; border-radius: 3px;">${(s.settlement_status || '').toUpperCase()}</span></td></tr>
+                            <tr style="background: ${APP_COLORS.background_light};"><td style="padding: 8px; font-weight: bold;">` + __('status') + `:</td><td style="padding: 8px;"><span style="background: ${APP_COLORS.primary}; color: white; padding: 3px 8px; border-radius: 3px;">${(s.settlement_status || '').toUpperCase()}</span></td></tr>
                             <tr><td style="padding: 8px; font-weight: bold;">` + __('created') + `:</td><td style="padding: 8px;">${new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td></tr>
                         </table>
                         ${approvalChainHtml}
@@ -10292,7 +10296,7 @@ function openFinanceManagerApprovalModal(requestId, requestType, requestedAmount
                 </div>
                 
                 <div class="form-group">
-                    <label style="color: #dc3545;">` + __('select_payer') + `: <span style="color: red;">*</span></label>
+                    <label style="color: ${APP_COLORS.danger};">` + __('select_payer') + `: <span style="color: red;">*</span></label>
                     <div style="margin: 10px 0;">
                         <label style="display: block; margin: 8px 0;">
                             <input type="radio" name="payerType_${modalId}" value="self" checked> ` + __('myself') + `
@@ -10304,21 +10308,21 @@ function openFinanceManagerApprovalModal(requestId, requestType, requestedAmount
                 </div>
                 
                 <div class="form-group" id="otherPayerGroup_${modalId}" style="display: none;">
-                    <label style="color: #dc3545;">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
+                    <label style="color: ${APP_COLORS.danger};">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
                     <select id="payerSelect_${modalId}" class="form-control form-control-lg select2-hidden-accessible" style="width: 100%;" required>
                         <option value="">` + __('select_finance_employee') + `</option>
                     </select>
                 </div>
                 
                 <div class="form-group" id="approvedAmountGroup_${modalId}" style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
-                    <label style="color: #dc3545;">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
+                    <label style="color: ${APP_COLORS.danger};">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
                     <input type="number" id="approvedAmount_${modalId}" class="form-control" step="0.01" value="${parseFloat(requestedAmount).toFixed(2)}" required>
                     <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(requestedAmount).toFixed(2)}</small>
-                    <div id="amountError_${modalId}" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match exactly</div>
+                    <div id="amountError_${modalId}" style="color: ${APP_COLORS.danger}; font-size: 12px; margin-top: 5px; display: none;">Amount must match exactly</div>
                 </div>
                 
                 <div class="form-group" id="paymentProofGroup_${modalId}">
-                    <label style="color: #dc3545;">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
+                    <label style="color: ${APP_COLORS.danger};">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
                     <input type="file" id="paymentProof_${modalId}" class="form-control-file" accept="image/*,application/pdf">
                     <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>
@@ -10330,7 +10334,7 @@ function openFinanceManagerApprovalModal(requestId, requestType, requestedAmount
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: __('approve'),
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.success,
                 cancelButtonText: __('cancel'),
                 allowOutsideClick: false,
                 preConfirm: () => {
@@ -10458,7 +10462,7 @@ function openFinanceManagerApprovalModal(requestId, requestType, requestedAmount
                 text: __('failed_to_load_payer_list') || 'Failed to load finance staff list.',
                 icon: 'error',
                 allowOutsideClick: false,
-                confirmButtonColor: '#dc3545'
+                confirmButtonColor: APP_COLORS.danger
             });
         }
     });
@@ -10560,7 +10564,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: __('approve'),
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.primary,
                 cancelButtonText: __('cancel'),
                 allowOutsideClick: false,
                 preConfirm: () => {
@@ -10795,7 +10799,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                                     text: response.message || __('settlement_approved'), 
                                     icon: 'success',
                                     confirmButtonText: __('ok'),
-                                    confirmButtonColor: '#28a745',
+                                    confirmButtonColor: APP_COLORS.primary,
                                     allowOutsideClick: false
                                 })
                                     .then(() => location.reload());
@@ -10806,7 +10810,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                                     icon: 'error',
                                     allowOutsideClick: false,
                                     confirmButtonText: __('ok'),
-                                    confirmButtonColor: '#dc3545'
+                                    confirmButtonColor: APP_COLORS.danger_dark
                                 });
                             }
                         },
@@ -10818,7 +10822,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                                 icon: 'error',
                                 allowOutsideClick: false,
                                 confirmButtonText: __('ok'),
-                                confirmButtonColor: '#dc3545'
+                                confirmButtonColor: APP_COLORS.danger_dark
                             });
                         }
                     });
@@ -10841,7 +10845,7 @@ function rejectSettlement(settlementId, settlementInvNo) {
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: __('reject'),
-        confirmButtonColor: '#dc3545',
+        confirmButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
         allowOutsideClick: false
     }).then((result) => {
@@ -10916,7 +10920,7 @@ function processSettlementPayment(settlementId, settlementInvNo) {
         icon: 'info',
         showCancelButton: true,
         confirmButtonText: __('clear_settlement'),
-        confirmButtonColor: '#28a745',
+        confirmButtonColor: APP_COLORS.primary,
         cancelButtonText: __('cancel'),
         allowOutsideClick: false
     }).then((result) => {
@@ -11000,7 +11004,7 @@ window.copyToClipboard = function(text, iconElement) {
         // Visual feedback - change icon temporarily
         const $icon = $(iconElement);
         const originalClass = $icon.attr('class');
-        $icon.removeClass('mdi-content-copy').addClass('mdi-check').css('color', '#28a745');
+        $icon.removeClass('mdi-content-copy').addClass('mdi-check').css('color', APP_COLORS.success);
         
         // Show toast notification
         const Toast = Swal.mixin({
@@ -11017,7 +11021,7 @@ window.copyToClipboard = function(text, iconElement) {
         
         // Restore original icon after 2 seconds
         setTimeout(function() {
-            $icon.attr('class', originalClass).css('color', '#4fa0e3');
+            $icon.attr('class', originalClass).css('color', APP_COLORS.primary);
         }, 2000);
         
     } catch (err) {
@@ -11508,8 +11512,8 @@ function viewFileInPopup(fileUrl, fileName) {
             showCancelButton: true,
             confirmButtonText: 'Download File',
             cancelButtonText: 'Cancel',
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
+            confirmButtonColor: APP_COLORS.primary,
+            cancelButtonColor: APP_COLORS.danger_dark,
             didDestroy: function() {
                 // Restore attachments modal if it was open before (and not already restoring)
                 if (window.modalState && 
@@ -11749,7 +11753,7 @@ function renderPdfPage(state, viewerKey) {
             }
 
             // White background
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = APP_COLORS.white;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             let renderContext = {
@@ -11799,7 +11803,7 @@ function renderPdfThumbnail(pdfUrl, canvasId) {
             let ctx = canvas.getContext('2d');
             
             // Fill white background
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = APP_COLORS.white;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             let renderContext = {
