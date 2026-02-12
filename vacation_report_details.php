@@ -69,7 +69,7 @@ if (mysqli_num_rows($query) == 1) {
                 END AS `fly_type`
             FROM emp_vacation v
             JOIN employees e ON v.emp_id = e.emp_id
-            LEFT JOIN bank_list bl ON e.bank_name = bl.id
+            LEFT JOIN bank_list bl ON e.bank_name = bl.bnk_id
             LEFT JOIN employees re ON v.replacement_person = re.emp_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN section s ON e.sectin_nme = s.id

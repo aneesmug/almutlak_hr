@@ -292,6 +292,8 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
+        <!-- Select2 -->
+        <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
@@ -392,8 +394,8 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                     <i class="fad fa-check-circle text-success"></i><strong><?=__('approved')?>:</strong> <span class="text-success font-weight-bold"><?=htmlspecialchars($loan['approved_amount']); ?></span>
                                                                 </div>
                                                             <?php endif; ?>
-                                                            <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start_date')?>:</strong> <?=htmlspecialchars(date('d M Y', strtotime($loan['start_date']))); ?></div>
-                                                            <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?=__('end_date')?>:</strong> <?=htmlspecialchars(date('d M Y', strtotime($loan['end_date']))); ?></div>
+                                                            <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start_date')?>:</strong> <?=htmlspecialchars(!empty($loan['start_date']) ? date('d M Y', strtotime($loan['start_date'])) : 'N/A'); ?></div>
+                                                            <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?=__('end_date')?>:</strong> <?=htmlspecialchars(!empty($loan['end_date']) ? date('d M Y', strtotime($loan['end_date'])) : 'N/A'); ?></div>
                                                             <div class="detail-item"><i class="fad fa-wallet duotone-info"></i><strong><?=__('monthly')?>:</strong> <?=htmlspecialchars($loan['monthly_deduction']); ?></div>
                                                             <div class="detail-item">
                                                                 <?php
@@ -522,6 +524,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
         <script src="assets/js/waves.js"></script>
         <script src="assets/js/jquery.slimscroll.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <script src="./plugins/select2/js/select2.min.js"></script>
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js"></script>
         <script src="assets/js/loan_approval.js"></script>

@@ -161,126 +161,85 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
             }
         });
     } else if (isFinanceManager) {
-        // Show payer selection, payment proof and final amount modal for Finance Manager
-        // First, fetch list of finance staff who can be payers
-        $.ajax({
-            url: './includes/ajaxFile/ajaxLoan.php',
-            type: 'POST',
-            data: { ajaxType: 'get_finance_staff' },
-            dataType: 'JSON',
-        }).done(function(staffResponse) {
-            let payerOptions = '<option value="">-- Select Payer --</option>';
-            if (staffResponse.status === 'success' && staffResponse.staff) {
-                staffResponse.staff.forEach(function(staff) {
-                    payerOptions += `<option value="${staff.emp_id}">${staff.name} (${staff.emp_id})</option>`;
+        // Use reusable Finance Manager approval modal from jquery.app.js
+        openFinanceManagerApprovalModal(loanId, 'loan', requestedAmount, {
+            ajaxEndpoint: './includes/ajaxFile/ajaxLoan.php',
+            onApprove: function(approvalData, params) {
+                const comment = approvalData.comment;
+                const payerType = approvalData.payerType;
+                const paymentProofFile = approvalData.paymentProofFile;
+                
+                // Show loading indicator
+                Swal.fire({
+                    title: __('processing'),
+                    text: __('approving_loan_please_wait') || 'Processing loan approval...',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
                 });
-            }
-            
-            Swal.fire({
-                title: __('finance_manager_payment_processing') || 'Finance Manager - Assign Payer',
-                html: `
-                    <form id="financeApprovalForm" class="text-left">
-                        <p class="alert alert-info text-center"><i class="fa fa-info-circle"></i> ${__('finance_manager_approval_notice') || 'Select the finance staff member who will process the payment and upload proof.'}</p>
-                        
-                        <div class="form-group">
-                            <label for="payer_emp_id">${__('who_will_process_payment') || 'Who Will Process Payment?'} <span class="text-danger">*</span></label>
-                            <select id="payer_emp_id" name="payer_emp_id" class="form-control" required>
-                                ${payerOptions}
-                            </select>
-                            <small class="form-text text-muted">${__('payer_hint') || 'The selected person will handle payment processing and upload payment proof'}</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>${__('requested_amount') || 'Requested Amount'}</label>
-                            <div class="form-control-plaintext"><strong>${parseFloat(requestedAmount).toFixed(2)} SAR</strong></div>
-                            <small class="form-text text-muted">${__('payer_will_confirm') || 'The payer will confirm the final amount when uploading proof'}</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="approval_comment">${__('approval_comment') || 'Approval Comment'}</label>
-                            <textarea id="approval_comment" name="approval_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Please provide your approval reasoning...'}" maxlength="5000"></textarea>
-                            <small class="form-text text-muted"><span id="char-count">0</span>/5000 ${__('characters')}</small>
-                        </div>
-                    </form>
-                `,
-                width: '40%',
-                showCancelButton: true,
-                confirmButtonText: __('approve_assign_payer') || 'Approve & Assign Payer',
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#dc3545',
-                cancelButtonText: __('cancel'),
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
-                didOpen: () => {
-                    // Character counter
-                    $('#approval_comment').on('input', function() {
-                        $('#char-count').text($(this).val().length);
-                    });
-                },
-                willClose: (result) => {
-                    // Show custom loader when confirmed
-                    if (result.isConfirmed) {
+                
+                let formData = new FormData();
+                formData.append('ajaxType', 'approve_loan');
+                formData.append('loan_id', loanId);
+                formData.append('approver_role', role);
+                formData.append('approval_comment', comment);
+                formData.append('payer_type', payerType);
+                
+                const currentEmpId = (typeof window.currentEmpId !== 'undefined' ? window.currentEmpId : currentUserId);
+                const payerId = payerType === 'self' ? currentEmpId : approvalData.payerSelect;
+                formData.append('payer_emp_id', payerId);
+                
+                if (approvalData.approvedAmount && approvalData.approvedAmount > 0) {
+                    formData.append('approved_amount', approvalData.approvedAmount);
+                }
+                
+                if (paymentProofFile) {
+                    formData.append('payment_proof', paymentProofFile);
+                }
+                
+                $.ajax({
+                    url: './includes/ajaxFile/ajaxLoan.php',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            Swal.fire({
+                                title: response.title || __('success'), 
+                                text: response.message || __('loan_approved'), 
+                                icon: response.type || 'success',
+                                confirmButtonText: __('ok'),
+                                confirmButtonColor: '#28a745',
+                                allowOutsideClick: false
+                            }).then(() => location.reload());
+                        } else {
+                            Swal.fire({
+                                title: response.title || __('error'),
+                                text: response.message || __('failed_approve_loan'),
+                                icon: response.type || 'error',
+                                allowOutsideClick: false,
+                                confirmButtonText: __('ok'),
+                                confirmButtonColor: '#dc3545'
+                            });
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Approval error:', xhr.responseText);
                         Swal.fire({
-                            title: __('processing'),
-                            html: __('assigning_payer_and_sending_notifications') || 'Assigning payer and sending notification emails...',
-                            icon: 'info',
+                            title: __('error'),
+                            text: __('failed_approve_loan') + ': ' + error,
+                            icon: 'error',
                             allowOutsideClick: false,
-                            allowEscapeKey: false,
-                            didOpen: () => {
-                                Swal.showLoading();
-                            }
+                            confirmButtonText: __('ok'),
+                            confirmButtonColor: '#dc3545'
                         });
                     }
-                },
-                preConfirm: () => {
-                    const payerEmpId = document.getElementById('payer_emp_id').value;
-                    const approvalComment = document.getElementById('approval_comment').value.trim();
-
-                    if (!payerEmpId) {
-                        Swal.showValidationMessage(__('payer_required') || 'Please select who will process the payment');
-                        return false;
-                    }
-
-                    // Approval comment is optional - no validation required
-
-                    return $.ajax({
-                        url: './includes/ajaxFile/ajaxLoan.php',
-                        type: 'POST',
-                        data: {
-                            ajaxType: 'approve_loan',
-                            loan_id: loanId,
-                            approver_role: role,
-                            payer_emp_id: payerEmpId,
-                            approval_comment: approvalComment
-                        },
-                        dataType: 'JSON',
-                    })
-                    .fail(function(jqXHR, textStatus) {
-                        const error = handleAjaxFailure(jqXHR, textStatus);
-                        Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
-                    });
-                }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const response = result.value;
-                    Swal.fire({
-                        title: response.title,
-                        text: response.message,
-                        icon: response.type,
-                        allowOutsideClick: false
-                    }).then(() => {
-                        if (response.status === 'success') {
-                            location.reload();
-                        }
-                    });
-                }
-            });
-        }).fail(function() {
-            Swal.fire({
-                title: __('error_title'),
-                text: __('failed_to_load_payer_list') || 'Failed to load payer list',
-                icon: 'error'
-            });
+                });
+            }
         });
     } else {
         // Normal approval for other levels

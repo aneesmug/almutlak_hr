@@ -828,7 +828,7 @@ function approve_loan() {
             $final_status = 'fully_approved';
             $note_final = 'Loan fully approved - all levels completed';
             $hist_final = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, ?)");
-            $hist_final->bind_param("ssss", $inv_no, $approver_emp_id, $note_final, $final_status);
+            $hist_final->bind_param("siss", $inv_no, $approver_emp_id, $note_final, $final_status);
             $hist_final->execute();
             $hist_final->close();
             
@@ -899,7 +899,7 @@ function approve_loan() {
 
             // --- ADD MONTHLY INSTALLMENT DEDUCTION IMMEDIATELY AFTER GM APPROVAL ---
             // Only add if not already present (idempotent)
-            $loan_stmt = $conDB->prepare("SELECT emp_id, inv_no, loan_amount, installments, deduction_start_date FROM emp_loan WHERE id = ? LIMIT 1");
+            $loan_stmt = $conDB->prepare("SELECT emp_id, inv_no, loan_amount, installments, start_date FROM emp_loan WHERE id = ? LIMIT 1");
             $loan_stmt->bind_param("i", $loan_id);
             $loan_stmt->execute();
             $loan_result = $loan_stmt->get_result();
@@ -910,7 +910,7 @@ function approve_loan() {
                 $inv_no = $loan['inv_no'];
                 $loan_amount = floatval($loan['loan_amount']);
                 $installments = intval($loan['installments']);
-                $start_date = $loan['deduction_start_date'];
+                $start_date = $loan['start_date'];
                 $deduction_label = 'Loan Installment';
                 if ($installments > 0) {
                     $monthly_amount = round($loan_amount / $installments, 2);

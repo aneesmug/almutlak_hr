@@ -606,6 +606,20 @@ if ($canSeeAllDepts) {
                                                         <div class="detail-item"><i class="fad fa-file-invoice"></i><strong><?= __('settlement_id') ?>:</strong> <?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES); ?></div>
                                                         <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <span class="badge badge-success" style="font-size: 0.95em; padding: 0.5rem 0.75rem;">SAR <?= number_format(round($payableAmount), 2); ?></span></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-alt"></i><strong><?= __('created') ?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($settlement['created_at'])), ENT_QUOTES); ?></div>
+                                                        <?php if (!empty($settlement['attachment_path'])): 
+                                                            // Decode JSON array of attachments
+                                                            $attachments = json_decode($settlement['attachment_path'], true);
+                                                            if (!is_array($attachments)) {
+                                                                // Fallback for old single file format
+                                                                $attachments = [$settlement['attachment_path']];
+                                                            }
+                                                        ?>
+                                                        <div class="detail-item"><i class="fad fa-paperclip"></i><strong><?= __('attachments') ?> (<?= count($attachments) ?>):</strong> 
+                                                            <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")' style="padding: 4px 12px; font-size: 0.85em; font-weight: 500;">
+                                                                <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
+                                                            </button>
+                                                        </div>
+                                                        <?php endif; ?>
                                                         <div class="detail-item">
                                                             <i class="fad fa-tasks"></i>
                                                             <strong><?= __('status') ?>:</strong>
@@ -708,10 +722,10 @@ if ($canSeeAllDepts) {
 
     <!-- Scripts -->
     <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
-    <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>

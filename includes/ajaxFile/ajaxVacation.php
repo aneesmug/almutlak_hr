@@ -1084,7 +1084,7 @@ elseif ($ajaxType == 'applyVacation') {
         $end_date_esc = mysqli_real_escape_string($conDB, $end_date);
         $notes_esc = mysqli_real_escape_string($conDB, $notes ?? '');
         $vacation_salary_type_esc = mysqli_real_escape_string($conDB, $vacation_salary_type ?? '');
-        $attachment_path_esc = $attachment_path ? mysqli_real_escape_string($conDB, $attachment_path) : '';
+        $attachment_path_sql = $attachment_path ? "'" . mysqli_real_escape_string($conDB, $attachment_path) . "'" : 'NULL';
         $request_inv_no_esc = mysqli_real_escape_string($conDB, $request_inv_no);
 
         // Determine is_deductible flag
@@ -1104,7 +1104,7 @@ elseif ($ajaxType == 'applyVacation') {
         $sql = "INSERT INTO `emp_vacation` 
                     (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`,`review`) 
                 VALUES 
-                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', '$attachment_path_esc', $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
+                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', $attachment_path_sql, $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
 
         if (!mysqli_query($conDB, $sql)) {
 

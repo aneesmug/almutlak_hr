@@ -677,14 +677,9 @@ if ($can_see_all_depts) {
                                                             <div class="detail-item">
                                                                 <i class="fad fa-paperclip duotone-info"></i>
                                                                 <strong><?= __('attachments') ?> (<?= count($attachments) ?>):</strong>
-                                                                <div style="margin-inline-start: 20px; margin-top: 5px; direction: inherit;">
-                                                                    <?php foreach ($attachments as $index => $attachment): ?>
-                                                                        <a href="<?= htmlspecialchars($attachment); ?>" target="_blank" class="font-weight-bold text-info" style="display: block; margin-bottom: 5px; direction: ltr; text-align: start;">
-                                                                            <i class="fa fa-file-<?= pathinfo($attachment, PATHINFO_EXTENSION) === 'pdf' ? 'pdf' : 'image' ?>"></i>
-                                                                            <?= __('document') ?> <?= $index + 1 ?>
-                                                                        </a>
-                                                                    <?php endforeach; ?>
-                                                                </div>
+                                                                <button type="button" class="btn btn-info btn-sm ml-2" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")'>
+                                                                    <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
+                                                                </button>
                                                             </div>
                                                         <?php endif; ?>
 

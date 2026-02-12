@@ -52,7 +52,7 @@ if (mysqli_num_rows($query) == 1) {
                 approver_emp.name as rejection_approver_name
             FROM emp_loan l
             JOIN employees e ON l.emp_id = e.emp_id
-            LEFT JOIN bank_list bl ON e.bank_name = bl.id
+            LEFT JOIN bank_list bl ON e.bank_name = bl.bnk_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN section s ON e.sectin_nme = s.id
             LEFT JOIN countries c ON e.country = c.id

@@ -1,0 +1,11 @@
+# ============================================================================
+# BASIC SECURITY CONFIGURATION
+# ============================================================================
+
+# Disable directory listing - no one can see folder contents
+Options -Indexes
+
+# Custom error messages
+ErrorDocument 403 /error403.php
+ErrorDocument 404 /error404.php
+ErrorDocument 500 /error500.php

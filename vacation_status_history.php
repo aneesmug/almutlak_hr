@@ -1,9 +1,12 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 if (file_exists(__DIR__ . '/includes/functions.php')) {
     require_once __DIR__ . '/includes/functions.php';
 }
+
+// Load translations
+$current_lang = $_SESSION['lang'] ?? 'en';
+load_language($current_lang);
 
 // Restrict access: Employees cannot view this detailed report page
 if (isset($isEmployee) && $isEmployee === true) {
@@ -207,9 +210,7 @@ if ($vacation['fly_type'] === 'annual') {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="shortcut icon" href="<?= function_exists('get_setting') ? (get_setting($conDB, 'favicon') ?? 'assets/images/favicon.ico') : 'assets/images/favicon.ico' ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body { background-color: #f8f9fa; }
@@ -321,13 +322,9 @@ if ($vacation['fly_type'] === 'annual') {
                     <div class="info-row">
                         <div class="info-label"><i class="fas fa-paperclip"></i> <?= __('attachments') ?> (<?= count($attachments) ?>):</div>
                         <div class="info-value">
-                            <?php foreach ($attachments as $index => $attachment): ?>
-                                <a href="<?= htmlspecialchars($attachment) ?>" target="_blank" class="attachment-link" style="margin-bottom: 8px; display: inline-flex;">
-                                    <i class="fas fa-file-<?= pathinfo($attachment, PATHINFO_EXTENSION) === 'pdf' ? 'pdf' : 'image' ?>"></i> 
-                                    <?= __('document') ?> <?= $index + 1 ?>
-                                </a>
-                                <?php if ($index < count($attachments) - 1): ?>&nbsp;&nbsp;<?php endif; ?>
-                            <?php endforeach; ?>
+                            <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")' style="padding: 6px 16px; font-weight: 500;">
+                                <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
+                            </button>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -584,7 +581,9 @@ if ($vacation['fly_type'] === 'annual') {
     </div>
 
     <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/jquery.app.js"></script>
 </body>
 </html>
 <?php $conDB->close(); ?>

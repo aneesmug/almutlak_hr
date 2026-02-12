@@ -1,0 +1,32 @@
+# Deny all direct access to this directory
+# Files can only be accessed through the application
+
+# Disable directory listing
+Options -Indexes
+
+# Deny all direct file access
+<FilesMatch ".*">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Alternative method: Block all requests except from your domain
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Block direct file requests
+    RewriteRule ^(.*)$ - [F,L]
+</IfModule>
+
+# Additional security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# Prevent access via referrer
+<IfModule mod_setenvif.c>
+    SetEnvIf Request_URI "." BLOCKDIRECT=1
+    Order allow,deny
+    Allow from env=!BLOCKDIRECT
+</IfModule>

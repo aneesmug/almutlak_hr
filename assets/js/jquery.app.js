@@ -8557,7 +8557,9 @@ function round(value, decimals) {
 
     function initMetisMenu() {
         //metis menu
-        $("#side-menu").metisMenu();
+        if ($("#side-menu").length && typeof jQuery.fn.metisMenu === 'function') {
+            $("#side-menu").metisMenu();
+        }
     }
 
     function initLeftMenuCollapse() {
@@ -10186,20 +10188,36 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     downloadProofButton = `<a href="./${proofPath}" target="_blank" class="btn btn-sm btn-primary" style="margin-top: 10px; margin-${marginDir}: 5px;"><i class="fa fa-download"></i> ${buttonText}</a>`;
                 }
                 
-                // Build settlement attachments
+                // Build settlement attachments - use showAttachmentsModal for unified view
                 let attachmentsHtml = '';
                 const attachments = (response.data && response.data.attachments) ? response.data.attachments : [];
                 if (attachments.length > 0) {
-                    const marginDir = isRtl ? 'right' : 'left';
-                    attachmentsHtml = '<br><h6 style="margin-top: 15px; color: #333; font-weight: 600;">📎 ' + __('attachments') + ':</h6>';
-                    attachments.forEach((att) => {
-                        const fileName = htmlspecialcharsJs(att.file_name || att.original_name || 'file');
-                        const fileSize = formatFileSize(att.file_size || 0);
-                        const isPdf = /\.pdf$/i.test(att.file_name || '');
-                        const isImage = /\.(jpg|jpeg)$/i.test(att.file_name || '');
-                        const icon = isPdf ? 'fa-file-pdf text-danger' : isImage ? 'fa-image text-info' : 'fa-file';
-                        attachmentsHtml += '<a href="download_settlement_attachment.php?id=' + att.id + '" target="_blank" class="btn btn-sm btn-outline-primary" style="margin-top: 8px; margin-' + marginDir + ': 5px;"><i class="fa ' + icon + '"></i> ' + fileName + ' (' + fileSize + ')</a>';
-                    });
+                    // Convert attachment objects to properly formatted file URLs
+                    // Settlement attachments have structure: {id, file_path, file_name, uploaded_at, ...}
+                    const attachmentPaths = attachments.map(att => {
+                        if (!att || !att.file_path) return '';
+                        
+                        let filePath = att.file_path;
+                        
+                        // If file_path doesn't contain slashes, it needs date-based path construction
+                        if (filePath.indexOf('/') === -1 && att.uploaded_at) {
+                            const uploadDate = new Date(att.uploaded_at);
+                            const year = uploadDate.getFullYear();
+                            const month = String(uploadDate.getMonth() + 1).padStart(2, '0');
+                            filePath = 'uploads/settlement_attachments/' + year + '/' + month + '/' + filePath;
+                        } else if (filePath.indexOf('/') === -1) {
+                            // Fallback if no date available
+                            filePath = 'uploads/settlement_attachments/' + filePath;
+                        }
+                        
+                        return filePath;
+                    }).filter(path => path.length > 0);
+                    
+                    if (attachmentPaths.length > 0) {
+                        const attachmentPathsJson = JSON.stringify(attachmentPaths).replace(/"/g, '&quot;');
+                        attachmentsHtml = '<br><h6 style="margin-top: 15px; color: #333; font-weight: 600;">📎 ' + __('attachments') + ' (' + attachmentPaths.length + '):</h6>';
+                        attachmentsHtml += '<button type="button" class="btn btn-sm btn-primary" onclick="showAttachmentsModal(' + attachmentPathsJson + ', &quot;' + __('attachments') + '&quot;)" style="margin-top: 8px;"><i class="fa fa-eye"></i> ' + __('view_attachments') + '</button>';
+                    }
                 }
                 
                 let historyHtml = '<div style="margin-top: 15px;">' + reportLink + downloadProofButton + attachmentsHtml + '</div>';
@@ -10236,6 +10254,212 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
             console.error('AJAX Error:', status, error);
             console.error('Response:', xhr.responseText);
             Swal.fire(__('error'), __('failed_to_load_settlement_details') + ': ' + error, 'error');
+        }
+    });
+}
+
+/**
+ * REUSABLE FINANCE MANAGER APPROVAL MODAL
+ * Used for both Loan and Settlement approvals
+ * Allows Finance Manager to select self or another employee to process payment
+ * 
+ * @param {number} requestId - Loan or Settlement ID
+ * @param {string} requestType - 'loan' or 'settlement'
+ * @param {number} requestedAmount - Amount to be approved
+ * @param {object} options - Configuration options {ajaxEndpoint, onApprove, additionalParams}
+ */
+function openFinanceManagerApprovalModal(requestId, requestType, requestedAmount, options = {}) {
+    const {
+        ajaxEndpoint = './includes/ajaxFile/ajaxLoan.php',
+        onApprove = null,
+        additionalParams = {}
+    } = options;
+    
+    // Fetch finance staff
+    $.ajax({
+        url: ajaxEndpoint,
+        type: 'POST',
+        dataType: 'JSON',
+        data: { ajaxType: 'get_finance_staff' },
+        success: function(staffResponse) {
+            const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
+            const modalId = `financeApprovalModal_${requestType}_${requestId}`;
+            
+            let formHtml = `<div style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
+                <div class="form-group">
+                    <label>` + __('approval_comment') + `:</label>
+                    <textarea id="approvalComment_${modalId}" class="form-control" placeholder="` + __('add_approval_comment') + `" rows="3"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label style="color: #dc3545;">` + __('select_payer') + `: <span style="color: red;">*</span></label>
+                    <div style="margin: 10px 0;">
+                        <label style="display: block; margin: 8px 0;">
+                            <input type="radio" name="payerType_${modalId}" value="self" checked> ` + __('myself') + `
+                        </label>
+                        <label style="display: block; margin: 8px 0;">
+                            <input type="radio" name="payerType_${modalId}" value="other"> ` + __('other_finance_employee') + `
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group" id="otherPayerGroup_${modalId}" style="display: none;">
+                    <label style="color: #dc3545;">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
+                    <select id="payerSelect_${modalId}" class="form-control form-control-lg select2-hidden-accessible" style="width: 100%;" required>
+                        <option value="">` + __('select_finance_employee') + `</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="approvedAmountGroup_${modalId}" style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
+                    <label style="color: #dc3545;">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
+                    <input type="number" id="approvedAmount_${modalId}" class="form-control" step="0.01" value="${parseFloat(requestedAmount).toFixed(2)}" required>
+                    <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(requestedAmount).toFixed(2)}</small>
+                    <div id="amountError_${modalId}" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match exactly</div>
+                </div>
+                
+                <div class="form-group" id="paymentProofGroup_${modalId}">
+                    <label style="color: #dc3545;">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
+                    <input type="file" id="paymentProof_${modalId}" class="form-control-file" accept="image/*,application/pdf">
+                    <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
+                </div>
+            </div>`;
+            
+            Swal.fire({
+                title: __('approve_' + requestType),
+                html: formHtml,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: __('approve'),
+                confirmButtonColor: '#28a745',
+                cancelButtonText: __('cancel'),
+                allowOutsideClick: false,
+                preConfirm: () => {
+                    const swalContainer = Swal.getHtmlContainer();
+                    const comment = document.getElementById(`approvalComment_${modalId}`).value;
+                    let payerType = null;
+                    let payerSelect = null;
+                    let paymentProofFile = null;
+                    let approvedAmount = null;
+                    
+                    // Collect payer type
+                    const payerTypeElem = document.querySelector(`input[name="payerType_${modalId}"]:checked`);
+                    payerType = payerTypeElem ? payerTypeElem.value : 'self';
+                    
+                    if (payerType === 'other') {
+                        const payerSelectElem = document.getElementById(`payerSelect_${modalId}`);
+                        payerSelect = payerSelectElem ? payerSelectElem.value : null;
+                        if (!payerSelect) {
+                            Swal.showValidationMessage(__('select_finance_employee') || 'Please select a finance employee');
+                            return false;
+                        }
+                    }
+                    
+                    // Collect approved amount and payment proof
+                    const approvedAmountElem = document.getElementById(`approvedAmount_${modalId}`);
+                    if (approvedAmountElem) {
+                        approvedAmount = parseFloat(approvedAmountElem.value || 0);
+                    }
+                    
+                    const paymentProofInput = swalContainer ? swalContainer.querySelector(`#paymentProof_${modalId}`) : null;
+                    if (paymentProofInput && paymentProofInput.files && paymentProofInput.files[0]) {
+                        paymentProofFile = paymentProofInput.files[0];
+                    }
+                    
+                    // Only validate amount and payment proof if paying myself
+                    if (payerType === 'self') {
+                        if (!approvedAmount || approvedAmount <= 0) {
+                            Swal.showValidationMessage(__('approved_amount_required') || 'Approved amount is required');
+                            return false;
+                        }
+                        
+                        if (Math.abs(approvedAmount - parseFloat(requestedAmount)) > 0.01) {
+                            Swal.showValidationMessage(__('amount_must_match_approved') || 'Amount must match exactly');
+                            return false;
+                        }
+                        
+                        if (!paymentProofFile) {
+                            Swal.showValidationMessage(__('payment_proof_document_is_required') || 'Payment proof is required');
+                            return false;
+                        }
+                    }
+                    
+                    return { 
+                        comment, 
+                        payerType, 
+                        payerSelect, 
+                        paymentProofFile,
+                        approvedAmount
+                    };
+                },
+                didOpen: () => {
+                    // Populate Select2 with finance employees
+                    setTimeout(() => {
+                        if (staffResponse.status === 'success' && staffResponse.staff) {
+                            $('#payerSelect_' + modalId).find('option:not(:first)').remove();
+                            staffResponse.staff.forEach(emp => {
+                                $(`#payerSelect_${modalId}`).append(`<option value="${emp.emp_id}">${emp.name} (${emp.emp_id})</option>`);
+                            });
+                            
+                            if ($('#payerSelect_' + modalId).data('select2')) {
+                                $('#payerSelect_' + modalId).select2('destroy');
+                            }
+                            
+                            $('#payerSelect_' + modalId).select2({
+                                placeholder: __('select_finance_employee'),
+                                allowClear: true,
+                                width: '100%'
+                            });
+                            
+                            $('.select2-container').css({
+                                'position': 'relative',
+                                'z-index': '9999'
+                            });
+                        }
+                    }, 150);
+                    
+                    // Handle payer type change
+                    $(`input[name="payerType_${modalId}"]`).on('change', function() {
+                        if ($(this).val() === 'other') {
+                            $(`#otherPayerGroup_${modalId}`).show();
+                            $(`#approvedAmountGroup_${modalId}`).hide();
+                            $(`#paymentProofGroup_${modalId}`).hide();
+                            setTimeout(() => {
+                                $(`#payerSelect_${modalId}`).select2('open');
+                                $(`#payerSelect_${modalId}`).select2('close');
+                            }, 100);
+                        } else {
+                            $(`#otherPayerGroup_${modalId}`).hide();
+                            $(`#approvedAmountGroup_${modalId}`).show();
+                            $(`#paymentProofGroup_${modalId}`).show();
+                        }
+                    });
+                    
+                    // Validate amount on input
+                    $(`#approvedAmount_${modalId}`).on('input', function() {
+                        const enteredAmt = parseFloat($(this).val() || 0);
+                        if (Math.abs(enteredAmt - parseFloat(requestedAmount)) > 0.01) {
+                            $(`#amountError_${modalId}`).show();
+                            $('.swal2-confirm').prop('disabled', true);
+                        } else {
+                            $(`#amountError_${modalId}`).hide();
+                            $('.swal2-confirm').prop('disabled', false);
+                        }
+                    });
+                }
+            }).then((result) => {
+                if (result.isConfirmed && typeof onApprove === 'function') {
+                    onApprove(result.value, additionalParams);
+                }
+            });
+        },
+        error: function() {
+            Swal.fire({
+                title: __('error_title') || 'Error',
+                text: __('failed_to_load_payer_list') || 'Failed to load finance staff list.',
+                icon: 'error',
+                allowOutsideClick: false,
+                confirmButtonColor: '#dc3545'
+            });
         }
     });
 }
@@ -10808,3 +11032,799 @@ window.copyToClipboard = function(text, iconElement) {
     
     document.body.removeChild(textArea);
 };
+
+
+// Global state to track previous modal (for restoring attachments modal after file viewer closes)
+if (!window.modalState) {
+    window.modalState = {
+        previousAttachments: null,
+        previousTitle: null,
+        isRestoring: false  // Prevent recursion during modal restoration
+    };
+}
+
+/**
+ * Show a SweetAlert2 modal with attachment thumbnails (including PDF previews).
+ * @param {Array} attachments - Array of file URLs.
+ * @param {string} [title] - Optional modal title.
+ */
+function showAttachmentsModal(attachments, title) {
+    if (!Array.isArray(attachments) || attachments.length === 0) {
+        Swal.fire({
+            icon: 'info',
+            title: __('no_attachments') || 'No Attachments',
+            text: __('no_attachments_found') || 'No attachments found for this record.',
+            allowOutsideClick: false,
+            confirmButtonText: __('ok'),
+        });
+        return;
+    }
+    
+    // Save current modal state so we can restore it when file viewer closes
+    // Only save if not currently restoring (to prevent infinite loops)
+    if (!window.modalState.isRestoring) {
+        window.modalState.previousAttachments = attachments;
+        window.modalState.previousTitle = title;
+    }
+    
+    // Load PDF.js library if not already loaded
+    if (typeof pdfjsLib === 'undefined') {
+        const pdfScript = document.createElement('script');
+        pdfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        pdfScript.onload = function() {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            renderAttachmentsModal(attachments, title);
+        };
+        document.head.appendChild(pdfScript);
+    } else {
+        renderAttachmentsModal(attachments, title);
+    }
+}
+
+/**
+ * Helper function to render the attachments modal with grid and detail view
+ */
+function renderAttachmentsModal(attachments, title) {
+    let currentIndex = -1; // -1 means showing grid, >= 0 means viewing specific attachment
+    
+    function renderGridView() {
+        let html = '<div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:flex-start;">';
+        attachments.forEach(function(att, idx) {
+            let ext = att.split('.').pop().toLowerCase();
+            let isPdf = ext === 'pdf';
+            let isImg = ['jpg','jpeg','png','gif','bmp','webp'].includes(ext);
+            let safeUrl = encodeURI(att).replace(/"/g, '&quot;');
+            
+            let thumb;
+            if (isPdf) {
+                thumb = `<canvas id="pdf-canvas-${idx}" class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;border-radius:8px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;transition:transform 0.2s;background:#f9f9f9;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"></canvas>`;
+            } else if (isImg) {
+                thumb = `<img src="${att}" alt="Attachment ${idx+1}" class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">`;
+            } else {
+                thumb = `<div class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;font-size:2.5em;color:#007bff;transition:transform 0.2s;user-select:none;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><i class="fa fa-file-alt"></i></div>`;
+            }
+            html += `<div style="text-align:center;">${thumb}<div style="font-size:0.9em;margin-top:4px;">${__('document')} ${idx+1}</div></div>`;
+        });
+        html += '</div>';
+        
+        Swal.update({ html: html });
+        
+        // Render PDF thumbnails
+        attachments.forEach(function(att, idx) {
+            let ext = att.split('.').pop().toLowerCase();
+            if (ext === 'pdf') {
+                renderPdfThumbnail(att, `pdf-canvas-${idx}`);
+            }
+        });
+        
+        // Attach click handler to all attachment thumbnails
+        document.querySelectorAll('.attachment-thumb').forEach(function(el) {
+            el.addEventListener('click', function() {
+                let idx = parseInt(this.getAttribute('data-idx'));
+                if (!isNaN(idx)) {
+                    renderDetailView(idx);
+                }
+            });
+        });
+    }
+    
+    function renderDetailView(index) {
+        currentIndex = index;
+        let att = attachments[index];
+        let ext = att.split('.').pop().toLowerCase();
+        let isPdf = ext === 'pdf';
+        let isImg = ['jpg','jpeg','png','gif','bmp','webp'].includes(ext);
+        
+        let preview;
+        if (isPdf) {
+            preview = `<div style="width:100%;max-height:500px;display:flex;justify-content:center;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:10px;">
+                <canvas id="att-pdf-canvas" style="max-width:100%;max-height:100%;border-radius:4px;"></canvas>
+            </div>`;
+        } else if (isImg) {
+            preview = `<div style="width:100%;display:flex;justify-content:center;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:10px;">
+                <img src="${att}" alt="Attachment ${index+1}" style="max-width:100%;max-height:500px;border-radius:4px;">
+            </div>`;
+        } else {
+            preview = `<div style="width:100%;height:300px;display:flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;border:1px solid #ccc;font-size:3em;color:#007bff;user-select:none;">
+                <i class="fa fa-file-alt"></i>
+            </div>`;
+        }
+        
+        let html = `
+            <div style="display:flex;flex-direction:column;gap:15px;align-items:center;">
+                <div style="width:100%;">
+                    ${preview}
+                </div>
+                <div style="width:100%;text-align:center;font-weight:bold;color:#666;">
+                    ${__('document')} ${index+1} ${__('of')} ${attachments.length}
+                </div>
+                <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                    <button type="button" id="att-back-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
+                        <i class="fa fa-arrow-left"></i> Back to Grid
+                    </button>
+                    <button type="button" id="att-prev-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
+                        <i class="fa fa-chevron-left"></i> Previous
+                    </button>
+                    <button type="button" id="att-next-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
+                        Next <i class="fa fa-chevron-right"></i>
+                    </button>
+                    <button type="button" id="att-open-fullscreen-btn" class="btn btn-sm btn-info" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
+                        <i class="fa fa-expand"></i> Fullscreen
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        Swal.update({ html: html });
+        
+        // Re-attach event listeners
+        let backBtn = document.getElementById('att-back-btn');
+        let prevBtn = document.getElementById('att-prev-btn');
+        let nextBtn = document.getElementById('att-next-btn');
+        let fullscreenBtn = document.getElementById('att-open-fullscreen-btn');
+        
+        // Update button states
+        prevBtn.disabled = index === 0;
+        nextBtn.disabled = index === attachments.length - 1;
+        
+        // Back button - return to grid
+        backBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentIndex = -1;
+            renderGridView();
+        });
+        
+        // Previous button
+        prevBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (index > 0) {
+                renderDetailView(index - 1);
+            }
+        });
+        
+        // Next button
+        nextBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (index < attachments.length - 1) {
+                renderDetailView(index + 1);
+            }
+        });
+        
+        // Fullscreen button (zoom popup)
+        fullscreenBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            viewFileInPopup(att, 'Attachment ' + (index + 1));
+        });
+        
+        // Render PDF if applicable
+        if (isPdf) {
+            renderPdfThumbnail(att, 'att-pdf-canvas');
+        }
+    }
+    
+    Swal.fire({
+        title: title || __('attachments') || 'Attachments',
+        html: '<div style="text-align:center;">Loading...</div>',
+        width: 'auto',
+        maxWidth: '90vw',
+        showCloseButton: true,
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        didOpen: function() {
+            // Show grid view first
+            renderGridView();
+        }
+    });
+}
+
+/**
+ * View file (image or PDF) in a popup modal on the same page
+ * Supports images (JPG, PNG, GIF, etc.) and PDF files
+ * @param {string} fileUrl - URL of the file to display
+ * @param {string} [fileName] - Optional filename for display
+ */
+function viewFileInPopup(fileUrl, fileName) {
+    if (!fileUrl) {
+        Swal.fire({
+            icon: 'error',
+            title: __('error'),
+            text: __('file_not_exist_in_local_storage') || 'File not exist in local storage.',
+            confirmButtonText: __('ok'),
+        });
+        return;
+    }
+
+    let ext = fileUrl.split('.').pop().toLowerCase();
+    let isPdf = ext === 'pdf';
+    let isImg = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
+
+    if (isImg) {
+        // Display image in popup with zoom controls and rotation
+        let imageName = fileName || 'Image';
+        let zoomKey = 'img_' + Date.now();
+        let zoomState = {
+            scale: 1,
+            rotation: 0  // Track rotation in degrees (0, 90, 180, 270)
+        };
+        window.imageZoomState = window.imageZoomState || {};
+        window.imageZoomState[zoomKey] = zoomState;
+
+        let html = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:10px;">
+                <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                    <button type="button" class="btn btn-sm btn-info" id="zoom-out-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
+                        <i class="fa fa-search-minus"></i> Zoom Out
+                    </button>
+                    <span style="font-weight:bold;min-width:80px;text-align:center;font-size:14px;">
+                        <span id="zoom-level-${zoomKey}">100</span>%
+                    </span>
+                    <button type="button" class="btn btn-sm btn-info" id="zoom-in-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
+                        <i class="fa fa-search-plus"></i> Zoom In
+                    </button>
+                    <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#ffc107;color:black;border:none;">
+                        <i class="fa fa-undo"></i> Reset
+                    </button>
+                    <button type="button" class="btn btn-sm btn-success" id="rotate-ltr-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#28a745;color:white;border:none;">
+                        <i class="fa fa-rotate-left"></i> Rotate LTR
+                    </button>
+                    <button type="button" class="btn btn-sm btn-success" id="rotate-rtl-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#28a745;color:white;border:none;">
+                        <i class="fa fa-rotate-right"></i> Rotate RTL
+                    </button>
+                </div>
+                <div id="img-container-${zoomKey}" style="width:100%;max-height:60vh;overflow:auto;display:flex;justify-content:center;align-items:flex-start;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:10px;cursor:grab;">
+                    <img id="zoom-img-${zoomKey}" src="${fileUrl}" alt="${imageName}" style="border-radius:8px;transition:transform 0.2s ease;transform:scale(1);user-select:none;max-width:100%;max-height:100%;object-fit:contain;">
+                </div>
+            </div>
+        `;
+
+        Swal.fire({
+            title: imageName,
+            html: html,
+            width: 'auto',
+            maxWidth: '90vw',
+            showCloseButton: true,
+            showConfirmButton: false,
+            allowOutsideClick: true,
+            didOpen: function() {
+                let img = document.getElementById('zoom-img-' + zoomKey);
+                let initialWidth = 400; // Default minimum width
+                let maxViewportWidth = window.innerWidth * 0.9;
+                
+                // Calculate dynamic width based on image dimensions
+                img.onload = function() {
+                    let naturalWidth = img.naturalWidth || img.width;
+                    let naturalHeight = img.naturalHeight || img.height;
+                    let maxViewportHeight = window.innerHeight * 0.8;
+                    
+                    // Calculate aspect ratio
+                    let aspectRatio = naturalWidth / naturalHeight;
+                    let calculatedWidth = naturalWidth;
+                    
+                    // If image exceeds viewport, scale it down
+                    if (naturalWidth > maxViewportWidth) {
+                        calculatedWidth = maxViewportWidth;
+                    }
+                    if (naturalHeight > maxViewportHeight) {
+                        calculatedWidth = maxViewportHeight * aspectRatio;
+                    }
+                    
+                    // Set initial width (but not less than 400px)
+                    initialWidth = Math.max(calculatedWidth, 400);
+                    Swal.update({
+                        width: initialWidth
+                    });
+                    // Update zoom after width is set
+                    setTimeout(function() {
+                        updateZoom();
+                    }, 50);
+                };
+                // Trigger load event if already cached
+                if (img.complete) {
+                    img.onload();
+                }
+                let container = document.getElementById('img-container-' + zoomKey);
+                let zoomOutBtn = document.getElementById('zoom-out-' + zoomKey);
+                let zoomInBtn = document.getElementById('zoom-in-' + zoomKey);
+                let zoomResetBtn = document.getElementById('zoom-reset-' + zoomKey);
+                let zoomLevelSpan = document.getElementById('zoom-level-' + zoomKey);
+
+                let isDragging = false;
+                let startX, startY, scrollLeft, scrollTop;
+
+                function updateZoom() {
+                    // Always refetch the image element to ensure we have the current reference
+                    let currentImg = document.getElementById('zoom-img-' + zoomKey);
+                    
+                    if (currentImg) {
+                        currentImg.style.transform = 'scale(' + zoomState.scale + ') rotate(' + zoomState.rotation + 'deg)';
+                    }
+                    
+                    // Refetch and update zoom level span
+                    let currentZoomLevelSpan = document.getElementById('zoom-level-' + zoomKey);
+                    if (currentZoomLevelSpan) {
+                        currentZoomLevelSpan.textContent = Math.round(zoomState.scale * 100);
+                    }
+                    
+                    // Update modal width based on zoom using CSS on the Swal container
+                    setTimeout(function() {
+                        let newWidth = Math.round(initialWidth * zoomState.scale);
+                        let maxWidth = window.innerWidth * 0.9;
+                        newWidth = Math.min(newWidth, maxWidth);
+                        newWidth = Math.max(newWidth, 300);
+                        
+                        let swalPopup = document.querySelector('.swal2-container .swal2-popup');
+                        if (swalPopup) {
+                            swalPopup.style.width = newWidth + 'px';
+                        }
+                    }, 0);
+                    
+                    // Refetch and update buttons
+                    let currentZoomOutBtn = document.getElementById('zoom-out-' + zoomKey);
+                    let currentZoomInBtn = document.getElementById('zoom-in-' + zoomKey);
+                    
+                    if (currentZoomOutBtn) {
+                        currentZoomOutBtn.disabled = zoomState.scale <= 0.5;
+                    }
+                    if (currentZoomInBtn) {
+                        currentZoomInBtn.disabled = zoomState.scale >= 3;
+                    }
+                    
+                    // Change cursor based on zoom level
+                    if (container) {
+                        if (zoomState.scale > 1) {
+                            container.style.cursor = 'grab';
+                        } else {
+                            container.style.cursor = 'default';
+                        }
+                    }
+                }
+
+                // Drag functionality for zoomed images
+                container.addEventListener('mousedown', function(e) {
+                    if (zoomState.scale <= 1) return;  // Only allow drag when zoomed in
+                    isDragging = true;
+                    startX = e.pageX - container.offsetLeft;
+                    startY = e.pageY - container.offsetTop;
+                    scrollLeft = container.scrollLeft;
+                    scrollTop = container.scrollTop;
+                    container.style.cursor = 'grabbing';
+                });
+
+                document.addEventListener('mousemove', function(e) {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    let x = e.pageX - container.offsetLeft;
+                    let y = e.pageY - container.offsetTop;
+                    let walkX = (x - startX);
+                    let walkY = (y - startY);
+                    container.scrollLeft = scrollLeft - walkX;
+                    container.scrollTop = scrollTop - walkY;
+                });
+
+                document.addEventListener('mouseup', function() {
+                    isDragging = false;
+                    if (zoomState.scale > 1) {
+                        container.style.cursor = 'grab';
+                    } else {
+                        container.style.cursor = 'default';
+                    }
+                });
+
+                // Use event delegation - attach to document for click events
+                document.addEventListener('click', function(e) {
+                    // Check if click target is one of the zoom buttons
+                    if (e.target && e.target.id === 'zoom-in-' + zoomKey) {
+                        if (zoomState.scale < 3) {
+                            zoomState.scale = Math.min(zoomState.scale + 0.2, 3);
+                            updateZoom();
+                        }
+                        return false;
+                    }
+                    if (e.target && e.target.id === 'zoom-out-' + zoomKey) {
+                        if (zoomState.scale > 0.5) {
+                            zoomState.scale = Math.max(zoomState.scale - 0.2, 0.5);
+                            updateZoom();
+                        }
+                        return false;
+                    }
+                    if (e.target && e.target.id === 'zoom-reset-' + zoomKey) {
+                        zoomState.scale = 1;
+                        zoomState.rotation = 0;
+                        updateZoom();
+                        return false;
+                    }
+                    if (e.target && e.target.id === 'rotate-ltr-' + zoomKey) {
+                        zoomState.rotation = (zoomState.rotation - 90) % 360;
+                        updateZoom();
+                        return false;
+                    }
+                    if (e.target && e.target.id === 'rotate-rtl-' + zoomKey) {
+                        zoomState.rotation = (zoomState.rotation + 90) % 360;
+                        updateZoom();
+                        return false;
+                    }
+                });
+
+                updateZoom();
+            },
+            didDestroy: function() {
+                // Restore attachments modal if it was open before (and not already restoring)
+                if (window.modalState && 
+                    window.modalState.previousAttachments && 
+                    window.modalState.previousAttachments.length > 0 &&
+                    !window.modalState.isRestoring) {
+                    window.modalState.isRestoring = true;
+                    let attachmentsToRestore = window.modalState.previousAttachments;
+                    let titleToRestore = window.modalState.previousTitle;
+                    // Clear state before restoring to prevent recursion
+                    window.modalState.previousAttachments = null;
+                    window.modalState.previousTitle = null;
+                    setTimeout(function() {
+                        window.modalState.isRestoring = false;
+                        showAttachmentsModal(attachmentsToRestore, titleToRestore);
+                    }, 100);
+                }
+            }
+        });
+    } else if (isPdf) {
+        // Load PDF.js if not already loaded
+        if (typeof pdfjsLib === 'undefined') {
+            const pdfScript = document.createElement('script');
+            pdfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            pdfScript.onload = function() {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                displayPdfPopup(fileUrl, fileName);
+            };
+            document.head.appendChild(pdfScript);
+        } else {
+            displayPdfPopup(fileUrl, fileName);
+        }
+    } else {
+        // For other file types, show a message
+        Swal.fire({
+            icon: 'info',
+            title: __('file_type_not_supported'),
+            text: 'This file type cannot be previewed in the popup. Please download to view.',
+            showCancelButton: true,
+            confirmButtonText: 'Download File',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            didDestroy: function() {
+                // Restore attachments modal if it was open before (and not already restoring)
+                if (window.modalState && 
+                    window.modalState.previousAttachments && 
+                    window.modalState.previousAttachments.length > 0 &&
+                    !window.modalState.isRestoring) {
+                    window.modalState.isRestoring = true;
+                    let attachmentsToRestore = window.modalState.previousAttachments;
+                    let titleToRestore = window.modalState.previousTitle;
+                    // Clear state before restoring to prevent recursion
+                    window.modalState.previousAttachments = null;
+                    window.modalState.previousTitle = null;
+                    setTimeout(function() {
+                        window.modalState.isRestoring = false;
+                        showAttachmentsModal(attachmentsToRestore, titleToRestore);
+                    }, 100);
+                }
+            }
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                window.open(fileUrl, '_blank');
+            }
+        });
+    }
+}
+
+/**
+ * Display PDF in a popup modal with page navigation and zoom controls
+ * @param {string} pdfUrl - URL of the PDF file
+ * @param {string} [fileName] - Optional filename for display
+ */
+function displayPdfPopup(pdfUrl, fileName) {
+    // Store PDF state in window object to manage across multiple pages
+    if (!window.pdfViewerState) {
+        window.pdfViewerState = {};
+    }
+
+    let pdfName = fileName || 'PDF Document';
+    let viewerKey = 'pdf_' + Date.now();
+    let state = {
+        url: pdfUrl,
+        totalPages: 0,
+        currentPage: 1,
+        pdf: null,
+        scale: 1.5  // Default zoom scale
+    };
+    window.pdfViewerState[viewerKey] = state;
+
+    // Create HTML for PDF viewer with navigation and zoom controls
+    let html = `
+        <div style="display:flex;flex-direction:column;align-items:center;width:100%;gap:10px;">
+            <div style="width:100%;text-align:center;margin-bottom:5px;display:flex;justify-content:center;align-items:center;gap:15px;flex-wrap:wrap;">
+                <div>
+                    <span style="font-weight:bold;font-size:14px;">Page <span id="current-page-${viewerKey}">1</span> of <span id="total-pages-${viewerKey}">...</span></span>
+                </div>
+                <div>
+                    <span style="font-weight:bold;font-size:14px;">Zoom: <span id="zoom-level-${viewerKey}">150</span>%</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">
+                <button type="button" class="btn btn-sm btn-secondary" id="prev-btn-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
+                    <i class="fa fa-chevron-left"></i> Previous
+                </button>
+                <input type="number" id="page-input-${viewerKey}" value="1" min="1" style="width:50px;padding:6px;text-align:center;border:1px solid #ddd;border-radius:4px;">
+                <button type="button" class="btn btn-sm btn-secondary" id="next-btn-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
+                    Next <i class="fa fa-chevron-right"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-info" id="zoom-out-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
+                    <i class="fa fa-search-minus"></i> Zoom Out
+                </button>
+                <button type="button" class="btn btn-sm btn-info" id="zoom-in-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
+                    <i class="fa fa-search-plus"></i> Zoom In
+                </button>
+                <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#ffc107;color:black;border:none;">
+                    <i class="fa fa-undo"></i> Reset
+                </button>
+            </div>
+            <div style="width:100%;display:flex;justify-content:center;max-height:60vh;overflow-y:auto;overflow-x:auto;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;padding:10px;">
+                <canvas id="pdf-viewer-canvas-${viewerKey}" style="display:block;margin:auto;"></canvas>
+            </div>
+        </div>
+    `;
+
+    Swal.fire({
+        title: pdfName,
+        html: html,
+        width: 'auto',
+        maxWidth: '90vw',
+        showCloseButton: true,
+        showConfirmButton: false,
+        allowOutsideClick: true,
+        didOpen: function() {
+            // Calculate dynamic width based on viewport
+            let maxViewportWidth = window.innerWidth * 0.9;
+            let initialWidth = Math.min(Math.max(window.innerWidth * 0.85, 500), maxViewportWidth);
+            Swal.update({ width: initialWidth });
+            
+            // Initialize PDF rendering
+            pdfjsLib.getDocument({
+                url: pdfUrl,
+                withCredentials: true
+            }).promise.then(function(pdf) {
+                state.pdf = pdf;
+                state.totalPages = pdf.numPages;
+                document.getElementById('total-pages-' + viewerKey).textContent = state.totalPages;
+                renderPdfPage(state, viewerKey);
+
+                let prevBtn = document.getElementById('prev-btn-' + viewerKey);
+                let nextBtn = document.getElementById('next-btn-' + viewerKey);
+                let pageInput = document.getElementById('page-input-' + viewerKey);
+                let zoomInBtn = document.getElementById('zoom-in-' + viewerKey);
+                let zoomOutBtn = document.getElementById('zoom-out-' + viewerKey);
+                let zoomResetBtn = document.getElementById('zoom-reset-' + viewerKey);
+                let zoomLevelSpan = document.getElementById('zoom-level-' + viewerKey);
+
+                // Previous button
+                prevBtn.addEventListener('click', function() {
+                    if (state.currentPage > 1) {
+                        state.currentPage--;
+                        pageInput.value = state.currentPage;
+                        renderPdfPage(state, viewerKey);
+                    }
+                });
+
+                // Next button
+                nextBtn.addEventListener('click', function() {
+                    if (state.currentPage < state.totalPages) {
+                        state.currentPage++;
+                        pageInput.value = state.currentPage;
+                        renderPdfPage(state, viewerKey);
+                    }
+                });
+
+                // Page input
+                pageInput.addEventListener('change', function() {
+                    let pageNum = parseInt(this.value);
+                    if (pageNum >= 1 && pageNum <= state.totalPages) {
+                        state.currentPage = pageNum;
+                        renderPdfPage(state, viewerKey);
+                    } else {
+                        this.value = state.currentPage;
+                    }
+                });
+
+                // Zoom controls
+                function updateZoomButton() {
+                    zoomOutBtn.disabled = state.scale <= 0.8;
+                    zoomInBtn.disabled = state.scale >= 3;
+                }
+
+                zoomInBtn.addEventListener('click', function() {
+                    if (state.scale < 3) {
+                        state.scale = Math.min(state.scale + 0.2, 3);
+                        state.scale = parseFloat(state.scale.toFixed(2));  // Prevent floating point errors
+                        zoomLevelSpan.textContent = Math.round(state.scale * 100);
+                        updateZoomButton();
+                        renderPdfPage(state, viewerKey);
+                    }
+                });
+
+                zoomOutBtn.addEventListener('click', function() {
+                    if (state.scale > 0.8) {
+                        state.scale = Math.max(state.scale - 0.2, 0.8);
+                        state.scale = parseFloat(state.scale.toFixed(2));  // Prevent floating point errors
+                        zoomLevelSpan.textContent = Math.round(state.scale * 100);
+                        updateZoomButton();
+                        renderPdfPage(state, viewerKey);
+                    }
+                });
+
+                zoomResetBtn.addEventListener('click', function() {
+                    state.scale = 1.5;
+                    zoomLevelSpan.textContent = '150';
+                    updateZoomButton();
+                    renderPdfPage(state, viewerKey);
+                });
+
+                updateZoomButton();
+            }).catch(function(error) {
+                document.getElementById('pdf-viewer-canvas-' + viewerKey).parentElement.innerHTML = 
+                    '<div style="padding:20px;color:#d32f2f;text-align:center;"><i class="fa fa-exclamation-circle"></i> Failed to load PDF file.</div>';
+            });
+        },
+        didDestroy: function() {
+            // Restore attachments modal if it was open before (and not already restoring)
+            if (window.modalState && 
+                window.modalState.previousAttachments && 
+                window.modalState.previousAttachments.length > 0 &&
+                !window.modalState.isRestoring) {
+                window.modalState.isRestoring = true;
+                let attachmentsToRestore = window.modalState.previousAttachments;
+                let titleToRestore = window.modalState.previousTitle;
+                // Clear state before restoring to prevent recursion
+                window.modalState.previousAttachments = null;
+                window.modalState.previousTitle = null;
+                setTimeout(function() {
+                    window.modalState.isRestoring = false;
+                    showAttachmentsModal(attachmentsToRestore, titleToRestore);
+                }, 100);
+            }
+        }
+    });
+}
+
+/**
+ * Render a specific page of the PDF
+ * @param {object} state - PDF viewer state object
+ * @param {string} viewerKey - Unique key for this PDF viewer instance
+ */
+function renderPdfPage(state, viewerKey) {
+    if (!state.pdf) {
+        return;
+    }
+
+    state.pdf.getPage(state.currentPage).then(function(page) {
+        let canvas = document.getElementById('pdf-viewer-canvas-' + viewerKey);
+        if (!canvas) {
+            return;
+        }
+
+        // Ensure scale is a valid number
+        let scale = parseFloat(state.scale) || 1.5;
+        if (scale < 0.8) scale = 0.8;
+        if (scale > 3) scale = 3;
+        state.scale = scale;
+
+        try {
+            let viewport = page.getViewport({ scale: scale });
+
+            // Properly clear the canvas
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            let ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return;
+            }
+
+            // White background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+
+            // Render the page
+            page.render(renderContext).promise.then(function() {
+                // Page rendered successfully
+                let pageSpan = document.getElementById('current-page-' + viewerKey);
+                if (pageSpan) {
+                    pageSpan.textContent = state.currentPage;
+                }
+            }).catch(function(error) {
+            });
+        } catch (error) {
+        }
+    }).catch(function(error) {
+    });
+}
+
+/**
+ * Render PDF thumbnail preview using PDF.js
+ */
+function renderPdfThumbnail(pdfUrl, canvasId) {
+    let canvas = document.getElementById(canvasId);
+    if (!canvas || !pdfjsLib) return;
+    
+    // Configure PDF.js to handle CORS for local files
+    pdfjsLib.getDocument({
+        url: pdfUrl,
+        withCredentials: true
+    }).promise.then(function(pdf) {
+        return pdf.getPage(1).then(function(page) {
+            let viewport = page.getViewport({ scale: 1 });
+            
+            // Scale to fit within 90x90
+            let scale = 90 / Math.max(viewport.width, viewport.height);
+            viewport = page.getViewport({ scale: scale });
+            
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            canvas.style.width = viewport.width + 'px';
+            canvas.style.height = viewport.height + 'px';
+            
+            let ctx = canvas.getContext('2d');
+            
+            // Fill white background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            let renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+            
+            return page.render(renderContext).promise;
+        });
+    }).catch(function(error) {
+        console.warn('PDF rendering failed for ' + pdfUrl, error);
+        // If PDF preview fails, show fallback
+        if (canvas) {
+            canvas.width = 90;
+            canvas.height = 90;
+            let ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#e8e8e8';
+            ctx.fillRect(0, 0, 90, 90);
+            ctx.fillStyle = '#666';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('PDF', 45, 40);
+            ctx.font = '12px Arial';
+            ctx.fillText('Preview', 45, 55);
+        }
+    });
+}

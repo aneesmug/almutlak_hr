@@ -1,9 +1,13 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/init.php';
 require_once __DIR__ . '/includes/session_check.php';
 if (file_exists(__DIR__ . '/includes/functions.php')) {
     require_once __DIR__ . '/includes/functions.php';
 }
+
+// Load translations
+$current_lang = $_SESSION['lang'] ?? 'en';
+load_language($current_lang);
 
 // Restrict access: Employees cannot view this detailed report page
 if (isset($isEmployee) && $isEmployee === true) {
@@ -354,11 +358,9 @@ if (!empty($settlement['avatar'])) {
                     <div class="info-row">
                         <div class="info-label"><i class="fas fa-paperclip"></i> <?= __('attachments') ?> (<?= count($attachments) ?>):</div>
                         <div class="info-value">
-                            <?php foreach ($attachments as $attachment): ?>
-                                <a href="<?= htmlspecialchars($attachment) ?>" target="_blank" class="attachment-link" download>
-                                    <i class="fas fa-download"></i> <?= basename($attachment) ?>
-                                </a><br/>
-                            <?php endforeach; ?>
+                            <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")' style="padding: 6px 16px; font-weight: 500;">
+                                <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
+                            </button>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -453,7 +455,9 @@ if (!empty($settlement['avatar'])) {
     </div>
 
     <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/jquery.app.js"></script>
 </body>
 </html>
 <?php $conDB->close(); ?>
