@@ -56,15 +56,13 @@ const APP_COLORS = {
     shadow: 'rgba(0, 0, 0, 0.2)',   // Shadow color
 };
 
+
 // Export for external use if needed
 if (typeof window !== 'undefined') {
     window.APP_COLORS = APP_COLORS;
 }
 
-// If used as ES6 module
+// If used as ES6 module (legacy support)
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = APP_COLORS;
 }
-
-// Export for external use if needed
-window.APP_COLORS = APP_COLORS;

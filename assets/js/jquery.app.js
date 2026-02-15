@@ -4,7 +4,34 @@
  * Module/App: Main Js
  */
 
-const APP_COLORS = require("./colors");
+// Load colors from external API endpoint
+// This ensures APP_COLORS is always fetched from a single source
+window.APP_COLORS = {}; // Initialize empty, will be populated by fetch
+
+(function() {
+    'use strict';
+    
+    // Fetch colors from the server
+    var colorsUrl = './includes/ajaxFile/getColors.php';
+    
+    // Use synchronous XMLHttpRequest to ensure colors are loaded before any code uses them
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', colorsUrl, false); // false = synchronous
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            try {
+                window.APP_COLORS = JSON.parse(xhr.responseText);
+                console.info('Colors loaded from external file successfully');
+            } catch(e) {
+                console.error('Failed to parse colors JSON:', e);
+            }
+        }
+    };
+    xhr.onerror = function() {
+        console.error('Failed to load colors from: ' + colorsUrl);
+    };
+    xhr.send(null);
+})();
 
 // Option 2: Reusable function with optional attributes
 function loadResource(src, type = 'js', attributes = {}, position = 'head') {
@@ -63,9 +90,6 @@ loadResource('./plugins/bootstrap-select/js/bootstrap-select.js', 'js', { async:
 loadResource('./assets/js/notifications.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/translation.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/geolocation-capture.js', 'js', { async: true, defer: true }, 'head');
-// Load css colors for consistent theming across JS and CSS
-loadResource('./assets/js/colors.js', 'js', { async: true, defer: true }, 'head');
-// Load responsive sidebar menu functionality
 
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
@@ -5130,7 +5154,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                         var currentLang = getCurrentLanguage();
                         translateName(employeeName, 'en', currentLang, function(translatedName) {
                             // Update the modal title with the translated employee's name
-                            $('.swal2-title').html(`${__('leave_application_for')} <br><span style="color:#3085d6;">${translatedName}</span>`);
+                            $('.swal2-title').html(`${__('leave_application_for')} <br><span style="color:${APP_COLORS.primary};">${translatedName}</span>`);
                         });
                         Swal.hideLoading();
                     } else {
@@ -5672,7 +5696,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     confirmButtonText: __('apply_another_vacation') || 'Apply Another Vacation',
                     cancelButtonText: __('cancel') || 'Cancel',
                     confirmButtonColor: APP_COLORS.danger_dark,
-                    cancelButtonColor: '#6c757d'
+                    cancelButtonColor: APP_COLORS.secondary,
                 }).then((result) => {
                     if (result.isConfirmed) {
                         // Open the modal for emergency vacation, passing the active return date
@@ -10509,7 +10533,7 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
             if (isFinalApproval && isFinanceManager) {
                 formHtml += `
                 <div class="form-group">
-                    <label style="color: #dc3545;">` + __('select_payer') + `: <span style="color: red;">*</span></label>
+                    <label class="text-danger">` + __('select_payer') + `: <span style="color: red;">*</span></label>
                     <div style="margin: 10px 0;">
                         <label style="display: block; margin: 8px 0;">
                             <input type="radio" name="payerType" value="self" checked> ` + __('myself') + `
@@ -10520,19 +10544,19 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                     </div>
                 </div>
                 <div class="form-group" id="otherPayerGroup" style="display: none;">
-                    <label style="color: #dc3545;">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
+                    <label class="text-danger">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
                     <select id="payerSelect" class="form-control form-control-lg select2-hidden-accessible" style="width: 100%;" required>
                         <option value="">` + __('select_finance_employee') + `</option>
                     </select>
                 </div>
                 <div class="form-group" id="approvedAmountGroup" style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
-                    <label style="color: #dc3545;">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
+                    <label class="text-danger">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
                     <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
                     <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(settlementAmount).toFixed(2)}</small>
                     <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
                 </div>
                 <div class="form-group" id="paymentProofGroup">
-                    <label style="color: #dc3545;">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
+                    <label class="text-danger">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
                     <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
                     <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>`;
@@ -10540,13 +10564,13 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                 // Finance Officer - show payment form (at final approval or when they need to process payment)
                 formHtml += `
                 <div class="form-group" id="approvedAmountGroup">
-                    <label style="color: #dc3545;">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
+                    <label class="text-danger">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
                     <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
                     <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(settlementAmount).toFixed(2)}</small>
                     <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
                 </div>
                 <div class="form-group" id="paymentProofGroup">
-                    <label style="color: #dc3545;">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
+                    <label class="text-danger">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
                     <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
                     <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>`;

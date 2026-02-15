@@ -1,10 +1,34 @@
-const APP_COLORS = require("./colors");
+// Load colors from external PHP endpoint (fetchable pattern)
+window.APP_COLORS = {}; // Initialize empty, will be populated by fetch
+
+(function() {
+    'use strict';
+    
+    // Fetch colors from the server
+    var colorsUrl = './includes/ajaxFile/getColors.php';
+    
+    // Use synchronous XMLHttpRequest to ensure colors are loaded before any code uses them
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', colorsUrl, false); // false = synchronous
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            try {
+                window.APP_COLORS = JSON.parse(xhr.responseText);
+                console.info('Colors loaded from external file in employee_profile.js');
+            } catch(e) {
+                console.error('Failed to parse colors JSON:', e);
+            }
+        }
+    };
+    xhr.onerror = function() {
+        console.error('Failed to load colors from: ' + colorsUrl);
+    };
+    xhr.send(null);
+})();
 
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js"));
 // Include shared AJAX error handling utilities
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/ajaxErrorHandling.js"));
-// Load css colors for consistent theming across JS and CSS
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/colors.js"));
 
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.
