@@ -107,14 +107,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $service_years = $serviceDuration->y + ($serviceDuration->m / 12) + ($serviceDuration->d / 365);
             
             // Apply calculation for Employee Resignation
-            if ($selectedReasonCode == '1') { // Employee Resignation
+            /* if ($selectedReasonCode == '1') { // Employee Resignation
                     // IMPORTANT FIX: Apply Qiwa/JISR calculation for Employee Resignation
                     // Formula: EOS = (Salary × Service Years) / 2.576
                     // This matches the official Qiwa and JISR website calculations exactly
                     // Verified: JISR returns 4,604.97 and this formula produces 4,606.02 (0.02 difference)
                 // Formula derived from Qiwa official calculation
                 $eos_amount = ($salary_get * $service_years) / 2.576;
-            }
+            } */
             // For other reason codes, use the API result as-is
             
             $vacation_salary = ($salary_get / 30) * $anul_vac_days;

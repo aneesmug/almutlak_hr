@@ -10201,8 +10201,8 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     reportLink = '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_vacation_report') + '</a>';
                 } else if (requestType.includes('loan')) {
                     reportLink = '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_loan_report') + '</a>';
-                } else if (requestType.includes('advance')) {
-                    reportLink = '<a href="./advance_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_advances_report') + '</a>';
+                } else if (requestType.includes('resignation')) {
+                    reportLink = '<a href="./emp_end_of_service.php?emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_end_of_service_report') + '</a>';
                 } else {
                     reportLink = '<a href="./all_general_requests.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_requests_report') + '</a>';
                 }

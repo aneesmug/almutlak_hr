@@ -297,6 +297,12 @@
             mysqli_free_result($reqQry);
         }
     }
+    
+    // FINAL FALLBACK: If still no request_inv_no, generate a temporary one for settlement creation
+    // Format: EOS-EMPID-TIMESTAMP (e.g., EOS-12345-1739615400)
+    if (empty($requestInvNo)) {
+        $requestInvNo = 'EOS-' . $emprow['empid'] . '-' . time();
+    }
 
     $reasonsResult = fetchEndOfServiceReasons();
     if ($reasonsResult['error']) {
@@ -456,12 +462,24 @@
 
 
             if (empty($errors)) {
-                $serviceDuration = $startDateTime->diff($endDateTime);
-                $t_years = $serviceDuration->y;
-                $t_months = $serviceDuration->m;
-                $t_days = $serviceDuration->d;
+                // Check if employee already has an EOS record
+                $checkEOS = $conDB->prepare("SELECT id FROM `emp_eos` WHERE `emp_id` = ? LIMIT 1");
+                $checkEOS->bind_param("i", $emprow['empid']);
+                $checkEOS->execute();
+                $checkEOS->store_result();
+                
+                if ($checkEOS->num_rows > 0) {
+                    $errors['duplicate_eos'] = 'This employee already has an End of Service record. Cannot create duplicate EOS.';
+                    $checkEOS->close();
+                } else {
+                    $checkEOS->close();
+                    
+                    $serviceDuration = $startDateTime->diff($endDateTime);
+                    $t_years = $serviceDuration->y;
+                    $t_months = $serviceDuration->m;
+                    $t_days = $serviceDuration->d;
 
-                $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `absent_days`, `deduction_hours`, `gosi_deduction`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `absent_days`, `deduction_hours`, `gosi_deduction`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->bind_param("sisssdssiiiddddiddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $absent_days, $deduction_hours, $gosi_deduction, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
                 $stmt->execute();
 
@@ -512,13 +530,22 @@
                 
                 // mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$username."','emp_end_of_service','".$_GET['emp_id']."','".date("c")."')");
                 
-                $error_1 = "<div class='alert alert-success'><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.')."</div>";
+                // Build success message with settlement info
+                $settlementMsg = "";
+                if ($settlementCreated && !empty($requestInvNo)) {
+                    $settlementMsg = "<br><br><div class='text-success'><i class='fa fa-check-circle'></i> <strong>Settlement {$requestInvNo} created</strong> and will be sent to the next approver for processing.</div>";
+                } elseif (!empty($requestInvNo)) {
+                    $settlementMsg = "<br><br><div class='text-info'><i class='fa fa-info-circle'></i> <strong>Settlement {$requestInvNo}</strong> processing initiated - approval notifications will be sent.</div>";
+                }
+                
+                $error_1 = "<div class='alert alert-success'><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.').$settlementMsg."</div>";
                 
                 // CRITICAL FIX: Do NOT redirect immediately - wait for settlement to complete
                 // Use JavaScript to delay redirect and show proper feedback
                 $_SESSION['eos_completion_time'] = time();
                 $_SESSION['eos_settlement_created'] = $settlementCreated;
                 $_SESSION['eos_request_inv'] = $requestInvNo;
+                }
             }
         }
     }
@@ -760,6 +787,7 @@
                                                         <?php endif; ?>
                                                         <?php if (!empty($errors['assets'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['assets']); ?></div><?php endif; ?>
                                                         <?php if (!empty($errors['country'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['country']); ?></div><?php endif; ?>
+                                                        <?php if (!empty($errors['duplicate_eos'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['duplicate_eos']); ?></div><?php endif; ?>
                                                         <div class="form-row align-items-end">
                                                             <div class="form-group col-lg-6">
                                                                 <label><strong><?=__('Type of Contract');?>:</strong></label>
@@ -954,6 +982,118 @@
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
 		<script src="assets/js/jquery.app.js"></script>
         <script type="text/javascript">
+            /**
+             * =====================================================================
+             * == CREATE SETTLEMENT FUNCTION FOR EOS
+             * =====================================================================
+             * Creates a settlement record for an End of Service
+             * Uses settlement_handler.php (EOS-specific endpoint, not vacation-based)
+             * Independent from vacation settlement workflow
+             */
+            function createSettlement(vacationId, requestInvNo, employeeId, employeeName, vacationDays) {
+                // Get the calculated settlement amount from the hidden field
+                const settlementAmount = parseFloat($('#net_payment_hidden').val()) || 0;
+                
+                // Validate required parameters
+                const empIdInt = parseInt(employeeId);
+                if (!requestInvNo || requestInvNo.trim() === '') {
+                    Swal.fire({
+                        title: __('error') || 'Error',
+                        text: 'Request Invoice Number is missing. Cannot create settlement.',
+                        icon: 'error',
+                        confirmButtonText: __('ok') || 'OK',
+                        confirmButtonColor: APP_COLORS.danger
+                    });
+                    return;
+                }
+                
+                if (isNaN(empIdInt) || empIdInt <= 0) {
+                    Swal.fire({
+                        title: __('error') || 'Error',
+                        text: 'Employee ID is invalid. Cannot create settlement.',
+                        icon: 'error',
+                        confirmButtonText: __('ok') || 'OK',
+                        confirmButtonColor: APP_COLORS.danger
+                    });
+                    return;
+                }
+                
+                if (isNaN(settlementAmount) || settlementAmount <= 0) {
+                    Swal.fire({
+                        title: __('error') || 'Error',
+                        text: 'Settlement amount must be calculated before creating settlement. Please ensure the form has been calculated.',
+                        icon: 'error',
+                        confirmButtonText: __('ok') || 'OK',
+                        confirmButtonColor: APP_COLORS.danger
+                    });
+                    return;
+                }
+                
+                // Show confirmation dialog for creating settlement
+                Swal.fire({
+                    title: __('create_settlement') || 'Create Settlement',
+                    html: `
+                        <div style="text-align: left; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                            <p><strong>${__('employee_name') || 'Employee Name'}:</strong> ${employeeName}</p>
+                            <p><strong>${__('request_number') || 'Request Number'}:</strong> ${requestInvNo}</p>
+                            <p><strong>${__('settlement_amount') || 'Settlement Amount'}:</strong> ${settlementAmount.toFixed(2)} SAR</p>
+                            <div style="margin-top: 15px; padding: 12px; background: white; border-radius: 6px; border-left: 4px solid #28a745;">
+                                <i class="fa fa-info-circle text-success"></i>
+                                <strong>${__('note')}:</strong>
+                                ${__('settlement_will_be_created_and_sent_for_approval') || 'A settlement record will be created and sent for approval.'}
+                            </div>
+                        </div>
+                    `,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: APP_COLORS.success,
+                    confirmButtonText: '<i class="fa fa-check"></i> ' + (__('create_settlement') || 'Create Settlement'),
+                    cancelButtonColor: APP_COLORS.danger,
+                    cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
+                    allowOutsideClick: false,
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => {
+                        // Submit EOS settlement creation via AJAX to EOS-specific endpoint
+                        return $.ajax({
+                            url: './includes/ajaxFile/settlement_handler.php',
+                            type: 'POST',
+                            dataType: 'JSON',
+                            data: {
+                                action: 'create_settlement',
+                                request_type: 'eos',
+                                request_inv_no: String(requestInvNo).trim(),
+                                emp_id: parseInt(employeeId),
+                                settlement_amount: parseFloat(settlementAmount)
+                            }
+                        }).fail(function(jqXHR, textStatus, errorThrown) {
+                            let errorMsg = __('error_creating_settlement') || 'Error creating settlement';
+                            if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
+                                errorMsg = jqXHR.responseJSON.message;
+                            }
+                            console.error('Settlement AJAX Error:', {
+                                status: jqXHR.status,
+                                response: jqXHR.responseText,
+                                error: errorThrown
+                            });
+                            Swal.showValidationMessage(errorMsg);
+                        });
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed && result.value) {
+                        const response = result.value;
+                        Swal.fire({
+                            title: __('success') || 'Success',
+                            text: response.message || (__('settlement_created_successfully') || 'Settlement has been created successfully.'),
+                            icon: 'success',
+                            confirmButtonText: __('ok') || 'OK',
+                            allowOutsideClick: false
+                        }).then(() => {
+                            location.reload();
+                        });
+                    }
+                });
+            }
+
             // Prompt for return date before printing; do not write to DB
             $(document).on('click', '.eos-print-return-btn', function(event) {
                 event.preventDefault();
@@ -966,6 +1106,8 @@
                     showCancelButton: true,
                     confirmButtonText: __('print_for_return'),
                     cancelButtonText: __('cancel'),
+                    confirmButtonColor: APP_COLORS.primary,
+                    cancelButtonColor: APP_COLORS.danger,
                     allowOutsideClick: false,
                     willOpen: function() {
                         $('#eos-return-date-input').datepicker({
@@ -977,7 +1119,7 @@
                     preConfirm: () => {
                         const selectedDate = $('#eos-return-date-input').val();
                         if (!selectedDate) {
-                            Swal.showValidationMessage('Please select a return date');
+                            Swal.showValidationMessage(__('please_select_return_date') || 'Please select a return date');
                             return false;
                         }
                         return selectedDate;
@@ -1262,35 +1404,23 @@
         <?php if (!empty($error_1)): ?>
         <script type="text/javascript">
             $(document).ready(function() {
-                // Get settlement status from session
-                const settlementCreated = <?= json_encode($_SESSION['eos_settlement_created'] ?? false) ?>;
-                const requestInvNo = <?= json_encode($_SESSION['eos_request_inv'] ?? '') ?>;
-                
-                // Show success alert with settlement details
-                let successMessage = __('employee_end_of_service_has_been_registered') || 'Employee End of Service has been registered.';
-                
-                if(settlementCreated && requestInvNo) {
-                    successMessage += '\n\n✓ Settlement ' + requestInvNo + ' created and approval notifications sent.';
-                } else if(requestInvNo) {
-                    successMessage += '\n\nℹ Settlement processing initiated (Settlement: ' + requestInvNo + ')';
-                }
-                
                 Swal.fire({
                     title: __('success') || 'Success',
-                    text: successMessage,
+                    html: `<?= $error_1; ?>`,
                     icon: 'success',
                     confirmButtonText: __('ok') || 'OK',
                     allowOutsideClick: false,
                     didOpen: function() {
-                        // Ensure email sending has time to complete
-                        // Wait minimum 2 seconds before allowing redirect
+                        // Wait 2 seconds before allowing interaction
                         setTimeout(function() {
                             Swal.getConfirmButton().disabled = false;
                         }, 2000);
                     }
-                }).then(function() {
-                    // After user clicks OK, redirect back to page
-                    window.location.href = './emp_end_of_service.php?emp_id=<?=$_GET['emp_id']?>';
+                }).then(function(result) {
+                    if (result.isConfirmed) {
+                        // Redirect back to page
+                        window.location.href = './emp_end_of_service.php?emp_id=<?=$_GET['emp_id']?>';
+                    }
                 });
             });
         </script>
