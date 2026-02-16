@@ -425,8 +425,8 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
             text: "You won't be able to revert this!",
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
+            confirmButtonColor: APP_COLORS.primary,
+            cancelButtonColor: APP_COLORS.danger_dark,
             confirmButtonText: 'Yes, delete it!',
             showLoaderOnConfirm: true,
             preConfirm: function() {

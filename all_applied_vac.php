@@ -1119,7 +1119,7 @@ if ($can_see_all_depts) {
                                 width: '55%',
                                 showCancelButton: false,
                                 confirmButtonText: __('confirm_clearance') || 'Confirm Clearance',
-                                confirmButtonColor: '#28a745',
+                                confirmButtonColor: APP_COLORS.success,
                                 allowOutsideClick: false,
                                 allowEscapeKey: false,
                                 showLoaderOnConfirm: true,
@@ -1193,7 +1193,7 @@ if ($can_see_all_depts) {
                 width: '45%',
                 showCancelButton: false,
                 confirmButtonText: __('confirm_clearance') || 'Confirm Clearance',
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.success,
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 showLoaderOnConfirm: true,
@@ -1250,7 +1250,7 @@ if ($can_see_all_depts) {
                         text: response.message,
                         icon: response.type,
                         allowOutsideClick: false,
-                        confirmButtonColor: '#28a745',
+                        confirmButtonColor: APP_COLORS.success,
                         confirmButtonText: __('ok') || 'OK'
                     }).then(() => {
                         location.reload();
@@ -1262,7 +1262,7 @@ if ($can_see_all_depts) {
                         title: response.title || __('error') || 'Error',
                         text: response.message || __('error_processing_request') || 'An error occurred',
                         icon: 'error',
-                        confirmButtonColor: '#dc3545'
+                        confirmButtonColor: APP_COLORS.danger
                     });
                 }
             });
@@ -1354,8 +1354,8 @@ if ($can_see_all_depts) {
                             width: '40%',
                             showCancelButton: true,
                             confirmButtonText: __('confirm_payment_upload_proof') || 'Confirm Payment & Upload Proof',
-                            confirmButtonColor: '#28a745',
-                            cancelButtonColor: '#dc3535',
+                            confirmButtonColor: APP_COLORS.success,
+                            cancelButtonColor: APP_COLORS.danger,
                             cancelButtonText: __('cancel'),
                             showLoaderOnConfirm: true,
                             allowOutsideClick: false,
@@ -1473,7 +1473,7 @@ if ($can_see_all_depts) {
                             title: __('error') || 'Error',
                             text: __('error_loading_vacation_details') || 'Could not load vacation details. Please try again.',
                             icon: 'error',
-                            confirmButtonColor: '#dc3535'
+                            confirmButtonColor: APP_COLORS.danger
                         });
                     }
                 });
@@ -1550,8 +1550,8 @@ if ($can_see_all_depts) {
                         width: '40%',
                         showCancelButton: true,
                         confirmButtonText: 'Approve & Assign Payer',
-                        confirmButtonColor: '#28a745',
-                        cancelButtonColor: '#dc3545',
+                        confirmButtonColor: APP_COLORS.success,
+                        cancelButtonColor: APP_COLORS.danger,
                         showLoaderOnConfirm: true,
                         preConfirm: () => {
                             const payerId = document.getElementById('payer_emp_id').value;
@@ -1586,8 +1586,8 @@ if ($can_see_all_depts) {
                         icon: 'question',
                         showCancelButton: true,
                         confirmButtonText: 'Approve',
-                        confirmButtonColor: '#28a745',
-                        cancelButtonColor: '#dc3545'
+                        confirmButtonColor: APP_COLORS.success,
+                        cancelButtonColor: APP_COLORS.danger
                     }).then((result) => {
                         if (result.isConfirmed) {
                             sendApproval(vacId, currentUserType, '', '');
@@ -1614,8 +1614,8 @@ if ($can_see_all_depts) {
                     `,
                     showCancelButton: true,
                     confirmButtonText: 'Approve',
-                    confirmButtonColor: '#28a745',
-                    cancelButtonColor: '#dc3545',
+                    confirmButtonColor: APP_COLORS.success,
+                    cancelButtonColor: APP_COLORS.danger,
                     preConfirm: () => {
                         return {
                             approval_comment: document.getElementById('approval_comment').value
@@ -1758,8 +1758,8 @@ if ($can_see_all_depts) {
                                     width: '40%',
                                     showCancelButton: true,
                                     confirmButtonText: __('approve_and_assign_checker') || 'Approve & Assign Checker',
-                                    confirmButtonColor: '#28a745',
-                                    cancelButtonColor: '#dc3545',
+                                    confirmButtonColor: APP_COLORS.success,
+                                    cancelButtonColor: APP_COLORS.danger,
                                     showLoaderOnConfirm: true,
                                     preConfirm: () => {
                                         const checkerId = document.getElementById('asset_checker_emp_id').value;
@@ -1796,7 +1796,7 @@ if ($can_see_all_depts) {
                                     title: __('error') || 'Error',
                                     text: __('error_loading_department_staff') || 'Could not load department staff. Please try again.',
                                     icon: 'error',
-                                    confirmButtonColor: '#dc3535'
+                                    confirmButtonColor: APP_COLORS.danger
                                 });
                             });
                             return;
@@ -1877,8 +1877,8 @@ if ($can_see_all_depts) {
                                     width: '40%',
                                     showCancelButton: true,
                                     confirmButtonText: __('approve_and_assign_checker') || 'Approve & Assign Checker',
-                                    confirmButtonColor: '#28a745',
-                                    cancelButtonColor: '#dc3545',
+                                    confirmButtonColor: APP_COLORS.success,
+                                    cancelButtonColor: APP_COLORS.danger,
                                     showLoaderOnConfirm: true,
                                     allowOutsideClick: false,
                                     preConfirm: () => {
@@ -1916,7 +1916,7 @@ if ($can_see_all_depts) {
                                     title: __('error') || 'Error',
                                     text: __('error_loading_department_staff') || 'Could not load department staff. Please try again.',
                                     icon: 'error',
-                                    confirmButtonColor: '#dc3535'
+                                    confirmButtonColor: APP_COLORS.danger
                                 });
                             });
                             return;
@@ -2179,8 +2179,8 @@ if ($can_see_all_depts) {
                 icon: 'warning',
                 // width: '40%', // Set modal width
                 showCancelButton: true,
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#dc3535',
+                confirmButtonColor: APP_COLORS.success,
+                cancelButtonColor: APP_COLORS.danger,
                 confirmButtonText: confirmButtonText,
                 allowOutsideClick: false,
                 willOpen: () => {

@@ -2966,8 +2966,8 @@ RTL Support
                 showCancelButton: true,
                 confirmButtonText: canRejoin ? `<i class=\"fa fa-check\"></i> <?= __('rejoin_first_vacation', 'Rejoin First Vacation') ?>` : `<i class=\"fa fa-times\"></i> <?= __('close') ?>`,
                 cancelButtonText: `<i class=\"fa fa-times\"></i> <?= __('cancel') ?>`,
-                confirmButtonColor: canRejoin ? '#ffc107' : '#6c757d',
-                cancelButtonColor: '#6c757d',
+                confirmButtonColor: canRejoin ? '#ffc107' : APP_COLORS.secondary,
+                cancelButtonColor: APP_COLORS.secondary,
                 showCancelButton: canRejoin,
                 allowOutsideClick: false,
                 width: '650px',
@@ -3048,8 +3048,8 @@ RTL Support
                 showCancelButton: true,
                 confirmButtonText: `<i class=\"fa fa-paper-plane\"></i> <?= __('submit_rejoin') ?>`,
                 cancelButtonText: `<i class=\"fa fa-times\"></i> <?= __('cancel') ?>`,
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#6c757d',
+                confirmButtonColor: APP_COLORS.success,
+                cancelButtonColor: APP_COLORS.secondary,
                 allowOutsideClick: false,
                 width: '600px',
                 didOpen: () => {
@@ -3109,7 +3109,7 @@ RTL Support
                             title: '<?= __('rejoin_submitted') ?>',
                             html: response.message || '<?= __('rejoin_request_submitted_successfully') ?>',
                             confirmButtonText: isLastVacation ? '<?= __('done') ?>' : '<?= __('next_vacation', 'Next Vacation') ?>',
-                            confirmButtonColor: isLastVacation ? '#28a745' : '#ffc107',
+                            confirmButtonColor: isLastVacation ? APP_COLORS.success : APP_COLORS.warning,
                             allowOutsideClick: false
                         }).then(() => {
                             if (!isLastVacation) {
@@ -3127,7 +3127,8 @@ RTL Support
                             icon: 'error',
                             title: '<?= __('error') ?>',
                             text: response.message || '<?= __('rejoin_submission_failed') ?>',
-                            confirmButtonText: '<?= __('ok') ?>'
+                            confirmButtonText: '<?= __('ok') ?>',
+                            confirmButtonColor: APP_COLORS.danger
                         });
                     }
                 },

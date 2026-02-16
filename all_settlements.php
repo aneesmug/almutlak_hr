@@ -841,9 +841,9 @@ if ($canSeeAllDepts) {
                 html: modalHTML,
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.success,
                 confirmButtonText: '<i class="fa fa-check"></i> <?= __("approve") ?>',
-                cancelButtonColor: '#6c757d',
+                cancelButtonColor: APP_COLORS.secondary,
                 cancelButtonText: '<i class="fa fa-times"></i> <?= __("cancel") ?>',
                 allowOutsideClick: false,
                 showLoaderOnConfirm: true,
@@ -930,7 +930,7 @@ if ($canSeeAllDepts) {
                             ${attachmentCount > 0 ? `<p><i class="fa fa-check text-success"></i> <strong>${attachmentCount}</strong> attachment(s) uploaded</p>` : ''}
                         `,
                         icon: 'success',
-                        confirmButtonColor: '#28a745',
+                        confirmButtonColor: APP_COLORS.success,
                         confirmButtonText: '<?= __("ok") ?>',
                         allowOutsideClick: false
                     }).then(() => {
@@ -943,7 +943,7 @@ if ($canSeeAllDepts) {
                     title: '<?= __("error") ?>',
                     html: error,
                     icon: 'error',
-                    confirmButtonColor: '#dc3545',
+                    confirmButtonColor: APP_COLORS.danger,
                     confirmButtonText: '<?= __("ok") ?>'
                 });
             });

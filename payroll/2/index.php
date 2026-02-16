@@ -737,8 +737,8 @@
                                         text: 'Are you sure you want to delete this benefit?',
                                         icon: 'warning',
                                         showCancelButton: true,
-                                        confirmButtonColor: '#d33',
-                                        cancelButtonColor: '#3085d6',
+                                        confirmButtonColor: APP_COLORS.danger_dark,
+                                        cancelButtonColor: APP_COLORS.primary,
                                         confirmButtonText: 'Yes, delete it!'
                                     });
 
@@ -781,8 +781,8 @@
                                         text: 'Are you sure you want to delete this deduction?',
                                         icon: 'warning',
                                         showCancelButton: true,
-                                        confirmButtonColor: '#d33',
-                                        cancelButtonColor: '#3085d6',
+                                        confirmButtonColor: APP_COLORS.danger_dark,
+                                        cancelButtonColor: APP_COLORS.primary,
                                         confirmButtonText: 'Yes, delete it!'
                                     });
 

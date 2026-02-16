@@ -2121,7 +2121,7 @@ if (mysqli_num_rows($query) == 1) {
 									</div>
 								`,
 								allowOutsideClick: false,
-								confirmButtonColor: '#3085d6',
+								confirmButtonColor: APP_COLORS.primary,
 								confirmButtonText: __('ok', 'OK')
 							});
 							return;
@@ -2135,7 +2135,7 @@ if (mysqli_num_rows($query) == 1) {
 							icon: 'error',
 							title: __('error', 'Error'),
 							text: __('request_failed_status', 'Request failed') + ' - ' + textStatus,
-							confirmButtonColor: '#d32f2f',
+							confirmButtonColor: APP_COLORS.danger,
 							confirmButtonText: __('ok', 'OK')
 						});
 					}
@@ -2171,8 +2171,8 @@ if (mysqli_num_rows($query) == 1) {
 					showCancelButton: true,
 					confirmButtonText: __('submit_request_button', 'Submit Request'),
 					cancelButtonText: __('cancel', 'Cancel'),
-					confirmButtonColor: '#6366f1',
-					cancelButtonColor: '#dc3545',
+					confirmButtonColor: APP_COLORS.primary,
+					cancelButtonColor: APP_COLORS.danger,
 					allowOutsideClick: false,
 					willOpen: () => {
 						var isRTL = $('html').attr('dir') === 'rtl' || $('body').attr('dir') === 'rtl';
@@ -2343,8 +2343,8 @@ if (mysqli_num_rows($query) == 1) {
 					showCancelButton: true,
 					confirmButtonText: __('submit_button', 'Submit'),
 					cancelButtonText: __('cancel', 'Cancel'),
-					confirmButtonColor: '#28a745',
-					cancelButtonColor: '#dc3545',
+					confirmButtonColor: APP_COLORS.success,
+					cancelButtonColor: APP_COLORS.danger,
 					allowOutsideClick: false,
 					didOpen: () => {
 						// Toggle adjustment details and rejection reason visibility
@@ -2645,7 +2645,9 @@ if (mysqli_num_rows($query) == 1) {
 						html: '<input type="text" id="view-emp-return-date-input" class="form-control" value="' + new Date().toISOString().slice(0, 10) + '">',
 						showCancelButton: true,
 						confirmButtonText: __('print_for_return'),
+						confirmButtonColor: APP_COLORS.info,
 						cancelButtonText: __('cancel'),
+						cancelButtonColor: APP_COLORS.danger,
 						allowOutsideClick: false,
 						willOpen: function() {
 							var isRTL = $('html').attr('dir') === 'rtl' || $('body').attr('dir') === 'rtl';
@@ -3362,7 +3364,7 @@ if (mysqli_num_rows($query) == 1) {
 								showCloseButton: true,
 								showCancelButton: true,
 								confirmButtonText: '<i class="mdi mdi-printer"></i> ' + __('print'),
-								confirmButtonColor: '#28a745',
+								confirmButtonColor: APP_COLORS.success,
 								cancelButtonText: __('close'),
 								customClass: {
 									confirmButton: 'btn btn-success',
@@ -3493,8 +3495,8 @@ if (mysqli_num_rows($query) == 1) {
 					showCancelButton: true,
 					confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit_payment'),
 					cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
-					confirmButtonColor: '#28a745',
-					cancelButtonColor: '#dc3545',
+					confirmButtonColor: APP_COLORS.success,
+					cancelButtonColor: APP_COLORS.danger,
 					showLoaderOnConfirm: true,
 					preConfirm: () => {
 						const payment_date = $('#payment_date').val();
@@ -3808,8 +3810,8 @@ if (mysqli_num_rows($query) == 1) {
 					html: '<p><?= __('manager_acknowledgment_confirm', 'Are you sure you want to acknowledge this evaluation from') ?> <strong class="manager-name">' + managerName + '</strong>?</p>',
 					icon: 'question',
 					showCancelButton: true,
-					confirmButtonColor: '#28a745',
-					cancelButtonColor: '#6c757d',
+					confirmButtonColor: APP_COLORS.success,
+					cancelButtonColor: APP_COLORS.secondary,
 					confirmButtonText: __('yes_acknowledge', 'Acknowledge'),
 					cancelButtonText: __('cancel'),
 					allowOutsideClick: false,
@@ -3842,8 +3844,8 @@ if (mysqli_num_rows($query) == 1) {
 					html: '<p><?= __('please_enter_your_objection_reasonnote', 'Please enter your objection reason/note:') ?></p><textarea id="objectionNote" class="form-control swal2-input" placeholder="<?= __('enter_your_objection_here', 'Enter your objection here...') ?>" rows="4" style="resize: vertical; margin-top: 10px;"></textarea>',
 					icon: 'warning',
 					showCancelButton: true,
-					confirmButtonColor: '#ffc107',
-					cancelButtonColor: '#6c757d',
+					confirmButtonColor: APP_COLORS.warning,
+					cancelButtonColor: APP_COLORS.secondary,
 					confirmButtonText: __('submit_objection', 'Submit Objection'),
 					cancelButtonText: __('cancel'),
 					allowOutsideClick: false,
@@ -3898,7 +3900,7 @@ if (mysqli_num_rows($query) == 1) {
 										icon: 'success',
 										title: '<?= __('success') ?>',
 										text: resp.message || '<?= __('evaluation_acknowledgment_submitted', 'Evaluation acknowledgment submitted successfully!') ?>',
-										confirmButtonColor: '#007bff'
+										confirmButtonColor: APP_COLORS.primary
 									}).then(() => {
 										if (typeof onSuccess === 'function') {
 											onSuccess();

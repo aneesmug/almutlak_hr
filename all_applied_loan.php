@@ -562,9 +562,9 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                     `,
                     icon: 'question',
                     showCancelButton: true,
-                    confirmButtonColor: '#28a745',
+                    confirmButtonColor: APP_COLORS.success,
                     confirmButtonText: '<i class="fa fa-check"></i> ' + (__('create_settlement') || 'Create Settlement'),
-                    cancelButtonColor: '#dc3545',
+                    cancelButtonColor: APP_COLORS.danger,
                     cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
                     allowOutsideClick: false,
                     showLoaderOnConfirm: true,
@@ -609,7 +609,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                 <p class="text-muted"><small>The settlement request has been initiated and is now pending approval from the settlement approval chain.</small></p>
                             `,
                             icon: 'success',
-                            confirmButtonColor: '#28a745',
+                            confirmButtonColor: APP_COLORS.success,
                             confirmButtonText: __('ok') || 'OK'
                         }).then(() => {
                             location.reload();
@@ -620,7 +620,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                         title: __('error') || 'Error',
                         html: error,
                         icon: 'error',
-                        confirmButtonColor: '#dc3545',
+                        confirmButtonColor: APP_COLORS.danger,
                         confirmButtonText: __('ok') || 'OK'
                     });
                 });

@@ -807,8 +807,8 @@
                 width: '45%',
                 showCancelButton: true,
                 confirmButtonText: __('confirm_return', 'Confirm Return'),
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#d33',
+                confirmButtonColor: APP_COLORS.success,
+                cancelButtonColor: APP_COLORS.danger_dark,
                 cancelButtonText: __('cancel', 'Cancel'),
                 showLoaderOnConfirm: true,
                 preConfirm: () => {
@@ -867,8 +867,8 @@
                                     showCancelButton: true,
                                     confirmButtonText: __('print_report', 'Print Report'),
                                     cancelButtonText: __('done', 'Done'),
-                                    confirmButtonColor: '#3085d6',
-                                    cancelButtonColor: '#6c757d',
+                                    confirmButtonColor: APP_COLORS.primary,
+                                    cancelButtonColor: APP_COLORS.secondary,
                                     allowOutsideClick: false
                                 }).then((printResult) => {
                                     loadInventory();
@@ -917,7 +917,7 @@
                 showCancelButton: true,
                 cancelButtonText: __('cancel', 'Cancel'),
                 confirmButtonText: __('update', 'Update'),
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.success,
                 showLoaderOnConfirm: true,
                 preConfirm: () => {
                     const newSerial = document.getElementById('edit-serial-number').value;
@@ -1038,8 +1038,8 @@
                             showCancelButton: true,
                             confirmButtonText: __('confirm_and_open_report', 'Confirm and Open Report'),
                             cancelButtonText: __('cancel', 'Cancel'),
-                            confirmButtonColor: '#3085d6',
-                            cancelButtonColor: '#6c757d',
+                            confirmButtonColor: APP_COLORS.primary,
+                            cancelButtonColor: APP_COLORS.secondary,
                             allowOutsideClick: false,
                             width: '35%',
                             didOpen: () => {

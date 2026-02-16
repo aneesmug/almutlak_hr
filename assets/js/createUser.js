@@ -8,8 +8,8 @@ $(document).on('click', '.createUserDeptAjax', function(e) {
         title: 'Create New User',
         html: create_user_HTML(),
         showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         confirmButtonText: 'Create User',
         showLoaderOnConfirm: true,
         allowOutsideClick: () => {

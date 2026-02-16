@@ -307,7 +307,7 @@ if (!isset($_GET['id'])) {
                     icon: 'warning',
                     title: '<?=__('required_fields', 'Required Fields')?>',
                     text: '<?=__('select_department_category_first', 'Please select Target Department and Request Category first')?>',
-                    confirmButtonColor: '#3085d6'
+                    confirmButtonColor: APP_COLORS.primary
                 });
                 return false;
             }
@@ -426,7 +426,7 @@ if (!isset($_GET['id'])) {
                     icon: 'warning',
                     title: '<?=__('warning', 'Warning')?>',
                     text: '<?=__('cannot_remove_first_item', 'Cannot remove the first item')?>',
-                    confirmButtonColor: '#3085d6'
+                    confirmButtonColor: APP_COLORS.primary
                 });
                 return;
             }
@@ -457,7 +457,7 @@ if (!isset($_GET['id'])) {
                     icon: 'error',
                     title: '<?=__('error')?>',
                     text: '<?=__('add_at_least_one_item', 'Please add at least one item to the request')?>',
-                    confirmButtonColor: '#3085d6'
+                    confirmButtonColor: APP_COLORS.primary
                 });
                 return false;
             }
@@ -479,7 +479,7 @@ if (!isset($_GET['id'])) {
                     icon: 'error',
                     title: '<?=__('error')?>',
                     text: '<?=__('all_items_required_fields', 'All items must have name and quantity')?>',
-                    confirmButtonColor: '#3085d6'
+                    confirmButtonColor: APP_COLORS.primary
                 });
                 return false;
             }
@@ -505,7 +505,7 @@ if (!isset($_GET['id'])) {
                             icon: 'success',
                             title: '<?=__('success')?>',
                             text: response.message || '<?=__('request_created_successfully', 'Request created successfully')?>',
-                            confirmButtonColor: '#3085d6',
+                            confirmButtonColor: APP_COLORS.primary,
                             timer: 2000
                         }).then(function() {
                             window.location.href = 'view_general_request.php?id=' + response.inv_no;
@@ -515,7 +515,7 @@ if (!isset($_GET['id'])) {
                             icon: 'error',
                             title: '<?=__('error')?>',
                             text: response.message || '<?=__('request_creation_failed', 'Failed to create request')?>',
-                            confirmButtonColor: '#3085d6'
+                            confirmButtonColor: APP_COLORS.primary
                         });
                         $('#submitBtn').prop('disabled', false).html('<i class="mdi mdi-content-save"></i> <?=__('submit_request', 'Submit Request')?>');
                     }
@@ -526,7 +526,7 @@ if (!isset($_GET['id'])) {
                         icon: 'error',
                         title: '<?=__('error')?>',
                         text: '<?=__('request_submission_error', 'An error occurred while submitting the request')?>',
-                        confirmButtonColor: '#3085d6'
+                        confirmButtonColor: APP_COLORS.primary
                     });
                     $('#submitBtn').prop('disabled', false).html('<i class="mdi mdi-content-save"></i> <?=__('submit_request', 'Submit Request')?>');
                 }

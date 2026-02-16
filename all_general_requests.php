@@ -318,8 +318,8 @@ if(mysqli_num_rows($query) == 1){
                     text: '<?=__('confirm_delete_request', 'This will permanently delete the request and all its data!')?>',
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#d33',
-                    cancelButtonColor: '#3085d6',
+                    confirmButtonColor: APP_COLORS.danger_dark,
+                    cancelButtonColor: APP_COLORS.primary,
                     confirmButtonText: '<?=__('yes_delete_it', 'Yes, delete it!')?>',
                     cancelButtonText: '<?=__('cancel')?>'
                 }).then((result) => {

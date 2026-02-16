@@ -440,8 +440,8 @@ if (mysqli_num_rows($query) == 1) {
                     text: "<?=__('update_status_confirm_text')?>",
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonColor: '#3085d6',
-                    cancelButtonColor: '#d33',
+                    confirmButtonColor: APP_COLORS.primary,
+                    cancelButtonColor: APP_COLORS.danger_dark,
                     confirmButtonText: '<?=__('yes_update_button')?>',
                     showLoaderOnConfirm: true,
                     preConfirm: function() {

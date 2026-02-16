@@ -28,7 +28,7 @@ ini_set('display_errors', '0');
 // Check authorization
 $can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager', 'HR_Payroll', 'HR_Recruitment'];
 
-if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'is_system_admin') {
+if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'administrator') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
     exit();
 }
@@ -78,8 +78,36 @@ if ($action === 'getEvaluationDetails') {
         echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
         exit();
     }
-    
     if ($row = mysqli_fetch_assoc($result)) {
+
+        if (isset($row['employee_name'])) {
+            $row['employee_name'] = getDisplayName($row['employee_name']);
+        }
+        if (isset($row['observation'])) {
+            $row['observation'] = getDisplayName($row['observation']);
+        }
+        if (isset($row['dept_name'])) {
+            $row['dept_name'] = getDisplayName($row['dept_name']);
+        }
+        if (isset($row['employee_position'])) {
+            $row['employee_position'] = getDisplayName($row['employee_position']);
+        }
+        if (isset($row['manager_name'])) {
+            $row['manager_name'] = getDisplayName($row['manager_name']);
+        }
+        if (isset($row['department'])) {
+            $row['department'] = getDisplayName($row['department']);
+        }
+        if (isset($row['section'])) {
+            $row['section'] = getDisplayName($row['section']);
+        }
+        if (isset($row['position'])) {
+            $row['position'] = getDisplayName($row['position']);
+        }
+        if (isset($row['rating'])) {
+            $row['rating'] = getDisplayName($row['rating']);
+        }
+
         echo json_encode(['success' => true, 'data' => $row]);
     } else {
         echo json_encode(['success' => false, 'message' => 'Evaluation not found']);
@@ -129,6 +157,24 @@ if ($action === 'getAssetActivity') {
             exit();
         }
 
+        
+        // Apply display translations to asset data
+        if (isset($asset['name'])) {
+            $asset['name'] = getDisplayName($asset['name']);
+        }
+        if (isset($asset['asset_type'])) {
+            $asset['asset_type'] = getDisplayName($asset['asset_type']);
+        }
+        if (isset($asset['asset_department'])) {
+            $asset['asset_department'] = getDisplayName($asset['asset_department']);
+        }
+        if (isset($asset['assigned_emp_name'])) {
+            $asset['assigned_emp_name'] = getDisplayName(parseName($asset['assigned_emp_name']));
+        }
+        if (isset($asset['assigned_emp_department'])) {
+            $asset['assigned_emp_department'] = getDisplayName($asset['assigned_emp_department']);
+        }
+
         // Build history based on asset_id + serial (tracking_id preferred)
         $serialForHistory = '';
         if (!empty($asset['tracking_id'])) {
@@ -163,6 +209,18 @@ if ($action === 'getAssetActivity') {
         }
         $history = [];
         while ($row = mysqli_fetch_assoc($histRes)) {
+            if (isset($row['employee_name'])) {
+                $row['employee_name'] = getDisplayName($row['employee_name']);
+            }
+            if (isset($row['employee_department'])) {
+                $row['employee_department'] = getDisplayName($row['employee_department']);
+            }
+            if (isset($row['status'])) {
+                $row['status'] = getDisplayName($row['status']);
+            }
+            if (isset($row['dept_name'])) {
+                $row['dept_name'] = getDisplayName($row['dept_name']);
+            }
             $history[] = $row;
         }
 
@@ -272,6 +330,7 @@ $dateFrom = isset($_POST['dateFrom']) ? $_POST['dateFrom'] : '';
 $dateTo = isset($_POST['dateTo']) ? $_POST['dateTo'] : '';
 $status = isset($_POST['status']) ? $_POST['status'] : '';
 $vacationType = isset($_POST['vacationType']) ? trim($_POST['vacationType']) : '';
+$employeeId = isset($_POST['employeeId']) ? trim($_POST['employeeId']) : '';
 $hasFullAccess = isset($_POST['hasFullAccess']) && $_POST['hasFullAccess'] === 'true';
 $userDept = isset($_POST['userDept']) ? $_POST['userDept'] : '';
 
@@ -291,47 +350,47 @@ try {
     
     switch ($reportType) {
         case 'employee':
-            $result = generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept);
+            $result = generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId);
             break;
         case 'vacation':
-            $result = generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType);
+            $result = generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType, $employeeId);
             break;
         case 'loan':
-            $result = generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept);
+            $result = generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId);
             break;
         case 'salary':
-            $result = generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status);
+            $result = generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status, $employeeId);
             break;
         case 'payroll':
-            $result = generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
+            $result = generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
             break;
         case 'attendance':
-            $result = generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
+            $result = generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
             break;
         case 'document':
-            $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status);
+            $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status, $employeeId);
             break;
         case 'assets':
-            $result = generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
+            $result = generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
             break;
         case 'assets_list':
-            $result = generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
+            $result = generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
             break;
         case 'evaluation':
             // Check if user can acknowledge evaluations (managers only)
             if (!can_acknowledge_evaluations($user_type, $user_role)) {
                 throw new Exception('Unauthorized: Only authorized managers can access evaluation reports');
             }
-            $result = generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
+            $result = generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
             break;
         case 'resignation':
-            $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status);
+            $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
             break;
         case 'terminated_employees':
-            $result = generateTerminatedEmployeesReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
+            $result = generateTerminatedEmployeesReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
             break;
         case 'eos':
-            $result = generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept);
+            $result = generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
             break;
         case 'dept_comparison':
             $result = generateDepartmentComparisonReport($conDB, $columns, $departments, $hasFullAccess, $userDept);
@@ -476,12 +535,12 @@ function getColumnLabel($column) {
 }
 
 // Employee Report
-function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept) {
+function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '') {
     global $is_rtl;
     // Map column IDs to actual database columns with proper joins
     $columnMap = [
         'actual_job' => 'j.job, j.job_ar',  // Select both
-        'dept' => 'd.dep_nme, d.dep_nme_ar',  // Select both
+        'dept' => 'd.dep_nme',  // Select both
         'sectin_nme' => 's.section_name',
         'country' => 'c.name, c.name_ar',  // Select both
         'bank_name' => 'b.name, b.bank_name_ar',  // Select both
@@ -580,6 +639,11 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
     if ($status !== '') {
         $where[] = "e.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -628,11 +692,11 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         if (isset($row['comp_name']) || isset($row['comp_name_ar'])) {
             $row['comp_no'] = $is_rtl ?? false ? $row['comp_name_ar'] : $row['comp_name'];
         }
-        if (isset($row['dep_nme'])) {
-            $row['dep_nme'] = $is_rtl ?? false ? $row['dep_nme_ar'] : $row['dep_nme'];
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
         }
         if (isset($row['sectin_nme'])) {
-            $row['sectin_nme'] = getDisplayName(parseName($row['sectin_nme']));
+            $row['sectin_nme'] = getDisplayName($row['sectin_nme']);
         }
         if (isset($row['actual_job'])) {
             $row['actual_job'] = $is_rtl ?? false ? $row['actual_job_ar'] : $row['actual_job'];
@@ -657,6 +721,12 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         }
         if (isset($row['payment_type'])) {
             $row['payment_type'] = __(strtolower($row['payment_type']));
+        } 
+        if (isset($row['emg_name'])) {
+            $row['emg_name'] = getDisplayName($row['emg_name']);
+        }
+        if (isset($row['address'])) {
+            $row['address'] = getDisplayName($row['address']);
         }
         
         
@@ -685,7 +755,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
 }
 
 // Vacation Report
-function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType = '') {
+function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType = '', $employeeId = '') {
     global $is_rtl;
     
     // Build SELECT clause
@@ -758,6 +828,11 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
     if (!empty($vacationType)) {
         $where[] = "v.vac_type = '" . mysqli_real_escape_string($conDB, $vacationType) . "'";
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "v.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -792,7 +867,22 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
         if (isset($row['comp_name']) || isset($row['comp_name_ar'])) {
             $row['comp_no'] = ($is_rtl ?? false) ? $row['comp_name_ar'] : $row['comp_name'];
             unset($row['comp_name']);
-            unset($row['comp_name_ar']);
+            unset($row['comp_name_ar']);   
+        }
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
+        if (isset($row['fly_type'])) {
+            $row['fly_type'] = getDisplayName($row['fly_type']);
+        }
+        if (isset($row['vac_type'])) {
+            $row['vac_type'] = getDisplayName($row['vac_type']);
+        }
+        if (isset($row['current_status'])) {
+            $row['current_status'] = getDisplayName($row['current_status']);
         }
         
         $data[] = $row;
@@ -802,7 +892,7 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
 }
 
 // Loan Report
-function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept) {
+function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '') {
     // Add column mappings
     $columnMap = [
         'dept' => 'd.dep_nme',
@@ -865,6 +955,11 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
     if ($status !== '') {
         $where[] = "l.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "l.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -897,6 +992,20 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
         unset($row['id']);
+
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
+        if (isset($row['loan_type'])) {
+            $row['loan_type'] = getDisplayName(str_replace('_', ' ', $row['loan_type']));
+        }
+        if (isset($row['status'])) {
+            $row['status'] = getDisplayName($row['status']);
+        }
+
         $data[] = $row;
     }
     
@@ -904,7 +1013,7 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
 }
 
 // Salary Report
-function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '') {
+function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
     // Build SELECT clause
     $selectCols = [];
     
@@ -951,6 +1060,11 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
         $where[] = "s.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
 
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "s.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
+
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -979,6 +1093,14 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
         if (isset($row['service_years'])) {
             $row['service_years'] = number_format((float)$row['service_years'], 2, '.', '');
         }
+
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName(parseName($row['dept']));
+        }
+
         $data[] = $row;
     }
     
@@ -986,7 +1108,7 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
 }
 
 // Payroll Report
-function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
     // Build SELECT clause with column mapping aligned to actual schema
     $selectCols = [];
 
@@ -1060,6 +1182,11 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
 
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "p.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
+
     $whereClause = implode(' AND ', $where);
 
     $sql = "SELECT $selectClause 
@@ -1086,6 +1213,14 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
             $monthIndex = (int)$row['month'];
             $row['month'] = ($monthIndex >=1 && $monthIndex <=12) ? $monthNames[$monthIndex] : $row['month'];
         }
+
+        if (isset($row['month'])) {
+            $row['month'] = getDisplayName($row['month']);
+        }
+        if (isset($row['generated_by'])) {
+            $row['generated_by'] = getDisplayName($row['generated_by']);
+        }
+
         $data[] = $row;
     }
 
@@ -1093,7 +1228,7 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
 }
 
 // Attendance Report
-function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept) {
+function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
     // Build SELECT clause
     $selectCols = [];
     
@@ -1142,6 +1277,11 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "a.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -1168,6 +1308,12 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
     
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
         $data[] = $row;
     }
     
@@ -1175,12 +1321,15 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
 }
 
 // Document Report
-function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '') {
+function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
     // Build SELECT clause - always include d.id and d.path for attachment button
     $selectCols = ['d.id AS document_id', 'd.path AS file_path', 'd.docu_ext AS file_extension'];
     
     foreach ($columns as $col) {
-        if ($col == 'emp_name') {
+        // Skip attachment column - it's generated dynamically
+        if ($col == 'attachment') {
+            continue;
+        } elseif ($col == 'emp_name') {
             $selectCols[] = 'e.name AS emp_name';
         } elseif ($col == 'emp_id') {
             $selectCols[] = 'd.emp_id';
@@ -1227,6 +1376,11 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
     if ($status !== '') {
         $where[] = "d.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "ed.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -1251,9 +1405,6 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
         $headers[] = getColumnLabel($col);
     }
     
-    // Add Attachment header
-    $headers[] = function_exists('__') ? __('attachment') : 'Attachment';
-    
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
         $docId = $row['document_id'];
@@ -1265,6 +1416,19 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
         $viewDocTitle = function_exists('__') ? __('view_document') : 'View Document';
         $row['attachment'] = '<a href="./assets/emp_documents/' . htmlspecialchars($filePath) . '" target="_blank" class="btn btn-sm btn-primary" title="' . htmlspecialchars($viewDocTitle) . '"><i class="mdi mdi-paperclip"></i> ' . htmlspecialchars($viewText) . '</a>';
         
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
+        if (isset($row['document_type'])) {
+            $row['document_type'] = getDisplayName($row['document_type']);
+        }
+        if (isset($row['status'])) {
+            $row['status'] = getDisplayName($row['status']);
+        }
+
         $data[] = $row;
     }
     
@@ -1272,7 +1436,7 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
 }
 
 // Evaluation Report
-function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
     // Add column mappings
     $columnMap = [
         'dept' => 'd.dep_nme',
@@ -1335,19 +1499,29 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
     }
     
     // Acknowledgment status filter
-    // IMPORTANT: By default, exclude pending evaluations (they haven't been acknowledged/objected yet)
-    if ($status === 'objected') {
-        // Show only objected evaluations
-        $where[] = "ev.manager_acknowledgment_status = 'objected'";
-    } else {
-        // Default behavior: exclude pending evaluations, show only acknowledged or objected
-        $where[] = "ev.manager_acknowledgment_status IN ('acknowledged', 'objected')";
+    // IMPORTANT: System admins can see all evaluations regardless of status
+    // For other users: By default, exclude pending evaluations (they haven't been acknowledged/objected yet)
+    global $user_type;
+    if ($user_type !== 'administrator') {
+        if ($status === 'objected') {
+            // Show only objected evaluations
+            $where[] = "ev.manager_acknowledgment_status = 'objected'";
+        } else {
+            // Default behavior: exclude pending evaluations, show only acknowledged or objected
+            $where[] = "ev.manager_acknowledgment_status IN ('acknowledged', 'objected')";
+        }
     }
+    // System admins see all, no status filter applied
     
     // Company filter - restrict by accessible companies
     $company_filter = getCompanyFilterSQL('e.comp_no', false);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "ev.employee_emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
     $whereClause = implode(' AND ', $where);
@@ -1385,6 +1559,23 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
     
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
+    
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['rating'])) {
+            $row['rating'] = getDisplayName($row['rating']);
+        }
+        if (isset($row['evaluator'])) {
+            $row['evaluator'] = getDisplayName($row['evaluator']);
+        }
+        if (isset($row['acknowledgment_status'])) {
+            $row['acknowledgment_status'] = getDisplayName($row['acknowledgment_status']);
+        }
+
         $evalId = $row['evaluation_id'];
         $viewDetails = function_exists('__') ? __('view_details') : 'View Details';
         $row['actions'] = '<button class="btn btn-sm btn-info view-evaluation-details" data-eval-id="' . $evalId . '"><i class="mdi mdi-eye"></i> ' . htmlspecialchars($viewDetails) . '</button>';
@@ -1395,7 +1586,9 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
 }
 
 // Resignation Report
-function generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+function generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+    global $is_rtl;
+    
     // Build SELECT clause
     $selectCols = [];
     
@@ -1453,6 +1646,11 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
     if ($status !== '') {
         $where[] = "r.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "r.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -1479,6 +1677,20 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
     
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
+
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
+        if (isset($row['reason'])) {
+            $row['reason'] = getReasonText($row['reason'], $is_rtl);
+        }
+        if (isset($row['status'])) {
+            $row['status'] = getDisplayName($row['status']);
+        }
+
         $data[] = $row;
     }
     
@@ -1486,7 +1698,9 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
 }
 
 // Terminated Employees Report (actual EOS records from emp_eos table)
-function generateTerminatedEmployeesReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept) {
+function generateTerminatedEmployeesReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
+    global $is_rtl;
+    
     // Build SELECT clause
     $selectCols = [];
     foreach ($columns as $col) {
@@ -1547,6 +1761,11 @@ function generateTerminatedEmployeesReport($conDB, $columns, $departments, $date
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -1573,6 +1792,18 @@ function generateTerminatedEmployeesReport($conDB, $columns, $departments, $date
     
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
+        if (isset($row['leaving_reason'])) {
+            $row['leaving_reason'] = getReasonText($row['leaving_reason'], $is_rtl);
+        }
+        if (isset($row['service_years'])) {
+            $row['service_years'] = getDisplayName($row['service_years']);
+        }
         $data[] = $row;
     }
     
@@ -1580,7 +1811,7 @@ function generateTerminatedEmployeesReport($conDB, $columns, $departments, $date
 }
 
 // End of Service Report (Prospective Calculation for Active Employees)
-function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept) {
+function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
     // This report calculates prospective EOS amounts for active employees
     // based on a selected termination date (dateTo parameter)
     
@@ -1608,6 +1839,11 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
     $department_filter = getDepartmentFilterSQL('e.dept', false);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
     $whereClause = implode(' AND ', $where);
@@ -1867,6 +2103,9 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
     
     while ($row = mysqli_fetch_assoc($result)) {
         $deptId = $row['id'];
+        if (isset($row['dep_nme'])) {
+            $row['dep_nme'] = getDisplayName($row['dep_nme']);
+        }
         $deptRow = [];
         
         foreach ($columns as $col) {
@@ -2264,6 +2503,40 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
     // Prepare data
     $data = [];
     while ($row = mysqli_fetch_assoc($result)) {
+        // Apply getDisplayName() translation to various column types
+        foreach ($row as $key => $value) {
+            // Translate name-type columns (employee names, manager names, etc.)
+            if (
+                stripos($key, 'name') !== false || 
+                stripos($key, 'emp_name') !== false || 
+                stripos($key, 'employee_name') !== false ||
+                stripos($key, 'manager_name') !== false ||
+                stripos($key, 'acknowledged_by_name') !== false
+                ) {
+                if (!empty($value) && is_string($value)) {
+                    $row[$key] = getDisplayName(parseName($value));
+                }
+            }
+            // Translate department columns
+            elseif (stripos($key, 'dept') !== false && !empty($value) && is_string($value)) {
+                $row[$key] = getDisplayName($value);
+            }
+            // Translate company columns
+            elseif (stripos($key, 'company') !== false && !empty($value) && is_string($value)) {
+                $row[$key] = getDisplayName($value);
+            }
+            elseif (stripos($key, 'comp_name') !== false && !empty($value) && is_string($value)) {
+                $row[$key] = getDisplayName($value);
+            }
+            // Translate position columns
+            elseif (stripos($key, 'position') !== false && !empty($value) && is_string($value)) {
+                $row[$key] = getDisplayName($value);
+            }
+            // Translate job columns (job title, actual_job, etc.)
+            elseif (stripos($key, 'job') !== false && !empty($value) && is_string($value)) {
+                $row[$key] = getDisplayName($value);
+            }
+        }
         $data[] = $row;
     }
     
@@ -2312,7 +2585,7 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
 }
 
 // Asset Inventory Report
-function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
     // Build SELECT clause
     $selectCols = ['a.id AS asset_id'];
     
@@ -2390,6 +2663,11 @@ function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo
         $status_safe = mysqli_real_escape_string($conDB, $status);
         $where[] = "ea.status = '$status_safe'";
     }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
     
     $whereClause = implode(' AND ', $where);
     
@@ -2417,6 +2695,26 @@ function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo
     
     // Get data
     while ($row = mysqli_fetch_assoc($query)) {
+
+        if (isset($row['asset_name'])) {
+            $row['asset_name'] = getDisplayName($row['asset_name']);
+        }
+        if (isset($row['asset_type'])) {
+            $row['asset_type'] = getDisplayName($row['asset_type']);
+        }    
+        if (isset($row['asset_status'])) {
+            $row['asset_status'] = getDisplayName($row['asset_status']);
+        }
+        if (isset($row['assigned_to'])) {
+            $row['assigned_to'] = getDisplayName(parseName($row['assigned_to']));
+        }
+        if (isset($row['assignment_status'])) {
+            $row['assignment_status'] = getDisplayName($row['assignment_status']);
+        }
+        if (isset($row['return_notes'])) {
+            $row['return_notes'] = getDisplayName($row['return_notes']);
+        }
+
         $data[] = $row;
     }
     
@@ -2424,7 +2722,7 @@ function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo
 }
 
 // Assets List (one row per asset with latest status/holder)
-function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '') {
+function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
     // Check if a specific asset item is selected - if so, show full activity
     $selectedItemId = isset($_POST['assetItemId']) ? intval($_POST['assetItemId']) : 0;
     if ($selectedItemId > 0) {
@@ -2549,6 +2847,11 @@ function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $da
         }
     }
 
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
+
     $whereClause = implode(' AND ', $where);
 
     $sql = "SELECT $selectClause
@@ -2568,6 +2871,14 @@ function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $da
     while ($row = mysqli_fetch_assoc($query)) {
         $viewTxt = function_exists('__') ? __('view_activity') : 'View Activity';
         $row['actions'] = '<button class="btn btn-sm btn-primary view-asset-activity" data-asset-item-id="' . intval($row['asset_item_id']) . '"><i class="mdi mdi-eye"></i> ' . htmlspecialchars($viewTxt) . '</button>';
+        
+        if (isset($row['asset_name'])) {
+            $row['asset_name'] = getDisplayName($row['asset_name']);
+        }
+        if (isset($row['asset_status'])) {
+            $row['asset_status'] = getDisplayName($row['asset_status']);
+        }
+
         $data[] = $row;
     }
 

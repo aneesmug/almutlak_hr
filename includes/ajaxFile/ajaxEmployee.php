@@ -30,6 +30,70 @@ if($ajaxType == 'emp_search') {
         'status'    => 200
     ];
     echo json_encode($data);
+} elseif($ajaxType == 'emp_search_select2') {
+    // Select2 AJAX search - for reports employee filter
+    // Returns data in format: [{emp_id: "...", name: "...", department: "..."}]
+    $search = isset($_POST['search']) ? trim($_POST['search']) : '';
+    $deptParam = isset($_POST['departments']) ? $_POST['departments'] : '';
+    
+    // Decode departments JSON array if provided
+    $selectedDepts = [];
+    if (!empty($deptParam)) {
+        $selectedDepts = json_decode($deptParam, true);
+        if (!is_array($selectedDepts)) {
+            $selectedDepts = [];
+        }
+    }
+    
+    // Add company filter based on user's access
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    
+    // Build WHERE clause for search
+    $whereSearch = [];
+    if (!empty($search)) {
+        $searchEscaped = mysqli_real_escape_string($conDB, $search);
+        $whereSearch[] = "(e.emp_id LIKE '%{$searchEscaped}%' OR e.name LIKE '%{$searchEscaped}%')";
+    }
+    
+    // Add department filter if departments are selected
+    if (!empty($selectedDepts)) {
+        $deptList = array_map(function($d) use ($conDB) { 
+            return "'" . mysqli_real_escape_string($conDB, $d) . "'"; 
+        }, $selectedDepts);
+        $whereSearch[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    }
+    
+    $whereClause = !empty($whereSearch) ? " AND " . implode(' AND ', $whereSearch) : "";
+    
+    $stmt = mysqli_query($conDB, "SELECT 
+        e.emp_id,
+        e.name,
+        d.dep_nme AS department
+    FROM employees e
+    LEFT JOIN department d ON e.dept = d.id
+    WHERE e.status = 1 {$company_filter}{$department_filter}{$whereClause}
+    ORDER BY e.name
+    LIMIT 20");
+    
+    $employees = []; // Initialize
+    if ($stmt) {
+        while($row = mysqli_fetch_assoc($stmt)) {
+            $employees[] = [
+                'emp_id' => $row['emp_id'],
+                'name' => $row['name'],
+                'department' => $row['department'] ?? ''
+            ];
+        }
+        mysqli_free_result($stmt);
+    }
+    
+    $data = [
+        'data'      => $employees,
+        'status'    => 200
+    ];
+    echo json_encode($data);
+    exit();
 } elseif($ajaxType == 'emp_data') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);

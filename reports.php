@@ -597,7 +597,18 @@ if (mysqli_num_rows($query) == 1) {
                                                 </select>
                                                 <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_departments') ?></small>
                                             </div>
-                                        <?php endif; ?> <!-- Date Range -->
+                                        <?php endif; ?> 
+                                        
+                                        <!-- Employee Filter (for employee-related reports) -->
+                                        <div class="col-md-4 mb-3" id="employeeFilterWrapper" style="display:none;">
+                                            <label for="employeeFilter"><?= __('employee') ?></label>
+                                            <select class="form-control" id="employeeFilter" style="width: 100%;">
+                                                <option value=""><?= __('all_employees') ?: 'All Employees' ?></option>
+                                            </select>
+                                            <small class="text-muted d-block mt-1"><?= __('type_to_search_employees') ?: 'Type employee ID or name to search' ?></small>
+                                        </div>
+
+                                        <!-- Date Range -->
                                         <div class="col-md-4 mb-3">
                                             <label for="dateFrom"><?= __('date_from') ?></label>
                                             <input type="text" class="form-control datepicker" id="dateFrom" placeholder="<?= __('select_start_date') ?>">
@@ -1179,6 +1190,80 @@ if (mysqli_num_rows($query) == 1) {
                         $('#vacationTypeFilter').val('');
                         $('#vacationTypeFilterWrapper').hide();
                     }
+                }
+
+                // Toggle Employee Filter visibility based on report type
+                function toggleEmployeeFilter(reportType) {
+                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos'];
+                    
+                    if (employeeRelatedReports.includes(reportType)) {
+                        $('#employeeFilterWrapper').show();
+                        // Load employees if not already loaded
+                        loadEmployees();
+                    } else {
+                        $('#employeeFilter').val('').trigger('change');
+                        $('#employeeFilterWrapper').hide();
+                    }
+                }
+
+                // Load employees into Select2 dropdown
+                function loadEmployees() {
+                    const $select = $('#employeeFilter');
+                    
+                    // Destroy existing Select2 instance to reload with new department filter
+                    if ($select.data('select2')) {
+                        $select.select2('destroy');
+                    }
+                    
+                    // Get selected departments
+                    let selectedDepts = [];
+                    const multiDeptFilter = $('#deptMultiFilter');
+                    const singleDeptFilter = $('#deptFilter');
+                    
+                    if (multiDeptFilter.is(':visible')) {
+                        selectedDepts = multiDeptFilter.val() || [];
+                    } else if (singleDeptFilter.is(':visible')) {
+                        const singleDept = singleDeptFilter.val();
+                        if (singleDept) {
+                            selectedDepts = [singleDept];
+                        }
+                    }
+                    
+                    // Initialize Select2 with AJAX loading
+                    $select.select2({
+                        theme: 'bootstrap4',
+                        ajax: {
+                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            delay: 250,
+                            data: function(params) {
+                                return {
+                                    ajaxType: 'emp_search_select2',
+                                    search: params.term,
+                                    departments: JSON.stringify(selectedDepts)
+                                };
+                            },
+                            processResults: function(response) {
+                                if (response.status === 200 && response.data) {
+                                    return {
+                                        results: response.data.map(function(emp) {
+                                            return {
+                                                id: emp.emp_id,
+                                                text: emp.emp_id + ' - ' + emp.name + (emp.department ? ' (' + emp.department + ')' : '')
+                                            };
+                                        })
+                                    };
+                                }
+                                return { results: [] };
+                            },
+                            cache: false
+                        },
+                        minimumInputLength: 1,
+                        placeholder: '<?= __('search_employee') ?: 'Search employee...' ?>',
+                        allowClear: true,
+                        width: '100%'
+                    });
                 }
 
                 initDeptSelect2();
@@ -1766,6 +1851,11 @@ if (mysqli_num_rows($query) == 1) {
                             id: 'status',
                             label: (typeof __ === 'function') ? __('status') : 'Status',
                             default: true
+                        },
+                        {
+                            id: 'attachment',
+                            label: (typeof __ === 'function') ? __('attachment') : 'Attachment',
+                            default: true
                         }
                     ],
                     evaluation: [{
@@ -2195,6 +2285,7 @@ if (mysqli_num_rows($query) == 1) {
                     $('#dateTo').val('');
                     $('#statusFilter').val('');
                     $('#deptFilter').val('');
+                    $('#employeeFilter').val('').trigger('change');
 
                     // Clear multi-select department filters
                     $('#deptMultiFilter').val(null).trigger('change');
@@ -2229,6 +2320,9 @@ if (mysqli_num_rows($query) == 1) {
                     // Update status and vacation-type filters based on report type
                     renderStatusFilter(reportType);
                     toggleVacationTypeFilter(reportType);
+
+                    // Show/hide employee filter based on report type
+                    toggleEmployeeFilter(reportType);
 
                     // Show/hide custom table selector
                     if (reportType === 'custom') {
@@ -2302,6 +2396,21 @@ if (mysqli_num_rows($query) == 1) {
                             $('#dateFrom').closest('.col-md-4, .form-group').hide();
                             $('#dateTo').closest('.col-md-4, .form-group').hide();
                         }
+                    }
+                });
+
+                // Reload employee filter when department selection changes
+                $('#deptFilter').on('change', function() {
+                    if ($('#employeeFilterWrapper').is(':visible')) {
+                        loadEmployees();
+                        $('#employeeFilter').val('').trigger('change');
+                    }
+                });
+
+                $('#deptMultiFilter').on('select2:select select2:unselect', function(e) {
+                    if ($('#employeeFilterWrapper').is(':visible')) {
+                        loadEmployees();
+                        $('#employeeFilter').val('').trigger('change');
                     }
                 });
 
@@ -2708,6 +2817,7 @@ if (mysqli_num_rows($query) == 1) {
                     // Prepare filter data
                     const statusValue = $('#statusFilterWrapper').is(':visible') ? $('#statusFilter').val() : '';
                     const vacationTypeValue = $('#vacationTypeFilterWrapper').is(':visible') ? $('#vacationTypeFilter').val() : '';
+                    const employeeIdValue = $('#employeeFilterWrapper').is(':visible') ? $('#employeeFilter').val() : '';
 
                     const filterData = {
                         reportType: reportType,
@@ -2717,7 +2827,8 @@ if (mysqli_num_rows($query) == 1) {
                         dateTo: $('#dateTo').val(),
                         status: statusValue,
                         hasFullAccess: <?= $has_full_access ? 'true' : 'false' ?>,
-                        userDept: '<?= $user_dept ?>'
+                        userDept: '<?= $user_dept ?>',
+                        employeeId: employeeIdValue
                     };
 
                     // If assets_list, include selected asset item filter
@@ -2827,30 +2938,17 @@ if (mysqli_num_rows($query) == 1) {
                         }
                         return key;
                     }
-                    // console.log('displayReport called with:');
-                    // console.log('- Data:', data);
-                    // console.log('- Data length:', data ? data.length : 0);
-                    // console.log('- Headers:', headers);
-                    // console.log('- Headers length:', headers ? headers.length : 0);
-                    // console.log('- Column IDs:', columnIds);
-                    // console.log('- Column IDs length:', columnIds ? columnIds.length : 0);
-                    // console.log('- Report type:', reportType);
-                    // console.log('- Selected columns order:', selectedColumnsOrder);
 
                     // Add 'actions' to columnIds if this is evaluation report with Actions column
-                    if (reportType === 'evaluation' && headers.length > columnIds.length && headers[headers.length - 1] === 'Actions') {
+                    // Don't check for 'Actions' string as it may be translated in RTL languages
+                    if (reportType === 'evaluation' && headers.length > columnIds.length) {
                         columnIds = columnIds.concat(['actions']);
                         // console.log('Added actions column. New columnIds length:', columnIds.length);
                     }
 
-                    // Add 'attachment' to columnIds if this is document report with Attachment column
-                    if (reportType === 'document' && headers.length > columnIds.length && headers[headers.length - 1] === 'Attachment') {
-                        columnIds = columnIds.concat(['attachment']);
-                        // console.log('Added attachment column. New columnIds length:', columnIds.length);
-                    }
-
                     // Add 'actions' for assets_list to show activity button
-                    if (reportType === 'assets_list' && headers.length > columnIds.length && headers[headers.length - 1] === 'Actions') {
+                    // Don't check for 'Actions' string as it may be translated in RTL languages
+                    if (reportType === 'assets_list' && headers.length > columnIds.length) {
                         columnIds = columnIds.concat(['actions']);
                     }
 
@@ -3276,10 +3374,10 @@ if (mysqli_num_rows($query) == 1) {
 
                                 // Build detailed HTML matching the image format
                                 let detailsHtml = `
-                                    <div class="evaluation-details-print" id="evaluationDetailsPrint" style="text-align: left; padding: 20px;">
+                                    <div class="evaluation-details-print" id="evaluationDetailsPrint" style="padding: 20px;">
                                         <div style="display: flex; justify-content: space-between; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #dee2e6;">
                                             <div style="flex: 1;">
-                                                <p style="margin-bottom: 10px;"><strong>${__('employee_name', 'Employee Name')}:</strong> <span class="emp-name">${eval.employee_name}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('employee_name', 'Employee Name')}:</strong> <span>${eval.employee_name}</span></p>
                                                 <p style="margin-bottom: 10px;"><strong>${__('employee_id', 'Employee ID')}:</strong> ${eval.employee_emp_id_display || eval.employee_emp_id}</p>
                                                 <p style="margin-bottom: 10px;"><strong>${__('department', 'Department')}:</strong> <span class="dept-name">${eval.department}</span></p>
                                                 <p style="margin-bottom: 10px;"><strong>${__('position', 'Position')}:</strong> <span class="emp-position">${eval.position || 'IT'}</span></p>
@@ -3373,13 +3471,13 @@ if (mysqli_num_rows($query) == 1) {
                                 `;
 
                                 Swal.fire({
-                                    title: 'Evaluation Details',
+                                    title: __('evaluation_details', 'Evaluation Details'),
                                     html: detailsHtml,
-                                    width: '900px',
+                                    width: '70%',
                                     showCloseButton: true,
                                     showCancelButton: true,
                                     confirmButtonText: `<i class="mdi mdi-printer"></i> ${__('print', 'Print')}`,
-                                    confirmButtonColor: '#28a745',
+                                    confirmButtonColor: APP_COLORS.success,
                                     cancelButtonText: __('close', 'Close'),
                                     customClass: {
                                         confirmButton: 'btn btn-success',
@@ -3512,7 +3610,7 @@ if (mysqli_num_rows($query) == 1) {
                             }
 
                             const html = `
-                                <div id="assetActivityModal" style="text-align: left;">
+                                <div id="assetActivityModal"">
                                     <div style="margin-bottom: 15px;">
                                         <h5 style="margin:0;">${(typeof __ === 'function') ? __('asset_name') : 'Asset Name'}: ${asset.name || '-'}</h5>
                                         <div style="color:#555;">${(typeof __ === 'function') ? __('asset_type') : 'Asset Type'}: ${asset.asset_type || '-'}</div>
@@ -3580,10 +3678,12 @@ if (mysqli_num_rows($query) == 1) {
                     $('#dateTo').val('');
                     $('#statusFilter').val('');
                     $('#vacationTypeFilter').val('');
+                    $('#employeeFilter').val('').trigger('change');
                     renderStatusFilter('');
                     toggleVacationTypeFilter('');
+                    toggleEmployeeFilter('');
                     // Show global date filters after reset
-                    $('#dateFrom').closest('.col-md-4, .form-group').show();
+                    $('#dateFrom').closest('.col-md-4, .form-group').show(); 
                     $('#dateTo').closest('.col-md-4, .form-group').show();
 
                     // Reset custom report date filters

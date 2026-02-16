@@ -539,8 +539,8 @@ function approveRequest(vacationId, role) {
                 width: '40%',
                 showCancelButton: true,
                 confirmButtonText: 'Approve & Assign Payer',
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#dc3545',
+                confirmButtonColor: APP_COLORS.success,
+                cancelButtonColor: APP_COLORS.danger,
                 showLoaderOnConfirm: true,
                 preConfirm: () => {
                     const payerId = document.getElementById('payer_emp_id').value;

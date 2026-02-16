@@ -567,8 +567,8 @@ if (mysqli_num_rows($query) == 1) {
                         text: `<?= __("confirm_user_signout_message") ?? "Are you sure you want to sign out" ?> ${username}?`,
                         icon: 'warning',
                         showCancelButton: true,
-                        confirmButtonColor: '#dc3545',
-                        cancelButtonColor: '#6c757d',
+                        confirmButtonColor: APP_COLORS.danger,
+                        cancelButtonColor: APP_COLORS.secondary,
                         confirmButtonText: '<?= __("yes_sign_out") ?? "Yes, Sign Out" ?>',
                         cancelButtonText: '<?= __("cancel") ?? "Cancel" ?>'
                     }).then((result) => {
@@ -725,7 +725,7 @@ if (mysqli_num_rows($query) == 1) {
                                 title: 'Error',
                                 text: res.message || 'Failed to sign out user.',
                                 icon: 'error',
-                                confirmButtonColor: '#dc3545'
+                                confirmButtonColor: APP_COLORS.danger
                             });
                         }
                     },
@@ -734,7 +734,7 @@ if (mysqli_num_rows($query) == 1) {
                             title: 'Error',
                             text: 'Failed to sign out user: ' + error,
                             icon: 'error',
-                            confirmButtonColor: '#dc3545'
+                            confirmButtonColor: APP_COLORS.danger
                         });
                     }
                 });

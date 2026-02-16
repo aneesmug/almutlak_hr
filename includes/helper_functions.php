@@ -5357,3 +5357,104 @@ if (!function_exists('getAvatarImagePath')) {
         return $displayImage;
     }
 }
+
+/*=============================================
+=    End of Service API & Reason Functions   =
+=============================================*/
+
+/**
+ * Fetches End of Service reasons from Qiwa API with 24-hour session caching.
+ * Handles network failures gracefully by returning cached data if available.
+ * 
+ * @return array Array of ContractEndReason objects from API, or empty array on error
+ */
+if (!function_exists('fetchEOSReasonsCache')) {
+    function fetchEOSReasonsCache() {
+        global $conDB;
+        
+        // Check session cache first (24-hour cache)
+        $cache_key = 'eos_reasons_cache_report';
+        $cache_duration = 24 * 60 * 60;
+        
+        if (isset($_SESSION[$cache_key]) && isset($_SESSION[$cache_key . '_time'])) {
+            $cache_age = time() - $_SESSION[$cache_key . '_time'];
+            if ($cache_age < $cache_duration) {
+                return $_SESSION[$cache_key];
+            }
+        }
+        
+        // Fetch from API
+        $url = "https://knowledge-center-be.qiwa.sa/api/v1/end-of-service";
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([]));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($http_code == 200) {
+            $data = json_decode($response, true);
+            $reasons = $data['EndOfServiceRewardLookUpRs']['Body']['EndOfServiceRewardLookUp']['ContractEndReason'] ?? [];
+            
+            // Cache the response
+            $_SESSION[$cache_key] = $reasons;
+            $_SESSION[$cache_key . '_time'] = time();
+            
+            return $reasons;
+        }
+        
+        // Return cached data if available (even if expired)
+        if (isset($_SESSION[$cache_key])) {
+            return $_SESSION[$cache_key];
+        }
+        
+        return [];
+    }
+}
+
+/**
+ * Translates End of Service reason code to human-readable text.
+ * Supports both English and Arabic descriptions based on language setting.
+ * 
+ * @param string|int $reasonCode The reason code from database (e.g., "1", "2")
+ * @param bool $isArabic Whether to return Arabic description (true) or English (false)
+ * @return string Translated reason text or original code if not found
+ */
+if (!function_exists('getReasonText')) {
+    function getReasonText($reasonCode, $isArabic = false) {
+        if (empty($reasonCode)) {
+            return $reasonCode;
+        }
+        
+        $reasons = fetchEOSReasonsCache();
+        if (empty($reasons)) {
+            return $reasonCode;
+        }
+        
+        // Search for matching reason code
+        foreach ($reasons as $reason) {
+            $code = isset($reason['ContractEndReasonCode']) ? (string)$reason['ContractEndReasonCode'] : '';
+            if ($code !== '' && $code === (string)$reasonCode) {
+                // Return Arabic or English description based on language
+                if ($isArabic && !empty($reason['ArDescription'])) {
+                    return $reason['ArDescription'];
+                } elseif (!empty($reason['EnDescription'])) {
+                    return $reason['EnDescription'];
+                }
+            }
+        }
+        
+        return $reasonCode; // Return original if no match found
+    }
+}

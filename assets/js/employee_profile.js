@@ -1946,7 +1946,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                 showCancelButton: true,
                 confirmButtonText: '<i class="fa fa-check"></i> ' + __('confirm'),
                 cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: APP_COLORS.success,
                 cancelButtonColor: APP_COLORS.secondary,
                 allowOutsideClick: false,
                 showLoaderOnConfirm: true,
