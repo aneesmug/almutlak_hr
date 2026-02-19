@@ -111,6 +111,11 @@ if (mysqli_num_rows($query) == 1) {
                                     <!-- <table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;"> -->
                                     <?php
 
+                                    // Add company, department, and employee filters based on user's access
+                                    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+                                    $department_filter = getDepartmentFilterSQL('e.dept', true);
+                                    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+
                                     $sql = "SELECT
                                         e.emp_id,
                                         e.name,
@@ -125,7 +130,8 @@ if (mysqli_num_rows($query) == 1) {
                                     FROM employees AS e
                                     JOIN bank_list AS bl ON e.bank_name = bl.bnk_id
                                     JOIN companies AS c ON e.comp_no = c.comp_id
-                                    JOIN department AS d ON e.dept = d.id";
+                                    JOIN department AS d ON e.dept = d.id
+                                    WHERE 1=1".$company_filter.$department_filter.$employee_filter;
                                     $query = mysqli_query($conDB, $sql);
                                     $company_query = mysqli_query($conDB, "SELECT * FROM companies ORDER BY comp_name ASC");
 

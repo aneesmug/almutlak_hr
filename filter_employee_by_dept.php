@@ -22,16 +22,32 @@ $accessible_departments = getAccessibleDepartments(true);
 
 // If user has restricted access (not empty array), check if requested department is allowed
 if (!empty($accessible_departments) && !in_array($department_id, $accessible_departments)) {
-    $_SESSION['error_msg'] = sprintf(
-        '<div class="col-xl-12">
-            <div class="alert alert-danger bg-danger text-white border-0" role="alert">
-                <b>Access Denied!</b> 
-                <h3>You don\'t have access to view employees from this department.</h3>
-            </div>
-        </div>'
-    );
-    header("Location: dashbydepart.php");
-    exit;
+    $allow_by_employee = false;
+    if (!empty($allowed_employees_array)) {
+        $allowed_emp_ids = implode(',', array_map('intval', $allowed_employees_array));
+        $dept_check_sql = "SELECT 1 FROM employees WHERE dept = ? AND emp_id IN ($allowed_emp_ids) LIMIT 1";
+        $dept_check_stmt = $conDB->prepare($dept_check_sql);
+        if ($dept_check_stmt) {
+            $dept_check_stmt->bind_param('i', $department_id);
+            $dept_check_stmt->execute();
+            $dept_check_stmt->store_result();
+            $allow_by_employee = $dept_check_stmt->num_rows > 0;
+            $dept_check_stmt->close();
+        }
+    }
+
+    if (!$allow_by_employee) {
+        $_SESSION['error_msg'] = sprintf(
+            '<div class="col-xl-12">
+                <div class="alert alert-danger bg-danger text-white border-0" role="alert">
+                    <b>Access Denied!</b> 
+                    <h3>You don\'t have access to view employees from this department.</h3>
+                </div>
+            </div>'
+        );
+        header("Location: dashbydepart.php");
+        exit;
+    }
 }
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
@@ -62,7 +78,8 @@ if ($current_page < 1) {
 }
 
 // ** NEW ** Get the total unfiltered count of ALL employees.
-$unfiltered_sql = "SELECT COUNT(id) as total FROM employees";
+$employee_filter_count = getEmployeeFilterSQL('emp_id', false);
+$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $employee_filter_count;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
@@ -70,6 +87,12 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 $where_clauses = ["`dept` = ?"]; // Department is the base filter for this page
 $params = [$department_id];
 $types = "i";
+
+// --- NEW ACCESS CONTROL: Always apply employee filter ---
+$employee_filter = getEmployeeFilterSQL('emp_id', false);
+if (!empty($employee_filter)) {
+    $where_clauses[] = substr($employee_filter, 5); // remove leading ' AND '
+}
 
 if (!empty($search_term)) {
     $where_clauses[] = "(`name` LIKE ? OR `iqama` LIKE ? OR `emp_id` LIKE ?)";

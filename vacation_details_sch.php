@@ -3,8 +3,9 @@
 	require_once __DIR__ . '/includes/session_check.php';
 	
 $company_filter = getCompanyFilterSQL('comp_no', true);
+$employee_filter = getEmployeeFilterSQL('emp_id', true);
 $emp_id_get = mysqli_real_escape_string($conDB, $_GET['emp_id']);
-$sql = "SELECT * FROM `employees` WHERE `emp_id`='" . $emp_id_get . "'" . $company_filter;
+$sql = "SELECT * FROM `employees` WHERE `emp_id`='" . $emp_id_get . "'" . $company_filter . $employee_filter;
 	$getquery = mysqli_query($conDB, $sql);
 
 // Check company access before processing
@@ -322,7 +323,8 @@ if(isset($_POST['submit'])){
 								// Apply access control for replacement employee list
 								$company_filter_rep = getCompanyFilterSQL('comp_no', true);
 								$department_filter_rep = getDepartmentFilterSQL('dept', true);
-								$sqlcodes = "SELECT * FROM `employees` WHERE `emp_sup_type`='mocha' AND `note`!='terminat' AND `dept`<>''" . $company_filter_rep . $department_filter_rep . " ORDER BY `dept` ASC";
+										$employee_filter_rep = getEmployeeFilterSQL('emp_id', true);
+										$sqlcodes = "SELECT * FROM `employees` WHERE `emp_sup_type`='mocha' AND `note`!='terminat' AND `dept`<>''" . $company_filter_rep . $department_filter_rep . $employee_filter_rep . " ORDER BY `dept` ASC";
     											$resultcodes = mysqli_query($conDB, $sqlcodes);
 												echo "<select class='form-control select2' name='replacement_per' required>";
 												echo "<option value=''>Select a Person...</option>";

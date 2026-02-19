@@ -17,10 +17,11 @@ if(mysqli_num_rows($query) == 1){
 // Fetch potential approvers (not 'employee' user_type) AND INCLUDE user_type AND dept ID
 $potential_approvers = [];
 $company_filter = getCompanyFilterSQL('e.comp_no', true);
+$employee_filter = getEmployeeFilterSQL('e.emp_id', true);
 $approver_query = mysqli_query($conDB, "SELECT e.`emp_id`, e.`name`, al.`user_type`, e.`dept`
                                         FROM `employees` e
                                         JOIN `admin_login` al ON e.`emp_id` = al.`emp_id`
-                                        WHERE al.`user_type` != 'employee' AND e.`status` = 1" . $company_filter . "
+                                        WHERE al.`user_type` != 'employee' AND e.`status` = 1" . $company_filter . $employee_filter . "
                                         ORDER BY e.`name`");
 if ($approver_query) {
     while ($row_approver = mysqli_fetch_assoc($approver_query)) {
@@ -129,7 +130,8 @@ $delivery_info = null;
 // Apply access control for delivery records
 $company_filter_delivery = getCompanyFilterSQL('e.comp_no', true);
 $department_filter_delivery = getDepartmentFilterSQL('e.dept', true);
-$delivery_query = mysqli_query($conDB, "SELECT d.*, e.name as received_employee_name FROM general_request_deliveries d LEFT JOIN employees e ON e.emp_id = d.received_by WHERE d.request_inv_no = '$inv_no'" . (strpos($delivery_query, 'WHERE') !== false ? " AND " : " WHERE ") . $company_filter_delivery . $department_filter_delivery . " LIMIT 1");
+$employee_filter_delivery = getEmployeeFilterSQL('e.emp_id', true);
+$delivery_query = mysqli_query($conDB, "SELECT d.*, e.name as received_employee_name FROM general_request_deliveries d LEFT JOIN employees e ON e.emp_id = d.received_by WHERE d.request_inv_no = '$inv_no'" . (strpos($delivery_query, 'WHERE') !== false ? " AND " : " WHERE ") . $company_filter_delivery . $department_filter_delivery . $employee_filter_delivery . " LIMIT 1");
 if ($delivery_query && mysqli_num_rows($delivery_query) > 0) {
     $delivery_info = mysqli_fetch_assoc($delivery_query);
 }

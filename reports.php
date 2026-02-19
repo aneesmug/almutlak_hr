@@ -15,7 +15,8 @@ $can_see_reports_page = [
     'DPT_Manager', 
     'HR_Manager', 
     'Finance_Manager',
-    'HR_Recruitment'
+    'HR_Recruitment',
+    'IT_Team_Manager'
 ];
 
 // Check authorization
@@ -1194,7 +1195,7 @@ if (mysqli_num_rows($query) == 1) {
 
                 // Toggle Employee Filter visibility based on report type
                 function toggleEmployeeFilter(reportType) {
-                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos'];
+                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement'];
                     
                     if (employeeRelatedReports.includes(reportType)) {
                         $('#employeeFilterWrapper').show();
@@ -1209,6 +1210,7 @@ if (mysqli_num_rows($query) == 1) {
                 // Load employees into Select2 dropdown
                 function loadEmployees() {
                     const $select = $('#employeeFilter');
+                    const reportType = $('#reportType').val();
                     
                     // Destroy existing Select2 instance to reload with new department filter
                     if ($select.data('select2')) {
@@ -1241,7 +1243,8 @@ if (mysqli_num_rows($query) == 1) {
                                 return {
                                     ajaxType: 'emp_search_select2',
                                     search: params.term,
-                                    departments: JSON.stringify(selectedDepts)
+                                    departments: JSON.stringify(selectedDepts),
+                                    reportType: reportType
                                 };
                             },
                             processResults: function(response) {
@@ -2052,6 +2055,117 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         }
                     ],
+                    terminated_employees: [{
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('employee_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'joining_date',
+                            label: (typeof __ === 'function') ? __('joining_date') : 'Joining Date',
+                            default: true
+                        },
+                        {
+                            id: 'termination_date',
+                            label: (typeof __ === 'function') ? __('termination_date') : 'Termination Date',
+                            default: true
+                        },
+                        {
+                            id: 'leaving_reason',
+                            label: (typeof __ === 'function') ? __('leaving_reason') : 'Leaving Reason',
+                            default: true
+                        },
+                        {
+                            id: 'service_duration',
+                            label: (typeof __ === 'function') ? __('service_duration') : 'Service Duration',
+                            default: true
+                        },
+                        {
+                            id: 'basic_salary',
+                            label: (typeof __ === 'function') ? __('basic_salary') : 'Basic Salary',
+                            default: true
+                        },
+                        {
+                            id: 'total_monthly_salary',
+                            label: (typeof __ === 'function') ? __('total_monthly_salary') : 'Total Monthly Salary',
+                            default: true
+                        },
+                        {
+                            id: 'eos_amount',
+                            label: (typeof __ === 'function') ? __('eos_amount') : 'EOS Amount',
+                            default: true
+                        },
+                        {
+                            id: 'vacation_days',
+                            label: (typeof __ === 'function') ? __('vacation_days') : 'Vacation Days',
+                            default: true
+                        },
+                        {
+                            id: 'vacation_salary',
+                            label: (typeof __ === 'function') ? __('vacation_salary') : 'Vacation Salary',
+                            default: true
+                        },
+                        {
+                            id: 'last_month_salary',
+                            label: (typeof __ === 'function') ? __('last_month_salary') : 'Last Month Salary',
+                            default: true
+                        },
+                        {
+                            id: 'gosi_deduction',
+                            label: (typeof __ === 'function') ? __('gosi_deduction') : 'GOSI Deduction',
+                            default: true
+                        },
+                        {
+                            id: 'absent_days_deduction',
+                            label: (typeof __ === 'function') ? __('absent_days_deduction') : 'Absent Days Deduction',
+                            default: true
+                        },
+                        {
+                            id: 'loan_deduction',
+                            label: (typeof __ === 'function') ? __('loan_deduction') : 'Loan/Other Deductions',
+                            default: true
+                        },
+                        {
+                            id: 'total_deductions',
+                            label: (typeof __ === 'function') ? __('total_deductions') : 'Total Deductions',
+                            default: true
+                        },
+                        {
+                            id: 'overtime_earnings',
+                            label: (typeof __ === 'function') ? __('overtime_earnings') : 'Overtime Earnings',
+                            default: true
+                        },
+                        {
+                            id: 'net_payment',
+                            label: (typeof __ === 'function') ? __('net_payment') : 'Net Payment Due',
+                            default: true
+                        },
+                        {
+                            id: 'bank_name',
+                            label: (typeof __ === 'function') ? __('bank_name') : 'Bank Name',
+                            default: true
+                        },
+                        {
+                            id: 'payment_type',
+                            label: (typeof __ === 'function') ? __('payment_type') : 'Payment Type',
+                            default: true
+                        },
+                        {
+                            id: 'payment_status',
+                            label: (typeof __ === 'function') ? __('payment_status') : 'Payment Status',
+                            default: true
+                        }
+                    ],
                     dept_comparison: [{
                             id: 'department',
                             label: (typeof __ === 'function') ? __('department') : 'Department',
@@ -2309,6 +2423,12 @@ if (mysqli_num_rows($query) == 1) {
                         $('label[for="dateTo"]').html('<?= __('last_working_day') ?> <span class="text-danger">*</span>');
                         $('#dateTo').attr('placeholder', '<?= __('select_last_working_day') ?>');
                         $('#dateFrom').closest('.col-md-4').hide(); // Hide date from for EOS
+                    } else if (reportType === 'terminated_employees') {
+                        // For Exit Settlement report, show date range for filtering
+                        $('label[for="dateFrom"]').html('<?= __('exit_from_date') ?: 'Exit From Date' ?>');
+                        $('label[for="dateTo"]').html('<?= __('exit_to_date') ?: 'Exit To Date' ?>');
+                        $('#dateTo').attr('placeholder', '<?= __('select_end_date') ?>');
+                        $('#dateFrom').closest('.col-md-4').show(); // Show date from for exit settlement
                     } else {
                         // Reset to default labels
                         $('label[for="dateFrom"]').html('<?= __('date_from') ?>');
@@ -2952,6 +3072,18 @@ if (mysqli_num_rows($query) == 1) {
                         columnIds = columnIds.concat(['actions']);
                     }
 
+                    // Add 'actions' for EOS report to show print PDF button
+                    // Don't check for 'Actions' string as it may be translated in RTL languages
+                    if (reportType === 'eos' && headers.length > columnIds.length) {
+                        columnIds = columnIds.concat(['actions']);
+                    }
+
+                    // Add 'actions' for terminated_employees report to show print PDF button
+                    // Don't check for 'Actions' string as it may be translated in RTL languages
+                    if (reportType === 'terminated_employees' && headers.length > columnIds.length) {
+                        columnIds = columnIds.concat(['actions']);
+                    }
+
                     // For asset detailed activity view, map headers to columnIds
                     if (reportType === 'assets_list' && data.length > 0 && data[0].entry_number !== undefined) {
                         columnIds = ['entry_number', 'asset_name', 'asset_type', 'tracking_id', 'emp_id', 'employee_name', 'employee_department', 'assigned_date', 'return_date', 'status', 'description'];
@@ -3227,8 +3359,8 @@ if (mysqli_num_rows($query) == 1) {
                                             filename: filename,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
-                                                    // Export all columns except the last one (Actions/Attachment) for evaluation, document, and assets_list reports
-                                                    if (reportType === 'evaluation' || reportType === 'document' || reportType === 'assets_list') {
+                                                    // Export all columns except the last one (Actions/Attachment) for evaluation, document, assets_list, eos, and terminated_employees reports
+                                                    if (reportType === 'evaluation' || reportType === 'document' || reportType === 'assets_list' || reportType === 'eos' || reportType === 'terminated_employees') {
                                                         var colCount = $('#reportTable').DataTable().columns().header().length;
                                                         return idx < colCount - 1;
                                                     }
@@ -3246,8 +3378,8 @@ if (mysqli_num_rows($query) == 1) {
                                             filename: filename,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
-                                                    // Export all columns except the last one (Actions/Attachment) for evaluation, document, and assets_list reports
-                                                    if (reportType === 'evaluation' || reportType === 'document' || reportType === 'assets_list') {
+                                                    // Export all columns except the last one (Actions/Attachment) for evaluation, document, assets_list, eos, and terminated_employees reports
+                                                    if (reportType === 'evaluation' || reportType === 'document' || reportType === 'assets_list' || reportType === 'eos' || reportType === 'terminated_employees') {
                                                         var colCount = $('#reportTable').DataTable().columns().header().length;
                                                         return idx < colCount - 1;
                                                     }

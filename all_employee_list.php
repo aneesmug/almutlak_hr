@@ -117,8 +117,9 @@
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('comp_no', true);
     $department_filter = getDepartmentFilterSQL('dept', true);
+    $employee_filter = getEmployeeFilterSQL('emp_id', true);
     
-    $sql = "SELECT * FROM `employees` WHERE `status`=1 AND `emp_sup_type`='mocha' ".$company_filter.$department_filter; 
+    $sql = "SELECT * FROM `employees` WHERE `status`=1 AND `emp_sup_type`='mocha' ".$company_filter.$department_filter.$employee_filter; 
     $query = mysqli_query($conDB, $sql);
 
     while ($rec = mysqli_fetch_array($query)) {

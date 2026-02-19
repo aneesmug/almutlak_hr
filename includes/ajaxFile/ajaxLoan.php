@@ -325,6 +325,61 @@ function approve_loan() {
         // Initialize ApprovalChainManager
         $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
         
+        // ===== CHECK ACCESS CONTROL for approver =====
+        // Get approver's allowed scope restrictions
+        $approverAccessQuery = $conDB->prepare("SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = ?");
+        $approverAccessQuery->bind_param("s", $approver_emp_id);
+        $approverAccessQuery->execute();
+        $approverAccessResult = $approverAccessQuery->get_result();
+        $approverAccessData = $approverAccessResult->fetch_assoc();
+        $approverAccessResult->free();
+        $approverAccessQuery->close();
+        
+        if ($approverAccessData) {
+            // Decode allowed scope restrictions
+            $allowedCompanies = !empty($approverAccessData['allowed_companies']) ? json_decode($approverAccessData['allowed_companies'], true) : null;
+            $allowedDepts = !empty($approverAccessData['allowed_departments']) ? json_decode($approverAccessData['allowed_departments'], true) : null;
+            $allowedEmps = !empty($approverAccessData['allowed_employees']) ? json_decode($approverAccessData['allowed_employees'], true) : null;
+            
+            // Get employee's company and department
+            $empAccessQuery = $conDB->prepare("SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = ?");
+            $empAccessQuery->bind_param("s", $loan_emp_id);
+            $empAccessQuery->execute();
+            $empAccessResult = $empAccessQuery->get_result();
+            $empScope = $empAccessResult->fetch_assoc();
+            $empAccessResult->free();
+            $empAccessQuery->close();
+            
+            $hasAccessToEmployee = true;
+            
+            // Check company restriction
+            if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
+                if (!in_array($empScope['comp_no'], $allowedCompanies)) {
+                    $hasAccessToEmployee = false;
+                }
+            }
+            
+            // Check department restriction
+            if ($hasAccessToEmployee && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
+                if (!in_array($empScope['dept'], $allowedDepts)) {
+                    $hasAccessToEmployee = false;
+                }
+            }
+            
+            // Check employee restriction
+            if ($hasAccessToEmployee && is_array($allowedEmps) && !empty($allowedEmps)) {
+                $empId = (int)$empScope['emp_id'];
+                if (!in_array($empId, array_map('intval', $allowedEmps))) {
+                    $hasAccessToEmployee = false;
+                }
+            }
+            
+            if (!$hasAccessToEmployee) {
+                echo json_encode(['status' => 'error', 'title' => 'Access Denied', 'message' => 'This employee is outside your approval scope. You cannot approve this loan.', 'type' => 'error']);
+                return;
+            }
+        }
+        
         // Verify approver is authorized
         $diagnostic = [];
         $diagnostic[] = "inv_no=$inv_no, approver_emp_id=$approver_emp_id";
@@ -2420,9 +2475,10 @@ function search_employee() {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('comp_no', false);
     $department_filter = getDepartmentFilterSQL('dept', false);
+    $employee_filter = getEmployeeFilterSQL('emp_id', false);
     
     $param = "%{$searchTerm}%";
-    $sql = "SELECT `emp_id`, `name` FROM `employees` WHERE (`name` LIKE ? OR `emp_id` LIKE ?) AND `status`=1 {$company_filter}{$department_filter} LIMIT 10";
+    $sql = "SELECT `emp_id`, `name` FROM `employees` WHERE (`name` LIKE ? OR `emp_id` LIKE ?) AND `status`=1 {$company_filter}{$department_filter}{$employee_filter} LIMIT 10";
     $stmt = $conDB->prepare($sql);
     $stmt->bind_param("ss", $param, $param);
     $stmt->execute();

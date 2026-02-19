@@ -8,6 +8,34 @@ if (mysqli_num_rows($query) == 1) {
 
 $color = array("primary", "success", "info", "warning", "danger", "dark");
 
+// Access scope labels for dashboard card
+$allowed_company_names = 'All Companies';
+if (!empty($allowed_companies_array)) {
+    $company_ids = implode(',', array_map('intval', $allowed_companies_array));
+    $comp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `comp_name` SEPARATOR ', ') AS `names` FROM `companies` WHERE `id` IN ($company_ids) OR `comp_id` IN ($company_ids)");
+    if ($comp_query && $comp_row = mysqli_fetch_assoc($comp_query)) {
+        $allowed_company_names = $comp_row['names'] ?: 'All Companies';
+    }
+}
+
+$allowed_department_names = 'All Departments';
+if (!empty($allowed_departments_array)) {
+    $department_ids = implode(',', array_map('intval', $allowed_departments_array));
+    $dept_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `dep_nme` SEPARATOR ', ') AS `names` FROM `department` WHERE `id` IN ($department_ids)");
+    if ($dept_query && $dept_row = mysqli_fetch_assoc($dept_query)) {
+        $allowed_department_names = $dept_row['names'] ?: 'All Departments';
+    }
+}
+
+$allowed_employee_names = 'All Employees';
+if (!empty($allowed_employees_array)) {
+    $employee_ids = implode(',', array_map('intval', $allowed_employees_array));
+    $emp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT CONCAT(`emp_id`, ' - ', `name`) SEPARATOR ', ') AS `names` FROM `employees` WHERE `emp_id` IN ($employee_ids)");
+    if ($emp_query && $emp_row = mysqli_fetch_assoc($emp_query)) {
+        $allowed_employee_names = $emp_row['names'] ?: 'All Employees';
+    }
+}
+
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -363,6 +391,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             // Apply company and department filters
                                             $company_filter = getCompanyFilterSQL('employees.comp_no', true);
                                             $department_filter = getDepartmentFilterSQL('employees.dept', true);
+                                            $employee_filter = getEmployeeFilterSQL('employees.emp_id', true);
                                             
                                             // Query to get department grouping (same query for all users, filters handle access)
                                             $querygrp = mysqli_query($conDB, "SELECT 
@@ -374,7 +403,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 FROM `employees` 
                                                 LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
                                                 LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
-                                                WHERE `employees`.`status` = 1" . $company_filter . $department_filter . "
+                                                WHERE `employees`.`status` = 1" . $company_filter . $department_filter . $employee_filter . "
                                                 GROUP BY `employees`.`dept`");
                                             
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
@@ -383,7 +412,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 $colorCount = count($colorArr);
                                                 $cardIndex = 0;
                                                 // Total active employees (for percentage calculation) - must respect access filters
-                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter . $department_filter);
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter . $department_filter . $employee_filter);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
@@ -438,6 +467,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                             
                                             // Apply only company filter for companies tab
                                             $company_filter = getCompanyFilterSQL('employees.comp_no', true);
+                                            $employee_filter = getEmployeeFilterSQL('employees.emp_id', true);
                                             
                                             // Query to get company grouping - only filter by allowed companies
                                             $querygrp = mysqli_query($conDB, "SELECT 
@@ -448,7 +478,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 `companies`.`comp_id`
                                                 FROM `employees` 
                                                 LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
-                                                WHERE `employees`.`status` = 1" . $company_filter . "
+                                                WHERE `employees`.`status` = 1" . $company_filter . $employee_filter . "
                                                 GROUP BY `employees`.`comp_no`");
                                             
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
@@ -458,7 +488,8 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 $cardIndex = 0;
                                                 // Total active employees (for percentage calculation) - only filter by company for this tab
                                                 $company_filter_total = getCompanyFilterSQL('comp_no', true);
-                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter_total);
+                                                $employee_filter_total = getEmployeeFilterSQL('emp_id', true);
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter_total . $employee_filter_total);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
@@ -526,6 +557,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 // Apply company and department filters for all users
                                                 $company_filter = getCompanyFilterSQL('emp.comp_no', true);
                                                 $department_filter = getDepartmentFilterSQL('emp.dept', true);
+                                                $employee_filter = getEmployeeFilterSQL('emp.emp_id', true);
                                                 
                                                 $sql = "SELECT 
                                                         `emp`.*, 
@@ -544,7 +576,7 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                         LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
                                                         LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
                                                         LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
-                                                        WHERE `emp`.`status`=1 AND `emp`.`fly`=0" . $company_filter . $department_filter . " ";
+                                                        WHERE `emp`.`status`=1 AND `emp`.`fly`=0" . $company_filter . $department_filter . $employee_filter . " ";
                                                 
                                                 $query = mysqli_query($conDB, $sql);
 
@@ -639,6 +671,30 @@ $color = array("primary", "success", "info", "warning", "danger", "dark");
                                                 </tr>
                                             </tfoot>
                                         </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-box">
+                            <h4 class="m-t-0 header-title"><?= __('access_scope') ?: 'Access Scope' ?></h4>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
+                                        <h5 class="m-t-0"><?= __('allowed_companies') ?: 'Allowed Companies' ?></h5>
+                                        <div class="small text-muted"><?= htmlspecialchars($allowed_company_names) ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
+                                        <h5 class="m-t-0"><?= __('allowed_departments') ?: 'Allowed Departments' ?></h5>
+                                        <div class="small text-muted"><?= htmlspecialchars($allowed_department_names) ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
+                                        <h5 class="m-t-0"><?= __('allowed_employees') ?: 'Allowed Employees' ?></h5>
+                                        <div class="small text-muted"><?= htmlspecialchars($allowed_employee_names) ?></div>
                                     </div>
                                 </div>
                             </div>

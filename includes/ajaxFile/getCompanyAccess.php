@@ -26,14 +26,6 @@ if (!$is_system_admin) {
 
 $user_id = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
 
-if ($user_id <= 0) {
-    echo json_encode([
-        'success' => false,
-        'message' => 'Invalid user ID'
-    ]);
-    exit();
-}
-
 try {
     // 1. Fetch all companies from database
     $companies = [];
@@ -48,27 +40,29 @@ try {
     
     // 2. Fetch current user's allowed companies
     $allowed_companies = [];
-    $user_query = "SELECT allowed_companies FROM admin_login WHERE id = ? LIMIT 1";
-    $stmt = mysqli_prepare($conDB, $user_query);
-    
-    if ($stmt) {
-        mysqli_stmt_bind_param($stmt, "i", $user_id);
-        mysqli_stmt_execute($stmt);
-        $user_result = mysqli_stmt_get_result($stmt);
+    if ($user_id > 0) {
+        $user_query = "SELECT allowed_companies FROM admin_login WHERE id = ? LIMIT 1";
+        $stmt = mysqli_prepare($conDB, $user_query);
         
-        if ($user_result && mysqli_num_rows($user_result) === 1) {
-            $user_data = mysqli_fetch_assoc($user_result);
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, "i", $user_id);
+            mysqli_stmt_execute($stmt);
+            $user_result = mysqli_stmt_get_result($stmt);
             
-            // Decode JSON allowed_companies
-            if (!empty($user_data['allowed_companies'])) {
-                $decoded = json_decode($user_data['allowed_companies'], true);
-                if (is_array($decoded)) {
-                    $allowed_companies = array_map('intval', $decoded);
+            if ($user_result && mysqli_num_rows($user_result) === 1) {
+                $user_data = mysqli_fetch_assoc($user_result);
+                
+                // Decode JSON allowed_companies
+                if (!empty($user_data['allowed_companies'])) {
+                    $decoded = json_decode($user_data['allowed_companies'], true);
+                    if (is_array($decoded)) {
+                        $allowed_companies = array_map('intval', $decoded);
+                    }
                 }
             }
+            
+            mysqli_stmt_close($stmt);
         }
-        
-        mysqli_stmt_close($stmt);
     }
     
     echo json_encode([

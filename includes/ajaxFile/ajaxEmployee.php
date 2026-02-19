@@ -18,8 +18,9 @@ if($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('comp_no', true);
     $department_filter = getDepartmentFilterSQL('dept', true);
+    $employee_filter = getEmployeeFilterSQL('emp_id', true);
     
-    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter.$department_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
+    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter.$department_filter.$employee_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
     $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -48,6 +49,7 @@ if($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
     
     // Build WHERE clause for search
     $whereSearch = [];
@@ -66,13 +68,17 @@ if($ajaxType == 'emp_search') {
     
     $whereClause = !empty($whereSearch) ? " AND " . implode(' AND ', $whereSearch) : "";
     
+    // Determine employee status filter based on report type
+    $reportType = isset($_POST['reportType']) ? $_POST['reportType'] : '';
+    $statusFilter = ($reportType === 'exit_settlement') ? 'e.status = 0' : 'e.status = 1';
+    
     $stmt = mysqli_query($conDB, "SELECT 
         e.emp_id,
         e.name,
         d.dep_nme AS department
     FROM employees e
     LEFT JOIN department d ON e.dept = d.id
-    WHERE e.status = 1 {$company_filter}{$department_filter}{$whereClause}
+    WHERE {$statusFilter} {$company_filter}{$department_filter}{$employee_filter}{$whereClause}
     ORDER BY e.name
     LIMIT 20");
     
@@ -98,6 +104,7 @@ if($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
     
     $emp_id_requested = (int)$_POST['empid'];
     
@@ -106,7 +113,7 @@ if($ajaxType == 'emp_search') {
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`emp_id`=".$emp_id_requested." ".$company_filter.$department_filter);
+    WHERE `e`.`status`=1 AND `e`.`emp_id`=".$emp_id_requested." ".$company_filter.$department_filter.$employee_filter);
     $name = []; // Initialize
     
     if ($stmt && mysqli_num_rows($stmt) > 0) {

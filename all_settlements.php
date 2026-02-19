@@ -9,6 +9,7 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
+require_once __DIR__ . '/includes/settlement_attachments_helper.php';
 
 // Restrict access: Employees cannot view this detailed report page
 if (isset($isEmployee) && $isEmployee === true) {
@@ -120,10 +121,11 @@ if (!$canSeeAllDepts && !$deptFilterApplied && $currentFilter !== 'my_pending') 
 // Add company filter to WHERE clause (same as vacation and loan pages)
 $companyFilter = getCompanyFilterSQL('e.comp_no', true);
 $departmentFilter = getDepartmentFilterSQL('e.dept', true);
+$employeeFilter = getEmployeeFilterSQL('e.emp_id', true);
 if (empty($whereClauses)) {
-    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter;
+    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter . $employeeFilter;
 } else {
-    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter;
+    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter . $employeeFilter;
 }
 
 
@@ -606,19 +608,23 @@ if ($canSeeAllDepts) {
                                                         <div class="detail-item"><i class="fad fa-file-invoice"></i><strong><?= __('settlement_id') ?>:</strong> <?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES); ?></div>
                                                         <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <span class="badge badge-success" style="font-size: 0.95em; padding: 0.5rem 0.75rem;">SAR <?= number_format(round($payableAmount), 2); ?></span></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-alt"></i><strong><?= __('created') ?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($settlement['created_at'])), ENT_QUOTES); ?></div>
-                                                        <?php if (!empty($settlement['attachment_path'])): 
-                                                            // Decode JSON array of attachments
-                                                            $attachments = json_decode($settlement['attachment_path'], true);
-                                                            if (!is_array($attachments)) {
-                                                                // Fallback for old single file format
-                                                                $attachments = [$settlement['attachment_path']];
+                                                        <?php
+                                                            $settlementAttachments = getSettlementAttachments(
+                                                                $pdo,
+                                                                (int)$settlement['id'],
+                                                                $settlement['request_inv_no']
+                                                            );
+                                                            $attachmentLinks = [];
+                                                            foreach ($settlementAttachments as $attachment) {
+                                                                $attachmentLinks[] = 'download_settlement_attachment.php?id=' . (int)$attachment['id'];
                                                             }
                                                         ?>
-                                                        <div class="detail-item"><i class="fad fa-paperclip"></i><strong><?= __('attachments') ?> (<?= count($attachments) ?>):</strong> 
-                                                            <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")' style="padding: 4px 12px; font-size: 0.85em; font-weight: 500;">
-                                                                <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
-                                                            </button>
-                                                        </div>
+                                                        <?php if (!empty($attachmentLinks)): ?>
+                                                            <div class="detail-item"><i class="fad fa-paperclip"></i><strong><?= __('attachments') ?> (<?= count($attachmentLinks) ?>):</strong> 
+                                                                <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachmentLinks) ?>, "<?= __('attachments') ?>")' style="padding: 4px 12px; font-size: 0.85em; font-weight: 500;">
+                                                                    <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
+                                                                </button>
+                                                            </div>
                                                         <?php endif; ?>
                                                         <div class="detail-item">
                                                             <i class="fad fa-tasks"></i>
@@ -748,7 +754,8 @@ if ($canSeeAllDepts) {
         // Preserve legacy approval handler from jquery.app.js for non-HR flows
         const approveSettlementLegacy = window.approveSettlement;
         
-
+        // Global array to track uploaded file references (server-side filenames)
+        window.uploadedSettlementFiles = [];
 
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
@@ -766,7 +773,6 @@ if ($canSeeAllDepts) {
                 return approveSettlementLegacy(settlementId, settlementInvNo, empId);
             }
 
-            
             // Get settlement details first
             $.ajax({
                 url: './includes/ajaxFile/settlement_handler.php',
@@ -791,7 +797,6 @@ if ($canSeeAllDepts) {
                     }
                 },
                 error: function(xhr) {
-                    console.error('Settlement details fetch failed:', xhr);
                     Swal.fire('Error', 'Failed to fetch settlement details', 'error');
                 }
             });
@@ -803,7 +808,9 @@ if ($canSeeAllDepts) {
          */
         function showSettlementApprovalModal(settlementId, settlementInvNo, empId, employeeName, settlementAmount) {
 
-            
+            // Store settlement details in window for use in Dropzone
+            window.currentSettlementId = settlementId;
+            window.currentSettlementInvNo = settlementInvNo;
             // Build HTML based on user type
             let modalHTML = `
                 <div class="text-left">
@@ -868,10 +875,15 @@ if ($canSeeAllDepts) {
                 },
                 preConfirm: () => {
                     const comment = document.getElementById('approvalComment').value.trim();
-                    const settlementDropzone = isHRPayroll ? Dropzone.forElement('#settlementDropzone') : null;
+                    
+                    // Use uploaded file references (collected during upload), not the files themselves
+                    const uploadedFileReferences = window.uploadedSettlementFiles || [];
+                    
+                    if (uploadedFileReferences.length === 0) {
+                    }
                     
                     return new Promise((resolve, reject) => {
-                        // Prepare form data for approval + attachments
+                        // Prepare form data for approval with file references
                         const formData = new FormData();
                         formData.append('action', 'approve_settlement_with_attachments');
                         formData.append('settlement_id', settlementId);
@@ -880,36 +892,33 @@ if ($canSeeAllDepts) {
                         formData.append('approval_comment', comment);
                         formData.append('is_final_approval', 0);
                         formData.append('is_hr_payroll', isHRPayroll ? '1' : '0');
-                        formData.append('attachment_count', settlementDropzone ? settlementDropzone.files.length : 0);
+                        formData.append('attachment_count', uploadedFileReferences.length);
                         
-                        // Add all uploaded files to FormData (HR Payroll only)
-                        if (settlementDropzone) {
-                            settlementDropzone.files.forEach((file, index) => {
-                                formData.append(`attachment_${index}`, file);
-                                formData.append(`attachment_${index}_name`, file.name);
+                        // Add file references (server-side filenames) - NOT the files themselves
+                        if (uploadedFileReferences && uploadedFileReferences.length > 0) {
+                            uploadedFileReferences.forEach((fileRef, index) => {
+                                formData.append(`attachment_file_${index}`, fileRef);
                             });
+                        } else {
                         }
                         
-                        $.ajax({
-                            url: './includes/ajaxFile/settlement_handler.php',
-                            type: 'POST',
-                            dataType: 'JSON',
-                            data: formData,
-                            processData: false,
-                            contentType: false,
-                            timeout: 30000,
-                            success: function(response) {
-                                if (response.success === true) {
-                                    resolve(response);
-                                } else {
-                                    reject(response.message || '<?= __("error_approving_settlement") ?>');
-                                }
-                            },
-                            error: function(xhr) {
-                                console.error('Approval request failed:', xhr);
-                                const response = xhr.responseJSON || {};
-                                reject(response.message || '<?= __("error_approving_settlement") ?>');
+                        // Use fetch API to send approval with file references
+                        fetch('./includes/ajaxFile/settlement_handler.php', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => {
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data.success === true) {
+                                resolve(data);
+                            } else {
+                                reject(data.message || '<?= __("error_approving_settlement") ?>');
                             }
+                        })
+                        .catch(error => {
+                            reject(error.message || '<?= __("error_approving_settlement") ?>');
                         });
                     });
 
@@ -938,7 +947,6 @@ if ($canSeeAllDepts) {
                     });
                 }
             }).catch((error) => {
-                console.error('Modal error:', error);
                 Swal.fire({
                     title: '<?= __("error") ?>',
                     html: error,
@@ -962,17 +970,21 @@ if ($canSeeAllDepts) {
         /**
          * Initialize Dropzone for settlement attachments
          * Supports multiple file uploads with validation
+         * Tracks uploaded file references for later linking to settlement
          */
         function initializeSettlementDropzone() {
             const dropzoneElement = document.getElementById('settlementDropzone');
             if (!dropzoneElement) {
-                console.warn('Settlement Dropzone element not found');
                 return;
             }
+            
+            // Reset uploaded files array for this modal session
+            window.uploadedSettlementFiles = [];
             
             // Destroy previous instance if exists
             if (window.settlementDropzoneInstance) {
                 window.settlementDropzoneInstance.destroy();
+                window.settlementDropzoneInstance = null;
             }
             
             try {
@@ -980,11 +992,11 @@ if ($canSeeAllDepts) {
                 window.settlementDropzoneInstance = new Dropzone('#settlementDropzone', {
                     url: './includes/ajaxFile/settlement_handler.php',
                     autoDiscover: false,
-                    autoProcessQueue: false,
+                    autoProcessQueue: true, // instant upload
                     maxFilesize: MAX_FILE_SIZE_MB,
                     maxFiles: 10,
                     acceptedFiles: '.pdf,.jpg,.jpeg',
-                    addRemoveLinks: false,
+                    addRemoveLinks: true,
                     clickable: true,
                     dictDefaultMessage: `
                         <i class="fa fa-cloud-upload-alt"></i>
@@ -992,12 +1004,98 @@ if ($canSeeAllDepts) {
                         <span><?= __("or_click_to_browse") ?></span>
                     `,
                     dictFallbackMessage: `<?= __("or_click_to_browse") ?>`,
+                    dictFileTooBig: 'File is too big ({{filesize}}). Max file size is {{maxFilesize}}.',
+                    dictInvalidFileType: 'You cannot upload files of this type.',
+                    dictMaxFilesExceeded: 'You can not upload any more files.',
                 });
-                console.log('Settlement Dropzone initialized:', window.settlementDropzoneInstance);
+
+                // Add event handlers for file tracking and approval button state
+                const dz = window.settlementDropzoneInstance;
+                
+                dz.on('sending', (file, xhr, formData) => {
+                    // Append settlement details for database linking
+                    formData.append('action', 'upload_settlement_attachment');
+                    formData.append('settlement_id', window.currentSettlementId);
+                    formData.append('settlement_inv_no', window.currentSettlementInvNo);
+                });
+                
+                dz.on('addedfile', (file) => {
+                    updateApprovalButtonState();
+                });
+                
+                dz.on('removedfile', (file) => {
+                    // Remove from uploaded files if it was there
+                    window.uploadedSettlementFiles = window.uploadedSettlementFiles.filter(f => f !== file.name);
+                    updateApprovalButtonState();
+                });
+                
+                // Track successful uploads with server-side filename
+                dz.on('success', (file, response) => {
+                    // Response might be a string or object, handle both
+                    let parsedResponse = response;
+                    if (typeof response === 'string') {
+                        try {
+                            parsedResponse = JSON.parse(response);
+                        } catch (e) {
+                            return;
+                        }
+                    }
+                    
+                    // Extract server-side filename from response
+                    if (parsedResponse && parsedResponse.uploaded_filename) {
+                        window.uploadedSettlementFiles.push(parsedResponse.uploaded_filename);
+                    } else {
+                    }
+                    
+                    updateApprovalButtonState();
+                });
+                
+                dz.on('uploadprogress', (file, progress, bytesSent) => {
+                    updateApprovalButtonState();
+                });
+                
+                dz.on('queuecomplete', () => {
+                    updateApprovalButtonState();
+                });
+                
+                dz.on('error', (file, message) => {
+                    // Alert user about the error
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Upload Failed',
+                        text: 'Error uploading ' + file.name + ': ' + message,
+                        showConfirmButton: true
+                    });
+                    
+                    updateApprovalButtonState();
+                });
+
+                // Update button state immediately after initialization
+                updateApprovalButtonState();
             } catch (e) {
-                console.error('Error initializing Settlement Dropzone:', e);
             }
         }
+
+        function updateApprovalButtonState() {
+            const dz = window.settlementDropzoneInstance;
+            const approveBtn = document.querySelector('.swal2-confirm');
+            if (!dz || !approveBtn) {
+                return;
+            }
+            
+            const uploading = dz.getUploadingFiles().length > 0;
+            const queued = dz.getQueuedFiles().length > 0;
+            const shouldDisable = uploading || queued;
+            const isCurrentlyDisabled = approveBtn.disabled;
+            
+            approveBtn.disabled = shouldDisable;
+            approveBtn.classList.toggle('disabled', shouldDisable);
+            
+            if (shouldDisable !== isCurrentlyDisabled) {
+            }
+        }
+
+        // ...existing code...
     </script>
 </body>
 </html>

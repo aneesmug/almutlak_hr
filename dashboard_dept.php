@@ -6,17 +6,49 @@
 	if(mysqli_num_rows($query) == 1){
 	include("./includes/avatar_select.php");
 		
-	$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`=1 AND `fly`=0 AND `dept`='".$user_dept."' ");
+    $company_filter = getCompanyFilterSQL('comp_no', true);
+    $department_filter = getDepartmentFilterSQL('dept', true);
+    $employee_filter = getEmployeeFilterSQL('emp_id', true);
+	
+    $sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`=1 AND `fly`=0".$company_filter.$department_filter.$employee_filter);
 	$status_cont_active = mysqli_fetch_array($sql_count_active)[0];
 		
-	$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`=0 AND `dept`='".$user_dept."'");
+    $sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `status`=0".$company_filter.$department_filter.$employee_filter);
 	$status_cont_ter = mysqli_fetch_array($sql_count_ter)[0];
 		
-	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `fly`=1 AND `dept`='".$user_dept."'");
+    $sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `fly`=1".$company_filter.$department_filter.$employee_filter);
 	$status_cont_fly = mysqli_fetch_array($sql_count_fly)[0];
 		
-	$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE `dept`='".$user_dept."'");
+    $sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) `id` FROM `employees` WHERE 1=1".$company_filter.$department_filter.$employee_filter);
 	$status_cont_tot = mysqli_fetch_array($sql_count_tot)[0];
+	
+    // Access scope labels for dashboard card
+    $allowed_company_names = 'All Companies';
+    if (!empty($allowed_companies_array)) {
+        $company_ids = implode(',', array_map('intval', $allowed_companies_array));
+        $comp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `comp_name` SEPARATOR ', ') AS `names` FROM `companies` WHERE `id` IN ($company_ids) OR `comp_id` IN ($company_ids)");
+        if ($comp_query && $comp_row = mysqli_fetch_assoc($comp_query)) {
+            $allowed_company_names = $comp_row['names'] ?: 'All Companies';
+        }
+    }
+
+    $allowed_department_names = 'All Departments';
+    if (!empty($allowed_departments_array)) {
+        $department_ids = implode(',', array_map('intval', $allowed_departments_array));
+        $dept_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `dep_nme` SEPARATOR ', ') AS `names` FROM `department` WHERE `id` IN ($department_ids)");
+        if ($dept_query && $dept_row = mysqli_fetch_assoc($dept_query)) {
+            $allowed_department_names = $dept_row['names'] ?: 'All Departments';
+        }
+    }
+
+    $allowed_employee_names = 'All Employees';
+    if (!empty($allowed_employees_array)) {
+        $employee_ids = implode(',', array_map('intval', $allowed_employees_array));
+        $emp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT CONCAT(`emp_id`, ' - ', `name`) SEPARATOR ', ') AS `names` FROM `employees` WHERE `emp_id` IN ($employee_ids)");
+        if ($emp_query && $emp_row = mysqli_fetch_assoc($emp_query)) {
+            $allowed_employee_names = $emp_row['names'] ?: 'All Employees';
+        }
+    }
 ?>
 <!doctype html>
 <html lang="en">
@@ -121,6 +153,30 @@
                                     <p class="text-uppercase m-b-5 font-13 font-600">Total Employees</p>
                                 </div>
                             </div>						
+                        </div>
+dash
+                        <div class="card-box">
+                            <h4 class="m-t-0 header-title"><?= __('access_scope') ?: 'Access Scope' ?></h4>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
+                                        <h5 class="m-t-0"><?= __('allowed_companies') ?: 'Allowed Companies' ?></h5>
+                                        <div class="small text-muted"><?= htmlspecialchars($allowed_company_names) ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
+                                        <h5 class="m-t-0"><?= __('allowed_departments') ?: 'Allowed Departments' ?></h5>
+                                        <div class="small text-muted"><?= htmlspecialchars($allowed_department_names) ?></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
+                                        <h5 class="m-t-0"><?= __('allowed_employees') ?: 'Allowed Employees' ?></h5>
+                                        <div class="small text-muted"><?= htmlspecialchars($allowed_employee_names) ?></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         
                     </div> <!-- container -->

@@ -758,6 +758,59 @@ if ($ajaxType == 'apply_resignation') {
             exit;
         }
         
+        // ===== CHECK ACCESS CONTROL for approver =====
+        // Get approver's allowed scope restrictions
+        $approverQuery = "SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = '$approverId'";
+        $approverResult = mysqli_query($conDB, $approverQuery);
+        $approverData = mysqli_fetch_assoc($approverResult);
+        mysqli_free_result($approverResult);
+        
+        if ($approverData) {
+            // Check allowed companies
+            $allowedCompanies = !empty($approverData['allowed_companies']) ? json_decode($approverData['allowed_companies'], true) : null;
+            $allowedDepts = !empty($approverData['allowed_departments']) ? json_decode($approverData['allowed_departments'], true) : null;
+            $allowedEmps = !empty($approverData['allowed_employees']) ? json_decode($approverData['allowed_employees'], true) : null;
+            
+            // Get employee's company and department
+            $empScopeQuery = "SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = '" . mysqli_real_escape_string($conDB, $resignation['emp_id']) . "'";
+            $empScopeResult = mysqli_query($conDB, $empScopeQuery);
+            $empScope = mysqli_fetch_assoc($empScopeResult);
+            mysqli_free_result($empScopeResult);
+            
+            $hasAccess = true;
+            
+            // If approver has company restrictions, check if employee is in allowed companies
+            if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
+                if (!in_array($empScope['comp_no'], $allowedCompanies)) {
+                    $hasAccess = false;
+                }
+            }
+            
+            // If approver has department restrictions, check if employee is in allowed departments
+            if ($hasAccess && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
+                if (!in_array($empScope['dept'], $allowedDepts)) {
+                    $hasAccess = false;
+                }
+            }
+            
+            // If approver has employee restrictions, check if employee is in allowed employees
+            if ($hasAccess && is_array($allowedEmps) && !empty($allowedEmps)) {
+                $empId = (int)$empScope['emp_id'];
+                if (!in_array($empId, array_map('intval', $allowedEmps))) {
+                    $hasAccess = false;
+                }
+            }
+            
+            if (!$hasAccess) {
+                echo json_encode([
+                    'type' => 'error',
+                    'title' => 'Access Denied',
+                    'message' => 'This employee is outside your approval scope. You are not authorized to approve this resignation.'
+                ]);
+                exit;
+            }
+        }
+        
         // Get approver details
         $approverQuery = "SELECT `fullname`, `email` FROM `admin_login` WHERE `emp_id` = '$approverId'";
         $approverResult = mysqli_query($conDB, $approverQuery);
@@ -1033,6 +1086,13 @@ if ($ajaxType == 'apply_resignation') {
 } elseif ($ajaxType == 'reject_resignation') {
     // ===== REJECT RESIGNATION =====
     try {
+        $debugLogPath = __DIR__ . '/../../logs/resignation_reject.log';
+        $logRejectDebug = function ($message) use ($debugLogPath) {
+            $timestamp = date('Y-m-d H:i:s');
+            @file_put_contents($debugLogPath, "[$timestamp] $message" . PHP_EOL, FILE_APPEND);
+        };
+        $logRejectDebug('START reject_resignation | POST=' . json_encode($_POST));
+
         $resignationId = isset($_POST['resignation_id']) ? (int)$_POST['resignation_id'] : 0;
         $invNo = isset($_POST['inv_no']) ? mysqli_real_escape_string($conDB, $_POST['inv_no']) : '';
         $rejectionReason = isset($_POST['rejection_reason']) ? mysqli_real_escape_string($conDB, $_POST['rejection_reason']) : '';
@@ -1057,6 +1117,7 @@ if ($ajaxType == 'apply_resignation') {
         $resignationResult = mysqli_query($conDB, $resignationQuery);
         
         if (!$resignationResult || mysqli_num_rows($resignationResult) == 0) {
+            $logRejectDebug('Resignation not found or already processed. Query=' . $resignationQuery . ' | Error=' . mysqli_error($conDB));
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Not Found',
@@ -1069,6 +1130,7 @@ if ($ajaxType == 'apply_resignation') {
         mysqli_free_result($resignationResult);
         $resignationId = $resignation['id'];
         $requestInvNo = $resignation['request_inv_no'];
+        $logRejectDebug("Loaded resignation id=$resignationId | inv=$requestInvNo | emp_id=" . ($resignation['emp_id'] ?? ''));
         
         // Current user (rejector) from session_check.php globals
         $rejecterId = isset($empid) ? $empid : '';
@@ -1082,14 +1144,15 @@ if ($ajaxType == 'apply_resignation') {
             exit;
         }
         
-        // Verify approver has permission from request_approvers
-        $approvalCheckQuery = "SELECT `id`, `approval_level` FROM `request_approvers` 
+        // Verify rejector is in the approval chain (not requiring status='awaiting')
+        $approvalCheckQuery = "SELECT `id`, `approval_level`, `status` FROM `request_approvers` 
                              WHERE `request_inv_no` = '$requestInvNo' 
                              AND `approver_id` = '$rejecterId'
-                             AND `status` = 'awaiting'";
+                             LIMIT 1";
         $approvalCheckResult = mysqli_query($conDB, $approvalCheckQuery);
         
         if (!$approvalCheckResult || mysqli_num_rows($approvalCheckResult) == 0) {
+            $logRejectDebug('Approval check failed. Query=' . $approvalCheckQuery . ' | Error=' . mysqli_error($conDB));
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Unauthorized',
@@ -1101,12 +1164,69 @@ if ($ajaxType == 'apply_resignation') {
         mysqli_free_result($approvalCheckResult);
         $approvalLevel = $approvalCheckData['approval_level'];
         
+        // ===== CHECK ACCESS CONTROL for rejector =====
+        // Get rejector's allowed scope restrictions
+        $rejecterScopeQuery = "SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = '$rejecterId'";
+        $rejecterScopeResult = mysqli_query($conDB, $rejecterScopeQuery);
+        $rejecterScopeData = mysqli_fetch_assoc($rejecterScopeResult);
+        mysqli_free_result($rejecterScopeResult);
+        $logRejectDebug('Rejecter scope loaded for emp_id=' . $rejecterId);
+        
+        if ($rejecterScopeData) {
+            // Check allowed companies
+            $allowedCompanies = !empty($rejecterScopeData['allowed_companies']) ? json_decode($rejecterScopeData['allowed_companies'], true) : null;
+            $allowedDepts = !empty($rejecterScopeData['allowed_departments']) ? json_decode($rejecterScopeData['allowed_departments'], true) : null;
+            $allowedEmps = !empty($rejecterScopeData['allowed_employees']) ? json_decode($rejecterScopeData['allowed_employees'], true) : null;
+            
+            // Get employee's company and department
+            $empScopeQuery = "SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = '" . mysqli_real_escape_string($conDB, $resignation['emp_id']) . "'";
+            $empScopeResult = mysqli_query($conDB, $empScopeQuery);
+            $empScope = mysqli_fetch_assoc($empScopeResult);
+            mysqli_free_result($empScopeResult);
+            $logRejectDebug('Employee scope loaded for emp_id=' . ($resignation['emp_id'] ?? ''));
+            
+            $hasAccess = true;
+            
+            // If rejector has company restrictions, check if employee is in allowed companies
+            if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
+                if (!in_array($empScope['comp_no'], $allowedCompanies)) {
+                    $hasAccess = false;
+                }
+            }
+            
+            // If rejector has department restrictions, check if employee is in allowed departments
+            if ($hasAccess && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
+                if (!in_array($empScope['dept'], $allowedDepts)) {
+                    $hasAccess = false;
+                }
+            }
+            
+            // If rejector has employee restrictions, check if employee is in allowed employees
+            if ($hasAccess && is_array($allowedEmps) && !empty($allowedEmps)) {
+                $empId = (int)$empScope['emp_id'];
+                if (!in_array($empId, array_map('intval', $allowedEmps))) {
+                    $hasAccess = false;
+                }
+            }
+            
+            if (!$hasAccess) {
+                $logRejectDebug('Access denied by scope restrictions.');
+                echo json_encode([
+                    'type' => 'error',
+                    'title' => 'Access Denied',
+                    'message' => 'This employee is outside your rejection scope. You are not authorized to reject this resignation.'
+                ]);
+                exit;
+            }
+        }
+        
         // Get rejector details
         $rejecterQuery = "SELECT `fullname`, `email` FROM `admin_login` WHERE `emp_id` = '$rejecterId'";
         $rejecterResult = mysqli_query($conDB, $rejecterQuery);
         $rejecterData = mysqli_fetch_assoc($rejecterResult);
         $rejecterName = $rejecterData ? $rejecterData['fullname'] : 'Unknown';
         mysqli_free_result($rejecterResult);
+        $logRejectDebug('Rejecter details loaded: ' . $rejecterName);
         
         // Update request_approvers record
         $updateApprovalQuery = "UPDATE `request_approvers` 
@@ -1117,54 +1237,72 @@ if ($ajaxType == 'apply_resignation') {
                                AND `approver_id` = '$rejecterId'";
         
         if (!mysqli_query($conDB, $updateApprovalQuery)) {
+            $dbError = mysqli_error($conDB);
+            error_log("[ajaxResignation] request_approvers update failed: $dbError | Query: $updateApprovalQuery");
+            $logRejectDebug("request_approvers update failed: $dbError | Query=$updateApprovalQuery");
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Database Error',
-                'message' => 'Failed to record rejection.'
+                'message' => 'Failed to record rejection.',
+                'debug_info' => $dbError
             ]);
             exit;
         }
+        $logRejectDebug('request_approvers updated for rejection.');
         
-        // Update resignation status to rejected
+        // Update resignation status to rejected (aligned with current table schema)
         $updateQuery = "UPDATE `emp_resignations` 
-                       SET `status` = 'rejected', 
-                           `rejected_by` = '$rejecterId', 
-                           `approval_date` = NOW(),
+                       SET `status` = 'rejected',
                            `rejection_reason` = '$rejectionReason',
                            `updated_at` = NOW()
                        WHERE `id` = $resignationId";
 
         
         if (!mysqli_query($conDB, $updateQuery)) {
+            $dbError = mysqli_error($conDB);
+            error_log("[ajaxResignation] emp_resignations update failed: $dbError | Query: $updateQuery");
+            $logRejectDebug("emp_resignations update failed: $dbError | Query=$updateQuery");
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Database Error',
-                'message' => 'Failed to update resignation status.'
+                'message' => 'Failed to update resignation status.',
+                'debug_info' => $dbError
             ]);
             exit;
         }
+        $logRejectDebug('emp_resignations updated to rejected.');
         
-        // Log the resignation rejection
-        $old_resignation = mysqli_query($conDB, "SELECT * FROM emp_resignations WHERE id = $resignationId");
-        $old_data = mysqli_fetch_assoc($old_resignation);
-        if ($old_data) {
-            ActivityLogger::logApproval('Resignation', 'ajaxResignation.php', $resignationId, 'rejected', "Rejected resignation request: {$requestInvNo}, Level: {$approvalLevel}, Reason: {$rejectionReason}", 'emp_resignations');
+        // Log the resignation rejection (wrapped in try-catch to prevent breaking flow)
+        try {
+            $old_resignation = mysqli_query($conDB, "SELECT * FROM emp_resignations WHERE id = $resignationId");
+            $old_data = mysqli_fetch_assoc($old_resignation);
+            if ($old_data && class_exists('ActivityLogger')) {
+                ActivityLogger::logApproval('Resignation', 'ajaxResignation.php', $resignationId, 'rejected', "Rejected resignation request: {$requestInvNo}, Level: {$approvalLevel}, Reason: {$rejectionReason}", 'emp_resignations');
+            }
+            if ($old_resignation) mysqli_free_result($old_resignation);
+        } catch (Exception $logException) {
+            error_log("WARNING: Failed to log resignation rejection: " . $logException->getMessage());
+            // Continue - logging failure should not block rejection
         }
-        mysqli_free_result($old_resignation);
         
-        // Save rejection comment
-        if (!empty($rejectionReason) && function_exists('save_approval_comment_db')) {
-            save_approval_comment_db(
-                $conDB,
-                $requestInvNo,
-                'resignation',
-                'rejected',
-                $rejecterId,
-                $rejecterName,
-                $rejectionReason,
-                $approvalLevel,
-                $rejecterId
-            );
+        // Save rejection comment (wrapped in try-catch)
+        try {
+            if (!empty($rejectionReason) && function_exists('save_approval_comment_db')) {
+                save_approval_comment_db(
+                    $conDB,
+                    $requestInvNo,
+                    'resignation',
+                    'rejected',
+                    $rejecterId,
+                    $rejecterName,
+                    $rejectionReason,
+                    $approvalLevel,
+                    $rejecterId
+                );
+            }
+        } catch (Exception $commentException) {
+            error_log("WARNING: Failed to save rejection comment: " . $commentException->getMessage());
+            // Continue - comment save failure should not block rejection
         }
         
         // History is tracked via request_approvers table with status='rejected' and action_date=NOW()
@@ -1179,41 +1317,53 @@ if ($ajaxType == 'apply_resignation') {
                                AND `status` = 'awaiting'";
         mysqli_query($conDB, $cancelApprovalQuery);
         
-        // Notify the employee
-        create_browser_notification(
-            $conDB,
-            $resignation['emp_id'],
-            'Resignation Rejected',
-            'Your resignation has been rejected at Level ' . $approvalLevel . '. Reason: ' . $rejectionReason,
-            'all_resignations.php?inv=' . $requestInvNo
-        );
-        
-        // Send email to employee with rejection details
-        $employeeEmailQuery = "SELECT `al`.`email` FROM `admin_login` `al` 
-                             WHERE `al`.`emp_id` = '" . $resignation['emp_id'] . "'";
-        $employeeEmailResult = mysqli_query($conDB, $employeeEmailQuery);
-        if ($employeeEmailResult && mysqli_num_rows($employeeEmailResult) > 0) {
-            $empEmailData = mysqli_fetch_assoc($employeeEmailResult);
-            mysqli_free_result($employeeEmailResult);
-            
-            if (!empty($empEmailData['email'])) {
-                $emailData = [
-                    'emp_name' => $resignation['emp_name'],
-                    'rejection_reason' => $rejectionReason,
-                    'rejected_by' => $rejecterName,
-                    'approval_level' => $approvalLevel,
-                    'approver_name' => $resignation['emp_name']
-                ];
-                
-                send_approval_email(
+        // Notify the employee (wrapped in try-catch to prevent blocking rejection)
+        try {
+            if (function_exists('create_browser_notification')) {
+                create_browser_notification(
                     $conDB,
-                    $empEmailData['email'],
-                    $resignation['emp_name'],
-                    'Your Resignation Request - Rejected',
-                    'resignation_request',
-                    $emailData
+                    $resignation['emp_id'],
+                    'Resignation Rejected',
+                    'Your resignation has been rejected at Level ' . $approvalLevel . '. Reason: ' . $rejectionReason,
+                    'all_resignations.php?inv=' . $requestInvNo
                 );
             }
+        } catch (Exception $notifyException) {
+            error_log("WARNING: Failed to create browser notification for rejection: " . $notifyException->getMessage());
+            // Continue - notification failure should not block rejection
+        }
+        
+        // Send email to employee with rejection details (wrapped in try-catch)
+        try {
+            $employeeEmailQuery = "SELECT `al`.`email` FROM `admin_login` `al` 
+                                 WHERE `al`.`emp_id` = '" . $resignation['emp_id'] . "'";
+            $employeeEmailResult = mysqli_query($conDB, $employeeEmailQuery);
+            if ($employeeEmailResult && mysqli_num_rows($employeeEmailResult) > 0) {
+                $empEmailData = mysqli_fetch_assoc($employeeEmailResult);
+                mysqli_free_result($employeeEmailResult);
+                
+                if (!empty($empEmailData['email']) && function_exists('send_approval_email')) {
+                    $emailData = [
+                        'emp_name' => $resignation['emp_name'],
+                        'rejection_reason' => $rejectionReason,
+                        'rejected_by' => $rejecterName,
+                        'approval_level' => $approvalLevel,
+                        'approver_name' => $resignation['emp_name']
+                    ];
+                    
+                    send_approval_email(
+                        $conDB,
+                        $empEmailData['email'],
+                        $resignation['emp_name'],
+                        'Your Resignation Request - Rejected',
+                        'resignation_request',
+                        $emailData
+                    );
+                }
+            }
+        } catch (Exception $emailException) {
+            error_log("WARNING: Failed to send rejection email: " . $emailException->getMessage());
+            // Continue - email failure should not block rejection
         }
         
         // Success response
@@ -1223,15 +1373,20 @@ if ($ajaxType == 'apply_resignation') {
             'message' => 'Resignation has been rejected successfully. All pending approvals have been cancelled.'
         ]);
         
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         $errorDetails = 'Error: ' . $e->getMessage() . ' | File: ' . $e->getFile() . ' | Line: ' . $e->getLine();
         error_log("Resignation rejection error: " . $errorDetails);
+        if (isset($logRejectDebug) && is_callable($logRejectDebug)) {
+            $logRejectDebug('EXCEPTION: ' . $errorDetails);
+        }
         
         echo json_encode([
             'type' => 'error',
             'title' => 'System Error',
             'message' => 'An unexpected error occurred. Please contact IT support.',
-            'debug_info' => (defined('DEBUG_MODE') && constant('DEBUG_MODE') === true ? $dbError : null)
+            'error_detail' => $e->getMessage(),
+            'error_file' => $e->getFile(),
+            'error_line' => $e->getLine()
         ]);
     }
     exit;

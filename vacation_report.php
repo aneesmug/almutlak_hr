@@ -66,10 +66,11 @@ if (mysqli_num_rows($query) == 1) {
     // Add company and department filters to WHERE clause
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
     if (strpos($where_sql, 'WHERE') === false) {
-        $where_sql = " WHERE 1=1" . $company_filter . $department_filter;
+        $where_sql = " WHERE 1=1" . $company_filter . $department_filter . $employee_filter;
     } else {
-        $where_sql .= $company_filter . $department_filter;
+        $where_sql .= $company_filter . $department_filter . $employee_filter;
     }
 
     // 3. Get total item count

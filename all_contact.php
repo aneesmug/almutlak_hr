@@ -96,7 +96,12 @@
 	</thead>
 	<tbody>
 <?php
-	$sql_emp_vac = "SELECT * FROM `employees` WHERE `status`=1";
+	// Add company, department, and employee filters based on user's access
+	$company_filter = getCompanyFilterSQL('comp_no', true);
+	$department_filter = getDepartmentFilterSQL('dept', true);
+	$employee_filter = getEmployeeFilterSQL('emp_id', true);
+	
+	$sql_emp_vac = "SELECT * FROM `employees` WHERE `status`=1".$company_filter.$department_filter.$employee_filter;
 	$query_emp_vac = mysqli_query($conDB, $sql_emp_vac);
 
 while ($rec = mysqli_fetch_array($query_emp_vac)) {

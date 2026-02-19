@@ -82,8 +82,37 @@ if ($ajaxType == 'add_customer') {
     $allowed_departments_sql = ($allowed_departments_json !== null) 
         ? "'" . mysqli_real_escape_string($conDB, $allowed_departments_json) . "'"
         : "NULL";
+
+    // Handle Employee Access Control
+    $allowed_employees_json = null;
+    $full_emp_access = isset($_POST['full_emp_access']) && $_POST['full_emp_access'] === '1';
     
-    // Update admin_login with user_type, email, status, company access, and department access
+    if (!$full_emp_access) {
+        $allowed_employees_input = isset($_POST['allowed_employees']) ? $_POST['allowed_employees'] : [];
+        
+        // Validate and sanitize employee IDs
+        $employee_ids = [];
+        if (is_array($allowed_employees_input)) {
+            foreach ($allowed_employees_input as $emp_id) {
+                $emp_id = (int)$emp_id;
+                if ($emp_id > 0) {
+                    $employee_ids[] = $emp_id;
+                }
+            }
+        }
+        
+        // Store as JSON array if there are validated employee IDs
+        if (!empty($employee_ids)) {
+            $allowed_employees_json = json_encode($employee_ids);
+        }
+    }
+    
+    // Prepare allowed_employees column value
+    $allowed_employees_sql = ($allowed_employees_json !== null) 
+        ? "'" . mysqli_real_escape_string($conDB, $allowed_employees_json) . "'"
+        : "NULL";
+    
+        // Update admin_login with user_type, email, status, company access, department access, and employee access
     $sql = "UPDATE `admin_login` SET 
             `fullname` = '".$fullname_up."', 
             `user_type` = '".$user_type_up."', 
@@ -92,6 +121,7 @@ if ($ajaxType == 'add_customer') {
             `status` = ".$user_status.", 
             `allowed_companies` = " . $allowed_companies_sql . ",
             `allowed_departments` = " . $allowed_departments_sql . ",
+            `allowed_employees` = " . $allowed_employees_sql . ",
             `updated_at` = '".date('Y-m-d H:i:s')."' 
             WHERE `id` = '".$user_id."'";
     
@@ -103,7 +133,8 @@ if ($ajaxType == 'add_customer') {
             'status' => $user_status,
             'emp_type' => $emp_type_up,
             'allowed_companies' => $allowed_companies_json ? json_decode($allowed_companies_json, true) : null,
-            'allowed_departments' => $allowed_departments_json ? json_decode($allowed_departments_json, true) : null
+            'allowed_departments' => $allowed_departments_json ? json_decode($allowed_departments_json, true) : null,
+            'allowed_employees' => $allowed_employees_json ? json_decode($allowed_employees_json, true) : null
         ];
         
         ActivityLogger::logUpdate('User', 'ajaxUser.php', $user_id, $old_user, $new_values, "Updated user: {$fullname_up}, Role: {$user_type_up}", 'admin_login');
@@ -197,11 +228,77 @@ if ($ajaxType == 'add_customer') {
     }
     $check_stmt->close();
     
+    // Handle Company Access Control for new user
+    $allowed_companies_json = null;
+    $full_access = isset($_POST['full_access']) && $_POST['full_access'] === '1';
+    if (!$full_access) {
+        $allowed_companies_input = isset($_POST['allowed_companies']) ? $_POST['allowed_companies'] : [];
+        $company_ids = [];
+        if (is_array($allowed_companies_input)) {
+            foreach ($allowed_companies_input as $comp_id) {
+                $comp_id = (int)$comp_id;
+                if ($comp_id > 0) {
+                    $company_ids[] = $comp_id;
+                }
+            }
+        }
+        if (!empty($company_ids)) {
+            $allowed_companies_json = json_encode($company_ids);
+        }
+    }
+    $allowed_companies_sql = ($allowed_companies_json !== null)
+        ? $allowed_companies_json
+        : null;
+
+    // Handle Department Access Control for new user
+    $allowed_departments_json = null;
+    $full_dept_access = isset($_POST['full_dept_access']) && $_POST['full_dept_access'] === '1';
+    if (!$full_dept_access) {
+        $allowed_departments_input = isset($_POST['allowed_departments']) ? $_POST['allowed_departments'] : [];
+        $department_ids = [];
+        if (is_array($allowed_departments_input)) {
+            foreach ($allowed_departments_input as $dept_id) {
+                $dept_id = (int)$dept_id;
+                if ($dept_id > 0) {
+                    $department_ids[] = $dept_id;
+                }
+            }
+        }
+        if (!empty($department_ids)) {
+            $allowed_departments_json = json_encode($department_ids);
+        }
+    }
+    $allowed_departments_sql = ($allowed_departments_json !== null)
+        ? $allowed_departments_json
+        : null;
+
+    // Handle Employee Access Control for new user
+    $allowed_employees_json = null;
+    $full_emp_access = isset($_POST['full_emp_access']) && $_POST['full_emp_access'] === '1';
+    if (!$full_emp_access) {
+        $allowed_employees_input = isset($_POST['allowed_employees']) ? $_POST['allowed_employees'] : [];
+        $employee_ids = [];
+        if (is_array($allowed_employees_input)) {
+            foreach ($allowed_employees_input as $emp_id_item) {
+                $emp_id_item = (int)$emp_id_item;
+                if ($emp_id_item > 0) {
+                    $employee_ids[] = $emp_id_item;
+                }
+            }
+        }
+        if (!empty($employee_ids)) {
+            $allowed_employees_json = json_encode($employee_ids);
+        }
+    }
+    $allowed_employees_sql = ($allowed_employees_json !== null)
+        ? $allowed_employees_json
+        : null;
+
     // Insert into admin_login with user_type and emp_type
-    $sql = "INSERT INTO `admin_login` (`emp_id`, `id_iqama`, `fullname`, `user_type`, `emp_type`, `dept`, `email`, `created_at`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO `admin_login` (`emp_id`, `id_iqama`, `fullname`, `user_type`, `emp_type`, `dept`, `email`, `allowed_companies`, `allowed_departments`, `allowed_employees`, `created_at`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     $stmt2 = $conDB->prepare($sql);
     $created_at = date('Y-m-d H:i:s');
-    $stmt2->bind_param('iissssss', 
+    $stmt2->bind_param('iisssssssss', 
         $row['emp_id'],
         $row['iqama'],
         $row['name'],
@@ -209,6 +306,9 @@ if ($ajaxType == 'add_customer') {
         $emp_type,
         $row['dept'],
         $email,
+        $allowed_companies_sql,
+        $allowed_departments_sql,
+        $allowed_employees_sql,
         $created_at
     );
     

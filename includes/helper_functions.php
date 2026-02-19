@@ -4487,19 +4487,31 @@ if (!function_exists('canAccessCompany')) {
  */
 if (!function_exists('getCompanyFilterSQL')) {
     function getCompanyFilterSQL($column_name, $use_session = true) {
-        global $conDB, $allowed_companies_array;
+        global $conDB, $allowed_companies_array, $allowed_employees_array;
         
         $companies = $use_session && isset($_SESSION['allowed_companies_array']) 
             ? $_SESSION['allowed_companies_array'] 
             : $allowed_companies_array;
+        $employees = $use_session && isset($_SESSION['allowed_employees_array'])
+            ? $_SESSION['allowed_employees_array']
+            : $allowed_employees_array;
         
         // No restrictions = no WHERE clause needed
         if (empty($companies)) {
             return "";
         }
+
+        $employee_column = 'emp_id';
+        if (strpos($column_name, '.') !== false) {
+            $employee_column = substr($column_name, 0, strrpos($column_name, '.')) . '.emp_id';
+        }
         
         // Create IN clause for allowed companies with AND prefix for WHERE clause compatibility
         $companies_list = implode(',', array_map('intval', $companies));
+        if (!empty($employees)) {
+            $employees_list = implode(',', array_map('intval', $employees));
+            return " AND ($column_name IN ($companies_list) OR $employee_column IN ($employees_list))";
+        }
         return " AND $column_name IN ($companies_list)";
     }
 }
@@ -4513,19 +4525,31 @@ if (!function_exists('getCompanyFilterSQL')) {
  */
 if (!function_exists('getDepartmentFilterSQL')) {
     function getDepartmentFilterSQL($column_name, $use_session = true) {
-        global $conDB, $allowed_departments_array;
+        global $conDB, $allowed_departments_array, $allowed_employees_array;
         
         $departments = $use_session && isset($_SESSION['allowed_departments_array']) 
             ? $_SESSION['allowed_departments_array'] 
             : $allowed_departments_array;
+        $employees = $use_session && isset($_SESSION['allowed_employees_array'])
+            ? $_SESSION['allowed_employees_array']
+            : $allowed_employees_array;
         
         // No restrictions = no WHERE clause needed
         if (empty($departments)) {
             return "";
         }
+
+        $employee_column = 'emp_id';
+        if (strpos($column_name, '.') !== false) {
+            $employee_column = substr($column_name, 0, strrpos($column_name, '.')) . '.emp_id';
+        }
         
         // Create IN clause for allowed departments with AND prefix for WHERE clause compatibility
         $departments_list = implode(',', array_map('intval', $departments));
+        if (!empty($employees)) {
+            $employees_list = implode(',', array_map('intval', $employees));
+            return " AND ($column_name IN ($departments_list) OR $employee_column IN ($employees_list))";
+        }
         return " AND $column_name IN ($departments_list)";
     }
 }
@@ -4801,7 +4825,7 @@ if (!function_exists('format_holiday_details')) {
  */
 if (!function_exists('canEmployeeSupervisorAccess')) {
     function canEmployeeSupervisorAccess($employee_data, $user_data, $user_role = '') {
-        global $is_system_admin, $isHR, $isDeptHr;
+        global $is_system_admin, $isHR, $isDeptHr, $allowed_employees_array;
         
         // Extract data safely and ensure integers for comparisons
         $emp_id = isset($employee_data['emp_id']) ? (int)$employee_data['emp_id'] : 0;
@@ -4832,6 +4856,12 @@ if (!function_exists('canEmployeeSupervisorAccess')) {
         // 2. HR Department only (NOT IT, Finance, or other departments) - full access
         if ($isHR || $isDeptHr) {
             error_log("ACCESS_CONTROL: ALLOWED via rule 2 (HR department)");
+            return true;
+        }
+        
+        // 2.5. EXPLICITLY ALLOWED EMPLOYEES - user can view employees they've been explicitly granted access to
+        if (!empty($allowed_employees_array) && in_array($emp_id, $allowed_employees_array)) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 2.5 (explicitly allowed employee). emp_id={$emp_id} in allowed_employees_array");
             return true;
         }
         
@@ -5456,5 +5486,28 @@ if (!function_exists('getReasonText')) {
         }
         
         return $reasonCode; // Return original if no match found
+    }
+}
+
+/**
+ * Generate SQL WHERE clause for employee filtering based on user's allowed employees
+ *
+ * @param string $column_name The column name to filter (e.g., 'emp_id', 'e.emp_id')
+ * @param bool $use_session Use session values (default: true)
+ * @return string SQL WHERE clause fragment (e.g., " AND emp_id IN (1001,1002)" or "" for no restrictions)
+ */
+if (!function_exists('getEmployeeFilterSQL')) {
+    function getEmployeeFilterSQL($column_name, $use_session = true) {
+        global $conDB, $allowed_employees_array;
+        $employees = $use_session && isset($_SESSION['allowed_employees_array'])
+            ? $_SESSION['allowed_employees_array']
+            : $allowed_employees_array;
+        // No restrictions = no WHERE clause needed
+        if (empty($employees)) {
+            return "";
+        }
+        // Create IN clause for allowed employees with AND prefix for WHERE clause compatibility
+        $employees_list = implode(',', array_map('intval', $employees));
+        return " AND $column_name IN ($employees_list)";
     }
 }

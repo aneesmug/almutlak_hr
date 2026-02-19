@@ -297,6 +297,63 @@ $_SESSION['allowed_departments_array'] = $allowed_departments_array;
 // Determine if user has department restrictions
 $has_department_restrictions = !empty($allowed_departments_array) && count($allowed_departments_array) > 0;
 
+// --- 4c. Employee Access Control (Employee-Level Restrictions) ---
+// Get allowed employees from admin_login.allowed_employees JSON column
+// NULL = full access to all employees
+// JSON array = restricted access to specified employee IDs only
+$allowed_employees = null;  // Default: all employees
+$allowed_employees_array = [];  // Default: empty array
+
+if (isset($emprow['allowed_employees']) && !empty($emprow['allowed_employees'])) {
+    try {
+        $decoded_employees = json_decode($emprow['allowed_employees'], true);
+        if (is_array($decoded_employees) && count($decoded_employees) > 0) {
+            $allowed_employees = $decoded_employees;
+            $allowed_employees_array = array_map('intval', $decoded_employees);
+        }
+    } catch (Exception $e) {
+        // JSON decode error - treat as full access
+        $allowed_employees = null;
+        $allowed_employees_array = [];
+    }
+}
+
+// Store in session for use throughout application
+$_SESSION['allowed_employees'] = $allowed_employees;
+$_SESSION['allowed_employees_array'] = $allowed_employees_array;
+
+// --- 4d. Effective Employee Access (Additive to Company/Department) ---
+// If company/department access is restricted, include employees from those scopes
+// plus any explicitly allowed employees. If company/department is unrestricted,
+// do not restrict by employees.
+$effective_allowed_employees = $allowed_employees_array;
+if ($has_company_restrictions || $has_department_restrictions) {
+    $scope_employees = [];
+    $scope_sql = "SELECT `emp_id` FROM `employees` WHERE `status` = 1";
+    if ($has_company_restrictions) {
+        $company_ids = implode(',', array_map('intval', $allowed_companies_array));
+        $scope_sql .= " AND `comp_no` IN ($company_ids)";
+    }
+    if ($has_department_restrictions) {
+        $department_ids = implode(',', array_map('intval', $allowed_departments_array));
+        $scope_sql .= " AND `dept` IN ($department_ids)";
+    }
+    $scope_result = mysqli_query($conDB, $scope_sql);
+    if ($scope_result) {
+        while ($row = mysqli_fetch_assoc($scope_result)) {
+            $scope_employees[] = (int) $row['emp_id'];
+        }
+    }
+    $effective_allowed_employees = array_values(array_unique(array_merge($effective_allowed_employees, $scope_employees)));
+}
+
+// Store effective employee access for filtering
+$allowed_employees_array = $effective_allowed_employees;
+$_SESSION['allowed_employees_array'] = $allowed_employees_array;
+
+// Determine if user has employee restrictions
+$has_employee_restrictions = !empty($allowed_employees_array) && count($allowed_employees_array) > 0;
+
 // --- 5. Log User Activity (First login only) ---
 if (!isset($_SESSION['activity_logged'])) {
     require_once __DIR__ . '/user_activity_logger.php';
@@ -485,5 +542,3 @@ function update_employee_fly_status_on_session($conDB) {
         // error_log("update_employee_fly_status: Exception - " . $e->getMessage());
     }
 }
-
-?>

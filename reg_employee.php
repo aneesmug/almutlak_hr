@@ -33,6 +33,7 @@ $types = "";
 // ================================================================
 $company_filter = getCompanyFilterSQL('comp_no', true);
 $department_filter = getDepartmentFilterSQL('dept', true);
+$employee_filter = getEmployeeFilterSQL('emp_id', true);
 
 // Add search term filter if it exists
 if (!empty($search_term)) {
@@ -50,7 +51,7 @@ $where_sql = "";
 if (!empty($where_conditions)) {
     $where_sql = " WHERE " . implode(' AND ', $where_conditions);
 }
-$where_sql .= ($where_sql ? " " : " WHERE 1=1 ") . $company_filter . $department_filter;
+$where_sql .= ($where_sql ? " " : " WHERE 1=1 ") . $company_filter . $department_filter . $employee_filter;
 
 // Get the total count of items for pagination
 $count_query = "SELECT COUNT(*) as totalCount FROM `employees`" . $where_sql;
@@ -98,7 +99,7 @@ if ($total_items > 0) {
 }
 
 // Get the total unfiltered count of all employees the user can access (with filters)
-$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $company_filter . $department_filter;
+$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $company_filter . $department_filter . $employee_filter;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 

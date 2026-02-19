@@ -1,0 +1,14 @@
+[2026-02-17 10:32:53] START reject_resignation | POST={"ajaxType":"reject_resignation","resignation_id":"13","rejection_reason":"no"}
+[2026-02-17 10:32:53] Loaded resignation id=13 | inv=RES-20260216-22DB3B | emp_id=4328
+[2026-02-17 10:32:53] Rejecter scope loaded for emp_id=5261
+[2026-02-17 10:32:53] Employee scope loaded for emp_id=4328
+[2026-02-17 10:32:53] Rejecter details loaded: AHMED MOHD MESSELHY SHALABY
+[2026-02-17 10:32:53] request_approvers updated for rejection.
+[2026-02-17 10:32:53] EXCEPTION: Error: Unknown column 'rejected_by' in 'field list' | File: D:\xampp\htdocs\almutlak\system\includes\ajaxFile\ajaxResignation.php | Line: 1263
+[2026-02-17 10:46:16] START reject_resignation | POST={"ajaxType":"reject_resignation","resignation_id":"13","rejection_reason":"no need"}
+[2026-02-17 10:46:16] Loaded resignation id=13 | inv=RES-20260216-22DB3B | emp_id=4328
+[2026-02-17 10:46:16] Rejecter scope loaded for emp_id=5261
+[2026-02-17 10:46:16] Employee scope loaded for emp_id=4328
+[2026-02-17 10:46:16] Rejecter details loaded: AHMED MOHD MESSELHY SHALABY
+[2026-02-17 10:46:16] request_approvers updated for rejection.
+[2026-02-17 10:46:16] emp_resignations updated to rejected.

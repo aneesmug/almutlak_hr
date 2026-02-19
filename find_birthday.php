@@ -136,8 +136,9 @@
 
 	$company_filter = getCompanyFilterSQL('comp_no', true);
 	$department_filter = getDepartmentFilterSQL('dept', true);
+    $employee_filter = getEmployeeFilterSQL('emp_id', true);
     $dobget_safe = mysqli_real_escape_string($conDB, $dobget);
-	$sql_emp_vac = "SELECT * FROM `employees` WHERE MONTH(`dob`) = MONTH('" . $dobget_safe . "') AND `status` = 1" . $company_filter . $department_filter;
+    $sql_emp_vac = "SELECT * FROM `employees` WHERE MONTH(`dob`) = MONTH('" . $dobget_safe . "') AND `status` = 1" . $company_filter . $department_filter . $employee_filter;
     $query_emp_vac = mysqli_query($conDB, $sql_emp_vac);
 
 while ($rec = mysqli_fetch_array($query_emp_vac)) {

@@ -26,7 +26,7 @@ header('Content-Type: application/json');
 ini_set('display_errors', '0');
 
 // Check authorization
-$can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager', 'HR_Payroll', 'HR_Recruitment'];
+$can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager', 'HR_Payroll', 'HR_Recruitment', 'IT_Team_Manager'];
 
 if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'administrator') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
@@ -386,11 +386,11 @@ try {
         case 'resignation':
             $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
             break;
-        case 'terminated_employees':
-            $result = generateTerminatedEmployeesReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
-            break;
         case 'eos':
             $result = generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
+            break;
+        case 'terminated_employees':
+            $result = generateExitSettlementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
             break;
         case 'dept_comparison':
             $result = generateDepartmentComparisonReport($conDB, $columns, $departments, $hasFullAccess, $userDept);
@@ -604,28 +604,47 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
     }
     $selectClause = implode(', ', $selectCols);
     
-    // Build WHERE clause
-    $where = ['1=1'];
+    // Build WHERE clause - only active employees
+    $where = ['e.status = 1'];
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // NOTE: Department and company filtering is handled by getEmployeeFilterSQL, getDepartmentFilterSQL, getCompanyFilterSQL
+    // Do NOT add hard-coded department restrictions here as it conflicts with allowed_employees access control
+    // The filter functions handle the OR logic: (dept IN allowed_depts OR emp_id IN allowed_emps)
+    
+    // Only apply manual department filter if BOTH:
+    // 1. User doesn't have full access
+    // 2. User has no special employee/department/company restrictions configured
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) || 
+                            !empty($_SESSION['allowed_departments_array']) || 
+                            !empty($_SESSION['allowed_companies_array']);
+    
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
+        // Only apply hard-coded department filter if no access controls are configured
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
+        // Or if departments were explicitly requested
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
+
+    // Employee filter - restrict by accessible employees (applied only once)
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+    if (!empty($employee_filter)) {
+        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
     
-    // Department filter - restrict by accessible departments  
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    // Department filter - restrict by accessible departments (applied only once)
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
+
     
     // Date filter
     if (!empty($dateFrom)) {
@@ -788,28 +807,48 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
     }
     $selectClause = implode(', ', $selectCols);
     
-    // Build WHERE clause
-    $where = ['1=1'];
+    // Build WHERE clause - only active employees
+    $where = ['e.status = 1'];
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // NOTE: Department and company filtering is handled by getEmployeeFilterSQL, getDepartmentFilterSQL, getCompanyFilterSQL
+    // Do NOT add hard-coded department restrictions here as it conflicts with allowed_employees access control
+    // The filter functions handle the OR logic: (dept IN allowed_depts OR emp_id IN allowed_emps)
+    
+    // Only apply manual department filter if BOTH:
+    // 1. User doesn't have full access
+    // 2. User has no special employee/department/company restrictions configured
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) || 
+                            !empty($_SESSION['allowed_departments_array']) || 
+                            !empty($_SESSION['allowed_companies_array']);
+    
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
+        // Only apply hard-coded department filter if no access controls are configured
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
+        // Or if departments were explicitly requested
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Department filter - restrict by accessible departments
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
+
+    // Employee filter - restrict by accessible employees
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+    if (!empty($employee_filter)) {
+        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+
+
     
     // Date filter
     if (!empty($dateFrom)) {
@@ -912,6 +951,8 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
             $selectCols[] = 'l.emp_id';
         } elseif ($col == 'dept') {
             $selectCols[] = 'd.dep_nme AS dept';
+        } elseif ($col == 'bank_name') {
+            $selectCols[] = 'b.name AS bank_name';
         } elseif ($col == 'remaining_amount') {
             $selectCols[] = '(l.final_approved_amount - COALESCE(SUM(lp.amount), 0)) AS remaining_amount';
         } else {
@@ -920,8 +961,8 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
     }
     $selectClause = implode(', ', $selectCols);
     
-    // Build WHERE clause
-    $where = ['1=1'];
+    // Build WHERE clause - only active employees
+    $where = ['e.status = 1'];
     
     // Department filter
     if (!$hasFullAccess) {
@@ -932,15 +973,22 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
-    
+
     // Department filter - restrict by accessible departments
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+
+
+    // Employee filter - restrict by accessible employees
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+    if (!empty($employee_filter)) {
+        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Date filter
@@ -968,6 +1016,7 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
             FROM emp_loan l
             INNER JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN bank_list b ON e.bank_name = b.id
             LEFT JOIN emp_loan_payments lp ON l.id = lp.loan_id
             LEFT JOIN companies c2 ON e.comp_no = c2.comp_id
             LEFT JOIN sponsorship ON e.emp_sup_type = sponsorship.id
@@ -1033,7 +1082,7 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
     $selectClause = implode(', ', $selectCols);
     
     // Build WHERE clause
-    $where = ['1=1'];
+    $where = ['e.status = 1']; // Only active employees
     
     // Department filter
     if (!$hasFullAccess) {
@@ -1044,15 +1093,27 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
+
+    // Employee filter - restrict by accessible employees
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+    if (!empty($employee_filter)) {
+        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
     
     // Department filter - restrict by accessible departments
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+
+    // Employee filter - restrict by accessible employees
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+    if (!empty($employee_filter)) {
+        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Status filter
@@ -1160,7 +1221,7 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
     $selectClause = implode(', ', $selectCols);
 
     // Build WHERE clause
-    $where = ['1=1'];
+    $where = ['e.status = 1']; // Only active employees
 
     if (!empty($dateFrom)) {
         $fromYm = substr($dateFrom, 0, 7);
@@ -1254,7 +1315,7 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
     $selectClause = implode(', ', $selectCols);
     
     // Build WHERE clause
-    $where = ['1=1'];
+    $where = ['e.status = 1']; // Only active employees
     
     // Department filter
     if (!$hasFullAccess) {
@@ -1273,7 +1334,7 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
@@ -1350,7 +1411,7 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
     $selectClause = implode(', ', $selectCols);
     
     // Build WHERE clause
-    $where = ['1=1'];
+    $where = ['e.status = 1']; // Only active employees
     
     // Department filter
     if (!$hasFullAccess) {
@@ -1361,13 +1422,13 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Department filter - restrict by accessible departments
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
@@ -1480,7 +1541,7 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
     $selectClause = implode(', ', $selectCols);
     
     // Build WHERE clause
-    $where = ['1=1'];
+    $where = ['e.status = 1']; // Only active employees
     
     // Department filter
     if (!$hasFullAccess) {
@@ -1514,7 +1575,7 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
     // System admins see all, no status filter applied
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
@@ -1611,8 +1672,8 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
     }
     $selectClause = implode(', ', $selectCols);
     
-    // Build WHERE clause
-    $where = ['1=1'];
+    // Build WHERE clause - only active employees
+    $where = ['e.status = 1'];
     
     // Department filter
     if (!$hasFullAccess) {
@@ -1631,13 +1692,13 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Department filter - restrict by accessible departments
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
@@ -1697,119 +1758,6 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
     return ['data' => $data, 'headers' => $headers];
 }
 
-// Terminated Employees Report (actual EOS records from emp_eos table)
-function generateTerminatedEmployeesReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
-    global $is_rtl;
-    
-    // Build SELECT clause
-    $selectCols = [];
-    foreach ($columns as $col) {
-        if ($col == 'emp_name') {
-            $selectCols[] = 'e.name AS emp_name';
-        } elseif ($col == 'emp_id') {
-            $selectCols[] = 'e.emp_id';
-        } elseif ($col == 'dept') {
-            $selectCols[] = 'd.dep_nme AS dept';
-        } elseif ($col == 'joining_date') {
-            $selectCols[] = 'eos.joining_date';
-        } elseif ($col == 'termination_date') {
-            $selectCols[] = 'eos.end_date AS termination_date';
-        } elseif ($col == 'service_years') {
-            $selectCols[] = "CONCAT(eos.t_years, ' years, ', eos.t_months, ' months, ', eos.t_days, ' days') AS service_years";
-        } elseif ($col == 'eos_amount') {
-            $selectCols[] = 'eos.eos_amount';
-        } elseif ($col == 'vacation_balance') {
-            $selectCols[] = 'eos.anul_vac_days AS vacation_balance';
-        } elseif ($col == 'total_amount') {
-            $selectCols[] = 'eos.net_payment AS total_amount';
-        } elseif ($col == 'leaving_reason') {
-            $selectCols[] = 'eos.leaving_reason';
-        } else {
-            // Try to map to eos table
-            $selectCols[] = 'eos.' . $col;
-        }
-    }
-    $selectClause = implode(', ', $selectCols);
-    
-    // Build WHERE clause
-    $where = ['1=1'];
-    
-    // Department filter
-    if (!$hasFullAccess) {
-        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
-        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
-        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
-    }
-    
-    // Date filter (based on end_date)
-    if (!empty($dateFrom)) {
-        $where[] = "eos.end_date >= '" . mysqli_real_escape_string($conDB, $dateFrom) . "'";
-    }
-    if (!empty($dateTo)) {
-        $where[] = "eos.end_date <= '" . mysqli_real_escape_string($conDB, $dateTo) . "'";
-    }
-    
-    // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
-    if (!empty($company_filter)) {
-        $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
-    
-    // Department filter - restrict by accessible departments
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
-    if (!empty($department_filter)) {
-        $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
-
-    // Employee filter
-    if (!empty($employeeId)) {
-        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
-    }
-    
-    $whereClause = implode(' AND ', $where);
-    
-    // Build and execute query
-    $sql = "SELECT $selectClause 
-            FROM emp_eos eos
-            INNER JOIN employees e ON eos.emp_id = e.emp_id
-            LEFT JOIN department d ON e.dept = d.id
-            WHERE $whereClause
-            ORDER BY eos.end_date DESC";
-    
-    $query = mysqli_query($conDB, $sql);
-    if (!$query) {
-        throw new Exception('Terminated Employees query error: ' . mysqli_error($conDB));
-    }
-    
-    $data = [];
-    $headers = [];
-    
-    // Get headers
-    foreach ($columns as $col) {
-        $headers[] = getColumnLabel($col);
-    }
-    
-    // Get data
-    while ($row = mysqli_fetch_assoc($query)) {
-        if (isset($row['emp_name'])) {
-            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
-        }
-        if (isset($row['dept'])) {
-            $row['dept'] = getDisplayName($row['dept']);
-        }
-        if (isset($row['leaving_reason'])) {
-            $row['leaving_reason'] = getReasonText($row['leaving_reason'], $is_rtl);
-        }
-        if (isset($row['service_years'])) {
-            $row['service_years'] = getDisplayName($row['service_years']);
-        }
-        $data[] = $row;
-    }
-    
-    return ['data' => $data, 'headers' => $headers];
-}
-
 // End of Service Report (Prospective Calculation for Active Employees)
 function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
     // This report calculates prospective EOS amounts for active employees
@@ -1830,13 +1778,13 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
     }
     
     // Company filter - restrict by accessible companies
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Department filter - restrict by accessible departments
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
@@ -1885,6 +1833,9 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
     foreach ($columns as $col) {
         $headers[] = getColumnLabel($col);
     }
+    
+    // Add Actions header
+    $headers[] = function_exists('__') ? __('actions') : 'Actions';
     
     // Calculate EOS for each employee
     while ($row = mysqli_fetch_assoc($query)) {
@@ -2039,6 +1990,238 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
             }
         }
         
+        // Add print button for EOS PDF
+        $empId = $row['emp_id'];
+        $printLabel = function_exists('__') ? __('print') : 'Print';
+        $rowData['actions'] = '<a href="eos_pdf.php?emp_id=' . htmlspecialchars($empId) . '" target="_blank" class="btn btn-sm btn-danger"><i class="mdi mdi-file-pdf"></i> ' . htmlspecialchars($printLabel) . ' PDF</a>';
+        
+        $data[] = $rowData;
+    }
+    
+    return ['data' => $data, 'headers' => $headers];
+}
+
+// Exit Settlement Report - Shows detailed settlement for all terminated employees
+function generateExitSettlementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
+    global $is_rtl;
+    
+    // Build WHERE clause
+    $where = ['e.status = 0']; // Only terminated employees
+    
+    // Department filter
+    if (!$hasFullAccess) {
+        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!empty($departments)) {
+        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
+        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    }
+    
+    // Date filter (based on end_date / termination_date)
+    if (!empty($dateFrom)) {
+        $where[] = "eos.end_date >= '" . mysqli_real_escape_string($conDB, $dateFrom) . "'";
+    }
+    if (!empty($dateTo)) {
+        $where[] = "eos.end_date <= '" . mysqli_real_escape_string($conDB, $dateTo) . "'";
+    }
+    
+    // Company filter - restrict by accessible companies
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $where[] = substr($company_filter, 5); // Remove " AND " prefix
+    }
+    
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5); // Remove " AND " prefix
+    }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
+    
+    $whereClause = implode(' AND ', $where);
+    
+    // Fetch terminated employees with their settlement details
+    $sql = "SELECT 
+                e.emp_id,
+                e.name,
+                d.dep_nme AS dept,
+                eos.joining_date,
+                eos.end_date,
+                eos.leaving_reason,
+                eos.t_years,
+                eos.t_months,
+                eos.t_days,
+                s.basic,
+                s.housing,
+                s.transport,
+                s.food,
+                s.misc,
+                s.cashier,
+                s.fuel,
+                s.tel,
+                s.guard,
+                s.other,
+                eos.eos_amount,
+                eos.anul_vac_days,
+                eos.anul_vac_salry,
+                eos.curt_month_salry,
+                eos.gosi_deduction,
+                eos.deduction_hours,
+                eos.deduct,
+                eos.overtime_hours,
+                eos.overtime_days,
+                eos.net_payment,
+                b.name AS bank_name,
+                emp.payment_type,
+                emp.iban
+            FROM emp_eos eos
+            INNER JOIN employees e ON eos.emp_id = e.emp_id
+            LEFT JOIN employees emp ON emp.emp_id = e.emp_id
+            LEFT JOIN emp_salary s ON s.emp_id = e.emp_id AND s.status = 1
+            LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN bank_list b ON e.bank_name = b.id
+            WHERE $whereClause
+            ORDER BY eos.end_date DESC";
+    
+    $query = mysqli_query($conDB, $sql);
+    if (!$query) {
+        throw new Exception('Exit Settlement query error: ' . mysqli_error($conDB));
+    }
+    
+    $data = [];
+    $headers = [];
+    
+    // Get headers
+    foreach ($columns as $col) {
+        $headers[] = getColumnLabel($col);
+    }
+    
+    // Add Actions header
+    $headers[] = function_exists('__') ? __('actions') : 'Actions';
+    
+    // Build row data for each employee
+    while ($row = mysqli_fetch_assoc($query)) {
+        $empId = $row['emp_id'];
+        $basic = (float)($row['basic'] ?? 0);
+        $housing = (float)($row['housing'] ?? 0);
+        $calculatedHousing = ($housing == 0 && $basic > 0) ? ($basic / 12) * 2 : $housing;
+        
+        // Calculate total monthly salary
+        $totalMonthlySalary = $basic + $calculatedHousing + 
+                              (float)($row['transport'] ?? 0) +
+                              (float)($row['food'] ?? 0) +
+                              (float)($row['misc'] ?? 0) +
+                              (float)($row['cashier'] ?? 0) +
+                              (float)($row['fuel'] ?? 0) +
+                              (float)($row['tel'] ?? 0) +
+                              (float)($row['guard'] ?? 0) +
+                              (float)($row['other'] ?? 0);
+        
+        // Calculate deductions
+        $gosiDeduction = (float)($row['gosi_deduction'] ?? 0);
+        $absentDaysDeduction = (float)($row['deduction_hours'] ?? 0);
+        $loanDeduction = (float)($row['deduct'] ?? 0);
+        $totalDeductions = $gosiDeduction + $absentDaysDeduction + $loanDeduction;
+        
+        // Calculate overtime earnings (if applicable)
+        $overtimeHours = (float)($row['overtime_hours'] ?? 0);
+        $overtimeDays = (float)($row['overtime_days'] ?? 0);
+        $hourlyRate = $totalMonthlySalary / 240; // Saudi standard: 240 working hours per month
+        $overtimeEarnings = ($overtimeHours * $hourlyRate) + ($overtimeDays * $totalMonthlySalary);
+        
+        // Payment type mapping
+        $paymentTypeMap = [
+            '1' => 'Bank Transfer',
+            '2' => 'Cash Payment',
+            '3' => 'On Hold'
+        ];
+        $paymentType = $paymentTypeMap[$row['payment_type']] ?? 'Not Specified';
+        
+        // Service duration string
+        $serviceDuration = "{$row['t_years']} " . __('years') . ", {$row['t_months']} " . __('months') . ", {$row['t_days']} " . __('days');
+        
+        // Build row data based on requested columns
+        $rowData = [];
+        foreach ($columns as $col) {
+            switch ($col) {
+                case 'emp_id':
+                    $rowData[$col] = $empId;
+                    break;
+                case 'emp_name':
+                    $rowData[$col] = getDisplayName(parseName($row['name']));
+                    break;
+                case 'dept':
+                    $rowData[$col] = getDisplayName($row['dept']);
+                    break;
+                case 'joining_date':
+                    $rowData[$col] = $row['joining_date'];
+                    break;
+                case 'termination_date':
+                    $rowData[$col] = $row['end_date'];
+                    break;
+                case 'leaving_reason':
+                    $rowData[$col] = getReasonText($row['leaving_reason'], $is_rtl);
+                    break;
+                case 'service_duration':
+                    $rowData[$col] = $serviceDuration;
+                    break;
+                case 'basic_salary':
+                    $rowData[$col] = number_format($basic, 2);
+                    break;
+                case 'total_monthly_salary':
+                    $rowData[$col] = number_format($totalMonthlySalary, 2);
+                    break;
+                case 'eos_amount':
+                    $rowData[$col] = number_format((float)($row['eos_amount'] ?? 0), 2);
+                    break;
+                case 'vacation_days':
+                    $rowData[$col] = number_format((float)($row['anul_vac_days'] ?? 0), 2);
+                    break;
+                case 'vacation_salary':
+                    $rowData[$col] = number_format((float)($row['anul_vac_salry'] ?? 0), 2);
+                    break;
+                case 'last_month_salary':
+                    $rowData[$col] = number_format((float)($row['curt_month_salry'] ?? 0), 2);
+                    break;
+                case 'gosi_deduction':
+                    $rowData[$col] = number_format($gosiDeduction, 2);
+                    break;
+                case 'absent_days_deduction':
+                    $rowData[$col] = number_format($absentDaysDeduction, 2);
+                    break;
+                case 'loan_deduction':
+                    $rowData[$col] = number_format($loanDeduction, 2);
+                    break;
+                case 'total_deductions':
+                    $rowData[$col] = number_format($totalDeductions, 2);
+                    break;
+                case 'overtime_earnings':
+                    $rowData[$col] = number_format($overtimeEarnings, 2);
+                    break;
+                case 'net_payment':
+                    $rowData[$col] = number_format((float)($row['net_payment'] ?? 0), 2);
+                    break;
+                case 'bank_name':
+                    $rowData[$col] = getDisplayName($row['bank_name']) ?? '';
+                    break;
+                case 'payment_type':
+                    $rowData[$col] = $paymentType;
+                    break;
+                case 'payment_status':
+                    $rowData[$col] = 'Completed'; // From emp_eos settled employees
+                    break;
+                default:
+                    $rowData[$col] = '';
+            }
+        }
+        
+        // Add print button for EOS PDF
+        $printLabel = function_exists('__') ? __('print') : 'Print';
+        $rowData['actions'] = '<a href="eos_pdf.php?emp_id=' . htmlspecialchars($empId) . '" target="_blank" class="btn btn-sm btn-danger"><i class="mdi mdi-file-pdf"></i> ' . htmlspecialchars($printLabel) . ' PDF</a>';
+        
         $data[] = $rowData;
     }
     
@@ -2069,15 +2252,21 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
     }
     
     // Add company filter
-    $company_filter = getCompanyFilterSQL('e.comp_no', false);
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($company_filter, 5) : "WHERE " . substr($company_filter, 5);
     }
     
     // Add department filter
-    $department_filter = getDepartmentFilterSQL('e.dept', false);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($department_filter, 5) : "WHERE " . substr($department_filter, 5);
+    }
+
+    // Add employee filter
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+    if (!empty($employee_filter)) {
+        $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($employee_filter, 5) : "WHERE " . substr($employee_filter, 5);
     }
     
     // Get department statistics
@@ -2473,7 +2662,7 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
     }
     
     // Add company filter for custom reports
-    $company_filter = getCompanyFilterSQL('employees.comp_no', false);
+    $company_filter = getCompanyFilterSQL('employees.comp_no', true);
     if (!empty($company_filter) && $hasEmployees) {
         // Add company filter if employees table is involved
         $whereClauses[] = substr($company_filter, 5); // Remove " AND " prefix
@@ -2637,8 +2826,8 @@ function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo
     
     $selectClause = implode(', ', $selectCols);
     
-    // Build WHERE clause
-    $where = ['1=1'];
+    // Build WHERE clause - only active employees
+    $where = ['e.status = 1'];
     
     // Department filter (from assigned employee's department)
     if (!$hasFullAccess) {
@@ -2802,8 +2991,8 @@ function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $da
 
     $selectClause = implode(', ', $selectCols);
 
-    // Build WHERE clause
-    $where = ['1=1'];
+    // Build WHERE clause - only active employees
+    $where = ['e.status = 1'];
 
     // Department filter (by asset's clearance department)
     if (!$hasFullAccess && !empty($userDept)) {

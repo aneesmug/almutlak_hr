@@ -519,8 +519,27 @@ if (mysqli_num_rows($query) == 1) {
                                         <?php endif; ?>
                                         
                                         <div class="detail-item"><span class="label"><?= __('requested_on') ?></span> <span class="value"><small><?= display_or_na(!empty($request['created_at']) ? date('d M Y, h:i A', strtotime($request['created_at'])) : null); ?></small></span></div>
-                                         <?php if (!empty($request['attachment_path'])): ?>
-                                            <div class="detail-item"><span class="label"><?= __('attachment') ?></span> <span class="value"><small><a href="<?= display_or_na($request['attachment_path']); ?>" target="_blank"><?= __('view_document') ?></a></small></span></div>
+                                        <?php
+                                            $attachments = [];
+                                            if (!empty($request['attachment_path'])) {
+                                                $attachments = json_decode($request['attachment_path'], true);
+                                                if (!is_array($attachments)) {
+                                                    $attachments = [$request['attachment_path']];
+                                                }
+                                                $attachments = array_values(array_filter($attachments));
+                                            }
+                                        ?>
+                                        <?php if (!empty($attachments)): ?>
+                                            <div class="detail-item">
+                                                <span class="label"><?= __('attachments') ?></span>
+                                                <span class="value">
+                                                    <small>
+                                                        <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")' style="padding: 4px 12px; font-weight: 500;">
+                                                            <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
+                                                        </button>
+                                                    </small>
+                                                </span>
+                                            </div>
                                         <?php endif; ?>
                                     </div>
                                 </div>

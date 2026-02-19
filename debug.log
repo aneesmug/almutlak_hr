@@ -1,0 +1,6 @@
+Active Count Result: 3
+Total Count SQL: SELECT COUNT(*) AS `tot` FROM `employees` WHERE 1=1  AND (comp_no IN (4) OR emp_id IN (3431,5127,5430,5456)) AND (dept IN (6) OR emp_id IN (3431,5127,5430,5456)) AND emp_id IN (3431,5127,5430,5456)
+Total Count Result: 4
+Active Count Result: 3
+Total Count SQL: SELECT COUNT(*) AS `tot` FROM `employees` WHERE 1=1  AND (comp_no IN (4) OR emp_id IN (3431,5127,5430,5456)) AND (dept IN (6) OR emp_id IN (3431,5127,5430,5456)) AND emp_id IN (3431,5127,5430,5456)
+Total Count Result: 4

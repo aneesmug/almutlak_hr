@@ -1,7 +1,5 @@
 <?php
 
-// require_once __DIR__ . '/includes/db.php';
-// require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
@@ -32,11 +30,6 @@ if (mysqli_num_rows($query) == 1) {
 		
 		// DEBUG: Log accessible departments
 		$accessible_depts = getAccessibleDepartments(true);
-		error_log("VIEW_EMPLOYEE DEBUG: User accessible_departments = " . json_encode($accessible_depts));
-		error_log("VIEW_EMPLOYEE DEBUG: Employee dept = " . ($emprow['dept'] ?? 'NULL'));
-		error_log("VIEW_EMPLOYEE DEBUG: Employee comp_no = " . ($emprow['comp_no'] ?? 'NULL'));
-		error_log("VIEW_EMPLOYEE DEBUG: User dept = " . $user_dept);
-		error_log("VIEW_EMPLOYEE DEBUG: User empid = " . $empid);
 		
 		$user_data = [
 			'emp_id' => $_SESSION['auth_user']['emp_id'] ?? $empid,

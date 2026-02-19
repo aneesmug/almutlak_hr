@@ -66,6 +66,80 @@ if (mysqli_num_rows($query) == 1) {
             .dt-button-down-arrow {
                 display: none !important;
             }
+            
+            /* Styling for Allowed Employees column (column 10) */
+            table tbody tr td:nth-child(11) {
+                max-width: 250px;
+                word-break: break-word;
+                word-wrap: break-word;
+                white-space: normal;
+                padding: 8px 5px !important;
+            }
+            
+            /* Badge styling for allowed employees */
+            .employee-badge {
+                display: inline-block;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 4px 10px;
+                border-radius: 20px;
+                margin: 3px 3px;
+                font-size: 12px;
+                font-weight: 500;
+                white-space: nowrap;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            
+            /* Container for employee badges */
+            .employee-badges-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+                align-items: center;
+            }
+            
+            /* All Employees indicator */
+            .all-employees-badge {
+                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                color: #333;
+                display: inline-block;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            }
+            
+            /* Card-style container for allowed employees display */
+            .allowed-employees-card {
+                background: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 16px;
+                margin-bottom: 16px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+            }
+            
+            .allowed-employees-card-title {
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 12px;
+                font-size: 13px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            
+            .allowed-employees-card-content {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: flex-start;
+            }
+            
+            .allowed-employees-card .employee-badge {
+                margin: 0;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -160,6 +234,10 @@ if (mysqli_num_rows($query) == 1) {
                                             <label for="filterAllowedDept" class="form-label small font-weight-bold d-block mb-1">Filter by Allowed Department</label>
                                             <div class="user_allowed_dept"></div>
                                         </div>
+                                        <div class="col-md-3 mb-2">
+                                            <label for="filterAllowedEmp" class="form-label small font-weight-bold d-block mb-1">Filter by Allowed Employee</label>
+                                            <div class="user_allowed_emp"></div>
+                                        </div>
                                     </div>
 
 
@@ -176,6 +254,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 <th>User Type</th>
                                                 <th>Allowed Companies</th>
                                                 <th>Allowed Departments</th>
+                                                <th>Allowed Employees</th>
                                                 <th>Status</th>
                                                 <th style="width: 30px">Action</th>
                                             </tr>
@@ -327,7 +406,7 @@ if (mysqli_num_rows($query) == 1) {
             $(document).ready(function() {
                 //Buttons examples
                 var buttonConfig = [];
-                var columnNum = [2, 3, 4, 5, 6, 7, 8, 9];
+                var columnNum = [2, 3, 4, 5, 6, 7, 8, 9, 10];
                 buttonConfig.push({
                     extend: 'copy',
                     text: '<i class="mdi mdi-content-copy text-info mr-1"></i>Copy',
@@ -437,8 +516,8 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         },
                         {
-                            // User Status - Updated to column 10
-                            targets: 10,
+                            // User Status - Updated to column 11
+                            targets: 11,
                             render: function(data, type, row, meta) {
                                 if (statusObj[data]) {
                                     return (`<span class="badge-border ${statusObj[data].class}" text-capitalized>${statusObj[data].title}</span>`);
@@ -459,10 +538,10 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         },
                         {
-                            // Action column - Updated to column 11
-                            targets: 11,
+                            // Action column - Updated to column 12
+                            targets: 12,
                             render: function(data, type, row, meta) {
-                                var recordData = row[12];  // Updated index for full record data
+                                var recordData = row[13];  // Updated index for full record data
                                 var html = `<div class='btn-group dropdown'>
                                     <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                     <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
@@ -474,7 +553,8 @@ if (mysqli_num_rows($query) == 1) {
                                             data-user_type="${recordData.user_type}" 
                                             data-status="${recordData.status || 0}" 
                                             data-allowed_companies="${(recordData.allowed_companies || '').replace(/"/g, '&quot;')}"
-                                            data-allowed_departments="${(recordData.allowed_departments || '').replace(/"/g, '&quot;')}">
+                                            data-allowed_departments="${(recordData.allowed_departments || '').replace(/"/g, '&quot;')}"
+                                            data-allowed_employees="${(recordData.allowed_employees || '').replace(/"/g, '&quot;')}">
                                             <i class='fa fa-edit mr-2 font-18 vertical-middle'></i>Edit
                                         </a>`;
                                 
@@ -505,10 +585,10 @@ if (mysqli_num_rows($query) == 1) {
                         var deptOptions = new Set();
                         var companyOptions = new Set();
                         
-                        // Adding status filter - Column 10 (updated from 8)
+                        // Adding status filter - Column 11 (updated from 8)
                         var statusSelect = $(selectOpt).appendTo('.user_status').on('change', function() {
                             var val = $(this).val();
-                            table.column(10).search(val, true, false).draw();
+                            table.column(11).search(val, true, false).draw();
                         });
                         statusOptions.forEach(function(status) {
                             statusSelect.append(`<option value="${status}">${status}</option>`);
@@ -552,6 +632,12 @@ if (mysqli_num_rows($query) == 1) {
                             table.column(9).search(val, false, false).draw();
                         });
                         
+                        // Adding allowed employee filter - Column 10
+                        var allowedEmpSelect = $(selectOpt).appendTo('.user_allowed_emp').on('change', function() {
+                            var val = $(this).val();
+                            table.column(10).search(val, false, false).draw();
+                        });
+                        
                         // Fetch all data to populate departments, companies, and allowed departments
                         $.ajax({
                             url: './includes/ajaxFile/getAllUsersData.php',
@@ -572,6 +658,7 @@ if (mysqli_num_rows($query) == 1) {
                                     {data: 'user_type', search: {value: ''}},
                                     {data: 'allowed_companies', search: {value: ''}},
                                     {data: 'allowed_departments', search: {value: ''}},
+                                    {data: 'allowed_employees', search: {value: ''}},
                                     {data: 'status', search: {value: ''}},
                                     {data: 'action', search: {value: ''}}
                                 ]
@@ -579,6 +666,7 @@ if (mysqli_num_rows($query) == 1) {
                             dataType: 'json',
                             success: function(response) {
                                 var allowedDeptOptions = new Set();
+                                var allowedEmpOptions = new Set();
                                 if (response.data && response.data.length > 0) {
                                     response.data.forEach(function(row) {
                                         // Collect unique departments from column 5
@@ -597,6 +685,13 @@ if (mysqli_num_rows($query) == 1) {
                                             var depts = row[9].split(',').map(d => d.trim()).filter(d => d);
                                             depts.forEach(function(dept) {
                                                 allowedDeptOptions.add(dept);
+                                            });
+                                        }
+                                        // Collect unique allowed employees from column 10
+                                        if (row[10] && row[10].trim()) {
+                                            var emps = row[10].split(',').map(e => e.trim()).filter(e => e);
+                                            emps.forEach(function(emp) {
+                                                allowedEmpOptions.add(emp);
                                             });
                                         }
                                     });
@@ -636,6 +731,18 @@ if (mysqli_num_rows($query) == 1) {
                                 // Initialize Select2 for allowed department (after options added)
                                 allowedDeptSelect.select2({
                                     placeholder: 'Select Allowed Department',
+                                    allowClear: true,
+                                    width: '100%'
+                                });
+
+                                // Populate allowed employee select
+                                Array.from(allowedEmpOptions).sort().forEach(function(emp) {
+                                    allowedEmpSelect.append(`<option value="${emp}">${emp}</option>`);
+                                });
+                                
+                                // Initialize Select2 for allowed employee (after options added)
+                                allowedEmpSelect.select2({
+                                    placeholder: 'Select Allowed Employee',
                                     allowClear: true,
                                     width: '100%'
                                 });

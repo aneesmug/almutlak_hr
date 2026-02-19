@@ -42,33 +42,41 @@ if (!$can_see_all_employees && isset($user_dept)) {
 // Add company filter if user has company restrictions
 // Use 'comp_no' directly since simple queries don't alias the table
 $company_filter = getCompanyFilterSQL('comp_no', true);
+$company_filter_alias = getCompanyFilterSQL('e.comp_no', true);
 
 // Add department filter if user has department restrictions
 // This works alongside company filter for multi-level access control
 $department_filter = getDepartmentFilterSQL('dept', true);
+$department_filter_alias = getDepartmentFilterSQL('e.dept', true);
+
+// Add employee filter if user has employee restrictions
+$employee_filter = getEmployeeFilterSQL('emp_id', true);
+$employee_filter_alias = getEmployeeFilterSQL('e.emp_id', true);
 
 // Count Active Employees (Status=1, Not on vacation)
-$sql_count_active = mysqli_query($conDB, "SELECT COUNT(*) AS `activeusr`, `id` FROM `employees` WHERE `status`=1 AND `fly`=0 ".$company_filter.$department_filter);
+$sql_query_active = "SELECT COUNT(*) AS `activeusr` FROM `employees` WHERE `status`=1 AND `fly`=0 ".$company_filter.$department_filter.$employee_filter;
+$sql_count_active = mysqli_query($conDB, $sql_query_active) or error_log("DASHBOARD ERROR - Active Count Query Failed: " . mysqli_error($conDB));
 while($rec = mysqli_fetch_assoc($sql_count_active)){$status_cont_active = $rec["activeusr"];}
 
 // Count Terminated Employees
-$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter`, `id` FROM `employees` WHERE `status`=0 ".$company_filter.$department_filter);
+$sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter` FROM `employees` WHERE `status`=0 ".$company_filter.$department_filter.$employee_filter);
 while($rec = mysqli_fetch_assoc($sql_count_ter)){$status_cont_ter = $rec["ter"];}
 
 // Count Employees on Departed Vacation (approved, latest vacation vac_type='Fly', employee fly=1)
-$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type='Fly' ".$company_filter.$department_filter);
+$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) AS lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type='Fly' ".$company_filter_alias.$department_filter_alias.$employee_filter_alias);
 while($rec = mysqli_fetch_assoc($sql_count_fly)){$status_cont_fly = $rec["flying"];}
 
 // Count Employees on Local Vacation (approved, latest vacation vac_type IN ('Local Vacation','Encashed'), employee fly=1)
-$sql_count_local_vac = mysqli_query($conDB, "SELECT COUNT(*) AS `local_vac` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type IN ('Local Vacation','Encashed') ".$company_filter.$department_filter);
+$sql_count_local_vac = mysqli_query($conDB, "SELECT COUNT(*) AS `local_vac` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) AS lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type IN ('Local Vacation','Encashed') ".$company_filter_alias.$department_filter_alias.$employee_filter_alias);
 while($rec = mysqli_fetch_assoc($sql_count_local_vac)){$status_cont_local_vac = $rec["local_vac"];}
 
 // Count Total Employees
-$sql_count_tot = mysqli_query($conDB, "SELECT COUNT(*) AS `tot`, `id` FROM `employees` WHERE 1=1 ".$company_filter.$department_filter);
+$sql_query_tot = "SELECT COUNT(*) AS `tot` FROM `employees` WHERE 1=1 ".$company_filter.$department_filter.$employee_filter;
+$sql_count_tot = mysqli_query($conDB, $sql_query_tot) or error_log("DASHBOARD ERROR - Total Count Query Failed: " . mysqli_error($conDB));
 while($rec = mysqli_fetch_assoc($sql_count_tot)){$status_cont_tot = $rec["tot"];}
 
 // Count Man Power Employees
-$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr`, `id` FROM `employees` WHERE `emp_sup_type`='man_power' AND `status`=1 ".$company_filter.$department_filter);
+$sql_count_man_power = mysqli_query($conDB, "SELECT COUNT(*) AS `manpwr` FROM `employees` WHERE `emp_sup_type`='man_power' AND `status`=1 ".$company_filter.$department_filter.$employee_filter);
 while($rec = mysqli_fetch_assoc($sql_count_man_power)){$status_cont_man_power = $rec["manpwr"];}
 
 // Percentages for dashboard progress bars
@@ -80,6 +88,34 @@ $pct_fly         = round((($status_cont_fly ?? 0) / $totalEmployees) * 100, 1);
 $pct_local_vac   = round((($status_cont_local_vac ?? 0) / $totalEmployees) * 100, 1);
 $pct_terminated  = round((($status_cont_ter ?? 0) / $totalEmployees) * 100, 1);
 $pct_total       = 100.0;
+
+// Access scope labels for dashboard card
+$allowed_company_names = 'All Companies';
+if (!empty($allowed_companies_array)) {
+	$company_ids = implode(',', array_map('intval', $allowed_companies_array));
+	$comp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `comp_name` SEPARATOR ', ') AS `names` FROM `companies` WHERE `id` IN ($company_ids) OR `comp_id` IN ($company_ids)");
+	if ($comp_query && $comp_row = mysqli_fetch_assoc($comp_query)) {
+		$allowed_company_names = $comp_row['names'] ?: 'All Companies';
+	}
+}
+
+$allowed_department_names = 'All Departments';
+if (!empty($allowed_departments_array)) {
+	$department_ids = implode(',', array_map('intval', $allowed_departments_array));
+	$dept_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `dep_nme` SEPARATOR ', ') AS `names` FROM `department` WHERE `id` IN ($department_ids)");
+	if ($dept_query && $dept_row = mysqli_fetch_assoc($dept_query)) {
+		$allowed_department_names = $dept_row['names'] ?: 'All Departments';
+	}
+}
+
+$allowed_employee_names = null; // Only show if employees are specifically assigned
+if (!empty($allowed_employees_array)) {
+	$employee_ids = implode(',', array_map('intval', $allowed_employees_array));
+	$emp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT CONCAT(`name`) SEPARATOR ', ') AS `names` FROM `employees` WHERE `emp_id` IN ($employee_ids)");
+	if ($emp_query && $emp_row = mysqli_fetch_assoc($emp_query)) {
+		$allowed_employee_names = $emp_row['names'];
+	}
+}
 
 if(isset($_POST['submit'])){
 	if($_POST['iqama_exp']){
@@ -295,6 +331,66 @@ if(isset($_POST['submit'])){
 					margin-bottom: 10px;
 					margin-right: 0;
 				}
+			}
+
+			/* Badge-based card styling for Allowed Employees */
+			.allowed-employees-card {
+				background: #f8f9fa;
+				border: 1px solid #e0e0e0;
+				border-radius: 8px;
+				padding: 16px;
+			}
+
+			.allowed-employees-card-title {
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+				font-size: 13px;
+				color: #333;
+				margin-bottom: 12px;
+				font-weight: 600;
+			}
+
+			.allowed-employees-card-content {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+				max-height: 160px;
+				overflow-y: auto;
+				padding-right: 4px;
+			}
+			.allowed-employees-card-content::-webkit-scrollbar {
+				width: 6px;
+			}
+			.allowed-employees-card-content::-webkit-scrollbar-thumb {
+				background: rgba(0, 0, 0, 0.18);
+				border-radius: 6px;
+			}
+			.allowed-employees-card-content::-webkit-scrollbar-track {
+				background: transparent;
+			}
+
+			.allowed-employees-card .employee-badge {
+				display: inline-flex;
+				align-items: center;
+				background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				color: #fff;
+				padding: 6px 12px;
+				border-radius: 20px;
+				font-size: 12px;
+				box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+				white-space: nowrap;
+			}
+
+			.allowed-employees-card .employee-badge.all-employees {
+				background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+				color: #333;
+				box-shadow: 0 2px 8px rgba(168, 237, 234, 0.3);
+			}
+
+			.allowed-employees-card .no-data-message {
+				color: #999;
+				font-size: 13px;
+				font-style: italic;
 			}
 		</style>
 
@@ -544,6 +640,33 @@ if(isset($_POST['submit'])){
 							</div>
 						</div>                        
                         </div>
+						<div class="card-box">
+							<h4 class="m-t-0 header-title"><?= __('access_scope') ?: 'Access Scope' ?></h4>
+							<div class="row">
+								<div class="col-md-4">
+									<div class="card-box" style="border: 1px solid #e5e7eb;">
+										<h5 class="m-t-0"><?= __('allowed_companies') ?: 'Allowed Companies' ?></h5>
+										<div class="small text-muted"><?= htmlspecialchars($allowed_company_names) ?></div>
+									</div>
+								</div>
+								<div class="col-md-4">
+									<div class="card-box" style="border: 1px solid #e5e7eb;">
+										<h5 class="m-t-0"><?= __('allowed_departments') ?: 'Allowed Departments' ?></h5>
+										<div class="small text-muted"><?= htmlspecialchars($allowed_department_names) ?></div>
+									</div>
+								</div>
+								<?php if (!empty($allowed_employee_names)): ?>
+								<div class="col-md-4">
+									<div class="allowed-employees-card" id="allowed-employees-badge-card">
+										<div class="allowed-employees-card-title"><?= __('allowed_employees') ?: 'Allowed Employees' ?></div>
+										<div class="allowed-employees-card-content" id="allowed-employees-container">
+											<!-- Badges will be populated by JavaScript -->
+										</div>
+									</div>
+								</div>
+								<?php endif; ?>
+							</div>
+						</div>
                         <?php /* if($user_type == $access1 OR $user_type == $access2){ ?>
                         <div class="card-box">
                         	<h4 class="m-t-0 header-title">Search Birthday by Month</h4>
@@ -954,6 +1077,16 @@ if(isset($_POST['submit'])){
 					},
 				})
 			});
+
+		// Initialize Allowed Employees Badge Card
+		$(document).ready(function() {
+			var employeeNames = '<?= htmlspecialchars($allowed_employee_names ?? '', ENT_QUOTES, 'UTF-8') ?>';
+			var container = $('#allowed-employees-container');
+			if (container.length && typeof renderAllowedEmployeesCard === 'function') {
+				var badgeHTML = renderAllowedEmployeesCard(employeeNames);
+				container.html(badgeHTML);
+			}
+		});
 
         </script>
 

@@ -74,6 +74,10 @@ if (strlen($search_term) > 1) {
 	if (!empty($department_filter)) {
 		$construct .= $department_filter;
 	}
+	$employee_filter = getEmployeeFilterSQL('emp_id', false);
+	if (!empty($employee_filter)) {
+		$construct .= $employee_filter;
+	}
 }
 
 if (!empty($construct)) {
@@ -122,7 +126,10 @@ if (!empty($construct)) {
 $_SESSION["foundnum"] = $total_items;
 // --- ** NEW ** Get the total unfiltered count ---
 // This query runs first to get the grand total before any search filters are applied.
-$unfiltered_sql = "SELECT COUNT(*) as total FROM employees";
+$company_filter_unf = getCompanyFilterSQL('comp_no', false);
+$department_filter_unf = getDepartmentFilterSQL('dept', false);
+$employee_filter_unf = getEmployeeFilterSQL('emp_id', false);
+$unfiltered_sql = "SELECT COUNT(*) as total FROM employees WHERE 1=1" . $company_filter_unf . $department_filter_unf . $employee_filter_unf;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 ?>

@@ -18,17 +18,23 @@ try {
     $deptFilter = '';
     $roleFilter = '';
     $companyFilter = '';
+    $allowedDeptFilter = '';
+    $allowedEmployeeFilter = '';
     
     // Check if columns array exists (server-side filtering)
     if (isset($_POST['columns']) && is_array($_POST['columns'])) {
-        // Column 4: Department
-        $deptFilter = isset($_POST['columns'][4]['search']['value']) ? $_POST['columns'][4]['search']['value'] : '';
-        // Column 6: Role
-        $roleFilter = isset($_POST['columns'][6]['search']['value']) ? $_POST['columns'][6]['search']['value'] : '';
-        // Column 7: Company
-        $companyFilter = isset($_POST['columns'][7]['search']['value']) ? $_POST['columns'][7]['search']['value'] : '';
-        // Column 8: Status
-        $statusFilter = isset($_POST['columns'][8]['search']['value']) ? $_POST['columns'][8]['search']['value'] : '';
+        // Column 5: Department
+        $deptFilter = isset($_POST['columns'][5]['search']['value']) ? $_POST['columns'][5]['search']['value'] : '';
+        // Column 7: Role
+        $roleFilter = isset($_POST['columns'][7]['search']['value']) ? $_POST['columns'][7]['search']['value'] : '';
+        // Column 8: Company
+        $companyFilter = isset($_POST['columns'][8]['search']['value']) ? $_POST['columns'][8]['search']['value'] : '';
+        // Column 9: Allowed Departments
+        $allowedDeptFilter = isset($_POST['columns'][9]['search']['value']) ? $_POST['columns'][9]['search']['value'] : '';
+        // Column 10: Allowed Employees
+        $allowedEmployeeFilter = isset($_POST['columns'][10]['search']['value']) ? $_POST['columns'][10]['search']['value'] : '';
+        // Column 11: Status
+        $statusFilter = isset($_POST['columns'][11]['search']['value']) ? $_POST['columns'][11]['search']['value'] : '';
     }
     
     // Build base query
@@ -42,6 +48,7 @@ try {
                 `admin_login`.`email`,
                 `admin_login`.`allowed_companies`,
                 `admin_login`.`allowed_departments`,
+                `admin_login`.`allowed_employees`,
                 `employees`.`name` AS `efullname`,
                 `employees`.`mobile`,
                 `department`.`dep_nme` AS `deptnme`
@@ -49,6 +56,11 @@ try {
             LEFT JOIN `employees` ON `employees`.`emp_id` = `admin_login`.`emp_id`
             LEFT JOIN `department` ON `department`.`id` = `admin_login`.`dept`
             WHERE 1=1";
+    // Employee filter - restrict by accessible employees
+    $employee_filter = getEmployeeFilterSQL('admin_login.emp_id', true);
+    if (!empty($employee_filter)) {
+        $sql .= $employee_filter;
+    }
     
     // Apply global search filter
     if (!empty($search)) {
@@ -103,6 +115,40 @@ try {
             $sql .= " AND 1=0";
         }
     }
+
+    // Allowed department filter - search using department IDs from allowed_departments
+    if (!empty($allowedDeptFilter) && $allowedDeptFilter !== 'All Departments') {
+        $allowedDeptFilter = mysqli_real_escape_string($conDB, $allowedDeptFilter);
+        $deptIds = [];
+        $deptQuery = mysqli_query($conDB, "SELECT `id` FROM `department` WHERE `dep_nme` LIKE '%$allowedDeptFilter%'");
+        while ($dept = mysqli_fetch_assoc($deptQuery)) {
+            $deptIds[] = $dept['id'];
+        }
+
+        if (!empty($deptIds)) {
+            $idList = implode('|', $deptIds);
+            $sql .= " AND `admin_login`.`allowed_departments` REGEXP '[$idList]'";
+        } else {
+            $sql .= " AND 1=0";
+        }
+    }
+
+    // Allowed employee filter - search using employee IDs from allowed_employees
+    if (!empty($allowedEmployeeFilter) && $allowedEmployeeFilter !== 'All Employees') {
+        $allowedEmployeeFilter = mysqli_real_escape_string($conDB, $allowedEmployeeFilter);
+        $empIds = [];
+        $empQuery = mysqli_query($conDB, "SELECT `emp_id` FROM `employees` WHERE `name` LIKE '%$allowedEmployeeFilter%' OR `emp_id` LIKE '%$allowedEmployeeFilter%'");
+        while ($emp = mysqli_fetch_assoc($empQuery)) {
+            $empIds[] = $emp['emp_id'];
+        }
+
+        if (!empty($empIds)) {
+            $idList = implode('|', array_map('intval', $empIds));
+            $sql .= " AND `admin_login`.`allowed_employees` REGEXP '[$idList]'";
+        } else {
+            $sql .= " AND 1=0";
+        }
+    }
     
     // Count total records before filtering
     $countSql = "SELECT COUNT(*) as total FROM `admin_login` 
@@ -139,30 +185,55 @@ try {
         $status_usr = $rec["status"];
         $allowed_companies = $rec["allowed_companies"];
         $allowed_departments = $rec["allowed_departments"];
+        $allowed_employees = $rec["allowed_employees"];
         
-        // Convert JSON allowed_companies to company names
-        $company_names = "All Companies";
+        // Convert JSON allowed_companies to company names with badge formatting
+        $company_names = '<span class="all-employees-badge">All Companies</span>';
         if (!empty($allowed_companies)) {
             $companies_array = json_decode($allowed_companies, true);
             if (is_array($companies_array) && !empty($companies_array)) {
                 $company_ids = implode(',', array_map('intval', $companies_array));
-                // Try matching by id first, then by comp_id if not found
-                $comp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `comp_name` SEPARATOR ', ') AS `names` FROM `companies` WHERE `id` IN ($company_ids) OR `comp_id` IN ($company_ids)");
-                if ($comp_query && $comp_row = mysqli_fetch_assoc($comp_query)) {
-                    $company_names = $comp_row['names'] ?: "All Companies";
+                $comp_query = mysqli_query($conDB, "SELECT DISTINCT `comp_name` FROM `companies` WHERE `id` IN ($company_ids) OR `comp_id` IN ($company_ids) ORDER BY `comp_name`");
+                if ($comp_query && mysqli_num_rows($comp_query) > 0) {
+                    $badges = [];
+                    while ($comp_row = mysqli_fetch_assoc($comp_query)) {
+                        $badges[] = '<span class="employee-badge">' . htmlspecialchars($comp_row['comp_name']) . '</span>';
+                    }
+                    $company_names = '<div class="employee-badges-container">' . implode('', $badges) . '</div>';
                 }
             }
         }
         
-        // Convert JSON allowed_departments to department names
-        $department_names = "All Departments";
+        // Convert JSON allowed_departments to department names with badge formatting
+        $department_names = '<span class="all-employees-badge">All Departments</span>';
         if (!empty($allowed_departments)) {
             $departments_array = json_decode($allowed_departments, true);
             if (is_array($departments_array) && !empty($departments_array)) {
                 $department_ids = implode(',', array_map('intval', $departments_array));
-                $dept_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT `dep_nme` SEPARATOR ', ') AS `names` FROM `department` WHERE `id` IN ($department_ids)");
-                if ($dept_query && $dept_row = mysqli_fetch_assoc($dept_query)) {
-                    $department_names = $dept_row['names'] ?: "All Departments";
+                $dept_query = mysqli_query($conDB, "SELECT DISTINCT `dep_nme` FROM `department` WHERE `id` IN ($department_ids) ORDER BY `dep_nme`");
+                if ($dept_query && mysqli_num_rows($dept_query) > 0) {
+                    $badges = [];
+                    while ($dept_row = mysqli_fetch_assoc($dept_query)) {
+                        $badges[] = '<span class="employee-badge">' . htmlspecialchars($dept_row['dep_nme']) . '</span>';
+                    }
+                    $department_names = '<div class="employee-badges-container">' . implode('', $badges) . '</div>';
+                }
+            }
+        }
+
+        // Convert JSON allowed_employees to employee names with badge formatting
+        $employee_names = '<span class="all-employees-badge">All Employees</span>';
+        if (!empty($allowed_employees)) {
+            $employees_array = json_decode($allowed_employees, true);
+            if (is_array($employees_array) && !empty($employees_array)) {
+                $employee_ids = implode(',', array_map('intval', $employees_array));
+                $emp_query = mysqli_query($conDB, "SELECT `name` AS `emp_display` FROM `employees` WHERE `emp_id` IN ($employee_ids) ORDER BY `name`");
+                if ($emp_query && mysqli_num_rows($emp_query) > 0) {
+                    $badges = [];
+                    while ($emp_row = mysqli_fetch_assoc($emp_query)) {
+                        $badges[] = '<span class="employee-badge">' . parseName($emp_row['emp_display']) . '</span>';
+                    }
+                    $employee_names = '<div class="employee-badges-container">' . implode('', $badges) . '</div>';
                 }
             }
         }
@@ -177,11 +248,12 @@ try {
             htmlspecialchars($dept_usr),                     // 5: Department
             htmlspecialchars($mobile_usr),                   // 6: Mobile
             $usrty_usr,                                      // 7: User Type
-            htmlspecialchars($company_names),                // 8: Allowed Companies
-            htmlspecialchars($department_names),             // 9: Allowed Departments
-            $status_usr,                                      // 10: Status
-            $id_user_usr,                                     // 11: Action (ID for button)
-            $rec                                              // 12: Full record data (for edit modal) - will be JSON encoded by json_encode()
+            $company_names,                                  // 8: Allowed Companies (contains HTML badges - don't escape)
+            $department_names,                               // 9: Allowed Departments (contains HTML badges - don't escape)
+            $employee_names,                                 // 10: Allowed Employees (contains HTML badges - don't escape)
+            $status_usr,                                      // 11: Status
+            $id_user_usr,                                     // 12: Action (ID for button)
+            $rec                                              // 13: Full record data (for edit modal) - will be JSON encoded by json_encode()
         ];
         
         $data[] = $row;

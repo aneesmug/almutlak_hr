@@ -15,6 +15,34 @@ if (!isset($_GET['comp']) || !is_numeric($_GET['comp'])) {
 }
 $company_id = (int)$_GET['comp'];
 
+// --- ACCESS CONTROL: Check if user is allowed to access this company ---
+$accessible_companies = [];
+if (!empty($allowed_companies_array)) {
+    $accessible_companies = $allowed_companies_array;
+} else {
+    // User has no restrictions - can access all companies
+}
+
+// If user has company restrictions, validate they have access to this specific company
+if (!empty($accessible_companies) && !in_array($company_id, $accessible_companies)) {
+    // Check if user has explicitly allowed employees in this company
+    $allow_by_employee = false;
+    if (!empty($allowed_employees_array)) {
+        $allowed_emp_ids = implode(',', array_map('intval', $allowed_employees_array));
+        $comp_check_sql = "SELECT 1 FROM employees WHERE comp_no = ? AND emp_id IN ($allowed_emp_ids) LIMIT 1";
+        $comp_check_stmt = $conDB->prepare($comp_check_sql);
+        $comp_check_stmt->bind_param("i", $company_id);
+        $comp_check_stmt->execute();
+        $allow_by_employee = $comp_check_stmt->get_result()->num_rows > 0;
+        $comp_check_stmt->close();
+    }
+    
+    if (!$allow_by_employee) {
+        header("Location: dashboard.php");
+        exit;
+    }
+}
+
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -43,7 +71,8 @@ if ($current_page < 1) {
 }
 
 // ** NEW ** Get the total unfiltered count of ALL employees.
-$unfiltered_sql = "SELECT COUNT(id) as total FROM employees";
+$employee_filter_count = getEmployeeFilterSQL('emp_id', false);
+$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $employee_filter_count;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
@@ -61,6 +90,10 @@ if (!empty($company_filter)) {
 $department_filter = getDepartmentFilterSQL('dept', false);
 if (!empty($department_filter)) {
     $where_clauses[] = substr($department_filter, 5); // remove leading ' AND '
+}
+$employee_filter = getEmployeeFilterSQL('emp_id', false);
+if (!empty($employee_filter)) {
+    $where_clauses[] = substr($employee_filter, 5); // remove leading ' AND '
 }
 
 if (!empty($search_term)) {

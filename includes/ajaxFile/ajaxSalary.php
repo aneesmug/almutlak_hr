@@ -20,8 +20,9 @@ if($ajaxType == 'add_salary'){
             // Get employee details with company filter
             $company_filter = getCompanyFilterSQL('comp_no', true);
             $department_filter = getDepartmentFilterSQL('dept', true);
+            $employee_filter = getEmployeeFilterSQL('emp_id', true);
             $chk_id_safe = (int)$chk_id;
-            $query = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='$chk_id_safe'" . $company_filter . $department_filter) or die(mysqli_error($conDB));
+            $query = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='$chk_id_safe'" . $company_filter . $department_filter . $employee_filter) or die(mysqli_error($conDB));
             if (mysqli_num_rows($query) > 0) {
                 $row = mysqli_fetch_array($query);
                 $name = $row['name'];

@@ -51,6 +51,9 @@ switch ($action) {
         approveSettlement($settlementManager, $currentUserId);
         break;
     
+    case 'upload_settlement_attachment':
+        uploadSettlementAttachment($currentUserId);
+        break;
     
     case 'approve_settlement_with_attachments':
         approveSettlementWithAttachments($settlementManager, $currentUserId);
@@ -894,6 +897,105 @@ function approveSettlement($settlementManager, $currentUserId) {
 }
 
 /**
+ * Upload Settlement Attachment via Dropzone
+ * Stores file and immediately saves metadata to database
+ */
+function uploadSettlementAttachment($currentUserId) {
+    global $pdo;
+    
+    // Log the action
+    error_log("uploadSettlementAttachment called - User: $currentUserId");
+    error_log("POST keys: " . json_encode(array_keys($_POST)));
+    error_log("FILES keys: " . json_encode(array_keys($_FILES)));
+    
+    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        $errorCode = $_FILES['file']['error'] ?? 'UNKNOWN';
+        error_log("Upload error: $errorCode");
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'File upload failed'
+        ]);
+        return;
+    }
+    
+    try {
+        $file = $_FILES['file'];
+        $settlementId = intval($_POST['settlement_id'] ?? 0);
+        $requestInvNo = trim($_POST['settlement_inv_no'] ?? '');
+        $originalFileName = basename($file['name']);
+        $fileSize = $file['size'];
+        $fileTmpPath = $file['tmp_name'];
+        
+        // Validate
+        if (!$settlementId || !$requestInvNo) {
+            throw new Exception("Missing settlement context");
+        }
+        
+        // Create upload directory
+        $uploadDir = __DIR__ . '/../../uploads/settlement_attachments/' . date('Y/m');
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+        
+        // Generate unique filename
+        $fileExtension = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
+        $uniqueFileName = 'settlement_' . uniqid() . '_' . time() . '.' . $fileExtension;
+        $filePath = $uploadDir . '/' . $uniqueFileName;
+        
+        // Move file
+        if (!move_uploaded_file($fileTmpPath, $filePath)) {
+            throw new Exception("Failed to save file to disk");
+        }
+        
+        error_log("File saved: $filePath");
+        
+        // Get emp_id from settlement_records
+        $stmtEmp = $pdo->prepare("SELECT emp_id FROM settlement_records WHERE id = ? LIMIT 1");
+        $stmtEmp->execute([$settlementId]);
+        $empRecord = $stmtEmp->fetch();
+        $empId = $empRecord['emp_id'] ?? $currentUserId;
+        
+        // Save to database  (CORRECT column names: request_inv_no, not settlement_inv_no)
+        $stmt = $pdo->prepare("
+            INSERT INTO settlement_attachments 
+            (settlement_id, request_inv_no, emp_id, file_name, file_path, file_type, file_size, attachment_category, uploaded_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'supporting_document', ?)
+        ");
+        
+        $mimeType = mime_content_type($filePath) ?? 'application/octet-stream';
+        $stmt->execute([
+            $settlementId,
+            $requestInvNo,  // <-- CORRECT: request_inv_no column
+            $empId,
+            $uniqueFileName,
+            $uniqueFileName,
+            $mimeType,
+            $fileSize,
+            $currentUserId
+        ]);
+        
+        error_log("✓ Attachment saved to DB: settlement_id=$settlementId, request_inv_no=$requestInvNo, file=$uniqueFileName");
+        
+        http_response_code(200);
+        echo json_encode([
+            'success' => true,
+            'uploaded_filename' => $uniqueFileName,
+            'original_filename' => $originalFileName,
+            'message' => 'File uploaded successfully'
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("✗ Upload error: " . $e->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage()
+        ]);
+    }
+}
+
+/**
  * Approve Settlement with WPS File Upload (Combined Operation for HR Payroll)
  * Handles both approval and WPS file upload in a single request
  */
@@ -1165,7 +1267,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                     }
                     
                     // Check file type
-                    $allowedExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'zip', 'rar'];
+                    $allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'gif'];
                     $fileExtension = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
                     
                     if (!in_array($fileExtension, $allowedExtensions)) {
@@ -1190,17 +1292,29 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         ");
                         
                         $mimeType = mime_content_type($filePath);
-                        $stmtInsert->execute([
-                            $settlementId,
-                            $settlementInvNo,
-                            $empId,
-                            $originalFileName,
-                            $uniqueFileName,
-                            $mimeType,
-                            $fileSize,
-                            $category,
-                            $currentUserId
-                        ]);
+                        
+                        // Execute with error handling
+                        try {
+                            $executeResult = $stmtInsert->execute([
+                                $settlementId,
+                                $settlementInvNo,
+                                $empId,
+                                $originalFileName,
+                                $uniqueFileName,
+                                $mimeType,
+                                $fileSize,
+                                $category,
+                                $currentUserId
+                            ]);
+                            
+                            if (!$executeResult) {
+                                error_log("Attachment INSERT failed: " . json_encode($stmtInsert->errorInfo()));
+                                continue;
+                            }
+                        } catch (Exception $e) {
+                            error_log("Attachment INSERT exception: " . $e->getMessage());
+                            continue;
+                        }
                         
                         $uploadedCount++;
                         $uploadedFiles[] = $originalFileName;

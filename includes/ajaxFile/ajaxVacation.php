@@ -84,8 +84,9 @@ if ($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('comp_no', true);
     $department_filter = getDepartmentFilterSQL('dept', true);
+    $employee_filter = getEmployeeFilterSQL('emp_id', true);
     
-    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter.$department_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
+    $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter.$department_filter.$employee_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
     $name = [];
     while ($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -100,13 +101,14 @@ if ($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
     
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`emp_id`=" . (int)$_POST['empid'] . " ".$company_filter.$department_filter); // Cast to int
+    WHERE `e`.`status`=1 AND `e`.`emp_id`=" . (int)$_POST['empid'] . " ".$company_filter.$department_filter.$employee_filter); // Cast to int
     $name = [];
     while ($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -118,12 +120,15 @@ if ($ajaxType == 'emp_search') {
     ];
     echo json_encode($data);
 } elseif ($ajaxType == 'emp_department') {
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
     $stmt = mysqli_query($conDB, "SELECT 
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
     LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE `e`.`status`=1 AND `e`.`dept`=" . (int)$_POST['dept'] . " "); // Cast to int
+    WHERE `e`.`status`=1 AND `e`.`dept`=" . (int)$_POST['dept'] . " ".$company_filter.$department_filter.$employee_filter); // Cast to int
     $name = [];
     while ($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;
@@ -1500,6 +1505,54 @@ elseif ($ajaxType == 'approveVacation') {
             $current_user_dept = isset($user_data['dept']) ? (int)$user_data['dept'] : null;
             mysqli_free_result($user_role_query);
             // No enforcement here; allow approval to proceed.
+        }
+
+        // ===== CHECK ACCESS CONTROL for approver =====
+        // Get approver's allowed scope restrictions
+        $approverAccessQuery = "SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = '{$current_user_id}'";
+        $approverAccessResult = mysqli_query($conDB, $approverAccessQuery);
+        $approverAccessData = mysqli_fetch_assoc($approverAccessResult);
+        mysqli_free_result($approverAccessResult);
+        
+        if ($approverAccessData) {
+            // Decode allowed scope restrictions
+            $allowedCompanies = !empty($approverAccessData['allowed_companies']) ? json_decode($approverAccessData['allowed_companies'], true) : null;
+            $allowedDepts = !empty($approverAccessData['allowed_departments']) ? json_decode($approverAccessData['allowed_departments'], true) : null;
+            $allowedEmps = !empty($approverAccessData['allowed_employees']) ? json_decode($approverAccessData['allowed_employees'], true) : null;
+            
+            // Get employee's company and department
+            $empAccessQuery = "SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = '" . mysqli_real_escape_string($conDB, $employee_id) . "'";
+            $empAccessResult = mysqli_query($conDB, $empAccessQuery);
+            $empScope = mysqli_fetch_assoc($empAccessResult);
+            mysqli_free_result($empAccessResult);
+            
+            $hasAccessToEmployee = true;
+            
+            // Check company restriction
+            if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
+                if (!in_array($empScope['comp_no'], $allowedCompanies)) {
+                    $hasAccessToEmployee = false;
+                }
+            }
+            
+            // Check department restriction
+            if ($hasAccessToEmployee && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
+                if (!in_array($empScope['dept'], $allowedDepts)) {
+                    $hasAccessToEmployee = false;
+                }
+            }
+            
+            // Check employee restriction
+            if ($hasAccessToEmployee && is_array($allowedEmps) && !empty($allowedEmps)) {
+                $empId = (int)$empScope['emp_id'];
+                if (!in_array($empId, array_map('intval', $allowedEmps))) {
+                    $hasAccessToEmployee = false;
+                }
+            }
+            
+            if (!$hasAccessToEmployee) {
+                throw new Exception(__('access_denied') . ' - This employee is outside your approval scope.');
+            }
         }
 
         // Normalize approver chain into integers and enforce uniqueness early
