@@ -99,18 +99,15 @@ try {
                 }
             }
             
-            // Add access control filters - allowed companies/departments/employees
-            if (!empty($allowed_companies_array)) {
-                $placeholders = implode(',', array_fill(0, count($allowed_companies_array), '?'));
-                $sql .= " AND (e.comp_no IN ($placeholders) OR e.emp_id IN (SELECT emp_id FROM employees WHERE emp_id IN (" . implode(',', array_fill(0, count($allowed_employees_array ?? []), '?')) . ")))";
-                $params = array_merge($params, $allowed_companies_array);
-                if (!empty($allowed_employees_array)) {
-                    $params = array_merge($params, $allowed_employees_array);
-                }
-            } elseif (!empty($allowed_employees_array)) {
+            // Add access control filters - strict employee scope first (prevents cross-manager leaks)
+            if (!empty($allowed_employees_array)) {
                 $placeholders = implode(',', array_fill(0, count($allowed_employees_array), '?'));
                 $sql .= " AND e.emp_id IN ($placeholders)";
                 $params = array_merge($params, $allowed_employees_array);
+            } elseif (!empty($allowed_companies_array)) {
+                $placeholders = implode(',', array_fill(0, count($allowed_companies_array), '?'));
+                $sql .= " AND e.comp_no IN ($placeholders)";
+                $params = array_merge($params, $allowed_companies_array);
             }
             
             $sql .= " ORDER BY e.created_at DESC";

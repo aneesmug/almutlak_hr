@@ -15,11 +15,12 @@ require_once __DIR__ . '/../../includes/session_check.php';
 
 header('Content-Type: application/json');
 
-// Check authorization - only allow system admins to edit department access
-if (!$is_system_admin) {
+// Check authorization - require authenticated user
+// All authenticated users can view/manage access levels
+if (!isset($user_type)) {
     echo json_encode([
         'success' => false,
-        'message' => 'Unauthorized: Only system administrators can manage department access'
+        'message' => 'Unauthorized: User must be logged in'
     ]);
     exit();
 }
@@ -34,6 +35,8 @@ try {
     
     if ($result) {
         while ($row = mysqli_fetch_assoc($result)) {
+            // Convert ID to string for consistent matching in Select2
+            $row['id'] = (string)$row['id'];
             $departments[] = $row;
         }
     }
@@ -56,7 +59,8 @@ try {
                 if (!empty($user_data['allowed_departments'])) {
                     $decoded = json_decode($user_data['allowed_departments'], true);
                     if (is_array($decoded)) {
-                        $allowed_departments = array_map('intval', $decoded);
+                        // Convert to strings to match HTML option values
+                        $allowed_departments = array_map('strval', $decoded);
                     }
                 }
             }

@@ -404,6 +404,7 @@
             $deduct = filter_input(INPUT_POST, 'deduct', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $eos_amount = filter_input(INPUT_POST, 'eos_amount', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $vacation_salary = filter_input(INPUT_POST, 'anul_vac_salry', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
+            $other_earnings = filter_input(INPUT_POST, 'other_earnings', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $net_payment = filter_input(INPUT_POST, 'net_payment', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $overtime_hours = filter_input(INPUT_POST, 'overtime_hours', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
             $overtime_days = filter_input(INPUT_POST, 'overtime_days', FILTER_VALIDATE_FLOAT, ['options' => ['default' => 0]]);
@@ -479,9 +480,21 @@
                     $t_months = $serviceDuration->m;
                     $t_days = $serviceDuration->d;
 
-                    $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `absent_days`, `deduction_hours`, `gosi_deduction`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("sisssdssiiiddddiddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $absent_days, $deduction_hours, $gosi_deduction, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
-                $stmt->execute();
+                    // Backward-compatible insert: include other_earnings only when column exists
+                    $has_other_earnings_col = false;
+                    $col_check = mysqli_query($conDB, "SHOW COLUMNS FROM `emp_eos` LIKE 'other_earnings'");
+                    if ($col_check && mysqli_num_rows($col_check) > 0) {
+                        $has_other_earnings_col = true;
+                    }
+
+                    if ($has_other_earnings_col) {
+                        $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `absent_days`, `deduction_hours`, `gosi_deduction`, `deduct`, `other_earnings`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->bind_param("sisssdssiiiddddiddddssid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $absent_days, $deduction_hours, $gosi_deduction, $deduct, $other_earnings, $net_payment, $notes, $curt_month_days, $curt_month_salry);
+                    } else {
+                        $stmt = $conDB->prepare("INSERT INTO `emp_eos` (`emp_id`, `contract_type`, `eos_reason`, `leaving_reason`, `leaving_reason_ar`, `eos_amount`, `joining_date`, `end_date`, `t_years`, `t_months`, `t_days`, `anul_vac_days`, `anul_vac_salry`, `overtime_hours`, `overtime_days`, `absent_days`, `deduction_hours`, `gosi_deduction`, `deduct`, `net_payment`, `notes`, `curt_month_days`, `curt_month_salry`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->bind_param("sisssdssiiiddddiddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $absent_days, $deduction_hours, $gosi_deduction, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
+                    }
+                    $stmt->execute();
 
                 $stmt_update = $conDB->prepare("UPDATE `employees` SET `status`='0', `ter_note`=?, `fly`='0', `ter_date`=? WHERE `emp_id`=?");
                 $stmt_update->bind_param("sss", $notes, $endDateStr, $emprow['empid']);

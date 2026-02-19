@@ -15,11 +15,12 @@ require_once __DIR__ . '/../../includes/session_check.php';
 
 header('Content-Type: application/json');
 
-// Check authorization - only allow system admins to edit employee access
-if (!$is_system_admin) {
+// Check authorization - require authenticated user
+// All authenticated users can view/manage access levels
+if (!isset($user_type)) {
     echo json_encode([
         'success' => false,
-        'message' => 'Unauthorized: Only system administrators can manage employee access'
+        'message' => 'Unauthorized: User must be logged in'
     ]);
     exit();
 }
@@ -35,7 +36,7 @@ try {
     if ($result) {
         while ($row = mysqli_fetch_assoc($result)) {
             $employees[] = [
-                'id' => $row['emp_id'],
+                'id' => (string)$row['emp_id'],  // Convert to string for consistent matching
                 'name' => $row['name'],
                 'display' => $row['emp_id'] . ' - ' . $row['name']
             ];
@@ -59,7 +60,8 @@ try {
                 if (!empty($user_data['allowed_employees'])) {
                     $decoded = json_decode($user_data['allowed_employees'], true);
                     if (is_array($decoded)) {
-                        $allowed_employees = array_map('intval', $decoded);
+                        // Convert to strings to match HTML option values
+                        $allowed_employees = array_map('strval', $decoded);
                     }
                 }
             }

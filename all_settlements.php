@@ -619,13 +619,6 @@ if ($canSeeAllDepts) {
                                                                 $attachmentLinks[] = 'download_settlement_attachment.php?id=' . (int)$attachment['id'];
                                                             }
                                                         ?>
-                                                        <?php if (!empty($attachmentLinks)): ?>
-                                                            <div class="detail-item"><i class="fad fa-paperclip"></i><strong><?= __('attachments') ?> (<?= count($attachmentLinks) ?>):</strong> 
-                                                                <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachmentLinks) ?>, "<?= __('attachments') ?>")' style="padding: 4px 12px; font-size: 0.85em; font-weight: 500;">
-                                                                    <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
-                                                                </button>
-                                                            </div>
-                                                        <?php endif; ?>
                                                         <div class="detail-item">
                                                             <i class="fad fa-tasks"></i>
                                                             <strong><?= __('status') ?>:</strong>

@@ -411,13 +411,14 @@ function approveSettlement($settlementManager, $currentUserId) {
             return;
         }
         
-        // Update approval status to 'approved'
+        // Update approval status to 'approved' for current assigned approver row only
         $updateQry = mysqli_query($conDB, "
             UPDATE request_approvers 
             SET status = 'approved', action_date = NOW(), note = '" . mysqli_real_escape_string($conDB, $approvalComment) . "'
             WHERE request_inv_no = '$settlementInvNo' 
             AND request_type_id = $typeId
-            AND approval_level = {$current['approval_level']}
+            AND approver_id = $currentUserId
+            AND status = 'pending'
         ");
         
         if (!$updateQry) {
@@ -1059,13 +1060,14 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
         // Begin transaction
         $pdo->beginTransaction();
         
-        // Update approval status to 'approved'
+        // Update approval status to 'approved' for current assigned approver row only
         $updateQry = mysqli_query($conDB, "
             UPDATE request_approvers 
             SET status = 'approved', action_date = NOW(), note = '" . mysqli_real_escape_string($conDB, $approvalComment) . "'
             WHERE request_inv_no = '$settlementInvNo' 
             AND request_type_id = $typeId
-            AND approval_level = {$current['approval_level']}
+            AND approver_id = $currentUserId
+            AND status = 'pending'
         ");
         
         if (!$updateQry) {
@@ -1427,12 +1429,13 @@ function rejectSettlement($settlementManager, $currentUserId) {
             return;
         }
         
-        // Update approval status to 'rejected'
+        // Update approval status to 'rejected' for current assigned approver row only
         $updateQry = mysqli_query($conDB, "
             UPDATE request_approvers 
             SET status = 'rejected', action_date = NOW(), note = '" . mysqli_real_escape_string($conDB, $rejectionReason) . "'
             WHERE request_inv_no = '$settlementInvNo' 
             AND request_type_id = $typeId
+            AND approver_id = $currentUserId
             AND status = 'pending'
         ");
         

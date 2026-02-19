@@ -748,51 +748,55 @@ if ($ajaxType == 'apply_resignation') {
         require_once __DIR__ . '/../ApprovalChainManager.php';
         $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
         
-        // Verify approver
-        if (!$chainManager->verifyApprover($requestInvNo, $approverId)) {
+        // Verify approver (must be current pending approver for this request)
+        $verifyResult = $chainManager->verifyApprover($requestInvNo, $approverId);
+        if (!is_array($verifyResult) || empty($verifyResult['authorized'])) {
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Unauthorized',
-                'message' => 'You are not an authorized approver for this resignation.'
+                'message' => $verifyResult['message'] ?? 'You are not an authorized approver for this resignation.'
             ]);
             exit;
         }
         
+        // NOTE: Approval authorization is controlled by approval-chain verification and processing.
+        /*
+        LEGACY (kept as comment per request): scope-based approval restriction check.
         // ===== CHECK ACCESS CONTROL for approver =====
         // Get approver's allowed scope restrictions
         $approverQuery = "SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = '$approverId'";
         $approverResult = mysqli_query($conDB, $approverQuery);
         $approverData = mysqli_fetch_assoc($approverResult);
         mysqli_free_result($approverResult);
-        
+
         if ($approverData) {
             // Check allowed companies
             $allowedCompanies = !empty($approverData['allowed_companies']) ? json_decode($approverData['allowed_companies'], true) : null;
             $allowedDepts = !empty($approverData['allowed_departments']) ? json_decode($approverData['allowed_departments'], true) : null;
             $allowedEmps = !empty($approverData['allowed_employees']) ? json_decode($approverData['allowed_employees'], true) : null;
-            
+
             // Get employee's company and department
             $empScopeQuery = "SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = '" . mysqli_real_escape_string($conDB, $resignation['emp_id']) . "'";
             $empScopeResult = mysqli_query($conDB, $empScopeQuery);
             $empScope = mysqli_fetch_assoc($empScopeResult);
             mysqli_free_result($empScopeResult);
-            
+
             $hasAccess = true;
-            
+
             // If approver has company restrictions, check if employee is in allowed companies
             if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
                 if (!in_array($empScope['comp_no'], $allowedCompanies)) {
                     $hasAccess = false;
                 }
             }
-            
+
             // If approver has department restrictions, check if employee is in allowed departments
             if ($hasAccess && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
                 if (!in_array($empScope['dept'], $allowedDepts)) {
                     $hasAccess = false;
                 }
             }
-            
+
             // If approver has employee restrictions, check if employee is in allowed employees
             if ($hasAccess && is_array($allowedEmps) && !empty($allowedEmps)) {
                 $empId = (int)$empScope['emp_id'];
@@ -800,7 +804,7 @@ if ($ajaxType == 'apply_resignation') {
                     $hasAccess = false;
                 }
             }
-            
+
             if (!$hasAccess) {
                 echo json_encode([
                     'type' => 'error',
@@ -810,6 +814,7 @@ if ($ajaxType == 'apply_resignation') {
                 exit;
             }
         }
+        */
         
         // Get approver details
         $approverQuery = "SELECT `fullname`, `email` FROM `admin_login` WHERE `emp_id` = '$approverId'";
@@ -1144,26 +1149,24 @@ if ($ajaxType == 'apply_resignation') {
             exit;
         }
         
-        // Verify rejector is in the approval chain (not requiring status='awaiting')
-        $approvalCheckQuery = "SELECT `id`, `approval_level`, `status` FROM `request_approvers` 
-                             WHERE `request_inv_no` = '$requestInvNo' 
-                             AND `approver_id` = '$rejecterId'
-                             LIMIT 1";
-        $approvalCheckResult = mysqli_query($conDB, $approvalCheckQuery);
-        
-        if (!$approvalCheckResult || mysqli_num_rows($approvalCheckResult) == 0) {
-            $logRejectDebug('Approval check failed. Query=' . $approvalCheckQuery . ' | Error=' . mysqli_error($conDB));
+        // Verify rejector is the current pending approver in approval chain
+        require_once __DIR__ . '/../ApprovalChainManager.php';
+        $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
+        $verifyRejectResult = $chainManager->verifyApprover($requestInvNo, $rejecterId);
+        if (!is_array($verifyRejectResult) || empty($verifyRejectResult['authorized'])) {
+            $logRejectDebug('Reject authorization failed: ' . json_encode($verifyRejectResult));
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Unauthorized',
-                'message' => 'You are not an authorized approver for this resignation.'
+                'message' => $verifyRejectResult['message'] ?? 'You are not an authorized approver for this resignation.'
             ]);
             exit;
         }
-        $approvalCheckData = mysqli_fetch_assoc($approvalCheckResult);
-        mysqli_free_result($approvalCheckResult);
-        $approvalLevel = $approvalCheckData['approval_level'];
+        $approvalLevel = (int)($verifyRejectResult['level'] ?? 0);
         
+        $logRejectDebug('Skipping scope restrictions; rejection authorization follows approval chain membership.');
+        /*
+        LEGACY (kept as comment per request): scope-based rejection restriction check.
         // ===== CHECK ACCESS CONTROL for rejector =====
         // Get rejector's allowed scope restrictions
         $rejecterScopeQuery = "SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = '$rejecterId'";
@@ -1171,36 +1174,36 @@ if ($ajaxType == 'apply_resignation') {
         $rejecterScopeData = mysqli_fetch_assoc($rejecterScopeResult);
         mysqli_free_result($rejecterScopeResult);
         $logRejectDebug('Rejecter scope loaded for emp_id=' . $rejecterId);
-        
+
         if ($rejecterScopeData) {
             // Check allowed companies
             $allowedCompanies = !empty($rejecterScopeData['allowed_companies']) ? json_decode($rejecterScopeData['allowed_companies'], true) : null;
             $allowedDepts = !empty($rejecterScopeData['allowed_departments']) ? json_decode($rejecterScopeData['allowed_departments'], true) : null;
             $allowedEmps = !empty($rejecterScopeData['allowed_employees']) ? json_decode($rejecterScopeData['allowed_employees'], true) : null;
-            
+
             // Get employee's company and department
             $empScopeQuery = "SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = '" . mysqli_real_escape_string($conDB, $resignation['emp_id']) . "'";
             $empScopeResult = mysqli_query($conDB, $empScopeQuery);
             $empScope = mysqli_fetch_assoc($empScopeResult);
             mysqli_free_result($empScopeResult);
             $logRejectDebug('Employee scope loaded for emp_id=' . ($resignation['emp_id'] ?? ''));
-            
+
             $hasAccess = true;
-            
+
             // If rejector has company restrictions, check if employee is in allowed companies
             if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
                 if (!in_array($empScope['comp_no'], $allowedCompanies)) {
                     $hasAccess = false;
                 }
             }
-            
+
             // If rejector has department restrictions, check if employee is in allowed departments
             if ($hasAccess && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
                 if (!in_array($empScope['dept'], $allowedDepts)) {
                     $hasAccess = false;
                 }
             }
-            
+
             // If rejector has employee restrictions, check if employee is in allowed employees
             if ($hasAccess && is_array($allowedEmps) && !empty($allowedEmps)) {
                 $empId = (int)$empScope['emp_id'];
@@ -1208,7 +1211,7 @@ if ($ajaxType == 'apply_resignation') {
                     $hasAccess = false;
                 }
             }
-            
+
             if (!$hasAccess) {
                 $logRejectDebug('Access denied by scope restrictions.');
                 echo json_encode([
@@ -1219,6 +1222,7 @@ if ($ajaxType == 'apply_resignation') {
                 exit;
             }
         }
+        */
         
         // Get rejector details
         $rejecterQuery = "SELECT `fullname`, `email` FROM `admin_login` WHERE `emp_id` = '$rejecterId'";
@@ -1234,7 +1238,8 @@ if ($ajaxType == 'apply_resignation') {
                                    `action_date` = NOW(),
                                    `note` = '" . mysqli_real_escape_string($conDB, "Rejected by $rejecterName: $rejectionReason") . "'
                                WHERE `request_inv_no` = '$requestInvNo' 
-                               AND `approver_id` = '$rejecterId'";
+                               AND `approver_id` = '$rejecterId'
+                               AND `status` = 'pending'";
         
         if (!mysqli_query($conDB, $updateApprovalQuery)) {
             $dbError = mysqli_error($conDB);

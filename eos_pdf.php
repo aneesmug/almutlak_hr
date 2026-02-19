@@ -20,6 +20,36 @@ if (!class_exists('TCPDF')) {
     }
 }
 
+class EOSPDF extends TCPDF {
+    public function Footer() {
+        $this->SetY(-28);
+        // Footer font requirement: Helvetica
+        $this->SetFont('helvetica', '', 8);
+        $this->setRTL(true);
+
+        $footer_html = '
+        <table width="100%" cellpadding="2" cellspacing="0" style="border-top:1px solid #dee2e6;">
+            <tr>
+                <td width="50%" align="center">
+                    _________________________<br>
+                    <strong>Compensation Signature</strong><br>
+                    توقيع التعويض<br>
+                    Date: ___________________
+                </td>
+                <td width="50%" align="center">
+                    _________________________<br>
+                    <strong>Company Representative</strong><br>
+                    ممثل الشركة<br>
+                    Date: ___________________
+                </td>
+            </tr>
+        </table>';
+
+        $this->writeHTMLCell(0, 0, '', '', $footer_html, 0, 0, false, true, 'C', true);
+        $this->setRTL(false);
+    }
+}
+
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
 if(mysqli_num_rows($query) == 1){
     
@@ -67,6 +97,7 @@ if(mysqli_num_rows($query) == 1){
     $deduction_hours = (float)($eosrow['deduction_hours'] ?? 0);
     $overtime_hours = (float)($eosrow['overtime_hours'] ?? 0);
     $overtime_days = (float)($eosrow['overtime_days'] ?? 0);
+    $other_earnings = (float)($eosrow['other_earnings'] ?? 0);
     
     $overtime_earnings = 0;
     $overtime_hourly_rate = 0;
@@ -84,18 +115,19 @@ if(mysqli_num_rows($query) == 1){
     $hourly_deduction_amount = $hourlyRateDeduction * $deduction_hours;
 
     // 3. PDF CONFIGURATION
-    $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+    $pdf = new EOSPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
     $pdf->SetCreator(PDF_CREATOR);
     $pdf->SetAuthor('HR System');
     $pdf->SetTitle('Final Settlement - ' . $emprow['name']);
     
     // Remove default header/footer
     $pdf->setPrintHeader(false);
-    $pdf->setPrintFooter(false);
+    $pdf->setPrintFooter(true);
     
     // Set margins
     $pdf->SetMargins(10, 10, 10);
-    $pdf->SetAutoPageBreak(TRUE, 15);
+    $pdf->SetAutoPageBreak(TRUE, 35);
+    $pdf->setFooterMargin(8);
     
     // Set default font - Helvetica for English (similar to Arial), xnahid for Arabic
     $pdf->SetFont('helvetica', '', 10);
@@ -272,6 +304,15 @@ if(mysqli_num_rows($query) == 1){
         }
     }
 
+    if ($other_earnings > 0.01) {
+        $html .= '
+        <tr>
+            <td class="label-en en text-success" width="33.33%">Other Earnings</td>
+            <td class="label-ar ar text-success" width="33.33%">أرباح أخرى</td>
+            <td width="33.33%" class="text-right text-success">+'.number_format($other_earnings, 2).'</td>
+        </tr>';
+    }
+
     $html .= '
         <tr class="text-danger">
             <td class="label-en en" width="33.33%" style="font-size: 10pt;"><strong>Deductions</strong></td>
@@ -365,27 +406,7 @@ if(mysqli_num_rows($query) == 1){
     
     $pdf->SetRTL(false); // Disable RTL after Arabic section
     
-    // Signatures
-    $signatures_html = '
-    <br><br><br><br><br><br><br><br><br><br><br><br><br>
-    <table class="sig-table" width="100%">
-        <tr>
-            <td width="50%" align="center">
-                _________________________<br>
-                <strong>Compensation Signature</strong><br>
-                توقيع التعويض<br><br>
-                Date: ___________________
-            </td>
-            <td width="50%" align="center">
-                _________________________<br>
-                <strong>Company Representative</strong><br>
-                ممثل الشركة<br><br>
-                Date: ___________________
-            </td>
-        </tr>
-    </table>';
-    
-    $pdf->writeHTML($signatures_html, true, false, true, false, '');
+    // Signatures are rendered in the footer on every page.
     
     // ========================================
     // PAGE 2 - SALARY INFORMATION & BANK DETAILS

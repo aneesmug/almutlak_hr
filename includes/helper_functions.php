@@ -4495,6 +4495,8 @@ if (!function_exists('getCompanyFilterSQL')) {
         $employees = $use_session && isset($_SESSION['allowed_employees_array'])
             ? $_SESSION['allowed_employees_array']
             : $allowed_employees_array;
+
+        $manager_direct_reports_only = $use_session && !empty($_SESSION['manager_direct_reports_only']);
         
         // No restrictions = no WHERE clause needed
         if (empty($companies)) {
@@ -4506,11 +4508,20 @@ if (!function_exists('getCompanyFilterSQL')) {
             $employee_column = substr($column_name, 0, strrpos($column_name, '.')) . '.emp_id';
         }
         
+        // In strict manager mode, do not broaden by company; rely on direct-report employee scope.
+        if ($manager_direct_reports_only) {
+            if (!empty($employees)) {
+                $employees_list = implode(',', array_map('intval', $employees));
+                return " AND $employee_column IN ($employees_list)";
+            }
+            return " AND 1=0";
+        }
+
         // Create IN clause for allowed companies with AND prefix for WHERE clause compatibility
         $companies_list = implode(',', array_map('intval', $companies));
         if (!empty($employees)) {
             $employees_list = implode(',', array_map('intval', $employees));
-            return " AND ($column_name IN ($companies_list) OR $employee_column IN ($employees_list))";
+            return " AND ($column_name IN ($companies_list) AND $employee_column IN ($employees_list))";
         }
         return " AND $column_name IN ($companies_list)";
     }
@@ -4533,6 +4544,8 @@ if (!function_exists('getDepartmentFilterSQL')) {
         $employees = $use_session && isset($_SESSION['allowed_employees_array'])
             ? $_SESSION['allowed_employees_array']
             : $allowed_employees_array;
+
+        $manager_direct_reports_only = $use_session && !empty($_SESSION['manager_direct_reports_only']);
         
         // No restrictions = no WHERE clause needed
         if (empty($departments)) {
@@ -4544,11 +4557,20 @@ if (!function_exists('getDepartmentFilterSQL')) {
             $employee_column = substr($column_name, 0, strrpos($column_name, '.')) . '.emp_id';
         }
         
+        // In strict manager mode, do not broaden by department; rely on direct-report employee scope.
+        if ($manager_direct_reports_only) {
+            if (!empty($employees)) {
+                $employees_list = implode(',', array_map('intval', $employees));
+                return " AND $employee_column IN ($employees_list)";
+            }
+            return " AND 1=0";
+        }
+
         // Create IN clause for allowed departments with AND prefix for WHERE clause compatibility
         $departments_list = implode(',', array_map('intval', $departments));
         if (!empty($employees)) {
             $employees_list = implode(',', array_map('intval', $employees));
-            return " AND ($column_name IN ($departments_list) OR $employee_column IN ($employees_list))";
+            return " AND ($column_name IN ($departments_list) AND $employee_column IN ($employees_list))";
         }
         return " AND $column_name IN ($departments_list)";
     }

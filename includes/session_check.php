@@ -266,6 +266,29 @@ if (isset($emprow['allowed_companies']) && !empty($emprow['allowed_companies']))
 $_SESSION['allowed_companies'] = $allowed_companies;
 $_SESSION['allowed_companies_array'] = $allowed_companies_array;
 
+// Normalize company restriction IDs to support both companies.id and companies.comp_id
+// This prevents scope leaks when legacy records store one format and employees.comp_no uses the other.
+if (!empty($allowed_companies_array)) {
+    $normalized_company_ids = $allowed_companies_array;
+    $company_ids_csv = implode(',', array_map('intval', $allowed_companies_array));
+
+    $company_map_sql = "SELECT `id`, `comp_id` FROM `companies` WHERE `id` IN ($company_ids_csv) OR `comp_id` IN ($company_ids_csv)";
+    $company_map_result = mysqli_query($conDB, $company_map_sql);
+    if ($company_map_result) {
+        while ($company_row = mysqli_fetch_assoc($company_map_result)) {
+            if (isset($company_row['id']) && (int)$company_row['id'] > 0) {
+                $normalized_company_ids[] = (int)$company_row['id'];
+            }
+            if (isset($company_row['comp_id']) && (int)$company_row['comp_id'] > 0) {
+                $normalized_company_ids[] = (int)$company_row['comp_id'];
+            }
+        }
+    }
+
+    $allowed_companies_array = array_values(array_unique(array_map('intval', $normalized_company_ids)));
+    $_SESSION['allowed_companies_array'] = $allowed_companies_array;
+}
+
 // Determine if user has company restrictions
 $has_company_restrictions = !empty($allowed_companies_array) && count($allowed_companies_array) > 0;
 
@@ -322,12 +345,31 @@ if (isset($emprow['allowed_employees']) && !empty($emprow['allowed_employees']))
 $_SESSION['allowed_employees'] = $allowed_employees;
 $_SESSION['allowed_employees_array'] = $allowed_employees_array;
 
+// Manager visibility mode flag
+// When enabled, manager should only see employees who directly report to them.
+$is_dept_manager = ($user_type === 'dept_user' || strtolower((string)$emp_type) === 'manager');
+$_SESSION['manager_direct_reports_only'] = $is_dept_manager;
+
 // --- 4d. Effective Employee Access (Additive to Company/Department) ---
 // If company/department access is restricted, include employees from those scopes
 // plus any explicitly allowed employees. If company/department is unrestricted,
 // do not restrict by employees.
 $effective_allowed_employees = $allowed_employees_array;
-if ($has_company_restrictions || $has_department_restrictions) {
+if ($is_dept_manager && !empty($empid)) {
+    // Strict manager mode: only direct reports are visible (same dept or cross dept).
+    $manager_emp_id = (int)$empid;
+    $scope_employees = [];
+    $scope_sql = "SELECT `emp_id` FROM `employees` WHERE `status` = 1 AND `supervisor_id` = {$manager_emp_id}";
+    $scope_result = mysqli_query($conDB, $scope_sql);
+    if ($scope_result) {
+        while ($row = mysqli_fetch_assoc($scope_result)) {
+            $scope_employees[] = (int)$row['emp_id'];
+        }
+    }
+
+    // Keep explicitly allowed employees if configured, and merge with direct reports.
+    $effective_allowed_employees = array_values(array_unique(array_merge($effective_allowed_employees, $scope_employees)));
+} elseif ($has_company_restrictions || $has_department_restrictions) {
     $scope_employees = [];
     $scope_sql = "SELECT `emp_id` FROM `employees` WHERE `status` = 1";
     if ($has_company_restrictions) {
@@ -338,6 +380,7 @@ if ($has_company_restrictions || $has_department_restrictions) {
         $department_ids = implode(',', array_map('intval', $allowed_departments_array));
         $scope_sql .= " AND `dept` IN ($department_ids)";
     }
+
     $scope_result = mysqli_query($conDB, $scope_sql);
     if ($scope_result) {
         while ($row = mysqli_fetch_assoc($scope_result)) {

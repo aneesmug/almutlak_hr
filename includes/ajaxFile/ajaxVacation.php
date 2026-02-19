@@ -1506,42 +1506,44 @@ elseif ($ajaxType == 'approveVacation') {
             mysqli_free_result($user_role_query);
             // No enforcement here; allow approval to proceed.
         }
-
+        // NOTE: Approval authorization is governed by approval-chain processing in handle_approval_action().
+        /*
+        LEGACY (kept as comment per request): scope-based restriction check.
         // ===== CHECK ACCESS CONTROL for approver =====
         // Get approver's allowed scope restrictions
         $approverAccessQuery = "SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = '{$current_user_id}'";
         $approverAccessResult = mysqli_query($conDB, $approverAccessQuery);
         $approverAccessData = mysqli_fetch_assoc($approverAccessResult);
         mysqli_free_result($approverAccessResult);
-        
+
         if ($approverAccessData) {
             // Decode allowed scope restrictions
             $allowedCompanies = !empty($approverAccessData['allowed_companies']) ? json_decode($approverAccessData['allowed_companies'], true) : null;
             $allowedDepts = !empty($approverAccessData['allowed_departments']) ? json_decode($approverAccessData['allowed_departments'], true) : null;
             $allowedEmps = !empty($approverAccessData['allowed_employees']) ? json_decode($approverAccessData['allowed_employees'], true) : null;
-            
+
             // Get employee's company and department
             $empAccessQuery = "SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = '" . mysqli_real_escape_string($conDB, $employee_id) . "'";
             $empAccessResult = mysqli_query($conDB, $empAccessQuery);
             $empScope = mysqli_fetch_assoc($empAccessResult);
             mysqli_free_result($empAccessResult);
-            
+
             $hasAccessToEmployee = true;
-            
+
             // Check company restriction
             if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
                 if (!in_array($empScope['comp_no'], $allowedCompanies)) {
                     $hasAccessToEmployee = false;
                 }
             }
-            
+
             // Check department restriction
             if ($hasAccessToEmployee && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
                 if (!in_array($empScope['dept'], $allowedDepts)) {
                     $hasAccessToEmployee = false;
                 }
             }
-            
+
             // Check employee restriction
             if ($hasAccessToEmployee && is_array($allowedEmps) && !empty($allowedEmps)) {
                 $empId = (int)$empScope['emp_id'];
@@ -1549,11 +1551,12 @@ elseif ($ajaxType == 'approveVacation') {
                     $hasAccessToEmployee = false;
                 }
             }
-            
+
             if (!$hasAccessToEmployee) {
                 throw new Exception(__('access_denied') . ' - This employee is outside your approval scope.');
             }
         }
+        */
 
         // Normalize approver chain into integers and enforce uniqueness early
         $approver_chain = array_values(array_filter(array_map('intval', $approver_chain)));

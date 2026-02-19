@@ -2713,6 +2713,9 @@ function loadCompanyAccess(userId, userType) {
                     $('#allowed_companies').select2('destroy');
                 }
                 
+                // Clear the select element first
+                $('#allowed_companies').empty();
+                
                 // Populate company options
                 var companyHTML = '';
                 $.each(response.companies, function(index, company) {
@@ -2734,9 +2737,13 @@ function loadCompanyAccess(userId, userType) {
                 
                 // Set current selections
                 if (response.allowed_companies && response.allowed_companies.length > 0) {
-                    $('#allowed_companies').val(response.allowed_companies).trigger('change');
                     $('#fullAccessCheckbox').prop('checked', false);
                     $('#allowed_companies').prop('disabled', false);
+                    
+                    // Delay value setting to ensure DOM is ready and Select2 is initialized
+                    setTimeout(function() {
+                        $('#allowed_companies').val(response.allowed_companies).trigger('change');
+                    }, 150);
                 } else {
                     // No restrictions = full access
                     $('#fullAccessCheckbox').prop('checked', true);
@@ -2832,7 +2839,10 @@ function loadDepartmentAccess(userId, userType) {
                 
                 // Set current selections
                 if (response.allowed_departments && response.allowed_departments.length > 0) {
-                    $('#allowed_departments').val(response.allowed_departments).trigger('change');
+                    // Delay value setting to ensure DOM is ready
+                    setTimeout(function() {
+                        $('#allowed_departments').val(response.allowed_departments).trigger('change');
+                    }, 50);
                     $('#fullDeptAccessCheckbox').prop('checked', false);
                     $('#allowed_departments').prop('disabled', false);
                 } else {
@@ -2885,6 +2895,104 @@ function toggleDepartmentAccessSection(userType) {
     } else {
         $('#department-access-group').show();
         $('#fullDeptAccessCheckbox').attr('required', 'required');
+    }
+}
+
+/**
+ * Load Employee Access - Load all employees and set current user's allowed employees
+ * @param {number} userId - The admin_login.id
+ * @param {string} userType - The selected user type
+ */
+function loadEmployeeAccess(userId, userType) {
+    $.ajax({
+        url: './includes/ajaxFile/getEmployeeAccess.php',
+        type: 'POST',
+        data: { user_id: userId },
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                // Destroy any existing Select2 instance
+                if ($('#allowed_employees').data('select2')) {
+                    $('#allowed_employees').select2('destroy');
+                }
+                
+                // Populate employee options
+                var employeeHTML = '';
+                $.each(response.employees, function(index, emp) {
+                    employeeHTML += '<option value="' + emp.id + '">' + emp.name + '</option>';
+                });
+                $('#allowed_employees').html(employeeHTML);
+                
+                // Initialize Select2 with search functionality
+                $('#allowed_employees').select2({
+                    placeholder: __('select_employees') || 'Search and select employees...',
+                    allowClear: false,
+                    width: '100%',
+                    dropdownParent: $('.swal2-container'),
+                    language: {
+                        searching: function () { return __('searching') || 'Searching...'; },
+                        noResults: function () { return __('no_results_found') || 'No results found'; }
+                    }
+                });
+                
+                // Set current selections
+                if (response.allowed_employees && response.allowed_employees.length > 0) {
+                    // Delay value setting to ensure DOM is ready
+                    setTimeout(function() {
+                        $('#allowed_employees').val(response.allowed_employees).trigger('change');
+                    }, 50);
+                    $('#fullEmpAccessCheckbox').prop('checked', false);
+                    $('#allowed_employees').prop('disabled', false);
+                } else {
+                    // No restrictions = full access
+                    $('#fullEmpAccessCheckbox').prop('checked', true);
+                    $('#allowed_employees').val([]).trigger('change');
+                    $('#allowed_employees').prop('disabled', true);
+                }
+                
+                // Handle full access checkbox
+                $('#fullEmpAccessCheckbox').off('change').on('change', function() {
+                    if ($(this).is(':checked')) {
+                        $('#allowed_employees').prop('disabled', true);
+                        $('#allowed_employees').val([]).trigger('change');
+                        $('#allowed_employees').closest('.form-group').addClass('opacity-50');
+                    } else {
+                        $('#allowed_employees').prop('disabled', false);
+                        $('#allowed_employees').closest('.form-group').removeClass('opacity-50');
+                        $('#allowed_employees').focus();
+                    }
+                });
+                
+                // Show/hide employee access section based on user type
+                toggleEmployeeAccessSection(userType);
+                
+                // Toggle when user type changes
+                $('#user_type').off('change.emp').on('change.emp', function() {
+                    toggleEmployeeAccessSection($(this).val());
+                });
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Error loading employee access:', error);
+        }
+    });
+}
+
+/**
+ * Toggle visibility of employee access section based on user type
+ * @param {string} userType - The selected user type
+ */
+function toggleEmployeeAccessSection(userType) {
+    // Hide for system admins and employees
+    var isSystemAdmin = (userType === 'administrator' || userType === 'gm');
+    var isEmployee = (userType === 'employee');
+    
+    if (isSystemAdmin || isEmployee) {
+        $('#employee-access-group').hide();
+        $('#fullEmpAccessCheckbox').removeAttr('required');
+    } else {
+        $('#employee-access-group').show();
+        $('#fullEmpAccessCheckbox').attr('required', 'required');
     }
 }
 

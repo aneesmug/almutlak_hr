@@ -325,6 +325,9 @@ function approve_loan() {
         // Initialize ApprovalChainManager
         $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
         
+        // NOTE: Approval authorization is controlled by approval-chain membership via verifyApprover().
+        /*
+        LEGACY (kept as comment per request): scope-based restriction check.
         // ===== CHECK ACCESS CONTROL for approver =====
         // Get approver's allowed scope restrictions
         $approverAccessQuery = $conDB->prepare("SELECT allowed_companies, allowed_departments, allowed_employees FROM admin_login WHERE emp_id = ?");
@@ -334,13 +337,13 @@ function approve_loan() {
         $approverAccessData = $approverAccessResult->fetch_assoc();
         $approverAccessResult->free();
         $approverAccessQuery->close();
-        
+
         if ($approverAccessData) {
             // Decode allowed scope restrictions
             $allowedCompanies = !empty($approverAccessData['allowed_companies']) ? json_decode($approverAccessData['allowed_companies'], true) : null;
             $allowedDepts = !empty($approverAccessData['allowed_departments']) ? json_decode($approverAccessData['allowed_departments'], true) : null;
             $allowedEmps = !empty($approverAccessData['allowed_employees']) ? json_decode($approverAccessData['allowed_employees'], true) : null;
-            
+
             // Get employee's company and department
             $empAccessQuery = $conDB->prepare("SELECT comp_no, dept, emp_id FROM employees WHERE emp_id = ?");
             $empAccessQuery->bind_param("s", $loan_emp_id);
@@ -349,23 +352,23 @@ function approve_loan() {
             $empScope = $empAccessResult->fetch_assoc();
             $empAccessResult->free();
             $empAccessQuery->close();
-            
+
             $hasAccessToEmployee = true;
-            
+
             // Check company restriction
             if (is_array($allowedCompanies) && !empty($allowedCompanies) && is_array($empScope)) {
                 if (!in_array($empScope['comp_no'], $allowedCompanies)) {
                     $hasAccessToEmployee = false;
                 }
             }
-            
+
             // Check department restriction
             if ($hasAccessToEmployee && is_array($allowedDepts) && !empty($allowedDepts) && is_array($empScope)) {
                 if (!in_array($empScope['dept'], $allowedDepts)) {
                     $hasAccessToEmployee = false;
                 }
             }
-            
+
             // Check employee restriction
             if ($hasAccessToEmployee && is_array($allowedEmps) && !empty($allowedEmps)) {
                 $empId = (int)$empScope['emp_id'];
@@ -373,12 +376,13 @@ function approve_loan() {
                     $hasAccessToEmployee = false;
                 }
             }
-            
+
             if (!$hasAccessToEmployee) {
                 echo json_encode(['status' => 'error', 'title' => 'Access Denied', 'message' => 'This employee is outside your approval scope. You cannot approve this loan.', 'type' => 'error']);
                 return;
             }
         }
+        */
         
         // Verify approver is authorized
         $diagnostic = [];
@@ -1569,7 +1573,7 @@ function calculateEndOfService($joining_date, $total_salary) {
 }
 
 function reject_loan() {
-    global $conDB;
+    global $conDB, $pdo;
     if (session_status() == PHP_SESSION_NONE) session_start();
     $username = $_SESSION['auth_user']['user_id'] ?? null; // admin_login.id_iqama
     if (empty($username)) {
@@ -1607,6 +1611,24 @@ function reject_loan() {
         $inv_no = $inv_row['inv_no'] ?? null;
     }
     $stmt_inv->close();
+    if (empty($inv_no) || empty($approver_emp_id)) {
+        echo json_encode(['status' => 'error', 'title' => 'Unauthorized', 'message' => 'Could not resolve approver identity or loan request.', 'type' => 'error']);
+        return;
+    }
+
+    // Verify rejector is the current pending approver for this loan request
+    $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
+    $verifyResult = $chainManager->verifyApprover($inv_no, $approver_emp_id);
+    if (!is_array($verifyResult) || empty($verifyResult['authorized'])) {
+        echo json_encode([
+            'status' => 'error',
+            'title' => 'Unauthorized',
+            'message' => $verifyResult['message'] ?? 'You are not authorized to reject this loan request.',
+            'type' => 'error'
+        ]);
+        return;
+    }
+
     if (!empty($inv_no) && $approver_emp_id) {
         $type_stmt = $conDB->prepare("SELECT id FROM approval_request_types WHERE type_name = 'loan_request' LIMIT 1");
         $type_stmt->execute();
@@ -1616,7 +1638,18 @@ function reject_loan() {
         $rej = $conDB->prepare("UPDATE request_approvers SET status = 'rejected', action_date = NOW(), note = ? WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND status = 'pending'");
         $rej->bind_param("ssii", $rejection_note, $inv_no, $request_type_id, $approver_emp_id);
         $rej->execute();
+        $affectedRows = $rej->affected_rows;
         $rej->close();
+
+        if ($affectedRows <= 0) {
+            echo json_encode([
+                'status' => 'error',
+                'title' => 'Unauthorized',
+                'message' => 'You are not the current assigned approver for this loan request.',
+                'type' => 'error'
+            ]);
+            return;
+        }
     }
 
     // Update loan status to rejected
@@ -2160,6 +2193,13 @@ function modify_and_approve_loan() {
         $inv_no = $loan['inv_no'];
         $start_date = new DateTime($loan['start_date']);
 
+        // Verify approver is the current pending approver before any data modification
+        $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
+        $verifyResult = $chainManager->verifyApprover($inv_no, $approver_emp_id);
+        if (!is_array($verifyResult) || empty($verifyResult['authorized'])) {
+            throw new Exception($verifyResult['message'] ?? 'You are not authorized to approve this loan request.');
+        }
+
         // Recalculate loan terms
         $new_total_payable = $new_loan_amount;
         $new_monthly_deduction = $new_total_payable / $new_installments;
@@ -2198,7 +2238,6 @@ function modify_and_approve_loan() {
         $stmt_update->close();
 
         // Use ApprovalChainManager to process approval
-        $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
         
         // Build approval comment with modification details
         $mod_note = "GM Modified and Approved: Amount changed to SAR " . number_format($new_loan_amount, 2) . ", Installments changed to " . $new_installments . " months.";
@@ -2335,6 +2374,13 @@ function modify_and_approve_loan_hr_assistant() {
         $inv_no = $loan['inv_no'];
         $start_date = new DateTime($loan['start_date']);
 
+        // Verify approver is the current pending approver before any data modification
+        $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
+        $verifyResult = $chainManager->verifyApprover($inv_no, $approver_emp_id);
+        if (!is_array($verifyResult) || empty($verifyResult['authorized'])) {
+            throw new Exception($verifyResult['message'] ?? 'You are not authorized to approve this loan request.');
+        }
+
         // Recalculate loan terms
         $new_total_payable = $new_loan_amount;
         $new_monthly_deduction = $new_total_payable / $new_installments;
@@ -2361,7 +2407,6 @@ function modify_and_approve_loan_hr_assistant() {
         $stmt_update->close();
 
         // Use ApprovalChainManager to process approval
-        $chainManager = new ApprovalChainManager($conDB, $pdo, new ActivityLogger());
         
         // Build approval comment with modification details
         $mod_note = "HR Assistant Modified and Approved: Amount changed to SAR " . number_format($new_loan_amount, 2) . ", Installments changed to " . $new_installments . " months.";

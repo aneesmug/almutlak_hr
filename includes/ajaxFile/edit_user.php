@@ -12,6 +12,49 @@ $email_pass_up= mysqli_real_escape_string($conDB, $_POST['email_pass'] ?? '');
 $mobile_up    = mysqli_real_escape_string($conDB, $_POST['mobile'] ?? '');
 $status_up    = mysqli_real_escape_string($conDB, $_POST['status'] ?? '0');
 
+// Handle allowed companies - convert to JSON
+$allowed_companies_json = '[]';
+if (isset($_POST['allowed_companies']) && is_array($_POST['allowed_companies'])) {
+    // Filter and convert to integers
+    $companies = array_filter(array_map('intval', $_POST['allowed_companies']));
+    if (!empty($companies)) {
+        $allowed_companies_json = json_encode(array_values($companies));
+    }
+} elseif (isset($_POST['full_access']) && $_POST['full_access'] == '1') {
+    // Full access = empty array
+    $allowed_companies_json = '[]';
+}
+
+// Handle allowed departments - convert to JSON
+$allowed_departments_json = '[]';
+if (isset($_POST['allowed_departments']) && is_array($_POST['allowed_departments'])) {
+    // Filter and convert to integers
+    $departments = array_filter(array_map('intval', $_POST['allowed_departments']));
+    if (!empty($departments)) {
+        $allowed_departments_json = json_encode(array_values($departments));
+    }
+} elseif (isset($_POST['full_dept_access']) && $_POST['full_dept_access'] == '1') {
+    // Full access = empty array
+    $allowed_departments_json = '[]';
+}
+
+// Handle allowed employees - convert to JSON
+$allowed_employees_json = '[]';
+if (isset($_POST['allowed_employees']) && is_array($_POST['allowed_employees'])) {
+    // Filter and convert to integers
+    $employees = array_filter(array_map('intval', $_POST['allowed_employees']));
+    if (!empty($employees)) {
+        $allowed_employees_json = json_encode(array_values($employees));
+    }
+} elseif (isset($_POST['full_emp_access']) && $_POST['full_emp_access'] == '1') {
+    // Full access = empty array
+    $allowed_employees_json = '[]';
+}
+
+$allowed_companies_safe = mysqli_real_escape_string($conDB, $allowed_companies_json);
+$allowed_departments_safe = mysqli_real_escape_string($conDB, $allowed_departments_json);
+$allowed_employees_safe = mysqli_real_escape_string($conDB, $allowed_employees_json);
+
 // 1) Find linked employee id for this admin_login record
 $emp_id_linked = null;
 if ($id_up > 0) {
@@ -52,7 +95,10 @@ $sql = "UPDATE `admin_login` SET
             `email`='".$email_up."', 
             `email_pass`='".$email_pass_up."', 
             `mobile`='".$mobile_up."', 
-            `status`='".$status_up."', 
+            `status`='".$status_up."',
+            `allowed_companies`='".$allowed_companies_safe."',
+            `allowed_departments`='".$allowed_departments_safe."',
+            `allowed_employees`='".$allowed_employees_safe."',
             `updated_at`='".date('Y-m-d H:i:s')."' 
         WHERE `id`='".$id_up."' ";
 

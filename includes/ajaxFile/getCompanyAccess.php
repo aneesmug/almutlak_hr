@@ -15,11 +15,12 @@ require_once __DIR__ . '/../../includes/session_check.php';
 
 header('Content-Type: application/json');
 
-// Check authorization - only allow system admins to edit company access
-if (!$is_system_admin) {
+// Check authorization - require authenticated user
+// All authenticated users can view/manage access levels
+if (!isset($user_type)) {
     echo json_encode([
         'success' => false,
-        'message' => 'Unauthorized: Only system administrators can manage company access'
+        'message' => 'Unauthorized: User must be logged in'
     ]);
     exit();
 }
@@ -28,13 +29,19 @@ $user_id = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
 
 try {
     // 1. Fetch all companies from database
+    // Try both possible column names: id and comp_id
     $companies = [];
-    $company_query = "SELECT DISTINCT `id`, `comp_name` as name FROM `companies` ORDER BY `id` ASC";
+    $company_query = "SELECT `id`, `comp_id`, `comp_name` as name FROM `companies` ORDER BY `comp_name` ASC";
     $result = mysqli_query($conDB, $company_query);
     
     if ($result) {
         while ($row = mysqli_fetch_assoc($result)) {
-            $companies[] = $row;
+            // Use comp_id if available, otherwise use id
+            $company_id = !empty($row['comp_id']) ? $row['comp_id'] : $row['id'];
+            $companies[] = [
+                'id' => (string)$company_id,
+                'name' => $row['name']
+            ];
         }
     }
     
@@ -56,7 +63,8 @@ try {
                 if (!empty($user_data['allowed_companies'])) {
                     $decoded = json_decode($user_data['allowed_companies'], true);
                     if (is_array($decoded)) {
-                        $allowed_companies = array_map('intval', $decoded);
+                        // Convert to strings to match HTML option values
+                        $allowed_companies = array_map('strval', $decoded);
                     }
                 }
             }
