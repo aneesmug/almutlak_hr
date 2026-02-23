@@ -331,8 +331,19 @@ $dateTo = isset($_POST['dateTo']) ? $_POST['dateTo'] : '';
 $status = isset($_POST['status']) ? $_POST['status'] : '';
 $vacationType = isset($_POST['vacationType']) ? trim($_POST['vacationType']) : '';
 $employeeId = isset($_POST['employeeId']) ? trim($_POST['employeeId']) : '';
-$hasFullAccess = isset($_POST['hasFullAccess']) && $_POST['hasFullAccess'] === 'true';
-$userDept = isset($_POST['userDept']) ? $_POST['userDept'] : '';
+$hasFullAccess = in_array($user_role, [
+    'Administrator',
+    'GM',
+    'Auditor',
+    'Finance_Manager',
+    'HR_Manager',
+    'HR_Senior_BP',
+    'HR_Operations',
+    'HR_Supervisor',
+    'HR_Recruitment',
+    'HR_Payroll'
+], true) || !empty($is_system_admin);
+$userDept = $_SESSION['user_dept'] ?? ($user_dept ?? '');
 
 // Normalize departments for filters (array of IDs as strings)
 if (!is_array($departments)) {

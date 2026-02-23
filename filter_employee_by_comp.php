@@ -15,6 +15,14 @@ if (!isset($_GET['comp']) || !is_numeric($_GET['comp'])) {
 }
 $company_id = (int)$_GET['comp'];
 
+$can_see_all_employees = function_exists('canSeeAllEmployeesByRole')
+    ? canSeeAllEmployeesByRole(true)
+    : ($is_system_admin || $user_type == 'administrator' || $user_dept == 5 || $isHR || $isDeptHr || $user_dept == 1);
+
+$has_explicit_scope_restrictions = function_exists('hasExplicitEmployeeScopeRestrictions')
+    ? hasExplicitEmployeeScopeRestrictions(true)
+    : (!empty($allowed_companies_array) || !empty($allowed_departments_array) || !empty($allowed_employees_array));
+
 // --- ACCESS CONTROL: Check if user is allowed to access this company ---
 $accessible_companies = [];
 if (!empty($allowed_companies_array)) {
@@ -38,6 +46,15 @@ if (!empty($accessible_companies) && !in_array($company_id, $accessible_companie
     }
     
     if (!$allow_by_employee) {
+        header("Location: dashboard.php");
+        exit;
+    }
+}
+
+// Legacy-safe fallback: when no explicit scope is configured, non-full-access users are limited to own company.
+if (empty($accessible_companies) && !$has_explicit_scope_restrictions && !$can_see_all_employees) {
+    $currentUserCompany = (int)($user_company ?? ($_SESSION['auth_user']['comp_no'] ?? 0));
+    if ($currentUserCompany > 0 && $currentUserCompany !== (int)$company_id) {
         header("Location: dashboard.php");
         exit;
     }
@@ -72,7 +89,17 @@ if ($current_page < 1) {
 
 // ** NEW ** Get the total unfiltered count of ALL employees.
 $employee_filter_count = getEmployeeFilterSQL('emp_id', false);
-$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $employee_filter_count;
+$fallback_scope_clause = "";
+if (!$can_see_all_employees && !$has_explicit_scope_restrictions) {
+    $currentUserCompany = (int)($user_company ?? ($_SESSION['auth_user']['comp_no'] ?? 0));
+    if ($currentUserCompany > 0) {
+        $fallback_scope_clause .= " AND `comp_no`='" . mysqli_real_escape_string($conDB, $currentUserCompany) . "'";
+    }
+    if (!empty($user_dept)) {
+        $fallback_scope_clause .= " AND `dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'";
+    }
+}
+$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $employee_filter_count . $fallback_scope_clause;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
@@ -94,6 +121,20 @@ if (!empty($department_filter)) {
 $employee_filter = getEmployeeFilterSQL('emp_id', false);
 if (!empty($employee_filter)) {
     $where_clauses[] = substr($employee_filter, 5); // remove leading ' AND '
+}
+
+if (!$can_see_all_employees && !$has_explicit_scope_restrictions) {
+    $currentUserCompany = (int)($user_company ?? ($_SESSION['auth_user']['comp_no'] ?? 0));
+    if ($currentUserCompany > 0) {
+        $where_clauses[] = "`comp_no` = ?";
+        $params[] = $currentUserCompany;
+        $types .= "i";
+    }
+    if (!empty($user_dept)) {
+        $where_clauses[] = "`dept` = ?";
+        $params[] = (int)$user_dept;
+        $types .= "i";
+    }
 }
 
 if (!empty($search_term)) {

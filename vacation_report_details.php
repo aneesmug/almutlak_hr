@@ -40,6 +40,7 @@ if (mysqli_num_rows($query) == 1) {
                 v.overtime_hours,
                 v.deduction_hours,
                 v.deduction_days,
+                v.other_earnings,
                 v.other_deductions,
                 v.payroll_note,
                 v.accommodation_provided,
@@ -129,6 +130,7 @@ if (mysqli_num_rows($query) == 1) {
     $overtime_hours = (float)($request['overtime_hours'] ?? 0);
     $deduction_hours = (float)($request['deduction_hours'] ?? 0);
     $deduction_days = (float)($request['deduction_days'] ?? 0);
+    $other_earnings = (float)($request['other_earnings'] ?? 0);
     $other_deductions = (float)($request['other_deductions'] ?? 0);
     $payroll_note = $request['payroll_note'] ?? '';
     
@@ -156,17 +158,24 @@ if (mysqli_num_rows($query) == 1) {
     // Determine if this vacation gets any payment calculation
     $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
     
-    // Calculate actual days in the vacation month
-    $days_in_month = 30; // Fixed 30 days for all calculations
+    // Calculate actual days in the vacation month (based on vacation start date)
+    // Fallback to 30 if start_date is missing/invalid
+    $days_in_month = 30;
+    if (!empty($request['start_date'])) {
+        $start_ts = strtotime($request['start_date']);
+        if ($start_ts !== false) {
+            $days_in_month = (int)date('t', $start_ts); // 28/29/30/31
+        }
+    }
     
     if ($calculate_payments && $salary) {
         $basic_salary = (float)($salary['basic'] ?? 0);
         $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
-        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
         
         // --- CALCULATE OVERTIME AND DEDUCTIONS (EOS Logic) ---
         $DEDUCTION_BASE = $total_monthly_salary;
-        $dailyRateDeduction = round($DEDUCTION_BASE / $days_in_month, 2);
+        $dailyRateDeduction = ($days_in_month > 0) ? round($DEDUCTION_BASE / $days_in_month, 2) : 0;
         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
         
         // OVERTIME CALCULATION (per EOS file):
@@ -191,7 +200,9 @@ if (mysqli_num_rows($query) == 1) {
         // NOT for Encashment or Local Vacation + Annual
         if ($is_fly_annual && !empty($request['start_date'])) {
             $start_date_obj = new DateTime($request['start_date']);
-            $working_days = (int)$start_date_obj->format('d') - 1; // Days before vacation starts
+            // Business rule: include the start day in working-days salary
+            // Example: start on Feb 28 => 28 working days (full month for Feb)
+            $working_days = (int)$start_date_obj->format('d');
             $working_days_salary = round($daily_rate * $working_days);
         }
 
@@ -251,10 +262,10 @@ if (mysqli_num_rows($query) == 1) {
         // Encashment: Total is handled in encashment section
         $total_payable = 0;
     } elseif ($is_fly_annual) {
-        // Fly + Annual: Working days + vacation salary + ticket + permit + overtime - deductions - GOSI
+        // Fly + Annual: Working days + vacation salary + ticket + permit + overtime + other earnings - deductions - GOSI
         // $total_payable = ($working_days_salary + $vacation_salary) + $ticket_fee + $permit_fee + $overtime_amount - $deduction_amount - $gosi_deduction;
         // $deduction_amount already includes $other_deductions from the calculation above
-        $total_payable = round(($working_days_salary + $vacation_salary)  + $overtime_amount - $deduction_amount - $gosi_deduction);
+        $total_payable = round(($working_days_salary + $vacation_salary)  + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
         $total_payable = 0;
@@ -730,6 +741,15 @@ if (mysqli_num_rows($query) == 1) {
                                                     <small class="text-muted d-block"><?= htmlspecialchars($overtime_hours) ?> <?= __('hours') ?? 'hours' ?> @ <?= number_format($overtimeHourlyRate ?? 0, 2) ?> SAR/hr</small>
                                                 </div>
                                                 <span class="value text-success">+<?=number_format($overtime_amount, 2); ?> SAR</span>
+                                            </li>
+                                            <?php endif; ?>
+                                            <?php if ($other_earnings > 0): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label text-success"><?= __('other_earnings') ?? 'Other Earnings' ?></span>
+                                                    <small class="text-muted d-block"><?= __('manual_payroll_adjustment') ?? 'Manual payroll adjustment' ?></small>
+                                                </div>
+                                                <span class="value text-success">+<?=number_format($other_earnings, 2); ?> SAR</span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($ticket_fee > 0): ?>

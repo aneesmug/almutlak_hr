@@ -17,9 +17,9 @@ if (session_status() == PHP_SESSION_ACTIVE && isset($_SESSION['timeout_duration'
     $last_activity_time = $_SESSION['last_activity_time'] ?? time();
     $current_server_time = $_SESSION['server_time'] ?? time();
     ?>
-<!-- Session timeout configuration for jquery.app.js?t=<?= time() ?> -->
+<!-- Session timeout configuration for jquery.app.js -->
 <script>
-// Session timeout settings from server (used by jquery.app.js?t=<?= time() ?>)
+// Session timeout settings from server (used by jquery.app.js)
 window.SESSION_TIMEOUT_SECONDS = <?php echo intval($timeout_duration); ?>; // in seconds
 window.SESSION_TIMEOUT_MS = window.SESSION_TIMEOUT_SECONDS * 1000; // Convert to milliseconds
 window.SERVER_LAST_ACTIVITY = <?php echo $last_activity_time; ?>; // Unix timestamp in seconds

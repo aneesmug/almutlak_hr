@@ -496,7 +496,7 @@ function approveSettlement($settlementManager, $currentUserId) {
             SELECT s.*, 
                    e.gosi, e.country as country_id,
                    v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
-                   v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_deductions,
+                     v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
                    sal.basic, sal.housing, sal.transport, sal.food, sal.misc, sal.cashier,
                    sal.fuel, sal.tel, sal.other, sal.guard
             FROM settlement_records s
@@ -539,8 +539,16 @@ function approveSettlement($settlementManager, $currentUserId) {
                                           ($settlementData['guard'] ?? 0);
                     
                     if ($total_monthly_salary > 0) {
-                        $daily_rate = round($total_monthly_salary / 30, 2);
-                        $dailyRateDeduction = round($total_monthly_salary / 30, 2);
+                        $days_in_month = 30;
+                        if (!empty($settlementData['start_date'])) {
+                            $start_ts = strtotime($settlementData['start_date']);
+                            if ($start_ts !== false) {
+                                $days_in_month = (int)date('t', $start_ts);
+                            }
+                        }
+
+                        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+                        $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
                         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
                         $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
                         
@@ -553,7 +561,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         if ($is_fly_annual && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
-                                $working_days = (int)$start_date_obj->format('d') - 1;
+                                $working_days = (int)$start_date_obj->format('d');
                                 $working_days_salary = round($daily_rate * $working_days);
                             } catch (Exception $e) {
                                 $working_days_salary = 0;
@@ -567,6 +575,8 @@ function approveSettlement($settlementManager, $currentUserId) {
                         if (!empty($settlementData['overtime_hours']) && $settlementData['overtime_hours'] > 0) {
                             $overtime_amount = round($overtimeHourlyRate * $settlementData['overtime_hours']);
                         }
+
+                        $other_earnings = !empty($settlementData['other_earnings']) ? $settlementData['other_earnings'] : 0;
                         
                         $ded_hours = !empty($settlementData['deduction_hours']) ? $settlementData['deduction_hours'] : 0;
                         $ded_days = !empty($settlementData['deduction_days']) ? $settlementData['deduction_days'] : 0;
@@ -589,7 +599,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         if ($is_encashment) {
                             $calculatedPayableAmount = 0;
                         } elseif ($is_fly_annual) {
-                            $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                            $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                         }
                     }
                 }
@@ -1125,7 +1135,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
             SELECT s.*, 
                    e.gosi, e.country as country_id,
                    v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
-                   v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_deductions,
+                     v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
                    sal.basic, sal.housing, sal.transport, sal.food, sal.misc, sal.cashier,
                    sal.fuel, sal.tel, sal.other, sal.guard
             FROM settlement_records s
@@ -1168,8 +1178,16 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                                           ($settlementData['guard'] ?? 0);
                     
                     if ($total_monthly_salary > 0) {
-                        $daily_rate = round($total_monthly_salary / 30, 2);
-                        $dailyRateDeduction = round($total_monthly_salary / 30, 2);
+                        $days_in_month = 30;
+                        if (!empty($settlementData['start_date'])) {
+                            $start_ts = strtotime($settlementData['start_date']);
+                            if ($start_ts !== false) {
+                                $days_in_month = (int)date('t', $start_ts);
+                            }
+                        }
+
+                        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+                        $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
                         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
                         $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
                         
@@ -1182,7 +1200,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         if ($is_fly_annual && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
-                                $working_days = (int)$start_date_obj->format('d') - 1;
+                                $working_days = (int)$start_date_obj->format('d');
                                 $working_days_salary = round($daily_rate * $working_days);
                             } catch (Exception $e) {
                                 $working_days_salary = 0;
@@ -1196,6 +1214,8 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         if (!empty($settlementData['overtime_hours']) && $settlementData['overtime_hours'] > 0) {
                             $overtime_amount = round($overtimeHourlyRate * $settlementData['overtime_hours']);
                         }
+
+                        $other_earnings = !empty($settlementData['other_earnings']) ? $settlementData['other_earnings'] : 0;
                         
                         $ded_hours = !empty($settlementData['deduction_hours']) ? $settlementData['deduction_hours'] : 0;
                         $ded_days = !empty($settlementData['deduction_days']) ? $settlementData['deduction_days'] : 0;
@@ -1218,7 +1238,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         if ($is_encashment) {
                             $calculatedPayableAmount = 0;
                         } elseif ($is_fly_annual) {
-                            $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                            $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                         }
                     }
                 }
@@ -1636,6 +1656,7 @@ function getSettlementDetails($settlementManager) {
                 $overtime_hours = (float)($vacation['overtime_hours'] ?? 0);
                 $deduction_hours = (float)($vacation['deduction_hours'] ?? 0);
                 $deduction_days = (float)($vacation['deduction_days'] ?? 0);
+                $other_earnings = (float)($vacation['other_earnings'] ?? 0);
                 $other_deductions = (float)($vacation['other_deductions'] ?? 0);
                 $ticket_pay = (float)($vacation['ticket_pay'] ?? 0);
                 $permit_fee = (float)($vacation['permit_fee'] ?? 0);
@@ -1656,8 +1677,14 @@ function getSettlementDetails($settlementManager) {
                     $basic_salary = (float)($salary['basic'] ?? 0);
                     $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
                     
-                    $days_in_month = 30; // Fixed for calculations
-                    $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                    $days_in_month = 30;
+                    if (!empty($vacation['start_date'])) {
+                        $start_ts = strtotime($vacation['start_date']);
+                        if ($start_ts !== false) {
+                            $days_in_month = (int)date('t', $start_ts);
+                        }
+                    }
+                    $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
                     
                     // Deduction calculation helpers
                     $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
@@ -1674,7 +1701,7 @@ function getSettlementDetails($settlementManager) {
                     // Calculate working days salary (Fly + Annual only)
                     if ($is_fly_annual && !empty($vacation['start_date'])) {
                         $start_date_obj = new DateTime($vacation['start_date']);
-                        $working_days = (int)$start_date_obj->format('d') - 1;
+                        $working_days = (int)$start_date_obj->format('d');
                         $working_days_salary = round($daily_rate * $working_days);
                     }
                     
@@ -1708,8 +1735,8 @@ function getSettlementDetails($settlementManager) {
                     if ($is_encashment) {
                         $calculatedPayableAmount = 0; // Handled in encashment section
                     } elseif ($is_fly_annual) {
-                        // Fly + Annual: Working days + vacation salary + overtime - deductions - GOSI
-                        $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                        // Fly + Annual: Working days + vacation salary + overtime + other earnings - deductions - GOSI
+                        $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                     } else {
                         // Local Vacation + Annual or other
                         $calculatedPayableAmount = 0;

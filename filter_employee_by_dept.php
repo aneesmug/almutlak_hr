@@ -15,6 +15,14 @@ if (!isset($_GET['dept']) || !is_numeric($_GET['dept'])) {
 }
 $department_id = (int)$_GET['dept'];
 
+$can_see_all_employees = function_exists('canSeeAllEmployeesByRole')
+    ? canSeeAllEmployeesByRole(true)
+    : ($is_system_admin || $user_type == 'administrator' || $user_dept == 5 || $isHR || $isDeptHr || $user_dept == 1);
+
+$has_explicit_scope_restrictions = function_exists('hasExplicitEmployeeScopeRestrictions')
+    ? hasExplicitEmployeeScopeRestrictions(true)
+    : (!empty($allowed_companies_array) || !empty($allowed_departments_array) || !empty($allowed_employees_array));
+
 // DEPARTMENT-BASED ACCESS CONTROL
 // Check if user has permission to view this department's employees
 // Uses the new allowed_departments array from session
@@ -41,6 +49,22 @@ if (!empty($accessible_departments) && !in_array($department_id, $accessible_dep
             '<div class="col-xl-12">
                 <div class="alert alert-danger bg-danger text-white border-0" role="alert">
                     <b>Access Denied!</b> 
+                    <h3>You don\'t have access to view employees from this department.</h3>
+                </div>
+            </div>'
+        );
+        header("Location: dashbydepart.php");
+        exit;
+    }
+}
+
+// Legacy-safe fallback: when no explicit scope is configured, non-full-access users are limited to own department.
+if (empty($accessible_departments) && !$has_explicit_scope_restrictions && !$can_see_all_employees) {
+    if ((int)$user_dept !== (int)$department_id) {
+        $_SESSION['error_msg'] = sprintf(
+            '<div class="col-xl-12">
+                <div class="alert alert-danger bg-danger text-white border-0" role="alert">
+                    <b>Access Denied!</b>
                     <h3>You don\'t have access to view employees from this department.</h3>
                 </div>
             </div>'
@@ -79,7 +103,10 @@ if ($current_page < 1) {
 
 // ** NEW ** Get the total unfiltered count of ALL employees.
 $employee_filter_count = getEmployeeFilterSQL('emp_id', false);
-$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $employee_filter_count;
+$fallback_dept_clause = (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept))
+    ? " AND `dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'"
+    : "";
+$unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $employee_filter_count . $fallback_dept_clause;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
@@ -92,6 +119,12 @@ $types = "i";
 $employee_filter = getEmployeeFilterSQL('emp_id', false);
 if (!empty($employee_filter)) {
     $where_clauses[] = substr($employee_filter, 5); // remove leading ' AND '
+}
+
+if (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept)) {
+    $where_clauses[] = "`dept` = ?";
+    $params[] = (int)$user_dept;
+    $types .= "i";
 }
 
 if (!empty($search_term)) {

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/db.php';
 
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/helper_functions.php';
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -17,6 +18,34 @@ if (mysqli_num_rows($query) == 1) {
 
     $where_conditions = []; // Start with an empty array for WHERE clauses
     $url_params = []; // Store parameters for pagination links
+
+    // --- Centralized Access Scope Filters ---
+    $company_filter_sql = getCompanyFilterSQL('employees.comp_no');
+    $department_filter_sql = getDepartmentFilterSQL('employees.dept');
+    $employee_filter_sql = getEmployeeFilterSQL('employees.emp_id');
+
+    if (!empty($company_filter_sql)) {
+        $where_conditions[] = preg_replace('/^\s*AND\s+/i', '', $company_filter_sql);
+    }
+    if (!empty($department_filter_sql)) {
+        $where_conditions[] = preg_replace('/^\s*AND\s+/i', '', $department_filter_sql);
+    }
+    if (!empty($employee_filter_sql)) {
+        $where_conditions[] = preg_replace('/^\s*AND\s+/i', '', $employee_filter_sql);
+    }
+
+    // Fallback restrictions for legacy/no-explicit-scope users who are not full-access
+    $has_full_access = canSeeAllEmployeesByRole();
+    $has_explicit_scope = hasExplicitEmployeeScopeRestrictions();
+
+    if (!$has_full_access && !$has_explicit_scope) {
+        if (!empty($user_company)) {
+            $where_conditions[] = "`comp_no` = '" . mysqli_real_escape_string($conDB, $user_company) . "'";
+        }
+        if (!empty($user_dept)) {
+            $where_conditions[] = "`dept` = '" . mysqli_real_escape_string($conDB, $user_dept) . "'";
+        }
+    }
 
     // Add filter for 'status' if it exists in the URL
     if (isset($_GET['status'])) {
@@ -158,12 +187,6 @@ if (mysqli_num_rows($query) == 1) {
                         <div class="row">
 
                             <?php
-                            // Handle department-specific user access from the session
-                            if (isset($user_type) && $user_type == "dept_user" && isset($_SESSION['user_dept'])) {
-                                $user_dept = mysqli_real_escape_string($conDB, $_SESSION['user_dept']);
-                                $where_conditions[] = "`dept` = '{$user_dept}'";
-                            }
-
                             // --- Construct Final Queries ---
                             $where_sql = "";
                             // Only add WHERE clause if there are conditions

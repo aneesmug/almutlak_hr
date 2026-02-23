@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 // --- Database Connection ---
 // Ensure you have a db.php file or similar connection logic.
 require_once(__DIR__ . "/db.php"); 
+require_once(__DIR__ . "/helper_functions.php");
 
 if ($conDB->connect_error) {
     echo json_encode(['success' => false, 'message' => 'Database connection failed: ' . $conDB->connect_error]);
@@ -22,6 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'update_settings':
             update_all_settings($conDB);
             break;
+        case 'get_full_access_candidates':
+            get_full_access_candidates($conDB);
+            break;
         default:
             echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);
             break;
@@ -39,6 +43,8 @@ $conDB->close();
  * Fetches all settings from the database.
  */
 function get_all_settings($conDB) {
+    ensure_full_access_override_setting($conDB);
+
     $settings = [];
     $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings ORDER BY setting_group, id";
     $result = $conDB->query($sql);
@@ -57,6 +63,8 @@ function get_all_settings($conDB) {
  * Updates settings, handling both file uploads and text inputs.
  */
 function update_all_settings($conDB) {
+    ensure_full_access_override_setting($conDB);
+
     // IMPORTANT: Make sure this path is correct and writable by your web server.
     $upload_dir = __DIR__ . '/../assets/logo/'; // Assumes 'assets/logo/' is one level up from this script's directory.
     $relative_path = 'assets/logo/'; // The path that will be stored in the database.
@@ -114,5 +122,70 @@ function update_all_settings($conDB) {
         $conDB->rollback();
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
+}
+
+/**
+ * Ensure full access override setting exists in app_settings for frontend control.
+ */
+function ensure_full_access_override_setting($conDB) {
+    $settingName = 'full_access_emp_ids';
+    $checkSql = "SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1";
+    $checkStmt = $conDB->prepare($checkSql);
+    if (!$checkStmt) {
+        return;
+    }
+
+    $checkStmt->bind_param("s", $settingName);
+    if (!$checkStmt->execute()) {
+        $checkStmt->close();
+        return;
+    }
+
+    $result = $checkStmt->get_result();
+    $exists = ($result && $result->num_rows > 0);
+    if ($result) {
+        $result->free();
+    }
+    $checkStmt->close();
+
+    if ($exists) {
+        return;
+    }
+
+    $insertSql = "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, '', 'security', 'full_access_employee_ids_comma_separated_or_json_emp_id_values', 'text', NULL)";
+    $insertStmt = $conDB->prepare($insertSql);
+    if (!$insertStmt) {
+        return;
+    }
+
+    $insertStmt->bind_param("s", $settingName);
+    $insertStmt->execute();
+    $insertStmt->close();
+}
+
+/**
+ * Return employees list for full-access multi-selection UI.
+ */
+function get_full_access_candidates($conDB) {
+    $employees = [];
+
+    $sql = "SELECT emp_id, name, status FROM employees WHERE emp_id IS NOT NULL AND emp_id <> '' ORDER BY name ASC";
+    $result = $conDB->query($sql);
+
+    if (!$result) {
+        echo json_encode(['success' => false, 'message' => 'Error fetching employees: ' . $conDB->error]);
+        return;
+    }
+
+    while ($row = $result->fetch_assoc()) {
+        $parsedName = parseName((string)($row['name'] ?? ''));
+        $employees[] = [
+            'emp_id' => (string)($row['emp_id'] ?? ''),
+            'name' => $parsedName,
+            'status' => (int)($row['status'] ?? 0),
+        ];
+    }
+
+    echo json_encode(['success' => true, 'employees' => $employees]);
 }
 ?>

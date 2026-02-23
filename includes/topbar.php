@@ -19,7 +19,7 @@
  **************************************************************************************************/
 
 // Output session configuration JavaScript variables from session_check.php
-// This must run early so jquery.app.js?t=<?= time() ?> can access the window variables
+// This must run early so jquery.app.js can access the window variables
 include(__DIR__ . '/session_config_js.php');
 ?>
 <div class="topbar">

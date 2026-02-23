@@ -23,12 +23,16 @@
 // DEPARTMENT & COMPANY-BASED ACCESS CONTROL FOR DASHBOARD COUNTS
 // Determine if user can see all employees or only their department
 $can_see_all_employees = (
-    $is_system_admin || 
-    $user_type == 'administrator' ||
-    $user_dept == 5 || // HR Department
-    $isHR || 
-    $isDeptHr ||
-	$user_dept == 1 // Administration Department
+	function_exists('canSeeAllEmployeesByRole')
+		? canSeeAllEmployeesByRole(true)
+		: (
+			$is_system_admin ||
+			$user_type == 'administrator' ||
+			$user_dept == 5 ||
+			$isHR ||
+			$isDeptHr ||
+			$user_dept == 1
+		)
 );
 
 // Build department filter for queries
@@ -52,6 +56,18 @@ $department_filter_alias = getDepartmentFilterSQL('e.dept', true);
 // Add employee filter if user has employee restrictions
 $employee_filter = getEmployeeFilterSQL('emp_id', true);
 $employee_filter_alias = getEmployeeFilterSQL('e.emp_id', true);
+
+// Fallback department scope (legacy-safe):
+// If user has no explicit allowed_departments/allowed_employees restrictions,
+// non-HR/non-admin users should still be limited to their own department.
+$has_explicit_scope_restrictions = function_exists('hasExplicitEmployeeScopeRestrictions')
+	? hasExplicitEmployeeScopeRestrictions(true)
+	: (!empty($allowed_companies_array) || !empty($allowed_departments_array) || !empty($allowed_employees_array));
+if (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept)) {
+	$escapedUserDept = mysqli_real_escape_string($conDB, $user_dept);
+	$department_filter = " AND `dept`='" . $escapedUserDept . "'";
+	$department_filter_alias = " AND `e`.`dept`='" . $escapedUserDept . "'";
+}
 
 // Count Active Employees (Status=1, Not on vacation)
 $sql_query_active = "SELECT COUNT(*) AS `activeusr` FROM `employees` WHERE `status`=1 AND `fly`=0 ".$company_filter.$department_filter.$employee_filter;

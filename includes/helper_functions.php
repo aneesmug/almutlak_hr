@@ -4655,6 +4655,97 @@ if (!function_exists('canAccessCompany')) {
 }
 
 /**
+ * Determine whether current user can view all employees (cross-department scope).
+ *
+ * Full-access roles:
+ * - System administrator / administrator user_type
+ * - GM
+ * - HR roles or anyone in HR department (dept 5)
+ * - Administration department (dept 1)
+ * - Finance Manager (role/user_type/department-manager mapping)
+ *
+ * NOTE: Finance Officer is intentionally NOT full-access.
+ *
+ * @param bool $use_session Use session values when available
+ * @return bool
+ */
+if (!function_exists('canSeeAllEmployeesByRole')) {
+    function canSeeAllEmployeesByRole($use_session = true) {
+        global $conDB, $is_system_admin, $isHR, $isDeptHr, $isFinance_Manager, $user_type, $user_dept, $user_role, $emp_type, $empid;
+
+        $sessionUserType = $use_session && isset($_SESSION['user_type']) ? strtolower((string)$_SESSION['user_type']) : '';
+        $sessionUserDept = $use_session && isset($_SESSION['user_dept']) ? (int)$_SESSION['user_dept'] : null;
+        $sessionEmpId = $use_session && isset($_SESSION['empid']) ? (int)$_SESSION['empid'] : null;
+
+        $resolvedUserType = $sessionUserType !== '' ? $sessionUserType : strtolower((string)$user_type);
+        $resolvedUserDept = $sessionUserDept !== null ? $sessionUserDept : (int)$user_dept;
+        $resolvedUserRole = strtolower((string)$user_role);
+        $resolvedEmpType = strtolower((string)$emp_type);
+        $resolvedEmpId = $sessionEmpId !== null ? $sessionEmpId : (int)$empid;
+
+        $isSystemAdminResolved = !empty($is_system_admin) || $resolvedUserType === 'administrator';
+        $isGMResolved = $resolvedUserType === 'gm';
+        $isHRResolved = !empty($isHR) || !empty($isDeptHr) || $resolvedUserDept === 5 || $resolvedUserType === 'hr';
+        $isAdministrationResolved = $resolvedUserDept === 1;
+
+        $isFinanceManagerResolved = !empty($isFinance_Manager)
+            || $resolvedUserType === 'finance'
+            || $resolvedUserRole === 'finance_manager'
+            || ($resolvedUserDept === 2 && $resolvedEmpType === 'manager');
+
+        $manualFullAccessEmpIds = [];
+        $manualFullAccessRaw = get_setting($conDB, 'full_access_emp_ids', '');
+        if (!empty($manualFullAccessRaw)) {
+            $decoded = json_decode($manualFullAccessRaw, true);
+            if (is_array($decoded)) {
+                $manualFullAccessEmpIds = array_map('intval', $decoded);
+            } else {
+                $csvParts = array_filter(array_map('trim', explode(',', (string)$manualFullAccessRaw)), static function ($value) {
+                    return $value !== '';
+                });
+                $manualFullAccessEmpIds = array_map('intval', $csvParts);
+            }
+        }
+        $isManualFullAccess = ($resolvedEmpId > 0 && in_array($resolvedEmpId, $manualFullAccessEmpIds, true));
+
+        return (
+            $isSystemAdminResolved
+            || $isGMResolved
+            || $isHRResolved
+            || $isAdministrationResolved
+            || $isFinanceManagerResolved
+            || $isManualFullAccess
+        );
+    }
+}
+
+/**
+ * Check whether explicit company/department/employee scope restrictions exist.
+ *
+ * @param bool $use_session Use session values when available
+ * @return bool
+ */
+if (!function_exists('hasExplicitEmployeeScopeRestrictions')) {
+    function hasExplicitEmployeeScopeRestrictions($use_session = true) {
+        global $allowed_companies_array, $allowed_departments_array, $allowed_employees_array;
+
+        $companies = $use_session && isset($_SESSION['allowed_companies_array'])
+            ? $_SESSION['allowed_companies_array']
+            : $allowed_companies_array;
+
+        $departments = $use_session && isset($_SESSION['allowed_departments_array'])
+            ? $_SESSION['allowed_departments_array']
+            : $allowed_departments_array;
+
+        $employees = $use_session && isset($_SESSION['allowed_employees_array'])
+            ? $_SESSION['allowed_employees_array']
+            : $allowed_employees_array;
+
+        return !empty($companies) || !empty($departments) || !empty($employees);
+    }
+}
+
+/**
  * Get SQL WHERE clause for company filtering based on user restrictions
  * 
  * Usage: 

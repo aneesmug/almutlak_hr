@@ -28,7 +28,7 @@ $sql = "SELECT s.*,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
                v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
-               v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_deductions,
+               v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
                (SELECT basic FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_basic,
                (SELECT housing FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_housing,
                (SELECT transport FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_transport,
@@ -81,9 +81,15 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
         
         if ($total_monthly_salary > 0) {
             $days_in_month = 30;
-            $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+            if (!empty($settlement['start_date'])) {
+                $start_ts = strtotime($settlement['start_date']);
+                if ($start_ts !== false) {
+                    $days_in_month = (int)date('t', $start_ts);
+                }
+            }
+            $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
             
-            $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
+            $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
             $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
             $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
             
@@ -91,13 +97,14 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             $vacation_salary = 0;
             $gosi_deduction = 0;
             $overtime_amount = 0;
+            $other_earnings = 0;
             $deduction_amount = 0;
             
             // Calculate working days salary (Fly + Annual only)
             if ($is_fly_annual && !empty($settlement['start_date'])) {
                 try {
                     $start_date_obj = new DateTime($settlement['start_date']);
-                    $working_days = (int)$start_date_obj->format('d') - 1;
+                    $working_days = (int)$start_date_obj->format('d');
                     $working_days_salary = round($daily_rate * $working_days);
                 } catch (Exception $e) {
                     $working_days_salary = 0;
@@ -112,6 +119,11 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             // Calculate overtime
             if (!empty($settlement['overtime_hours']) && $settlement['overtime_hours'] > 0) {
                 $overtime_amount = round($overtimeHourlyRate * $settlement['overtime_hours']);
+            }
+
+            // Other earnings
+            if (!empty($settlement['other_earnings']) && $settlement['other_earnings'] > 0) {
+                $other_earnings = round((float)$settlement['other_earnings'], 2);
             }
             
             // Calculate deductions
@@ -138,7 +150,7 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             if ($is_encashment) {
                 $payableAmount = 0;
             } elseif ($is_fly_annual) {
-                $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
             }
         }
     }
@@ -375,6 +387,15 @@ if (!empty($settlement['avatar'])) {
                     <?php endif; ?>
                     <?php if (!empty($settlement['salary_basic'])): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-money-bill"></i> <?= __('basic_salary') ?>:</div><div class="info-value"><strong>SAR <?= number_format($settlement['salary_basic'], 2) ?></strong></div></div>
+                    <?php endif; ?>
+                    <?php if (!empty($settlement['overtime_hours']) && $settlement['overtime_hours'] > 0): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-clock"></i> <?= __('overtime_hours') ?>:</div><div class="info-value"><strong><?= number_format((float)$settlement['overtime_hours'], 2) ?></strong></div></div>
+                    <?php endif; ?>
+                    <?php if (!empty($settlement['other_earnings']) && $settlement['other_earnings'] > 0): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-plus-circle"></i> <?= __('other_earnings') ?>:</div><div class="info-value"><strong style="color:#28a745;">+SAR <?= number_format((float)$settlement['other_earnings'], 2) ?></strong></div></div>
+                    <?php endif; ?>
+                    <?php if ((!empty($settlement['deduction_hours']) && $settlement['deduction_hours'] > 0) || (!empty($settlement['deduction_days']) && $settlement['deduction_days'] > 0) || (!empty($settlement['other_deductions']) && $settlement['other_deductions'] > 0)): ?>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-minus-circle"></i> <?= __('deductions') ?>:</div><div class="info-value"><strong style="color:#dc3545;">-SAR <?= number_format((float)$deduction_amount, 2) ?></strong></div></div>
                     <?php endif; ?>
                     <?php if (!empty($settlement['settlement_amount'])): ?>
                     <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('settlement_amount') ?>:</div><div class="info-value"><strong style="color:#28a745;">SAR <?= number_format(round($payableAmount), 2) ?></strong></div></div>

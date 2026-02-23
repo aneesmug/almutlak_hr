@@ -2898,7 +2898,7 @@ elseif ($ajaxType == 'updateVacationPayments') {
         if ($rows_affected > 0) {
             // Check if this is an Annual Fly vacation and if all required fields are filled
             // Then update status to completed
-            $check_complete_sql = "SELECT vac_type, fly_type, ticket_pay, permit_fee, overtime_hours, deduction_hours, emp_id FROM emp_vacation WHERE id = ?";
+            $check_complete_sql = "SELECT vac_type, fly_type, ticket_pay, permit_fee, overtime_hours, deduction_hours, deduction_days, other_earnings, other_deductions, emp_id FROM emp_vacation WHERE id = ?";
             $check_complete_stmt = mysqli_prepare($conDB, $check_complete_sql);
             if ($check_complete_stmt) {
                 mysqli_stmt_bind_param($check_complete_stmt, "i", $vacation_id);
@@ -2910,7 +2910,13 @@ elseif ($ajaxType == 'updateVacationPayments') {
                 // For Annual Fly: ticket_pay AND permit_fee AND (overtime_hours OR deduction_hours) must all be filled
                 if ($vac_data && $vac_data['vac_type'] === 'Fly' && $vac_data['fly_type'] === 'annual') {
                     $has_payment = ($vac_data['ticket_pay'] > 0 || $vac_data['permit_fee'] > 0);
-                    $has_adjustment = ($vac_data['overtime_hours'] > 0 || $vac_data['deduction_hours'] > 0);
+                    $has_adjustment = (
+                        (float)($vac_data['overtime_hours'] ?? 0) > 0 ||
+                        (float)($vac_data['deduction_hours'] ?? 0) > 0 ||
+                        (float)($vac_data['deduction_days'] ?? 0) > 0 ||
+                        (float)($vac_data['other_earnings'] ?? 0) > 0 ||
+                        (float)($vac_data['other_deductions'] ?? 0) > 0
+                    );
                     
                     if ($has_payment && $has_adjustment) {
                         // All required fields are filled - mark as completed
@@ -3073,7 +3079,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
             ];
             
             // Check vacation type and decide completion + balance update rules
-            $check_complete_sql = "SELECT `vac_type`, `fly_type`, `ticket_pay`, `permit_fee`, `overtime_hours`, `deduction_hours` FROM `emp_vacation` WHERE `id` = ?";
+            $check_complete_sql = "SELECT `vac_type`, `fly_type`, `ticket_pay`, `permit_fee`, `overtime_hours`, `deduction_hours`, `deduction_days`, `other_earnings`, `other_deductions` FROM `emp_vacation` WHERE `id` = ?";
             $check_complete_stmt = mysqli_prepare($conDB, $check_complete_sql);
             if ($check_complete_stmt) {
                 mysqli_stmt_bind_param($check_complete_stmt, "i", $vacation_id);
@@ -3089,7 +3095,13 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     $is_emergency = (strtolower($vac_data['fly_type']) === 'emergency');
 
                     $has_payment = ((float)($vac_data['ticket_pay'] ?? 0) > 0 || (float)($vac_data['permit_fee'] ?? 0) > 0);
-                    $has_adjustment = ((float)($vac_data['overtime_hours'] ?? 0) > 0 || (float)($vac_data['deduction_hours'] ?? 0) > 0);
+                    $has_adjustment = (
+                        (float)($vac_data['overtime_hours'] ?? 0) > 0 ||
+                        (float)($vac_data['deduction_hours'] ?? 0) > 0 ||
+                        (float)($vac_data['deduction_days'] ?? 0) > 0 ||
+                        (float)($vac_data['other_earnings'] ?? 0) > 0 ||
+                        (float)($vac_data['other_deductions'] ?? 0) > 0
+                    );
 
                     // Rule 1: Local | Annual vacation -> Booking button hidden; complete on adjustments update
                     // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
@@ -3302,6 +3314,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                     v.overtime_amount,
                     v.deduction_hours,
                     v.deduction_days,
+                    v.other_earnings,
                     v.other_deductions,
                     v.deduction_amount,
                     v.ticket_pay,
@@ -3360,6 +3373,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
         $vacation_salary = 0;
         $overtime_amount = 0;
         $deduction_amount = 0;
+        $other_earnings = 0;
         $gosi_deduction = 0;
         $encashment_amount = 0;
         $encash_gosi = 0;
@@ -3393,7 +3407,13 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                 ($vacation_data['guard'] ?? 0);
             
             $days_in_month = 30;
-            $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+            if (!empty($vacation_data['start_date'])) {
+                $start_ts = strtotime($vacation_data['start_date']);
+                if ($start_ts !== false) {
+                    $days_in_month = (int)date('t', $start_ts);
+                }
+            }
+            $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
             $hourly_rate_deduction = round(($daily_rate / 8), 2);
             
             $approved_days = (float)($vacation_data['vacdays'] ?? 0);
@@ -3401,7 +3421,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             // Calculate working days salary (if Fly + Annual)
             if ($is_fly_annual && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
-                $working_days = (int)$start_date_obj->format('d') - 1;
+                $working_days = (int)$start_date_obj->format('d');
                 $working_days_salary = round($daily_rate * $working_days, 2);
             }
             
@@ -3426,6 +3446,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             // USE STORED deduction_amount if available, otherwise recalculate
             $deduction_hours = (float)($vacation_data['deduction_hours'] ?? 0);
             $deduction_days = (float)($vacation_data['deduction_days'] ?? 0);
+            $other_earnings = (float)($vacation_data['other_earnings'] ?? 0);
             $other_deductions = (float)($vacation_data['other_deductions'] ?? 0);
             $stored_deduction_amount = (float)($vacation_data['deduction_amount'] ?? 0);
             
@@ -3450,7 +3471,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             
             // Calculate total payable - MUST MATCH vacation_report_details.php exactly
             if ($is_fly_annual) {
-                $total_payable = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction, 2);
+                $total_payable = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction, 2);
             }
         }
 
@@ -3461,6 +3482,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             'working_days_salary' => round($working_days_salary, 2),
             'vacation_salary' => round($vacation_salary, 2),
             'overtime_amount' => round($overtime_amount, 2),
+            'other_earnings' => round($other_earnings, 2),
             'deduction_amount' => round($deduction_amount, 2),
             'gosi_deduction' => round($gosi_deduction, 2),
             'encashment_amount' => round($encashment_amount, 2),

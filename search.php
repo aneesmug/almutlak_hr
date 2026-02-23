@@ -6,18 +6,40 @@ if (mysqli_num_rows($query) == 1) {
 	include("./includes/avatar_select.php");
 }
 
+$can_see_all_employees = function_exists('canSeeAllEmployeesByRole')
+	? canSeeAllEmployeesByRole(true)
+	: ($is_system_admin || $user_type == 'administrator' || $user_dept == 5 || $isHR || $isDeptHr || $user_dept == 1);
+
+$has_explicit_scope_restrictions = function_exists('hasExplicitEmployeeScopeRestrictions')
+	? hasExplicitEmployeeScopeRestrictions(true)
+	: (!empty($allowed_companies_array) || !empty($allowed_departments_array) || !empty($allowed_employees_array));
+
 // This block seems to be for department-level access control, retaining it as is.
 if (isset($_GET['dept'])) {
 	$gdept = mysqli_query($conDB, "SELECT * FROM `department` WHERE `id`={$_GET['dept']} ");
 	$allDeptData = mysqli_fetch_all($gdept, MYSQLI_ASSOC);
 	if (isset($_GET['dept']) && isset($_SESSION['user_type']) && isset($_SESSION['user_dept'])) {
-		if (
-			$_SESSION['user_type'] !== $is_system_admin &&
-			$_SESSION['user_type'] !== 'hr' &&
-			$_SESSION['user_type'] !== 'gm' &&
-			$_SESSION['user_dept'] != $_GET['dept'] &&
-			!$isDeptHr
-		) {
+		$requested_dept = (int)$_GET['dept'];
+		$accessible_departments = function_exists('getAccessibleDepartments') ? getAccessibleDepartments(true) : [];
+		$allowed_by_department = !empty($accessible_departments) && in_array($requested_dept, $accessible_departments, true);
+
+		$allowed_by_employee = false;
+		if (!empty($allowed_employees_array)) {
+			$allowed_emp_ids = implode(',', array_map('intval', $allowed_employees_array));
+			$dept_check_sql = "SELECT 1 FROM employees WHERE dept = ? AND emp_id IN ($allowed_emp_ids) LIMIT 1";
+			$dept_check_stmt = $conDB->prepare($dept_check_sql);
+			if ($dept_check_stmt) {
+				$dept_check_stmt->bind_param('i', $requested_dept);
+				$dept_check_stmt->execute();
+				$dept_check_stmt->store_result();
+				$allowed_by_employee = $dept_check_stmt->num_rows > 0;
+				$dept_check_stmt->close();
+			}
+		}
+
+		$allowed_by_legacy_fallback = (!$has_explicit_scope_restrictions && !$can_see_all_employees && (int)$user_dept === $requested_dept);
+
+		if (!$can_see_all_employees && !$allowed_by_department && !$allowed_by_employee && !$allowed_by_legacy_fallback) {
 			$_SESSION['error_msg'] = sprintf(
 				'<div class="col-xl-12">
 							<div class="alert alert-danger bg-danger text-white border-0" role="alert">
@@ -78,6 +100,10 @@ if (strlen($search_term) > 1) {
 	if (!empty($employee_filter)) {
 		$construct .= $employee_filter;
 	}
+
+	if (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept)) {
+		$construct .= " AND `dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'";
+	}
 }
 
 if (!empty($construct)) {
@@ -129,7 +155,10 @@ $_SESSION["foundnum"] = $total_items;
 $company_filter_unf = getCompanyFilterSQL('comp_no', false);
 $department_filter_unf = getDepartmentFilterSQL('dept', false);
 $employee_filter_unf = getEmployeeFilterSQL('emp_id', false);
-$unfiltered_sql = "SELECT COUNT(*) as total FROM employees WHERE 1=1" . $company_filter_unf . $department_filter_unf . $employee_filter_unf;
+$fallback_dept_clause = (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept))
+	? " AND `dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'"
+	: "";
+$unfiltered_sql = "SELECT COUNT(*) as total FROM employees WHERE 1=1" . $company_filter_unf . $department_filter_unf . $employee_filter_unf . $fallback_dept_clause;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 ?>

@@ -33,13 +33,13 @@ class EOSPDF extends TCPDF {
                 <td width="50%" align="center">
                     _________________________<br>
                     <strong>Compensation Signature</strong><br>
-                    <span style="font-family: xnahid;">توقيع التعويض</span><br><br>
+                    <span style="font-family: xnahid;">توقيع التعويض</span><br><br><br>
                     Date: ___________________
                 </td>
                 <td width="50%" align="center">
                     _________________________<br>
                     <strong>Company Representative</strong><br>
-                    <span style="font-family: xnahid;">ممثل الشركة</span><br><br>
+                    <span style="font-family: xnahid;">ممثل الشركة</span><br><br><br>
                     Date: ___________________
                 </td>
             </tr>
@@ -453,7 +453,7 @@ if(mysqli_num_rows($query) == 1){
         <tr>
             <td width="30%"><img src="'.$logo_path.'" height="65"></td>
             <td width="70%" align="right">
-                <span class="title-en en">SALARY DETAILS & BANK INFORMATION</span><br>
+                <span class="title-en en">SALARY & BANK INFORMATION</span><br>
                 <span class="title-ar ar">تفاصيل الراتب والمعلومات البنكية</span>
             </td>
         </tr>

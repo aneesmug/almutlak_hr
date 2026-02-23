@@ -27,14 +27,42 @@ if (!empty($allowed_departments_array)) {
     }
 }
 
-$allowed_employee_names = 'All Employees';
+$allowed_employee_names = null; // Only show if employees are specifically assigned
 if (!empty($allowed_employees_array)) {
     $employee_ids = implode(',', array_map('intval', $allowed_employees_array));
-    $emp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT CONCAT(`emp_id`, ' - ', `name`) SEPARATOR ', ') AS `names` FROM `employees` WHERE `emp_id` IN ($employee_ids)");
+    $emp_query = mysqli_query($conDB, "SELECT GROUP_CONCAT(DISTINCT CONCAT(`name`) SEPARATOR ', ') AS `names` FROM `employees` WHERE `emp_id` IN ($employee_ids)");
     if ($emp_query && $emp_row = mysqli_fetch_assoc($emp_query)) {
-        $allowed_employee_names = $emp_row['names'] ?: 'All Employees';
+        $allowed_employee_names = $emp_row['names'];
     }
 }
+
+// Fallback department scope (legacy-safe):
+// If user has no explicit allowed_departments/allowed_employees restrictions,
+// non-HR/non-admin users should still be limited to their own department.
+$can_see_all_employees = (
+    function_exists('canSeeAllEmployeesByRole')
+        ? canSeeAllEmployeesByRole(true)
+        : (
+            $is_system_admin ||
+            $user_type == 'administrator' ||
+            $user_dept == 5 ||
+            $isHR ||
+            $isDeptHr ||
+            $user_dept == 1
+        )
+);
+$has_explicit_scope_restrictions = function_exists('hasExplicitEmployeeScopeRestrictions')
+    ? hasExplicitEmployeeScopeRestrictions(true)
+    : (!empty($allowed_companies_array) || !empty($allowed_departments_array) || !empty($allowed_employees_array));
+$fallback_dept_filter_employees = (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept))
+    ? " AND `employees`.`dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'"
+    : "";
+$fallback_dept_filter_emp = (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept))
+    ? " AND `emp`.`dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'"
+    : "";
+$fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept))
+    ? " AND `dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'"
+    : "";
 
 ?>
     <!doctype html>
@@ -288,6 +316,66 @@ if (!empty($allowed_employees_array)) {
                     ?>;
                 }
             <?php } ?>
+
+            /* Badge-based card styling for Allowed Employees */
+            .allowed-employees-card {
+                background: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 16px;
+            }
+
+            .allowed-employees-card-title {
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                font-size: 13px;
+                color: #333;
+                margin-bottom: 12px;
+                font-weight: 600;
+            }
+
+            .allowed-employees-card-content {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                max-height: 160px;
+                overflow-y: auto;
+                padding-right: 4px;
+            }
+            .allowed-employees-card-content::-webkit-scrollbar {
+                width: 6px;
+            }
+            .allowed-employees-card-content::-webkit-scrollbar-thumb {
+                background: rgba(0, 0, 0, 0.18);
+                border-radius: 6px;
+            }
+            .allowed-employees-card-content::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            .allowed-employees-card .employee-badge {
+                display: inline-flex;
+                align-items: center;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: #fff;
+                padding: 6px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+                white-space: nowrap;
+            }
+
+            .allowed-employees-card .employee-badge.all-employees {
+                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                color: #333;
+                box-shadow: 0 2px 8px rgba(168, 237, 234, 0.3);
+            }
+
+            .allowed-employees-card .no-data-message {
+                color: #999;
+                font-size: 13px;
+                font-style: italic;
+            }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -380,12 +468,16 @@ if (!empty($allowed_employees_array)) {
                                             // HR Department (dept 5) and System Admins can see all departments
                                             // All other users can only see their own department
                                             $can_see_all_departments = (
-                                                $is_system_admin || 
-                                                $user_type == 'administrator' ||
-                                                $user_dept == 5 || // HR Department
-                                                $isHR || 
-                                                $isDeptHr ||
-                                                $user_dept == 1 // Administration Department
+                                                function_exists('canSeeAllEmployeesByRole')
+                                                    ? canSeeAllEmployeesByRole(true)
+                                                    : (
+                                                        $is_system_admin ||
+                                                        $user_type == 'administrator' ||
+                                                        $user_dept == 5 ||
+                                                        $isHR ||
+                                                        $isDeptHr ||
+                                                        $user_dept == 1
+                                                    )
                                             );
                                             
                                             // Apply company and department filters
@@ -403,7 +495,7 @@ if (!empty($allowed_employees_array)) {
                                                 FROM `employees` 
                                                 LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
                                                 LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
-                                                WHERE `employees`.`status` = 1" . $company_filter . $department_filter . $employee_filter . "
+                                                WHERE `employees`.`status` = 1" . $company_filter . $department_filter . $employee_filter . $fallback_dept_filter_employees . "
                                                 GROUP BY `employees`.`dept`");
                                             
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
@@ -412,7 +504,7 @@ if (!empty($allowed_employees_array)) {
                                                 $colorCount = count($colorArr);
                                                 $cardIndex = 0;
                                                 // Total active employees (for percentage calculation) - must respect access filters
-                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter . $department_filter . $employee_filter);
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter . $department_filter . $employee_filter . $fallback_dept_filter_plain);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
@@ -478,7 +570,7 @@ if (!empty($allowed_employees_array)) {
                                                 `companies`.`comp_id`
                                                 FROM `employees` 
                                                 LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
-                                                WHERE `employees`.`status` = 1" . $company_filter . $employee_filter . "
+                                                WHERE `employees`.`status` = 1" . $company_filter . $employee_filter . $fallback_dept_filter_employees . "
                                                 GROUP BY `employees`.`comp_no`");
                                             
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
@@ -489,7 +581,7 @@ if (!empty($allowed_employees_array)) {
                                                 // Total active employees (for percentage calculation) - only filter by company for this tab
                                                 $company_filter_total = getCompanyFilterSQL('comp_no', true);
                                                 $employee_filter_total = getEmployeeFilterSQL('emp_id', true);
-                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter_total . $employee_filter_total);
+                                                $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter_total . $employee_filter_total . $fallback_dept_filter_plain);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
@@ -576,7 +668,7 @@ if (!empty($allowed_employees_array)) {
                                                         LEFT JOIN `department` ON `department`.`id` = `emp`.`dept` 
                                                         LEFT JOIN `countries` ON `countries`.`id` = `emp`.`country` 
                                                         LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `emp`.`emp_sup_type` 
-                                                        WHERE `emp`.`status`=1 AND `emp`.`fly`=0" . $company_filter . $department_filter . $employee_filter . " ";
+                                                        WHERE `emp`.`status`=1 AND `emp`.`fly`=0" . $company_filter . $department_filter . $employee_filter . $fallback_dept_filter_emp . " ";
                                                 
                                                 $query = mysqli_query($conDB, $sql);
 
@@ -692,10 +784,14 @@ if (!empty($allowed_employees_array)) {
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="card-box" style="border: 1px solid #e5e7eb;">
-                                        <h5 class="m-t-0"><?= __('allowed_employees') ?: 'Allowed Employees' ?></h5>
-                                        <div class="small text-muted"><?= htmlspecialchars($allowed_employee_names) ?></div>
+                                    <?php if (!empty($allowed_employee_names)): ?>
+                                    <div class="allowed-employees-card" id="allowed-employees-badge-card">
+                                        <div class="allowed-employees-card-title"><?= __('allowed_employees') ?: 'Allowed Employees' ?></div>
+                                        <div class="allowed-employees-card-content" id="allowed-employees-container">
+                                            <!-- Badges will be populated by JavaScript -->
+                                        </div>
                                     </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -752,6 +848,9 @@ if (!empty($allowed_employees_array)) {
 
         <!-- Selection table -->
         <script src="./plugins/datatables/dataTables.select.min.js"></script>
+
+        <!-- Make sure this is on EVERY page -->
+        <script src="assets/js/notifications.js"></script>
 
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
@@ -850,6 +949,16 @@ if (!empty($allowed_employees_array)) {
                 table.buttons().container()
                     .appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
 
+            });
+
+            // Initialize Allowed Employees Badge Card
+            $(document).ready(function() {
+                var employeeNames = '<?= htmlspecialchars($allowed_employee_names ?? '', ENT_QUOTES, 'UTF-8') ?>';
+                var container = $('#allowed-employees-container');
+                if (container.length && typeof renderAllowedEmployeesCard === 'function') {
+                    var badgeHTML = renderAllowedEmployeesCard(employeeNames);
+                    container.html(badgeHTML);
+                }
             });
         </script>
 

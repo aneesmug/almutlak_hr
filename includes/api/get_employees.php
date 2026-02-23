@@ -15,11 +15,15 @@ $monthYear = $_GET['month'] ?? null; // Get the month from the GET request
 // DEPARTMENT-BASED ACCESS CONTROL FOR EMPLOYEE LIST
 // Determine if user can see all employees or only their department
 $can_see_all_employees = (
-    $is_system_admin || 
-    $user_type == 'administrator' ||
-    $user_dept == 5 || // HR Department
-    $isHR || 
-    $isDeptHr
+    function_exists('canSeeAllEmployeesByRole')
+        ? canSeeAllEmployeesByRole(true)
+        : (
+            $is_system_admin ||
+            $user_type == 'administrator' ||
+            $user_dept == 5 ||
+            $isHR ||
+            $isDeptHr
+        )
 );
 
 // Build department filter condition

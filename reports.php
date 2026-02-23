@@ -20,7 +20,7 @@ $can_see_reports_page = [
 ];
 
 // Check authorization
-if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'is_system_admin') {
+if (!in_array($user_role, $can_see_reports_page) && !$is_system_admin) {
     header("Location: dashboard.php");
     exit();
 }
@@ -30,14 +30,14 @@ $has_full_access = in_array($user_role, [
     'Administrator', 
     'GM', 
     'Auditor',
+    'Finance_Manager',
     'HR_Manager',
     'HR_Senior_BP', 
     'HR_Operations', 
     'HR_Supervisor',
     'HR_Recruitment',
-    'HR_Payroll',
-    'Finance_Officer'
-    ]) || $user_type === 'is_system_admin';
+    'HR_Payroll'
+    ]) || $is_system_admin;
 
 // Get user's department for filtering
 $user_dept = isset($_SESSION['user_dept']) ? $_SESSION['user_dept'] : '';
@@ -1263,6 +1263,11 @@ if (mysqli_num_rows($query) == 1) {
                             cache: false
                         },
                         minimumInputLength: 1,
+                        language: {
+                            inputTooShort: function(args) {
+                                return __('please_enter_or_more_characters');
+                            }
+                        },
                         placeholder: '<?= __('search_employee') ?: 'Search employee...' ?>',
                         allowClear: true,
                         width: '100%'
@@ -2414,7 +2419,7 @@ if (mysqli_num_rows($query) == 1) {
 
                     // Hide select by table dropdown and clear it
                     $('#selectByTableContainer').hide();
-                    $('#selectByTable').empty().append('<option value="">Select by Table...</option>');
+                    $('#selectByTable').empty().append('<option value=""><?= __('select_by_table') ?></option>');
 
                     // Update date labels based on report type
                     if (reportType === 'eos') {

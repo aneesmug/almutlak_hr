@@ -17,16 +17,16 @@
     <!-- App favicon -->
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
+    <!-- Plugins -->
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    
-    <!-- Plugins -->
-    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 
     <script src="assets/js/modernizr.min.js"></script>
     <style>
@@ -125,6 +125,7 @@
             height: 36px;
             right: 5px;
         }
+
         .select2-dropdown {
              border: 1px solid #ced4da;
              border-radius: .25rem;
@@ -233,9 +234,87 @@
     document.addEventListener('DOMContentLoaded', function() {
         let appSettings = [];
         let groupedSettings = {};
+        let fullAccessCandidates = null;
         const settingsContainer = document.getElementById('settings-container');
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
+
+        function parseEmpIdList(value) {
+            if (!value) return [];
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    return parsed.map(v => String(v).trim()).filter(v => v !== '');
+                }
+            } catch (e) {
+                // Not JSON, fallback to CSV
+            }
+            return String(value)
+                .split(',')
+                .map(v => v.trim())
+                .filter(v => v !== '');
+        }
+
+        async function fetchFullAccessCandidates() {
+            if (Array.isArray(fullAccessCandidates)) {
+                return fullAccessCandidates;
+            }
+
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_full_access_candidates' })
+                });
+
+                if (!response.ok) {
+                    throw new Error('<?= __('failed_to_load_employees') ?>');
+                }
+
+                const data = await response.json();
+                if (!data.success || !Array.isArray(data.employees)) {
+                    throw new Error(data.message || '<?= __('failed_to_load_employees') ?>');
+                }
+
+                fullAccessCandidates = data.employees;
+                return fullAccessCandidates;
+            } catch (error) {
+                console.error('Failed loading full access candidates:', error);
+                fullAccessCandidates = [];
+                return fullAccessCandidates;
+            }
+        }
+
+        async function initializeFullAccessEmployeeSelect() {
+            const element = document.getElementById('setting-full_access_emp_ids');
+            if (!element) return;
+
+            const selectedIds = parseEmpIdList(element.dataset.selected || '');
+            const candidates = await fetchFullAccessCandidates();
+
+            let optionsHtml = '';
+            candidates.forEach(emp => {
+                const empId = String(emp.emp_id || '').trim();
+                if (!empId) return;
+                const empName = (emp.name || '').trim();
+                const statusLabel = Number(emp.status) === 1 ? '<?= __('active') ?>' : '<?= __('terminated') ?>';
+                const selected = selectedIds.includes(empId) ? 'selected' : '';
+                const label = `${empName} (${empId}) - ${statusLabel}`;
+                optionsHtml += `<option value="${empId}" ${selected}>${label}</option>`;
+            });
+
+            element.innerHTML = optionsHtml;
+
+            if ($(element).hasClass('select2-hidden-accessible')) {
+                $(element).trigger('change.select2');
+            } else {
+                $(element).select2({
+                    width: '100%',
+                    placeholder: '<?= __('select_employees') ?>',
+                    allowClear: true
+                });
+            }
+        }
 
         /**
          * Translate text using window.lang object (from PHP __() function)
@@ -414,6 +493,10 @@
                     formHtml += `<small class="text-success"><strong><?= __('evaluated_as') ?>:</strong> <span class="timeout-seconds"></span> <?= __('seconds') ?></small>`;
                     formHtml += `</div>`;
                     formHtml += `</div>`;
+                } else if (setting.setting_name === 'full_access_emp_ids') {
+                    const selectedList = parseEmpIdList(setting.setting_value || '');
+                    formHtml += `<select id="${id}" name="${setting.setting_name}" class="form-control select2" multiple data-selected='${JSON.stringify(selectedList)}'></select>`;
+                    formHtml += `<small class="form-text text-muted"><?= __('select_users_for_full_employee_access') ?></small>`;
                 } else {
                     let inputHtml = '';
                     switch (setting.input_type) {
@@ -442,6 +525,8 @@
             $('.select2').select2({
                 width: '100%'
             });
+
+            initializeFullAccessEmployeeSelect();
 
             attachPreviewListeners();
             attachEmailListListeners();
@@ -1341,6 +1426,9 @@
                                 throw new Error(`<?= __('Invalid session timeout expression:') ?> "${value}". <?= __('Please use only numbers and operators (+, -, *, /, parentheses).') ?>`);
                             }
                         }
+                    } else if (setting.setting_name === 'full_access_emp_ids') {
+                        const selected = $(`#setting-${setting.setting_name}`).val() || [];
+                        formData.append(setting.setting_name, JSON.stringify(selected));
                     } else {
                         // Simplified logic: this works for both standard inputs and select2.
                         formData.append(setting.setting_name, element.value);

@@ -130,7 +130,7 @@ if ($current_filter === 'my_pending') {
     // Show approved annual vacation (fly) requests without overtime/deduction details
     $where_clauses[] = "v.current_status = 'approved'";
     $where_clauses[] = "v.fly_type = 'annual'";
-    $where_clauses[] = "(v.overtime_hours IS NULL OR v.overtime_hours = 0) AND (v.deduction_hours IS NULL OR v.deduction_hours = 0) AND (v.deduction_days IS NULL OR v.deduction_days = 0)";
+    $where_clauses[] = "(v.overtime_hours IS NULL OR v.overtime_hours = 0) AND (v.deduction_hours IS NULL OR v.deduction_hours = 0) AND (v.deduction_days IS NULL OR v.deduction_days = 0) AND (v.other_earnings IS NULL OR v.other_earnings = 0) AND (v.other_deductions IS NULL OR v.other_deductions = 0)";
 } elseif (in_array($current_filter, ['pending_approval', 'approved', 'rejected'])) {
     // Filter by the main status on the vacation table
     $where_clauses[] = "v.current_status = ?";
@@ -746,13 +746,15 @@ if ($can_see_all_depts) {
                                                                 }
 
                                                                 // Check if deduction/overtime is pending
-                                                                // All three fields are NULL or 0 means no adjustments have been entered
+                                                                // All adjustment fields are NULL or 0 means no adjustments have been entered
                                                                 $has_overtime = !empty($req['overtime_hours']) && (float)$req['overtime_hours'] > 0;
                                                                 $has_deduction_hours = !empty($req['deduction_hours']) && (float)$req['deduction_hours'] > 0;
                                                                 $has_deduction_days = !empty($req['deduction_days']) && (float)$req['deduction_days'] > 0;
+                                                                $has_other_earnings = !empty($req['other_earnings']) && (float)$req['other_earnings'] > 0;
+                                                                $has_other_deductions = !empty($req['other_deductions']) && (float)$req['other_deductions'] > 0;
 
                                                                 // Deduction is pending if ALL adjustment fields are missing or zero
-                                                                if (!$has_overtime && !$has_deduction_hours && !$has_deduction_days) {
+                                                                if (!$has_overtime && !$has_deduction_hours && !$has_deduction_days && !$has_other_earnings && !$has_other_deductions) {
                                                                     $is_deduction_pending = true;
                                                                 }
                                                             }
@@ -845,10 +847,12 @@ if ($can_see_all_depts) {
                                                     }
 
                                                     // 3. STEP 3: Show Adjustments button when adjustments are missing/pending
-                                                    // Adjustments are missing if ALL three fields are empty/zero
+                                                    // Adjustments are missing if ALL adjustment fields are empty/zero
                                                     $adjustments_missing = (empty($req['overtime_hours']) || (float)$req['overtime_hours'] <= 0) &&
                                                         (empty($req['deduction_hours']) || (float)$req['deduction_hours'] <= 0) &&
-                                                        (empty($req['deduction_days']) || (float)$req['deduction_days'] <= 0);
+                                                        (empty($req['deduction_days']) || (float)$req['deduction_days'] <= 0) &&
+                                                        (empty($req['other_earnings']) || (float)$req['other_earnings'] <= 0) &&
+                                                        (empty($req['other_deductions']) || (float)$req['other_deductions'] <= 0);
 
                                                     // Fly | Annual: show adjustments button
                                                     if (
@@ -3979,30 +3983,33 @@ if ($can_see_all_depts) {
                             // For Encashed vacations, use encashment-specific data
                             const encashmentAmount = parseFloat(vacationData.encashment_amount || 0);
                             const encashGosi = parseFloat(vacationData.encash_gosi || 0);
-                            const netEncashment = parseFloat(vacationData.net_encashment || encashmentAmount - encashGosi);
+                            const netEncashmentRaw = parseFloat(vacationData.net_encashment || (encashmentAmount - encashGosi));
+                            const netEncashment = Math.ceil(Math.max(0, netEncashmentRaw));
                             
-                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, netEncashment, 0, 0, 0, 0, 0, true, encashmentAmount, encashGosi);
+                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, netEncashment, 0, 0, 0, 0, 0, 0, true, encashmentAmount, encashGosi);
                         } else {
                             // For Annual Fly vacations, use the normal total_payable calculation
-                            const totalPayable = parseFloat(vacationData.total_payable || 0);
+                            const totalPayableRaw = parseFloat(vacationData.total_payable || 0);
+                            const totalPayable = Math.ceil(Math.max(0, totalPayableRaw));
                             const workingDaysSalary = parseFloat(vacationData.working_days_salary || 0);
                             const vacationSalary = parseFloat(vacationData.vacation_salary || 0);
                             const overtimeAmount = parseFloat(vacationData.overtime_amount || 0);
+                            const otherEarnings = parseFloat(vacationData.other_earnings || 0);
                             const deductionAmount = parseFloat(vacationData.deduction_amount || 0);
                             const gosiDeduction = parseFloat(vacationData.gosi_deduction || 0);
                             
-                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, false, 0, 0);
+                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, false, 0, 0);
                         }
                     } else {
                         // Fallback if data fetch fails
                         const settlementAmount = vacationDays * 350;
-                        showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, false, 0, 0);
+                        showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, 0, false, 0, 0);
                     }
                 },
                 error: function() {
                     // Fallback calculation
                     const settlementAmount = vacationDays * 350;
-                    showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, false, 0, 0);
+                    showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, 0, false, 0, 0);
                 }
             });
         }
@@ -4029,7 +4036,7 @@ if ($can_see_all_depts) {
             }
         }
         
-        function showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi) {
+        function showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi) {
             // Fetch settlement approval chain from app_settings
             $.ajax({
                 url: './includes/ajaxFile/settlement_handler.php',
@@ -4054,15 +4061,15 @@ if ($can_see_all_depts) {
                         approvalChainText = chainSteps.join(' → ');
                     }
                     
-                    displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText, approvalChain);
+                    displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText, approvalChain);
                 },
                 error: function() {
                     // Fallback if chain fetch fails
-                    displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, 'Configured settlement approval chain', []);
+                    displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, 'Configured settlement approval chain', []);
                 }
             });
        
- }        function displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText) {
+ }        function displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText) {
             // Build the breakdown HTML based on vacation type
             let breakdownHtml = '';
             
@@ -4093,6 +4100,7 @@ if ($can_see_all_depts) {
                         ${workingDaysSalary > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0;"><span>${__('working_days_salary')}:</span><span>${parseFloat(workingDaysSalary).toFixed(2)} SAR</span></div>` : ''}
                         ${vacationSalary > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0;"><span>${__('vacation_salary')}:</span><span>${parseFloat(vacationSalary).toFixed(2)} SAR</span></div>` : ''}
                         ${overtimeAmount > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: green;"><span>+ ${__('overtime')}:</span><span>+${parseFloat(overtimeAmount).toFixed(2)} SAR</span></div>` : ''}
+                        ${otherEarnings > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: green;"><span>+ ${__('other_earnings') || 'Other Earnings'}:</span><span>+${parseFloat(otherEarnings).toFixed(2)} SAR</span></div>` : ''}
                         ${deductionAmount > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;"><span>- ${__('deductions')}:</span><span>-${parseFloat(deductionAmount).toFixed(2)} SAR</span></div>` : ''}
                         ${gosiDeduction > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;"><span>- ${__('gosi_deduction')}:</span><span>-${parseFloat(gosiDeduction).toFixed(2)} SAR</span></div>` : ''}
                     </div>

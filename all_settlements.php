@@ -185,6 +185,7 @@ if ($totalItems > 0) {
         v.overtime_hours,
         v.deduction_hours,
         v.deduction_days,
+        v.other_earnings,
         v.other_deductions,
         v.ticket_pay,
         v.permit_fee,
@@ -530,9 +531,15 @@ if ($canSeeAllDepts) {
                                                     
                                                     if ($total_monthly_salary > 0) {
                                                         $days_in_month = 30;
-                                                        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                                                        if (!empty($settlement['start_date'])) {
+                                                            $start_ts = strtotime($settlement['start_date']);
+                                                            if ($start_ts !== false) {
+                                                                $days_in_month = (int)date('t', $start_ts);
+                                                            }
+                                                        }
+                                                        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
                                                         
-                                                        $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
+                                                        $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
                                                         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
                                                         $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
                                                         
@@ -546,7 +553,7 @@ if ($canSeeAllDepts) {
                                                         if ($is_fly_annual && !empty($settlement['start_date'])) {
                                                             try {
                                                                 $start_date_obj = new DateTime($settlement['start_date']);
-                                                                $working_days = (int)$start_date_obj->format('d') - 1;
+                                                                $working_days = (int)$start_date_obj->format('d');
                                                                 $working_days_salary = round($daily_rate * $working_days);
                                                             } catch (Exception $e) {
                                                                 $working_days_salary = 0;
@@ -562,6 +569,8 @@ if ($canSeeAllDepts) {
                                                         if (!empty($settlement['overtime_hours']) && $settlement['overtime_hours'] > 0) {
                                                             $overtime_amount = round($overtimeHourlyRate * $settlement['overtime_hours']);
                                                         }
+
+                                                        $other_earnings = !empty($settlement['other_earnings']) ? $settlement['other_earnings'] : 0;
                                                         
                                                         // Calculate deductions
                                                         $ded_hours = !empty($settlement['deduction_hours']) ? $settlement['deduction_hours'] : 0;
@@ -587,7 +596,7 @@ if ($canSeeAllDepts) {
                                                         if ($is_encashment) {
                                                             $payableAmount = 0;
                                                         } elseif ($is_fly_annual) {
-                                                            $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount - $deduction_amount - $gosi_deduction);
+                                                            $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                                                         }
                                                     }
                                                 }

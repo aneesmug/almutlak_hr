@@ -7,7 +7,7 @@ header('Content-Type: application/json');
 // Check authorization
 $can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'];
 
-if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'is_system_admin') {
+if (!in_array($user_role, $can_see_reports_page) && !$is_system_admin) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
     exit();
 }

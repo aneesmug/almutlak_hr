@@ -346,8 +346,10 @@ $_SESSION['allowed_employees'] = $allowed_employees;
 $_SESSION['allowed_employees_array'] = $allowed_employees_array;
 
 // Manager visibility mode flag
-// When enabled, manager should only see employees who directly report to them.
-$is_dept_manager = ($user_type === 'dept_user' || strtolower((string)$emp_type) === 'manager');
+// Rule: emp_type='Manager' is treated as manager-assigned user.
+// But strict direct-reports mode should NOT apply to roles with full employee visibility.
+$is_manager_assigned = ($user_type === 'dept_user' || strtolower((string)$emp_type) === 'manager');
+$is_dept_manager = ($is_manager_assigned && !canSeeAllEmployeesByRole(false));
 $_SESSION['manager_direct_reports_only'] = $is_dept_manager;
 
 // --- 4d. Effective Employee Access (Additive to Company/Department) ---
@@ -359,7 +361,7 @@ if ($is_dept_manager && !empty($empid)) {
     // Strict manager mode: only direct reports are visible (same dept or cross dept).
     $manager_emp_id = (int)$empid;
     $scope_employees = [];
-    $scope_sql = "SELECT `emp_id` FROM `employees` WHERE `status` = 1 AND `supervisor_id` = {$manager_emp_id}";
+    $scope_sql = "SELECT `emp_id` FROM `employees` WHERE `supervisor_id` = {$manager_emp_id}";
     $scope_result = mysqli_query($conDB, $scope_sql);
     if ($scope_result) {
         while ($row = mysqli_fetch_assoc($scope_result)) {

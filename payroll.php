@@ -118,11 +118,15 @@
 	// DEPARTMENT-BASED ACCESS CONTROL FOR PAYROLL
 	// Determine if user can see all employees or only their department
 	$can_see_all_employees = (
-		$is_system_admin || 
-		$user_type == 'administrator' ||
-		$user_dept == 5 || // HR Department
-		$isHR || 
-		$isDeptHr
+        function_exists('canSeeAllEmployeesByRole')
+            ? canSeeAllEmployeesByRole(true)
+            : (
+                $is_system_admin ||
+                $user_type == 'administrator' ||
+                $user_dept == 5 ||
+                $isHR ||
+                $isDeptHr
+            )
 	);
 
 	// Build the SQL query with department filtering if needed
