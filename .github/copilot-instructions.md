@@ -43,7 +43,7 @@ The project uses a mix of `mysqli` and `PDO` for database operations. This is a 
 
 ## Frontend and AJAX
 
-- **jQuery:** The frontend heavily relies on jQuery for DOM manipulation, event handling, and AJAX requests. The main JavaScript file is `assets/js/jquery.app.js`.
+- **jQuery:** The frontend heavily relies on jQuery for DOM manipulation, event handling, and AJAX requests. The main JavaScript file is `assets/js/jquery.app.js?t=<?= time() ?>`.
 - **AJAX Handlers:** AJAX requests are typically handled by dedicated PHP files in the `includes/ajaxFile/` directory (e.g., `ajaxSmartRequest.php`). These files process the request and often return JSON.
 - **DataTables:** The plugin `DataTables` is used for displaying and managing tables (sorting, searching, pagination). Server-side processing for these tables is implemented in files like `includes/ajaxFile/smartRequestAjaxTbl.php`.
 

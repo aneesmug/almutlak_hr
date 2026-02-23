@@ -512,7 +512,7 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 		<script src="./plugins/croppie/exif.js" type="text/javascript"></script>
 
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
 
 <script type="text/javascript">

@@ -271,7 +271,7 @@ if (!isset($_GET['id'])) {
     <script src="./plugins/bootstrap-select/js/bootstrap-select.js"></script>
     <script src="./plugins/switchery/switchery.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script type="text/javascript">

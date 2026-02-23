@@ -311,6 +311,6 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 	<script src="./plugins/custombox/js/custombox.min.js"></script>
 	<script src="./plugins/custombox/js/legacy.min.js"></script>
 	<script src="assets/js/jquery.core.js"></script>
-	<script src="assets/js/jquery.app.js"></script>
+	<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 </body>
 </html>

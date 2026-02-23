@@ -146,7 +146,7 @@
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
     (function() {

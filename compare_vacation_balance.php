@@ -254,7 +254,7 @@ if(mysqli_num_rows($query) == 1){
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 </body>
 </html>
 <?php } ?>

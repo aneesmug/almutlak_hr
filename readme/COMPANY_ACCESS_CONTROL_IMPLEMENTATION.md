@@ -49,7 +49,7 @@ This document outlines the comprehensive company-level access control system imp
   - Display current allowed companies in `data-allowed_companies` attribute
 
 ### 4. **User Edit Form** ✅
-- **File:** `assets/js/jquery.app.js`
+- **File:** `assets/js/jquery.app.js?t=<?= time() ?>`
 - **Changes:**
   - Updated `edit_user_HTML()` function with company access section
   - Updated `loadCompanyAccess()` to fetch and display companies

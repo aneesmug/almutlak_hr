@@ -121,7 +121,7 @@ Time: ~3-4 hours
 
 ### **User Interface**
 - `all_users.php` - Edit users & assign companies
-- `assets/js/jquery.app.js` - Select2 dropdown logic
+- `assets/js/jquery.app.js?t=<?= time() ?>` - Select2 dropdown logic
 
 ### **Already Filtering By Company**
 - `dashboard.php` - Dashboard counts
@@ -329,7 +329,7 @@ Your company access control system is:
 - `dashboard.php` - Added company filtering (8 queries)
 - `all_employee_list.php` - Added company filtering
 - `all_users.php` - Added Select2 CSS & JS
-- `assets/js/jquery.app.js` - Enhanced with Select2
+- `assets/js/jquery.app.js?t=<?= time() ?>` - Enhanced with Select2
 - `assets/css/style.css` - Added Select2 styling
 - `includes/ajaxFile/ajaxEmployee.php` - Updated 5 functions
 - `includes/ajaxFile/ajaxEmployeeSelect.php` - Added company filter

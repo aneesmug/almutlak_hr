@@ -1002,7 +1002,7 @@ $status_classes = [
     <script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>

@@ -132,7 +132,7 @@ if((isset($_COOKIE['user']) && $_COOKIE['user'] != '') || (isset($_SESSION['user
 
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js?v=<?=time()?>"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>?v=<?=time()?>"></script>
 
         <script>
             restrictToNumbers(document.getElementById('id_iqama'), {

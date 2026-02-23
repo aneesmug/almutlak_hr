@@ -116,7 +116,7 @@ When reviewing a Fly | Annual vacation:
 - **No duplicate check**: System verifies GR Officer not already in chain before adding
 - **Dynamic level assignment**: GR Officer level = MAX(existing levels) + 1
 - **Single GR Officer**: Uses `ORDER BY e.emp_id ASC LIMIT 1` to get first active GR Officer
-- **JavaScript already supports** `gr_officer` role (defined in jquery.app.js lines 7289, 7378)
+- **JavaScript already supports** `gr_officer` role (defined in jquery.app.js?t=<?= time() ?> lines 7289, 7378)
 
 ## Files Modified
 

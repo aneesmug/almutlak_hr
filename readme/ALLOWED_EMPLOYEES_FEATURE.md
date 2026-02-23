@@ -30,7 +30,7 @@ User reported that explicitly allowed employees weren't showing in lists, dashbo
    - Returns currently allowed employees for the user
    - Authorization check in place
 
-4. **Frontend UI** (assets/js/jquery.app.js):
+4. **Frontend UI** (assets/js/jquery.app.js?t=<?= time() ?>):
    - Lines 2895-2960: JavaScript function `loadEmployeeAccess()` loads and displays form
    - Lines 7952-7973: HTML form template includes "Allowed Employees" select field  
    - Lines 3071-3151: Form submission properly handles allowed_employees as array

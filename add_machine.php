@@ -291,7 +291,7 @@ if(isset($_POST['submit'])){
         <script type="text/javascript" src="assets/pages/jquery.form-advanced.init.js"></script>
 		
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 <script type="text/javascript">
 	$(document).ready(function() {
 		$('form').parsley();

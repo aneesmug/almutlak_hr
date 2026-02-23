@@ -628,7 +628,7 @@ onclick="javascript:displayPopup('./assets/emp_documents/<?= $attachment_get ?>'
 
 ### Related Files
 - `includes/functions.php`: Utility functions
-- `assets/js/jquery.app.js`: Main jQuery
+- `assets/js/jquery.app.js?t=<?= time() ?>`: Main jQuery
 - `includes/ajaxFile/`: AJAX handlers
 
 ---

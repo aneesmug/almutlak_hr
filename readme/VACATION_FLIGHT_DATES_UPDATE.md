@@ -26,7 +26,7 @@ ADD COLUMN `arrival_date` DATE DEFAULT NULL COMMENT 'Flight arrival date (for Fl
 ```
 
 ### 2. Frontend Changes (JavaScript)
-**File:** `assets/js/jquery.app.js`
+**File:** `assets/js/jquery.app.js?t=<?= time() ?>`
 
 #### a) HTML Form Updates in `vacationApply_HTML()`
 - Added new "Flight Dates" section with:
@@ -141,7 +141,7 @@ mysqli_stmt_bind_param($stmt_vac, "sssssssisssds",
 ## Files Modified
 
 1. ✅ `add_flight_dates_to_vacation.sql` - NEW (Database migration)
-2. ✅ `assets/js/jquery.app.js` - UPDATED
+2. ✅ `assets/js/jquery.app.js?t=<?= time() ?>` - UPDATED
    - vacationApply_HTML() function
    - toggleVacationFields() function
    - willOpen() callback

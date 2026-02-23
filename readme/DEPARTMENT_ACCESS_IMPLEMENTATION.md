@@ -47,7 +47,7 @@ Due to the new column, the following column indices were updated:
 - Status: Column 9 → Column 10
 - Action: Column 10 → Column 11
 
-### 2. User Edit Modal (`assets/js/jquery.app.js`)
+### 2. User Edit Modal (`assets/js/jquery.app.js?t=<?= time() ?>`)
 
 #### New HTML Section
 Added "Department Access Control" section in the edit modal:
@@ -265,7 +265,7 @@ allowed_departments[]: 5
 3. `DEPARTMENT_ACCESS_IMPLEMENTATION.md` - This documentation
 
 ### Modified Files
-1. `assets/js/jquery.app.js`
+1. `assets/js/jquery.app.js?t=<?= time() ?>`
    - Added `loadDepartmentAccess()` function
    - Added `toggleDepartmentAccessSection()` function
    - Updated `edit_user_HTML()` with department section

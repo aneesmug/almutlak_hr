@@ -11,7 +11,7 @@ Added company-level access control to the user editing interface in `all_users.p
 data-allowed_companies="<?= htmlspecialchars($rec['allowed_companies'] ?? '') ?>"
 ```
 
-### 2. [assets/js/jquery.app.js](assets/js/jquery.app.js)
+### 2. [assets/js/jquery.app.js?t=<?= time() ?>](assets/js/jquery.app.js?t=<?= time() ?>)
 
 #### A. Edit User HTML Form (Line ~6966)
 **Added:** Company access control section to the edit user modal

@@ -248,7 +248,7 @@ if (isset($empid) && !empty($empid)) {
 
     <!-- App js -->
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script> <!-- Includes __() -->
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script> <!-- Includes __() -->
 
     <!-- Notifications Script (for topbar updates if needed, though not strictly required here now) -->
     <!-- <script src="assets/js/notifications.js"></script> -->

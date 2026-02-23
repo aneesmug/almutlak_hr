@@ -16,7 +16,7 @@
 | **Session Management** | `includes/session_check.php` | ✅ Company access functions |
 | **Helper Functions** | `includes/session_check.php` | ✅ 3 core functions implemented |
 | **User Management UI** | `all_users.php` | ✅ Select2 dropdown added |
-| **User Edit Modal** | `assets/js/jquery.app.js` | ✅ Company section with Select2 |
+| **User Edit Modal** | `assets/js/jquery.app.js?t=<?= time() ?>` | ✅ Company section with Select2 |
 | **Modal Styling** | `assets/css/style.css` | ✅ Select2 modal support |
 | **AJAX Company Fetch** | `includes/ajaxFile/getCompanyAccess.php` | ✅ Endpoint created |
 | **User Update Handler** | `includes/ajaxFile/ajaxUser.php` | ✅ Company data processing |
@@ -88,7 +88,7 @@ Result: Accurate counts for user's accessible companies only
 - ✅ `includes/ajaxFile/getCompanyAccess.php` - NEW - Company endpoint
 
 ### Frontend JavaScript/CSS
-- ✅ `assets/js/jquery.app.js` - Select2 integration (2 sections updated)
+- ✅ `assets/js/jquery.app.js?t=<?= time() ?>` - Select2 integration (2 sections updated)
 - ✅ `assets/css/style.css` - Select2 modal styling
 
 ---

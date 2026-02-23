@@ -5,7 +5,7 @@ Complete integration of the vacation application system with the new chain appro
 
 ## Changes Made
 
-### 1. Frontend Form Redesign (`assets/js/jquery.app.js`)
+### 1. Frontend Form Redesign (`assets/js/jquery.app.js?t=<?= time() ?>`)
 
 #### Modern UI Components
 - **Card-based layout** replacing traditional form structure
@@ -146,7 +146,7 @@ Already properly integrated with:
 
 ## Files Modified
 
-1. ✅ `assets/js/jquery.app.js` - Complete form HTML redesign
+1. ✅ `assets/js/jquery.app.js?t=<?= time() ?>` - Complete form HTML redesign
 2. ✅ `assets/js/empVacationHandle.js` - Modal config, approver section, validation
 3. ✅ `assets/css/style.css` - Custom modal and button styling
 4. ✅ `vacation_report_details.php` - Chain approval timeline integration

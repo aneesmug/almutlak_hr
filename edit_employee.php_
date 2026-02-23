@@ -696,7 +696,7 @@ $u = "UPDATE `employees` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_up."
 		<script src="assets/pages/jquery.form-pickers.init.js"></script>
 		
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 		
 		<script defer src="./plugins/imask.js"></script>
 		

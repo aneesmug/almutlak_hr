@@ -153,7 +153,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
     <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
 
     <!-- App js -->
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
         $(document).ready(function() {

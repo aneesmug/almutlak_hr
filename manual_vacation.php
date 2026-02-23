@@ -88,7 +88,7 @@ if (!$is_system_admin && !$isHR && !$isDeptHr) {
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
         $(document).ready(function() {

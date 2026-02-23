@@ -159,7 +159,7 @@ $datechk = date('m');
 <script type='text/javascript' src="./../plugins/sweet-alert/v11/sweetalert2.min.js"></script>
 <script type='text/javascript' src="./../plugins/sweet-alert/v11/sweetalert2.all.js"></script>
 <script type='text/javascript' src="./../plugins/sweet-alert/v11/sweetalert2.all.min.js"></script>
-<!-- <script src="./../assets/js/jquery.app.js"></script> -->
+<!-- <script src="./../assets/js/jquery.app.js?t=<?= time() ?>"></script> -->
 <script type="text/javascript">
 
 $(document).on('click', '.addDrvrAtter', function (e) {

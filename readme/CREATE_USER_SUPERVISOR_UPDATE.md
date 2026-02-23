@@ -5,7 +5,7 @@ Enhanced the `createUserDeptAjax` function to allow selecting **user role/permis
 
 ## What Changed
 
-### 1. Frontend (jquery.app.js)
+### 1. Frontend (jquery.app.js?t=<?= time() ?>)
 
 #### Updated `create_user_HTML()` function:
 - Changed from employee type (Manager/Assistant) to **admin user roles**
@@ -153,7 +153,7 @@ ADD INDEX idx_supervisor (supervisor_id);
 
 ## Files Modified
 
-1. `assets/js/jquery.app.js`
+1. `assets/js/jquery.app.js?t=<?= time() ?>`
    - Line ~5928: `create_user_HTML()` - Added supervisor dropdown
    - Line ~2683: `createUserDeptAjax` - Added supervisor loading and submission
 

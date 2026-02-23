@@ -706,7 +706,7 @@ if ($handle = opendir("./file_manager")) {
 
         <script src="assets/js/jquery.core.js"></script>
 
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
 
 

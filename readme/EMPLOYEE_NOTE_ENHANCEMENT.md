@@ -19,7 +19,7 @@ mysql -u root -p almutlak_db < add_note_attachment_and_type.sql
 ```
 
 ### 2. Frontend Changes
-**File**: `assets/js/jquery.app.js`
+**File**: `assets/js/jquery.app.js?t=<?= time() ?>`
 
 #### Updated `add_note_HTML()` function (lines ~6683-6729)
 - Changed from single text input to comprehensive form

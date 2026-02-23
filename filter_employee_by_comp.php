@@ -319,7 +319,7 @@ if ($total_items > 0) {
 	<script src="./plugins/custombox/js/custombox.min.js"></script>
 	<script src="./plugins/custombox/js/legacy.min.js"></script>
 	<script src="assets/js/jquery.core.js"></script>
-	<script src="assets/js/jquery.app.js"></script>
+	<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script>
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;

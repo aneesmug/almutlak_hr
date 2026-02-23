@@ -2,7 +2,7 @@
 # This script processes all JavaScript files and adds the property where missing
 
 $jsDir = "d:\xampp\htdocs\almutlak\system\assets\js"
-$files = @('resignationApproval.js', 'resignationApprovalWizard.js', 'resignationWizard.js', 'loan_approval.js', 'loanHandling.js', 'employee_profile.js', 'createUser.js', 'jquery.app.js')
+$files = @('resignationApproval.js', 'resignationApprovalWizard.js', 'resignationWizard.js', 'loan_approval.js', 'loanHandling.js', 'employee_profile.js', 'createUser.js', 'jquery.app.js?t=<?= time() ?>')
 
 foreach ($file in $files) {
     $filePath = Join-Path $jsDir $file

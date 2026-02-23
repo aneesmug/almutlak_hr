@@ -426,7 +426,7 @@ while ($rec = mysqli_fetch_array($query_mactrn)) {
 
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
 		<script type="text/javascript">
 			jQuery(function($) {

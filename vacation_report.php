@@ -308,7 +308,7 @@ if (mysqli_num_rows($query) == 1) {
         <script src="assets/js/waves.js"></script>
         <script src="assets/js/jquery.slimscroll.js"></script>
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
         <script>
             function applyFilters() {
                 const status = document.getElementById('statusFilter').value;

@@ -912,7 +912,7 @@ if(isset($_POST['submit'])){
 		
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
 		<!-- Make sure this is on EVERY page -->
     	<script src="assets/js/notifications.js"></script>

@@ -389,7 +389,7 @@ if($record_count !== 0){
   
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
         <?php if ($amount_inv == "0.00"): ?>
             <script>

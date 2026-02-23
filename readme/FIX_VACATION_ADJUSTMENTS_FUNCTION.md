@@ -1,7 +1,7 @@
 # FIX: Removed Duplicate addVacationAdjustments Function
 
 ## Problem
-The global `addVacationAdjustments()` function from `jquery.app.js` with:
+The global `addVacationAdjustments()` function from `jquery.app.js?t=<?= time() ?>` with:
 - Real-time payroll calculation display
 - Other Earnings field support
 - Complete payroll summary box
@@ -16,14 +16,14 @@ This caused the old modal to show instead of the new one.
 ## Solution
 ✅ **Removed the old function definition from all_applied_vac.php** (Lines 1849-1923)
 
-Now the global function from `jquery.app.js` is used throughout the application.
+Now the global function from `jquery.app.js?t=<?= time() ?>` is used throughout the application.
 
 ## Files Modified
 - **all_applied_vac.php**: Removed duplicate `addVacationAdjustments()` function definition
 
 ## Function Location
 The active function is now exclusively at:
-- **assets/js/jquery.app.js** (Lines 5833-5950)
+- **assets/js/jquery.app.js?t=<?= time() ?>** (Lines 5833-5950)
 
 ## Features Now Available
 ✅ Real-time payroll calculation display  

@@ -298,6 +298,6 @@ if(isset($_POST['submit'])){
         <script src="./plugins/croppie/exif.js" type="text/javascript"></script>
 
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     </body>
 </html>

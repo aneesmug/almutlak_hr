@@ -289,7 +289,7 @@
         <script type="text/javascript" src="assets/pages/jquery.form-advanced.init.js"></script>
 		
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
         <script>
 		// $(function() {

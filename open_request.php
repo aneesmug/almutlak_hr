@@ -1383,7 +1383,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
     <script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
     <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     
     <script>
         // Function to display popup (ensure it's defined or included)

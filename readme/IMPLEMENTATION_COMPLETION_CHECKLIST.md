@@ -33,7 +33,7 @@
 - [x] Data attributes in edit button updated
 
 ### ✅ Frontend JavaScript
-- [x] `jquery.app.js` - `edit_user_HTML()` updated
+- [x] `jquery.app.js?t=<?= time() ?>` - `edit_user_HTML()` updated
 - [x] `loadCompanyAccess()` function implemented
 - [x] `toggleCompanyAccessSection()` function implemented
 - [x] Select2 multi-select working

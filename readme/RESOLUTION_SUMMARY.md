@@ -24,8 +24,8 @@ Conclusion: Feature is READY but requires initial data entry
 | Component | Status | Location |
 |-----------|--------|----------|
 | Database Column | ✅ Ready | admin_login.allowed_employees |
-| UI Form | ✅ Complete | assets/js/jquery.app.js (lines 7952-7973) |
-| JavaScript Logic | ✅ Working | assets/js/jquery.app.js (loadEmployeeAccess, form submission) |
+| UI Form | ✅ Complete | assets/js/jquery.app.js?t=<?= time() ?> (lines 7952-7973) |
+| JavaScript Logic | ✅ Working | assets/js/jquery.app.js?t=<?= time() ?> (loadEmployeeAccess, form submission) |
 | Backend Save API | ✅ Working | includes/ajaxFile/ajaxUser.php (lines 87-113) |
 | Employee Fetch API | ✅ Working | includes/ajaxFile/getEmployeeAccess.php |
 | Session Decoding | ✅ Working | includes/session_check.php (lines 260-340) |

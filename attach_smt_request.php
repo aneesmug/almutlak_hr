@@ -390,7 +390,7 @@ require_once __DIR__ . '/includes/db.php';
 
     <!-- App js -->
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="assets/js/num-word.js"></script>
 
     <link href="./plugins/sweet-alert/sweetalert2.min.css" rel="stylesheet" type="text/css" />

@@ -227,7 +227,7 @@
 
     <!-- App js -->
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {

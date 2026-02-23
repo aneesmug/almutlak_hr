@@ -373,7 +373,7 @@ gap: 30px; /* Increase for more spacing */
 - `profile.php`: Employee profile page
 - `includes/functions.php`: Shared utility functions
 - `includes/header.php`: Page header and navigation
-- `assets/js/jquery.app.js`: Main jQuery functionality
+- `assets/js/jquery.app.js?t=<?= time() ?>`: Main jQuery functionality
 - `assets/css/style_cl.css`: Light theme styles
 - `assets/css/style_dark.css`: Dark theme styles
 

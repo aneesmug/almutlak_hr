@@ -282,7 +282,7 @@ if(isset($_POST['submit'])){
         <script src="assets/pages/jquery.form-pickers.init.js"></script>
         <script type="text/javascript" src="assets/pages/jquery.form-advanced.init.js"></script>
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
         <script src="assets/js/num-word.js"></script>
         <script type="text/javascript">
             function isNumberKey(evt, obj) {

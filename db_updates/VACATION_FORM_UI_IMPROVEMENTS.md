@@ -96,7 +96,7 @@ Complete redesign of the vacation application form with modern, professional sty
 
 ## Files Modified
 
-### 1. `assets/js/jquery.app.js`
+### 1. `assets/js/jquery.app.js?t=<?= time() ?>`
 **Function**: `vacationApply_HTML()`
 
 **Changes**:

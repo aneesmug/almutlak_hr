@@ -384,7 +384,7 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
     <!-- Select2 -->
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
         // Employee Search

@@ -77,7 +77,7 @@ Calculations:
 ### 3. FRONTEND CHANGES
 =======================
 
-File A: assets/js/jquery.app.js
+File A: assets/js/jquery.app.js?t=<?= time() ?>
 Function: window.addVacationAdjustments()
 
 Features Added:

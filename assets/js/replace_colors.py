@@ -1,7 +1,7 @@
 import re
 
 # Read the file
-with open('jquery.app.js', 'r', encoding='utf-8') as f:
+with open('jquery.app.js?t=<?= time() ?>', 'r', encoding='utf-8') as f:
     content = f.read()
 
 # Replace color hex codes with APP_COLORS constants
@@ -31,9 +31,9 @@ for pattern, replacement in replacements:
     before = len(content)
 
 # Write back
-with open('jquery.app.js', 'w', encoding='utf-8') as f:
+with open('jquery.app.js?t=<?= time() ?>', 'w', encoding='utf-8') as f:
     f.write(content)
 
-print("Color replacements in jquery.app.js completed successfully!")
+print("Color replacements in jquery.app.js?t=<?= time() ?> completed successfully!")
 print(f"Original content length: {original_length} bytes")
 print(f"New content length: {len(content)} bytes")

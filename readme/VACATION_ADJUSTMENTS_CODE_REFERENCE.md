@@ -86,7 +86,7 @@ $updateStmt->execute([
 ---
 
 ## 3. Frontend Modal Function
-**File**: `assets/js/jquery.app.js`
+**File**: `assets/js/jquery.app.js?t=<?= time() ?>`
 **Function**: `window.addVacationAdjustments()` (lines ~5828-5950)
 **Status**: ✅ Updated with real-time calculation display
 
@@ -197,7 +197,7 @@ onclick="addVacationAdjustments(
 
 ---
 
-## 5. Delegated Handler (in jquery.app.js)
+## 5. Delegated Handler (in jquery.app.js?t=<?= time() ?>)
 **Location**: Global event delegation for `.addVacationAdjustments` elements
 **Status**: ✅ Updated to extract other_earnings from data attribute
 
@@ -325,7 +325,7 @@ FROM emp_vacation WHERE id = [vacation_id];
 
 ### If Calculation Doesn't Display:
 - Check browser console for JavaScript errors
-- Verify jquery.app.js function is properly loaded
+- Verify jquery.app.js?t=<?= time() ?> function is properly loaded
 - Check that `.payroll-calc-trigger` class is applied to input elements
 
 ### If Values Don't Save:
@@ -347,7 +347,7 @@ FROM emp_vacation WHERE id = [vacation_id];
 |-----------|------|--------|--------|
 | Database | emp_vacation | Added 3 columns | ✅ Migration created |
 | Backend | ajaxVacation.php | Salary fetching + calculation | ✅ Updated |
-| Frontend Modal | jquery.app.js | Real-time calculation display | ✅ Updated |
+| Frontend Modal | jquery.app.js?t=<?= time() ?> | Real-time calculation display | ✅ Updated |
 | HTML onclick | all_applied_vac.php | Pass other_earnings param | ✅ Updated |
 | Documentation | This file | Complete reference | ✅ Created |
 

@@ -161,7 +161,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
             }
         });
     } else if (isFinanceManager) {
-        // Use reusable Finance Manager approval modal from jquery.app.js
+        // Use reusable Finance Manager approval modal from jquery.app.js?t=<?= time() ?>
         openFinanceManagerApprovalModal(loanId, 'loan', requestedAmount, {
             ajaxEndpoint: './includes/ajaxFile/ajaxLoan.php',
             onApprove: function(approvalData, params) {

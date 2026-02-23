@@ -527,7 +527,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script src="./plugins/select2/js/select2.min.js"></script>
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
         <script src="assets/js/loan_approval.js"></script>
         <script>
             function applyFilters() {

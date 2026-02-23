@@ -728,14 +728,14 @@ if ($canSeeAllDepts) {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
-    <script src="assets/js/jquery.app.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.js"></script>
 
     <script>
         // Configuration constants
         const MAX_FILE_SIZE_MB = 10;
         
-        // Current user details - Make window-global for access in jquery.app.js
+        // Current user details - Make window-global for access in jquery.app.js?t=<?= time() ?>
         window.currentUserType = '<?php echo $_SESSION['user_type'] ?? ""; ?>';
         window.currentUserId = <?= (int)$empid; ?>;
         
@@ -744,7 +744,7 @@ if ($canSeeAllDepts) {
         const currentUserId = window.currentUserId;
         const isHRPayroll = (currentUserType === 'hr_payroll');
 
-        // Preserve legacy approval handler from jquery.app.js for non-HR flows
+        // Preserve legacy approval handler from jquery.app.js?t=<?= time() ?> for non-HR flows
         const approveSettlementLegacy = window.approveSettlement;
         
         // Global array to track uploaded file references (server-side filenames)
@@ -954,7 +954,7 @@ if ($canSeeAllDepts) {
         // - approveSettlement(settlementId, settlementInvNo, empId) - Main approval handler with attachments
         // - showSettlementApprovalModal(settlementId, settlementInvNo, empId, employeeName, settlementAmount) - Modal display
         // - initializeSettlementDropzone() - Dropzone initialization for file uploads
-        // Settlement functions defined globally in assets/js/jquery.app.js:
+        // Settlement functions defined globally in assets/js/jquery.app.js?t=<?= time() ?>:
         // - viewSettlementDetails(settlementId, settlementInvNo)
         // - rejectSettlement(settlementId, settlementInvNo)
         // - processSettlementPayment(settlementId, settlementInvNo)

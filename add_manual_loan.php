@@ -156,7 +156,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
         <script>
             $(document).ready(function() {

@@ -598,7 +598,7 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
 
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
-        <script src="assets/js/jquery.app.js"></script>
+        <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
 
         <!-- <script src='https://maps.googleapis.com/maps/api/js?key=AIzaSyAAmpMDQXVtsHabQM2U1NqP1rhls03ZxMc&amp;sensor=false'></script>
