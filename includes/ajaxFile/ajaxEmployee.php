@@ -196,10 +196,11 @@ if($ajaxType == 'emp_search') {
 } elseif($ajaxType == 'emp_department') {
     $dept = (int)$_POST['dept'];
     $exclude_emp_id = isset($_POST['exclude_emp_id']) ? mysqli_real_escape_string($conDB, $_POST['exclude_emp_id']) : '';
+    $for_replacement = (isset($_POST['for_replacement']) && $_POST['for_replacement'] == '1');
     
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
-    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $department_filter = $for_replacement ? '' : getDepartmentFilterSQL('e.dept', true);
     
     $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept".$company_filter.$department_filter;
     if (!empty($exclude_emp_id)) {

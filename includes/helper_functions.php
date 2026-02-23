@@ -113,6 +113,171 @@ if (!function_exists('escape_string')) {
     }
 }
 
+if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
+    function assignTemporaryVacationRoleToReplacement($conDB, $vacation_id, $request_inv_no, $employee_emp_id, $assigned_by_emp_id)
+    {
+        $vacation_id = (int)$vacation_id;
+        $employee_emp_id = trim((string)$employee_emp_id);
+        $request_inv_no = trim((string)$request_inv_no);
+
+        $stmtEmpRole = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmtEmpRole, "s", $employee_emp_id);
+        mysqli_stmt_execute($stmtEmpRole);
+        $empRoleRes = mysqli_stmt_get_result($stmtEmpRole);
+        $empRoleRow = $empRoleRes ? mysqli_fetch_assoc($empRoleRes) : null;
+        if ($empRoleRes) mysqli_free_result($empRoleRes);
+        mysqli_stmt_close($stmtEmpRole);
+
+        $employee_user_type = trim((string)($empRoleRow['user_type'] ?? ''));
+        if ($employee_user_type === '' || strtolower($employee_user_type) === 'employee') {
+            return ['success' => true, 'skipped' => true, 'message' => 'Employee role is not assignable for temporary coverage.'];
+        }
+
+        $stmtVac = mysqli_prepare($conDB, "SELECT replacement_person FROM emp_vacation WHERE id = ? LIMIT 1");
+        if (!$stmtVac) {
+            return ['success' => false, 'message' => 'Failed to load vacation replacement.'];
+        }
+        mysqli_stmt_bind_param($stmtVac, "i", $vacation_id);
+        mysqli_stmt_execute($stmtVac);
+        $vacRes = mysqli_stmt_get_result($stmtVac);
+        $vacRow = $vacRes ? mysqli_fetch_assoc($vacRes) : null;
+        if ($vacRes) mysqli_free_result($vacRes);
+        mysqli_stmt_close($stmtVac);
+
+        $replacement_emp_id = trim((string)($vacRow['replacement_person'] ?? ''));
+        if ($replacement_emp_id === '') {
+            return ['success' => false, 'message' => 'Replacement Person must be selected for non-employee vacation requests.'];
+        }
+        if ($replacement_emp_id === $employee_emp_id) {
+            return ['success' => false, 'message' => 'Replacement employee cannot be the same employee.'];
+        }
+
+        $stmtActive = mysqli_prepare($conDB, "SELECT id FROM temp_vacation_role_assignments WHERE vacation_id = ? AND status = 'active' LIMIT 1");
+        mysqli_stmt_bind_param($stmtActive, "i", $vacation_id);
+        mysqli_stmt_execute($stmtActive);
+        $activeRes = mysqli_stmt_get_result($stmtActive);
+        $alreadyActive = ($activeRes && mysqli_num_rows($activeRes) > 0);
+        if ($activeRes) mysqli_free_result($activeRes);
+        mysqli_stmt_close($stmtActive);
+        if ($alreadyActive) {
+            return ['success' => true, 'skipped' => true, 'message' => 'Temporary role already assigned for this vacation.'];
+        }
+
+        $stmtRepRole = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmtRepRole, "s", $replacement_emp_id);
+        mysqli_stmt_execute($stmtRepRole);
+        $repRoleRes = mysqli_stmt_get_result($stmtRepRole);
+        $repRoleRow = $repRoleRes ? mysqli_fetch_assoc($repRoleRes) : null;
+        if ($repRoleRes) mysqli_free_result($repRoleRes);
+        mysqli_stmt_close($stmtRepRole);
+
+        if (!$repRoleRow) {
+            return ['success' => false, 'message' => 'Replacement employee has no admin role account.'];
+        }
+
+        $replacement_original_user_type = trim((string)$repRoleRow['user_type']);
+
+        mysqli_begin_transaction($conDB);
+        try {
+            $stmtUpdateRep = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
+            if (!$stmtUpdateRep) {
+                throw new Exception('Failed to prepare replacement role update.');
+            }
+            mysqli_stmt_bind_param($stmtUpdateRep, "ss", $employee_user_type, $replacement_emp_id);
+            if (!mysqli_stmt_execute($stmtUpdateRep)) {
+                throw new Exception('Failed to apply temporary role to replacement.');
+            }
+            mysqli_stmt_close($stmtUpdateRep);
+
+            $stmtInsert = mysqli_prepare($conDB, "INSERT INTO temp_vacation_role_assignments (
+                    vacation_id, request_inv_no, employee_emp_id, replacement_emp_id,
+                    employee_user_type, replacement_original_user_type, status,
+                    assigned_by_emp_id, assigned_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NOW())");
+            if (!$stmtInsert) {
+                throw new Exception('Failed to prepare temporary role assignment record insert.');
+            }
+            mysqli_stmt_bind_param(
+                $stmtInsert,
+                "issssss",
+                $vacation_id,
+                $request_inv_no,
+                $employee_emp_id,
+                $replacement_emp_id,
+                $employee_user_type,
+                $replacement_original_user_type,
+                $assigned_by_emp_id
+            );
+            if (!mysqli_stmt_execute($stmtInsert)) {
+                throw new Exception('Failed to save temporary role assignment record.');
+            }
+            mysqli_stmt_close($stmtInsert);
+
+            mysqli_commit($conDB);
+            return ['success' => true, 'replacement_emp_id' => $replacement_emp_id, 'employee_user_type' => $employee_user_type];
+        } catch (Exception $e) {
+            mysqli_rollback($conDB);
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+}
+
+if (!function_exists('restoreTemporaryVacationRoleAssignment')) {
+    function restoreTemporaryVacationRoleAssignment($conDB, $vacation_id, $restored_by_emp_id = null)
+    {
+        $vacation_id = (int)$vacation_id;
+
+        $stmtActive = mysqli_prepare($conDB, "SELECT id, replacement_emp_id, replacement_original_user_type FROM temp_vacation_role_assignments WHERE vacation_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1");
+        if (!$stmtActive) {
+            return ['success' => false, 'message' => 'Failed to load active temporary role assignment.'];
+        }
+        mysqli_stmt_bind_param($stmtActive, "i", $vacation_id);
+        mysqli_stmt_execute($stmtActive);
+        $activeRes = mysqli_stmt_get_result($stmtActive);
+        $activeRow = $activeRes ? mysqli_fetch_assoc($activeRes) : null;
+        if ($activeRes) mysqli_free_result($activeRes);
+        mysqli_stmt_close($stmtActive);
+
+        if (!$activeRow) {
+            return ['success' => true, 'skipped' => true, 'message' => 'No active temporary role assignment found.'];
+        }
+
+        $assignment_id = (int)$activeRow['id'];
+        $replacement_emp_id = trim((string)$activeRow['replacement_emp_id']);
+        $replacement_original_user_type = trim((string)$activeRow['replacement_original_user_type']);
+
+        mysqli_begin_transaction($conDB);
+        try {
+            $stmtRestore = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
+            if (!$stmtRestore) {
+                throw new Exception('Failed to prepare replacement role restore.');
+            }
+            mysqli_stmt_bind_param($stmtRestore, "ss", $replacement_original_user_type, $replacement_emp_id);
+            if (!mysqli_stmt_execute($stmtRestore)) {
+                throw new Exception('Failed to restore replacement original role.');
+            }
+            mysqli_stmt_close($stmtRestore);
+
+            $restored_by_emp_id = ($restored_by_emp_id !== null) ? (string)$restored_by_emp_id : null;
+            $stmtUpdate = mysqli_prepare($conDB, "UPDATE temp_vacation_role_assignments SET status = 'restored', restored_by_emp_id = ?, restored_at = NOW() WHERE id = ?");
+            if (!$stmtUpdate) {
+                throw new Exception('Failed to prepare temporary assignment status update.');
+            }
+            mysqli_stmt_bind_param($stmtUpdate, "si", $restored_by_emp_id, $assignment_id);
+            if (!mysqli_stmt_execute($stmtUpdate)) {
+                throw new Exception('Failed to update temporary assignment status.');
+            }
+            mysqli_stmt_close($stmtUpdate);
+
+            mysqli_commit($conDB);
+            return ['success' => true, 'replacement_emp_id' => $replacement_emp_id, 'restored_user_type' => $replacement_original_user_type];
+        } catch (Exception $e) {
+            mysqli_rollback($conDB);
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+}
+
 
 // --- Time Ago Functions ---
 if (!function_exists('timeAgo')) {
@@ -2238,6 +2403,21 @@ if (!function_exists('handle_approval_action')) {
                             }
 
                             if ($vacation_id > 0) {
+                                // Assign temporary replacement role on final vacation approval (non-encashed only)
+                                if (!$is_encashed && !empty($vacation_emp_id)) {
+                                    $roleAssignResult = assignTemporaryVacationRoleToReplacement(
+                                        $conDB,
+                                        $vacation_id,
+                                        $inv_no_safe,
+                                        $vacation_emp_id,
+                                        $current_user_id_safe
+                                    );
+                                    if (!$roleAssignResult['success']) {
+                                        $result_payload['role_assignment_warning'] = $roleAssignResult['message'];
+                                        error_log('Vacation ' . $inv_no_safe . ': temporary role assignment failed - ' . $roleAssignResult['message']);
+                                    }
+                                }
+
                                 // CRITICAL: Only update balance if this is NOT an asset clearance approval
                                 // Balance should only be updated when HR_Payroll approves, not during asset clearance
                                 $is_asset_clearance = (stripos($note_safe, 'Asset Clearance') !== false);

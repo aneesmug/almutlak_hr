@@ -665,6 +665,48 @@ elseif ($ajaxType == 'applyVacation') {
             throw new Exception(__("missing_required_fields_employee,_vacation_type_or_first_approver"));
         }
 
+        // 2.1 For non-employee roles, replacement employee must be provided and valid
+        $requester_user_type = 'employee';
+        $stmtRequesterRole = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
+        if ($stmtRequesterRole) {
+            mysqli_stmt_bind_param($stmtRequesterRole, "i", $emp_id);
+            mysqli_stmt_execute($stmtRequesterRole);
+            $roleRes = mysqli_stmt_get_result($stmtRequesterRole);
+            if ($roleRes && ($roleRow = mysqli_fetch_assoc($roleRes))) {
+                $requester_user_type = strtolower(trim((string)($roleRow['user_type'] ?? 'employee')));
+            }
+            if ($roleRes) mysqli_free_result($roleRes);
+            mysqli_stmt_close($stmtRequesterRole);
+        }
+
+        if ($requester_user_type !== 'employee') {
+            if (empty($replacement_per)) {
+                throw new Exception('Replacement employee is required for non-employee roles during vacation.');
+            }
+            if ((string)$replacement_per === (string)$emp_id) {
+                throw new Exception('Replacement employee cannot be the same as vacation employee.');
+            }
+
+            $stmtReplacementCheck = mysqli_prepare($conDB, "
+                SELECT e.emp_id
+                FROM employees e
+                INNER JOIN admin_login al ON al.emp_id = e.emp_id
+                WHERE e.emp_id = ? AND e.status = 1
+                LIMIT 1
+            ");
+            if ($stmtReplacementCheck) {
+                mysqli_stmt_bind_param($stmtReplacementCheck, "s", $replacement_per);
+                mysqli_stmt_execute($stmtReplacementCheck);
+                $repRes = mysqli_stmt_get_result($stmtReplacementCheck);
+                $replacementValid = ($repRes && mysqli_num_rows($repRes) > 0);
+                if ($repRes) mysqli_free_result($repRes);
+                mysqli_stmt_close($stmtReplacementCheck);
+                if (!$replacementValid) {
+                    throw new Exception('Replacement employee must be active and have a valid system role account.');
+                }
+            }
+        }
+
         // Validate vacation_salary_type - only allow 'payroll' or 'end_of_service'
         if (!empty($vacation_salary_type) && !in_array($vacation_salary_type, ['payroll', 'end_of_service'])) {
             throw new Exception(__("invalid_vacation_salary_type_selected"));
@@ -1833,6 +1875,10 @@ elseif ($ajaxType == 'approveVacation') {
             throw new Exception($result['message']);
         }
 
+        $role_assignment_warning = !empty($result['role_assignment_warning'])
+            ? (' Temporary role assignment warning: ' . $result['role_assignment_warning'])
+            : '';
+
         // Notify the selected asset checker and ensure their task is marked AWAITING (not pending)
         // They will be awaiting their turn, and when shown the approval UI, they'll see asset clearance modal
         if ($asset_checker_added && $asset_checker_emp_id > 0) {
@@ -2318,7 +2364,7 @@ elseif ($ajaxType == 'approveVacation') {
             $log_stmt->close();
         }
         
-        send_json_response("Approved!", __("the_vacation_request_has_been_approved"), "success");
+        send_json_response("Approved!", __("the_vacation_request_has_been_approved") . $role_assignment_warning, "success");
     } catch (Exception $e) {
 
         send_json_response("Error", $e->getMessage(), "error", 500);
@@ -2618,8 +2664,8 @@ elseif ($ajaxType == 'returnVacation') {
             throw new Exception("Return date is required.");
         }
 
-        // Get vacation details (emp_id, planned return_date, vacdays)
-        $sql_vac = "SELECT `emp_id`, `return_date`, `vacdays`, `id` FROM `emp_vacation` WHERE `id` = ?";
+        // Get vacation details (emp_id, request_inv_no, planned return_date, vacdays)
+        $sql_vac = "SELECT `emp_id`, `request_inv_no`, `return_date`, `vacdays`, `id` FROM `emp_vacation` WHERE `id` = ?";
         $stmt_vac = mysqli_prepare($conDB, $sql_vac);
         if (!$stmt_vac) {
             throw new Exception(__("database_prepare_error") . ": " . mysqli_error($conDB));
@@ -2634,6 +2680,7 @@ elseif ($ajaxType == 'returnVacation') {
         }
 
         $emp_id = (int)$row_vac['emp_id'];
+        $request_inv_no = (string)($row_vac['request_inv_no'] ?? '');
         $planned_return_date = $row_vac['return_date'];
         $original_vacdays = (int)$row_vac['vacdays'];
         $vac_id_for_balance = (int)$row_vac['id'];
@@ -2719,6 +2766,12 @@ elseif ($ajaxType == 'returnVacation') {
             throw new Exception(__("failed_to_update_vacation_status") . ": " . mysqli_stmt_error($stmt_complete_vac));
         }
         mysqli_stmt_close($stmt_complete_vac);
+
+        // Restore replacement employee original role (if temporary role assignment exists)
+        $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, $vacation_id, $current_user_id);
+        if (!$restoreResult['success']) {
+            error_log('Vacation ' . $request_inv_no . ': temporary role restore failed - ' . $restoreResult['message']);
+        }
 
         $message = __("employee_marked_as_returned");
 
@@ -6030,6 +6083,11 @@ elseif ($ajaxType == 'processRejoinApproval') {
                     ");
                     $stmt->execute([':vacation_id' => $request['vacation_id']]);
 
+                    $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, (int)$request['vacation_id'], $current_user_id);
+                    if (!$restoreResult['success']) {
+                        error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role restore failed - ' . $restoreResult['message']);
+                    }
+
                     // Set employee fly status to 0 ONLY if NO remaining active vacations
                     // Use PDO within the same transaction to avoid stale reads
                     $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM emp_vacation WHERE emp_id = :emp_id AND review = 'A'");
@@ -6162,6 +6220,11 @@ elseif ($ajaxType == 'processRejoinApproval') {
                     WHERE id = :vacation_id
                 ");
                 $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+                $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, (int)$request['vacation_id'], $current_user_id);
+                if (!$restoreResult['success']) {
+                    error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role restore failed - ' . $restoreResult['message']);
+                }
 
                 // Set employee fly status to 0 ONLY if NO remaining active vacations
                 $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM emp_vacation WHERE emp_id = :emp_id AND review = 'A'");
@@ -6432,6 +6495,11 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
             WHERE id = :vacation_id
         ");
         $stmt->execute([':vacation_id' => $request['vacation_id']]);
+
+        $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, (int)$request['vacation_id'], $emp_id);
+        if (!$restoreResult['success']) {
+            error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role restore failed - ' . $restoreResult['message']);
+        }
 
         // Set employee fly status to 0 ONLY if NO remaining active vacations
         $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM emp_vacation WHERE emp_id = :emp_id AND review = 'A'");

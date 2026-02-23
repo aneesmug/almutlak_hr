@@ -28,18 +28,18 @@ class EOSPDF extends TCPDF {
         $this->setRTL(true);
 
         $footer_html = '
-        <table width="100%" cellpadding="2" cellspacing="0" style="border-top:1px solid #dee2e6;">
+        <table width="100%" cellpadding="2" cellspacing="0" style="border-top:1px solid #dee2e6; font-family: helvetica;">
             <tr>
                 <td width="50%" align="center">
                     _________________________<br>
                     <strong>Compensation Signature</strong><br>
-                    توقيع التعويض<br>
+                    <span style="font-family: xnahid;">توقيع التعويض</span><br><br>
                     Date: ___________________
                 </td>
                 <td width="50%" align="center">
                     _________________________<br>
                     <strong>Company Representative</strong><br>
-                    ممثل الشركة<br>
+                    <span style="font-family: xnahid;">ممثل الشركة</span><br><br>
                     Date: ___________________
                 </td>
             </tr>

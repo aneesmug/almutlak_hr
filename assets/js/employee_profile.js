@@ -157,21 +157,21 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     icon: 'info', 
                     allowOutsideClick: false,
                     showCancelButton: true,
-                    confirmButtonText: __('apply_emergency_vacation') || 'Apply Emergency Vacation',
+                    confirmButtonText: __('apply_another_vacation') || 'Apply Another Vacation',
                     cancelButtonText: __('cancel') || 'Cancel',
                     confirmButtonColor: APP_COLORS.danger_dark,
                     cancelButtonColor: APP_COLORS.secondary
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        // Open the modal for emergency vacation
-                        openVacationApplyModal(empid, deptId, country, currentBalance, true);
+                        // Open the modal for emergency vacation, passing the active return date
+                        openVacationApplyModal(empid, deptId, country, currentBalance, true, res.active_return_date);
                     }
                 });
                 return;
             }
 
-            // Proceed to open the modal as usual
-            openVacationApplyModal(empid, deptId, country, currentBalance, false);
+            // Proceed to open the modal as usual, passing active_return_date if available
+            openVacationApplyModal(empid, deptId, country, currentBalance, false, res.active_return_date || null);
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
@@ -183,9 +183,10 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 });
 
 // Extracted function to open the Apply Vacation modal after eligibility check
-function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency) {
+function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate) {
     currentBalance = currentBalance || 0;
     forceEmergency = forceEmergency || false;
+    activeReturnDate = activeReturnDate || null;
 
     Swal.fire({
         title: '<i class="fa fa-umbrella-beach"></i> ' + (forceEmergency ? __('apply_emergency_vacation') : __('apply_vacation_info_title')),
@@ -208,47 +209,130 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         willOpen: () => {
             const swalModal = Swal.getHtmlContainer();
             
-            // If forceEmergency is true, pre-select Fly and Emergency vacation
-            if (forceEmergency) {
-                setTimeout(() => {
-                    // Select "Fly" vacation type
-                    $('#inlineRadio1').prop('checked', true).trigger('change');
-                    
-                    // Show flyTypeSection and select "emergency"
-                    setTimeout(() => {
-                        $('#vac_type2').prop('checked', true).trigger('change');
-                    }, 100);
-                }, 100);
+            // [NEW] Hide/Show vacation options based on balance
+            // If balance >= 1: Hide Emergency Vacation, Show Annual Vacation and Encashed
+            // If balance < 1: Hide Annual Vacation and Encashed, Show Emergency Vacation
+            if (swalModal) {
+                if (currentBalance >= 1) {
+                    // Employee has sufficient balance - hide Emergency Vacation, show Annual and Encashed
+                    console.log('Current Balance:', currentBalance, '- Hiding Emergency Vacation, showing Annual and Encashed');
+                    $(swalModal).find('*').each(function() {
+                        const text = $(this).text().trim();
+                        if (text === 'Emergency vacation') {
+                            $(this).hide();
+                            console.log('Hidden Emergency vacation element');
+                            return false; // break
+                        }
+                    });
+                } else {
+                    // Employee has insufficient balance (< 1 day) - hide Annual and Encashed, show Emergency
+                    console.log('Current Balance:', currentBalance, '- Hiding Annual Vacation and Encashed, showing Emergency');
+                    $(swalModal).find('*').each(function() {
+                        const text = $(this).text().trim();
+                        if (text === 'Annual vacation' || text === 'Encashed') {
+                            $(this).hide();
+                            console.log('Hidden:', text);
+                        }
+                    });
+                }
             }
 
-            // Original date pickers
-            $('#start_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
-            }).on('changeDate', function (e) {
-                var startDate = e.date;
-                $('#end_date').datepicker('setStartDate', startDate);
-                // Update flight date pickers to respect new start date
-                $('#departure_date').datepicker('setStartDate', startDate);
-                $('#arrival_date').datepicker('setStartDate', startDate);
-                // Calculate vacation days
-                calculateVacationDays();
-            });
+            // Helper function to check if Emergency vacation is currently selected
+            const isEmergencySelected = () => {
+                const flyType = $('input[name="fly_type"]:checked').val();
+                return flyType === 'emergency';
+            };
 
-            $('#end_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
-            }).on('changeDate', function (e) {
-                var endDate = e.date;
-                $('#start_date').datepicker('setEndDate', endDate);
-                // Update flight date pickers to respect new end date
-                $('#departure_date').datepicker('setEndDate', endDate);
-                $('#arrival_date').datepicker('setEndDate', endDate);
-                // Calculate vacation days
-                calculateVacationDays();
-            });
+            if (typeof setupGlobalRTLDatepicker === 'function') {
+                setupGlobalRTLDatepicker();
+            }
+
+            // Helper function to initialize date pickers with proper restrictions
+            const initializeDatePickers = () => {
+                const isEmergency = isEmergencySelected();
+
+                // Helper to format date as YYYY-MM-DD
+                const formatDateToString = (date) => {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                };
+
+                // Determine the minimum start date
+                let minStartDate = null;
+
+                // If there's an active return date, start from day after return
+                if (activeReturnDate) {
+                    const parts = activeReturnDate.split('-');
+                    minStartDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    minStartDate.setDate(minStartDate.getDate() + 1); // Day AFTER return date
+                    const formattedDate = formatDateToString(minStartDate);
+                    console.log('✅ Active vacation found - Return date:', activeReturnDate, '- Min start date for 2nd vacation:', formattedDate);
+                } else {
+                    // No active vacation - allow from tomorrow onwards
+                    minStartDate = new Date();
+                    minStartDate.setDate(minStartDate.getDate() + 1); // Tomorrow
+                    const formattedDate = formatDateToString(minStartDate);
+                    console.log('✅ No active vacation - Min start date:', formattedDate);
+                }
+
+                const minStartDateString = formatDateToString(minStartDate);
+                console.log('🔄 initializeDatePickers called - activeReturnDate:', activeReturnDate, 'minStartDate:', minStartDateString);
+
+                const startDateConfig = {
+                    format: "yyyy-mm-dd",
+                    todayHighlight: false,
+                    autoclose: true,
+                    startDate: minStartDateString
+                };
+
+                const endDateConfig = {
+                    format: "yyyy-mm-dd",
+                    todayHighlight: false,
+                    autoclose: true,
+                    startDate: minStartDateString
+                };
+
+                console.log('📅 Date picker configuration - startDate (string):', minStartDateString);
+                console.log('📅 Date picker configuration - startDate (object):', minStartDate);
+
+                // Try both string and Date object formats for better compatibility
+                startDateConfig.startDate = minStartDate;  // Use Date object
+                endDateConfig.startDate = minStartDate;    // Use Date object
+
+                // Remove existing datepicker instances before creating new ones
+                try {
+                    $('#start_date').datepicker('destroy');
+                    $('#end_date').datepicker('destroy');
+                } catch(e) {
+                    console.log('Date pickers not yet initialized');
+                }
+
+                $('#start_date').datepicker(startDateConfig);
+                // Use setStartDate method to ensure proper restriction even for past dates
+                $('#start_date').datepicker('setStartDate', minStartDate);
+                $('#start_date').on('changeDate', function (e) {
+                    var startDate = e.date;
+                    $('#end_date').datepicker('setStartDate', startDate);
+                    $('#departure_date').datepicker('setStartDate', startDate);
+                    $('#arrival_date').datepicker('setStartDate', startDate);
+                    calculateVacationDays();
+                });
+
+                $('#end_date').datepicker(endDateConfig);
+                // Use setStartDate method to ensure proper restriction even for past dates
+                $('#end_date').datepicker('setStartDate', minStartDate);
+                $('#end_date').on('changeDate', function (e) {
+                    var endDate = e.date;
+                    $('#start_date').datepicker('setEndDate', endDate);
+                    $('#departure_date').datepicker('setEndDate', endDate);
+                    $('#arrival_date').datepicker('setEndDate', endDate);
+                    calculateVacationDays();
+                });
+            };
+
+            initializeDatePickers();
 
             // Function to calculate and display vacation days
             function calculateVacationDays() {
@@ -271,8 +355,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             // Initialize departure and arrival date pickers
             $('#departure_date').datepicker({
                 format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
+                todayHighlight: false,
+                autoclose: true,
+                startDate: '+1d'
             }).on('changeDate', function (e) {
                 var departureDate = e.date;
                 $('#arrival_date').datepicker('setStartDate', departureDate);
@@ -280,8 +365,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
 
             $('#arrival_date').datepicker({
                 format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true
+                todayHighlight: false,
+                autoclose: true,
+                startDate: '+1d'
             }).on('changeDate', function (e) {
                 var arrivalDate = e.date;
                 $('#departure_date').datepicker('setEndDate', arrivalDate);
@@ -295,18 +381,63 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 url: './includes/ajaxFile/ajaxEmployee.php',
                 dataType: 'JSON',
                 type: 'POST',
-                data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid},
+                data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid, for_replacement: 1},
                 success: function(res) {
                     if (res.status == 200) {
                         let options = '';
+                        const currentLang = (typeof getCurrentLanguage === 'function') ? getCurrentLanguage() : 'en';
+                        let pendingTranslations = res.data.length;
+
                         for (let i in res.data) {
-                            options += `<option value="${res.data[i].emp_id}">${res.data[i].name.split(' ')[0]+' '+res.data[i].name.split(' ')[1]}</option>`;
+                            const emp = res.data[i];
+                            // Defensive: ensure name has at least two parts
+                            const nameParts = emp.name ? emp.name.split(' ') : [];
+                            const displayName = nameParts.length >= 2 ? (nameParts[0] + ' ' + nameParts[1]) : emp.name;
+
+                            if (typeof translateName === 'function') {
+                                // Translate the display name
+                                translateName(displayName, 'en', currentLang, function(translatedName) {
+                                    // Update the option with translated name
+                                    const optionHtml = `<option value="${emp.emp_id}">${translatedName}</option>`;
+                                    $(`#replacement_per`).append(optionHtml);
+
+                                    pendingTranslations--;
+                                    if (pendingTranslations === 0) {
+                                        // All translations done, add NONE option
+                                        $('#replacement_per').append(`<option value="N/A">${__('no_replacement_available')}</option>`);
+                                        $("#replacement_per").select2('destroy').select2({
+                                            dropdownParent: $(swalModal)
+                                        });
+                                    }
+                                });
+                            } else {
+                                const optionHtml = `<option value="${emp.emp_id}">${displayName}</option>`;
+                                $(`#replacement_per`).append(optionHtml);
+                                pendingTranslations--;
+                                if (pendingTranslations === 0) {
+                                    $('#replacement_per').append(`<option value="N/A">${__('no_replacement_available')}</option>`);
+                                    $("#replacement_per").select2('destroy').select2({
+                                        dropdownParent: $(swalModal)
+                                    });
+                                }
+                            }
                         }
-                        $('#replacement_per').append(options);
+
+                        if (res.data.length === 0) {
+                            // No available replacement persons
+                            $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
+                        }
+                    } else {
+                        // Non-200 status, still provide a NONE fallback
+                        $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
                     }
                 },
                 error: function(j, e) {
                     errorHandling(j, e);
+                    // On error also ensure user can proceed without replacement
+                    if (!$('#replacement_per option').length) {
+                        $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
+                    }
                 },
             });
 
@@ -318,7 +449,13 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 data: {ajaxType: "emp_data", empid: empid},
                 success: function(res) {
                     if (res.status == 200) {
-                        $('input[name="name"]').val(res.data[0].name);
+
+                        var employeeName = res.data[0].name;
+                        var currentLang = getCurrentLanguage();
+                        translateName(employeeName, 'en', currentLang, function(translatedName) {
+                            $('input[name="name"]').val(translatedName);
+                        });
+
                         $('input[name="empid"]').val(res.data[0].emp_id);
                     }
                 },
@@ -410,11 +547,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                             if (flyVal === 'annual') {
                                 $('#salaryTypeSection').removeClass('d-none');
-                                // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation)
-                                if (vacValue === 'Fly') {
+                                // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation) and NOT for country 191 (Saudi Arabia)
+                                if (vacValue === 'Fly' && country !== '191') {
                                     $('#flightDatesSection, #notesSection').removeClass('d-none');
                                 } else {
-                                    // Explicitly hide flight dates for Local Vacation
+                                    // Explicitly hide flight dates for Local Vacation or country 191
                                     $('#flightDatesSection, #notesSection').addClass('d-none');
                                 }
                             }
@@ -431,11 +568,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                 // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                                 if (flyVal === 'annual') {
                                     $('#salaryTypeSection').removeClass('d-none');
-                                    // Show flight dates AND remarks ONLY for Fly + Annual
-                                    if (currentVacValue === 'Fly') {
+                                    // Show flight dates AND remarks ONLY for Fly + Annual and NOT for country 191
+                                    if (currentVacValue === 'Fly' && country !== '191') {
                                         $('#flightDatesSection, #notesSection').removeClass('d-none');
                                     } else {
-                                        // Explicitly hide for Local Vacation
+                                        // Explicitly hide for Local Vacation or country 191
                                         $('#flightDatesSection, #notesSection').addClass('d-none');
                                     }
                                 } else {
@@ -444,6 +581,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             } else {
                                 $('#replacementSection, #date_select, #salaryTypeSection, #flightDatesSection, #notesSection').addClass('d-none');
                             }
+                            // Re-initialize date pickers when fly type changes to apply proper restrictions
+                            setTimeout(() => {
+                                console.log('🔄 Fly type changed to:', flyVal);
+                                initializeDatePickers();
+                            }, 100);
                         });
                     });
                 }
@@ -469,11 +611,24 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 Swal.showValidationMessage(__('select_vacation_type_validation'));
                 return false;
             }
+
+            const balance = parseFloat(currentBalance) || 0;
+            let isEmergencySelection = false;
+            if (selectedRadio === 'emergency') {
+                isEmergencySelection = true;
+                if (balance >= 1) {
+                    Swal.showValidationMessage(__('emergency_vacation_requires_zero_balance') || 'Emergency Vacation is only available when you have insufficient balance. Please use regular vacation.');
+                    return false;
+                }
+            }
+
             if (selectedRadio === 'Encashed') {
+                if (balance < 1) {
+                    Swal.showValidationMessage(__('only_emergency_allowed_when_balance_below_one') || 'Your available balance is below 1 day. Please apply for Emergency Vacation only.');
+                    return false;
+                }
                 const encashDays = parseFloat($('#encash_days').val()) || 0;
                 const balance = parseFloat($('#vacation_balance_display').text()) || 0;
-                const encashmentSalary = parseFloat($('#encashment_salary_display').text().replace(/,/g, '')) || 0;
-                
                 if (!encashDays || encashDays < 0.01) {
                     Swal.showValidationMessage(__('enter_days_to_encash_validation') || 'Please enter number of days to encash');
                     return false;
@@ -482,21 +637,24 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     Swal.showValidationMessage(__('encash_days_exceeds_balance') || 'You cannot encash more than your balance');
                     return false;
                 }
-                if (encashmentSalary <= 0) {
-                    Swal.showValidationMessage(__('encashment_salary_not_calculated') || 'Encashment salary not calculated. Please enter days first.');
-                    return false;
-                }
-                
-                // FormData already includes encash_days from the input field
-                // Just need to append the calculated salary
-                formData.set('encash_days', encashDays); // Ensure correct value
-                formData.set('encashment_salary', encashmentSalary);
-                
-                console.log('Encashment submission - Days:', encashDays, 'Salary:', encashmentSalary);
+                // Attach encashment info to formData
+                formData.append('encash_days', encashDays);
+                formData.append('encashment_salary', $('#encashment_salary_display').text());
             } else if (selectedRadio === 'Local Vacation' || selectedRadio === 'Fly') {
                 const flyType = $('input[name="fly_type"]:checked').val();
                 if (!flyType) {
                     Swal.showValidationMessage(__('select_vacation_type_validation'));
+                    return false;
+                }
+                if (flyType === 'emergency') {
+                    isEmergencySelection = true;
+                }
+                if (balance < 1 && !isEmergencySelection) {
+                    Swal.showValidationMessage(__('only_emergency_allowed_when_balance_below_one') || 'Your available balance is below 1 day. Please apply for Emergency Vacation only.');
+                    return false;
+                }
+                if (balance >= 1 && isEmergencySelection) {
+                    Swal.showValidationMessage(__('emergency_vacation_requires_zero_balance') || 'Emergency Vacation is only available when you have insufficient balance. Please use regular vacation.');
                     return false;
                 }
                 if (flyType === 'annual' || flyType === 'emergency') {
@@ -533,7 +691,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             return false;
                         }
                     }
-                    // NEW: Validate vacation salary type selection for annual vacations
+                    // NEW: Validate vacation salary type selection for annual vacations ONLY (Emergency vacation is unpaid)
                     if (flyType === 'annual') {
                         const salaryType = $('input[name="vacation_salary_type"]:checked').val();
                         if (!salaryType) {
@@ -541,7 +699,16 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             return false;
                         }
                     }
+
+                    // Note: Emergency vacation does NOT require balance check as it is unpaid
+                    // Balance validation is only for Annual vacation or Encashed vacation
                 }
+            }
+
+            // Add flag to indicate if this is emergency vacation (for backend processing)
+            const flyType = $('input[name="fly_type"]:checked').val();
+            if (flyType === 'emergency') {
+                formData.append('is_emergency', '1');
             }
 
             // NEW: Automatically set direct supervisor as first approver
@@ -557,14 +724,14 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     }
                     
                     // DEBUG: Log FormData contents
-                    console.log('=== FormData Contents ===');
+                    // console.log('=== FormData Contents ===');
                     for (let pair of formData.entries()) {
-                        console.log(pair[0] + ': ' + pair[1]);
+                        // console.log(pair[0] + ': ' + pair[1]);
                     }
-                    console.log('departure_date value:', $('#departure_date').val());
-                    console.log('arrival_date value:', $('#arrival_date').val());
-                    console.log('vacation_salary_type checked:', $('input[name="vacation_salary_type"]:checked').val());
-                    console.log('========================');
+                    // console.log('departure_date value:', $('#departure_date').val());
+                    // console.log('arrival_date value:', $('#arrival_date').val());
+                    // console.log('vacation_salary_type checked:', $('input[name="vacation_salary_type"]:checked').val());
+                    // console.log('========================');
                     
                     $.ajax({
                         url: './includes/ajaxFile/ajaxVacation.php',

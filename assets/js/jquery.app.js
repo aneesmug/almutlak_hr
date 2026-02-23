@@ -6149,7 +6149,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 url: './includes/ajaxFile/ajaxEmployee.php',
                 dataType: 'JSON',
                 type: 'POST',
-                data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid},
+                data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid, for_replacement: 1},
                 success: function(res) {
                     if (res.status == 200) {
                         let options = '';
