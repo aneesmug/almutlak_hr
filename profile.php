@@ -2556,24 +2556,24 @@ RTL Support
     <!-- Hidden file input for image cropping -->
     <!-- <input type="file" id="img-crop-input" accept="image/*" style="display: none;"> -->
 
-    <script src="assets/js/jquery.min.js"></script>
-    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/jquery.min.js?t=<?= time() ?>"></script>
+    <script src="assets/js/bootstrap.bundle.min.js?t=<?= time() ?>"></script>
     <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script> -->
 
     <!-- Dropzone JS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js?t=<?= time() ?>"></script>
 
     <!-- Moment.js for date manipulation -->
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js?t=<?= time() ?>"></script>
     <!-- Date Pickers -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/js/bootstrap-datepicker.min.js"></script>
-    <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/js/bootstrap-datepicker.min.js?t=<?= time() ?>"></script>
+    <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js?t=<?= time() ?>"></script>
     <!-- Select2 -->
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js?t=<?= time() ?>"></script>
     <!-- Main App JS -->
-    <script src="assets/js/employee_profile.js"></script>
-    <script src="assets/js/loanHandling.js"></script>
-    <script src="assets/js/resignationWizard.js"></script>
+    <script src="assets/js/employee_profile.js?t=<?= time() ?>"></script>
+    <script src="assets/js/loanHandling.js?t=<?= time() ?>"></script>
+    <script src="assets/js/resignationWizard.js?t=<?= time() ?>"></script>
     <script>
         $(document).ready(function() {
 
