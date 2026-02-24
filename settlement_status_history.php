@@ -80,16 +80,19 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
         $total_monthly_salary = $basic_salary + ($settlement['salary_housing'] ?? 0) + ($settlement['salary_transport'] ?? 0) + ($settlement['salary_food'] ?? 0) + ($settlement['salary_misc'] ?? 0) + ($settlement['salary_cashier'] ?? 0) + ($settlement['salary_fuel'] ?? 0) + ($settlement['salary_tel'] ?? 0) + ($settlement['salary_other'] ?? 0) + ($settlement['salary_guard'] ?? 0);
         
         if ($total_monthly_salary > 0) {
+            // Keep 30-day basis for all payroll calculations except Working Days Salary
             $days_in_month = 30;
+            $working_days_month_days = 30;
             if (!empty($settlement['start_date'])) {
                 $start_ts = strtotime($settlement['start_date']);
                 if ($start_ts !== false) {
-                    $days_in_month = (int)date('t', $start_ts);
+                    $working_days_month_days = (int)date('t', $start_ts);
                 }
             }
-            $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+            $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+            $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
             
-            $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+            $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
             $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
             $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
             
@@ -105,7 +108,7 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
                 try {
                     $start_date_obj = new DateTime($settlement['start_date']);
                     $working_days = (int)$start_date_obj->format('d');
-                    $working_days_salary = round($daily_rate * $working_days);
+                    $working_days_salary = round($working_daily_rate * $working_days);
                 } catch (Exception $e) {
                     $working_days_salary = 0;
                 }

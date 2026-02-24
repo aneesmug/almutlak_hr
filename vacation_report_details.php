@@ -121,6 +121,7 @@ if (mysqli_num_rows($query) == 1) {
     $permit_fee = 0;
     $overtime_amount = 0;
     $deduction_amount = 0;
+    $working_daily_rate = 0;
     
     // Get approved vacation days from the request (vacdays = approved days)
     $approved_days = (float)($request['vacdays'] ?? 0);
@@ -158,24 +159,26 @@ if (mysqli_num_rows($query) == 1) {
     // Determine if this vacation gets any payment calculation
     $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
     
-    // Calculate actual days in the vacation month (based on vacation start date)
-    // Fallback to 30 if start_date is missing/invalid
+    // Base payroll divisor stays fixed at 30 days for all calculations except Working Days Salary
     $days_in_month = 30;
+    // Working Days Salary divisor uses actual month days of vacation start date
+    $working_days_month_days = 30;
     if (!empty($request['start_date'])) {
         $start_ts = strtotime($request['start_date']);
         if ($start_ts !== false) {
-            $days_in_month = (int)date('t', $start_ts); // 28/29/30/31
+            $working_days_month_days = (int)date('t', $start_ts); // 28/29/30/31
         }
     }
     
     if ($calculate_payments && $salary) {
         $basic_salary = (float)($salary['basic'] ?? 0);
         $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
-        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+        $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
         
         // --- CALCULATE OVERTIME AND DEDUCTIONS (EOS Logic) ---
         $DEDUCTION_BASE = $total_monthly_salary;
-        $dailyRateDeduction = ($days_in_month > 0) ? round($DEDUCTION_BASE / $days_in_month, 2) : 0;
+        $dailyRateDeduction = round($DEDUCTION_BASE / $days_in_month, 2);
         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
         
         // OVERTIME CALCULATION (per EOS file):
@@ -203,7 +206,7 @@ if (mysqli_num_rows($query) == 1) {
             // Business rule: include the start day in working-days salary
             // Example: start on Feb 28 => 28 working days (full month for Feb)
             $working_days = (int)$start_date_obj->format('d');
-            $working_days_salary = round($daily_rate * $working_days);
+            $working_days_salary = round($working_daily_rate * $working_days);
         }
 
         // === VACATION SALARY ===
@@ -723,7 +726,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
-                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <?= number_format($daily_rate, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $days_in_month; ?> days)</small>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <?= number_format($working_daily_rate, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $working_days_month_days; ?> days)</small>
                                                 </div>
                                                 <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
                                             </li>

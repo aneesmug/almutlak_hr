@@ -193,17 +193,147 @@ try {
     
     log_message("Database connection established", 'info');
 
+    /**
+     * Fetch latest vacation balance record for employee; create baseline record if missing.
+     *
+     * @param mysqli $conDB
+     * @param string $emp_id
+     * @return array|null
+     */
+    function get_or_create_balance_record($conDB, $emp_id) {
+        $select_sql = "SELECT id, vac_id, contract_id, total_days, used_days, remaining_balance,
+                              available_balance, carryover_days, period_start, period_end, last_updated
+                       FROM emp_vacation_balance
+                       WHERE emp_id = ?
+                       ORDER BY id DESC
+                       LIMIT 1";
+
+        $select_stmt = mysqli_prepare($conDB, $select_sql);
+        if (!$select_stmt) {
+            log_message("  [emp_id: $emp_id] ERROR: Prepare failed while reading balance - " . mysqli_error($conDB), 'error');
+            return null;
+        }
+
+        mysqli_stmt_bind_param($select_stmt, 's', $emp_id);
+        if (!mysqli_stmt_execute($select_stmt)) {
+            log_message("  [emp_id: $emp_id] ERROR: Execute failed while reading balance - " . mysqli_stmt_error($select_stmt), 'error');
+            mysqli_stmt_close($select_stmt);
+            return null;
+        }
+
+        $select_result = mysqli_stmt_get_result($select_stmt);
+        $record = mysqli_fetch_assoc($select_result);
+        mysqli_stmt_close($select_stmt);
+
+        if ($record) {
+            return $record;
+        }
+
+        log_message("  [emp_id: $emp_id] ℹ️ No vacation balance record found. Creating initial balance record.", 'info');
+
+        if (!class_exists('VacationCalculator')) {
+            log_message("  [emp_id: $emp_id] ERROR: VacationCalculator class not found", 'error');
+            return null;
+        }
+
+        try {
+            $calculator = new VacationCalculator($conDB);
+            $calc_data = $calculator->getCalculatedBalance($emp_id);
+        } catch (Throwable $e) {
+            log_message("  [emp_id: $emp_id] ERROR: Failed calculating initial balance - " . $e->getMessage(), 'error');
+            return null;
+        }
+
+        if (!$calc_data) {
+            log_message("  [emp_id: $emp_id] ERROR: Could not calculate initial balance data", 'error');
+            return null;
+        }
+
+        $contract_id = isset($calc_data['contract_id']) ? (int)$calc_data['contract_id'] : 0;
+        if ($contract_id <= 0) {
+            log_message("  [emp_id: $emp_id] ERROR: Invalid contract_id while creating initial balance", 'error');
+            return null;
+        }
+
+        $period_start = ($calc_data['period_start'] instanceof DateTime)
+            ? $calc_data['period_start']->format('Y-m-d')
+            : (string)$calc_data['period_start'];
+        $period_end = ($calc_data['period_end'] instanceof DateTime)
+            ? $calc_data['period_end']->format('Y-m-d')
+            : (string)$calc_data['period_end'];
+
+        $total_days = (float)($calc_data['total_days'] ?? 0);
+        $used_days = (float)($calc_data['used_days'] ?? 0);
+        $remaining_balance = (float)($calc_data['remaining_balance'] ?? 0);
+        $available_balance = (float)($calc_data['available_balance'] ?? 0);
+        $carryover_days = (float)($calc_data['carryover_days'] ?? 0);
+
+        $insert_sql = "INSERT INTO emp_vacation_balance
+                          (emp_id, vac_id, contract_id, period_start, period_end,
+                           total_days, used_days, remaining_balance, available_balance,
+                           opening_balance, carryover_days, last_updated)
+                       VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+
+        $insert_stmt = mysqli_prepare($conDB, $insert_sql);
+        if (!$insert_stmt) {
+            log_message("  [emp_id: $emp_id] ERROR: Prepare failed while creating balance - " . mysqli_error($conDB), 'error');
+            return null;
+        }
+
+        mysqli_stmt_bind_param(
+            $insert_stmt,
+            'sisssddddd',
+            $emp_id,
+            $contract_id,
+            $period_start,
+            $period_end,
+            $total_days,
+            $used_days,
+            $remaining_balance,
+            $available_balance,
+            $available_balance,
+            $carryover_days
+        );
+
+        if (!mysqli_stmt_execute($insert_stmt)) {
+            log_message("  [emp_id: $emp_id] ERROR: Insert failed while creating balance - " . mysqli_stmt_error($insert_stmt), 'error');
+            mysqli_stmt_close($insert_stmt);
+            return null;
+        }
+        mysqli_stmt_close($insert_stmt);
+
+        log_message("  [emp_id: $emp_id] ✅ Initial vacation balance record created", 'info');
+
+        $reselect_stmt = mysqli_prepare($conDB, $select_sql);
+        if (!$reselect_stmt) {
+            log_message("  [emp_id: $emp_id] ERROR: Prepare failed while re-reading balance - " . mysqli_error($conDB), 'error');
+            return null;
+        }
+
+        mysqli_stmt_bind_param($reselect_stmt, 's', $emp_id);
+        if (!mysqli_stmt_execute($reselect_stmt)) {
+            log_message("  [emp_id: $emp_id] ERROR: Execute failed while re-reading balance - " . mysqli_stmt_error($reselect_stmt), 'error');
+            mysqli_stmt_close($reselect_stmt);
+            return null;
+        }
+
+        $reselect_result = mysqli_stmt_get_result($reselect_stmt);
+        $new_record = mysqli_fetch_assoc($reselect_result);
+        mysqli_stmt_close($reselect_stmt);
+
+        return $new_record ?: null;
+    }
+
     // =====================================================================
     // FUNCTION 1: Normal Mode (force=0) - Update once per day
     // =====================================================================
     function process_employees_normal($conDB, &$updated_count, &$changed_count, &$error_count) {
         global $updates_log, $conDB_global;
         
-        $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
-                  FROM emp_vacation_balance evb
-                  JOIN employees e ON evb.emp_id = e.emp_id
+        $query = "SELECT e.emp_id
+                  FROM employees e
                   WHERE e.status = 1
-                  ORDER BY evb.emp_id";
+                  ORDER BY e.emp_id";
         
         $result = mysqli_query($conDB, $query);
         if (!$result) {
@@ -215,35 +345,16 @@ try {
         
         while ($row = mysqli_fetch_assoc($result)) {
             $emp_id = $row['emp_id'];
-            $balance_record_id = $row['balance_record_id'];
-            $old_balance = (float)$row['old_balance'];
-            
-            // Get current record
-            $check_sql = "SELECT vac_id, contract_id, total_days, used_days, remaining_balance, 
-                                 available_balance, carryover_days, period_start, period_end, last_updated 
-                          FROM emp_vacation_balance WHERE id = ? LIMIT 1";
-            $check_stmt = mysqli_prepare($conDB, $check_sql);
-            if (!$check_stmt) {
-                log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
-                $error_count++;
-                continue;
-            }
-            mysqli_stmt_bind_param($check_stmt, 'i', $balance_record_id);
-            if (!mysqli_stmt_execute($check_stmt)) {
-                log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($check_stmt), 'error');
-                mysqli_stmt_close($check_stmt);
-                $error_count++;
-                continue;
-            }
-            $result_last = mysqli_stmt_get_result($check_stmt);
-            $current_record = mysqli_fetch_assoc($result_last);
-            mysqli_stmt_close($check_stmt);
+            $current_record = get_or_create_balance_record($conDB, $emp_id);
             
             if (!$current_record) {
                 log_message("  [emp_id: $emp_id] ERROR: Could not fetch record", 'error');
                 $error_count++;
                 continue;
             }
+
+            $balance_record_id = (int)$current_record['id'];
+            $old_balance = (float)$current_record['available_balance'];
             
             $last_updated = $current_record['last_updated'];
             $today_str = date('Y-m-d');
@@ -348,11 +459,10 @@ try {
     function process_employees_check_missing($conDB, &$updated_count, &$changed_count, &$error_count) {
         global $updates_log, $conDB_global;
         
-        $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
-                  FROM emp_vacation_balance evb
-                  JOIN employees e ON evb.emp_id = e.emp_id
+        $query = "SELECT e.emp_id
+                  FROM employees e
                   WHERE e.status = 1
-                  ORDER BY evb.emp_id";
+                  ORDER BY e.emp_id";
         
         $result = mysqli_query($conDB, $query);
         if (!$result) {
@@ -364,10 +474,24 @@ try {
         
         while ($row = mysqli_fetch_assoc($result)) {
             $emp_id = $row['emp_id'];
-            $old_balance = (float)$row['old_balance'];
+            $current_record = get_or_create_balance_record($conDB, $emp_id);
+            if (!$current_record) {
+                log_message("  [emp_id: $emp_id] ERROR: Could not fetch record in check-missing mode", 'error');
+                $error_count++;
+                continue;
+            }
+
+            $old_balance = (float)$current_record['available_balance'];
+            $live_balance = get_live_vacation_balance($conDB, $emp_id);
+            if ($live_balance === null) {
+                log_message("  [emp_id: $emp_id] WARNING: Could not calculate balance in check-missing mode", 'warning');
+                $error_count++;
+                continue;
+            }
+            $live_balance = (float)$live_balance;
             
             // Only show refreshed values - NO database updates
-            log_message("  [emp_id: $emp_id] 🔄 REFRESHED: $old_balance → $old_balance ❌", 'refresh', $emp_id, $old_balance, $old_balance);
+            log_message("  [emp_id: $emp_id] 🔄 REFRESHED: $old_balance → $live_balance ❌", 'refresh', $emp_id, $old_balance, $live_balance);
         }
         mysqli_free_result($result);
         return $total;
@@ -379,11 +503,10 @@ try {
     function process_employees_force_update($conDB, &$updated_count, &$changed_count, &$error_count) {
         global $updates_log, $conDB_global;
         
-        $query = "SELECT DISTINCT evb.emp_id, evb.id as balance_record_id, evb.available_balance as old_balance
-                  FROM emp_vacation_balance evb
-                  JOIN employees e ON evb.emp_id = e.emp_id
+        $query = "SELECT e.emp_id
+                  FROM employees e
                   WHERE e.status = 1
-                  ORDER BY evb.emp_id";
+                  ORDER BY e.emp_id";
         
         $result = mysqli_query($conDB, $query);
         if (!$result) {
@@ -395,35 +518,16 @@ try {
         
         while ($row = mysqli_fetch_assoc($result)) {
             $emp_id = $row['emp_id'];
-            $balance_record_id = $row['balance_record_id'];
-            $old_balance = (float)$row['old_balance'];
-            
-            // Get current record
-            $check_sql = "SELECT vac_id, contract_id, total_days, used_days, remaining_balance, 
-                                 available_balance, carryover_days, period_start, period_end, last_updated 
-                          FROM emp_vacation_balance WHERE id = ? LIMIT 1";
-            $check_stmt = mysqli_prepare($conDB, $check_sql);
-            if (!$check_stmt) {
-                log_message("  [emp_id: $emp_id] ERROR: Prepare failed - " . mysqli_error($conDB), 'error');
-                $error_count++;
-                continue;
-            }
-            mysqli_stmt_bind_param($check_stmt, 'i', $balance_record_id);
-            if (!mysqli_stmt_execute($check_stmt)) {
-                log_message("  [emp_id: $emp_id] ERROR: Execute failed - " . mysqli_stmt_error($check_stmt), 'error');
-                mysqli_stmt_close($check_stmt);
-                $error_count++;
-                continue;
-            }
-            $result_last = mysqli_stmt_get_result($check_stmt);
-            $current_record = mysqli_fetch_assoc($result_last);
-            mysqli_stmt_close($check_stmt);
+            $current_record = get_or_create_balance_record($conDB, $emp_id);
             
             if (!$current_record) {
                 log_message("  [emp_id: $emp_id] ERROR: Could not fetch record", 'error');
                 $error_count++;
                 continue;
             }
+
+            $balance_record_id = (int)$current_record['id'];
+            $old_balance = (float)$current_record['available_balance'];
             
             // Calculate live balance
             $live_balance = get_live_vacation_balance($conDB, $emp_id);

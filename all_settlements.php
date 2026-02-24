@@ -530,16 +530,19 @@ if ($canSeeAllDepts) {
                                                     $total_monthly_salary = $basic_salary + ($settlement['housing'] ?? 0) + ($settlement['transport'] ?? 0) + ($settlement['food'] ?? 0) + ($settlement['misc'] ?? 0) + ($settlement['cashier'] ?? 0) + ($settlement['fuel'] ?? 0) + ($settlement['tel'] ?? 0) + ($settlement['other'] ?? 0) + ($settlement['guard'] ?? 0);
                                                     
                                                     if ($total_monthly_salary > 0) {
+                                                        // Keep 30-day basis for all payroll calculations except Working Days Salary
                                                         $days_in_month = 30;
+                                                        $working_days_month_days = 30;
                                                         if (!empty($settlement['start_date'])) {
                                                             $start_ts = strtotime($settlement['start_date']);
                                                             if ($start_ts !== false) {
-                                                                $days_in_month = (int)date('t', $start_ts);
+                                                                $working_days_month_days = (int)date('t', $start_ts);
                                                             }
                                                         }
-                                                        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+                                                        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                                                        $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
                                                         
-                                                        $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+                                                        $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
                                                         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
                                                         $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
                                                         
@@ -554,7 +557,7 @@ if ($canSeeAllDepts) {
                                                             try {
                                                                 $start_date_obj = new DateTime($settlement['start_date']);
                                                                 $working_days = (int)$start_date_obj->format('d');
-                                                                $working_days_salary = round($daily_rate * $working_days);
+                                                                $working_days_salary = round($working_daily_rate * $working_days);
                                                             } catch (Exception $e) {
                                                                 $working_days_salary = 0;
                                                             }
@@ -745,13 +748,16 @@ if ($canSeeAllDepts) {
         const MAX_FILE_SIZE_MB = 10;
         
         // Current user details - Make window-global for access in jquery.app.js?t=<?= time() ?>
-        window.currentUserType = '<?php echo $_SESSION['user_type'] ?? ""; ?>';
+        window.currentUserType = <?= json_encode($_SESSION['user_type'] ?? ''); ?>;
         window.currentUserId = <?= (int)$empid; ?>;
+        window.currentUserTypeNormalized = String(window.currentUserType || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
         
         // Also set as regular constants for backward compatibility
         const currentUserType = window.currentUserType;
         const currentUserId = window.currentUserId;
-        const isHRPayroll = (currentUserType === 'hr_payroll');
+        const isHRPayroll = <?= !empty($isHR_Payroll) ? 'true' : 'false'; ?> ||
+            window.currentUserTypeNormalized === 'hr_payroll' ||
+            window.currentUserTypeNormalized === 'hrpayroll';
 
         // Preserve legacy approval handler from jquery.app.js?t=<?= time() ?> for non-HR flows
         const approveSettlementLegacy = window.approveSettlement;

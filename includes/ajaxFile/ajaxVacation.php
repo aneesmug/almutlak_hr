@@ -3406,14 +3406,18 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                 ($vacation_data['other'] ?? 0) + 
                 ($vacation_data['guard'] ?? 0);
             
+            // Keep 30-day basis for payroll calculations (vacation salary, deductions, etc.)
             $days_in_month = 30;
+            // Working Days Salary only: use actual month days of vacation start date
+            $working_days_month_days = 30;
             if (!empty($vacation_data['start_date'])) {
                 $start_ts = strtotime($vacation_data['start_date']);
                 if ($start_ts !== false) {
-                    $days_in_month = (int)date('t', $start_ts);
+                    $working_days_month_days = (int)date('t', $start_ts);
                 }
             }
-            $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+            $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+            $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
             $hourly_rate_deduction = round(($daily_rate / 8), 2);
             
             $approved_days = (float)($vacation_data['vacdays'] ?? 0);
@@ -3422,7 +3426,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             if ($is_fly_annual && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
                 $working_days = (int)$start_date_obj->format('d');
-                $working_days_salary = round($daily_rate * $working_days, 2);
+                $working_days_salary = round($working_daily_rate * $working_days, 2);
             }
             
             // Calculate vacation salary (if Fly + Annual and vacation_salary_type = 'payroll')

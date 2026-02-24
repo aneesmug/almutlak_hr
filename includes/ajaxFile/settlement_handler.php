@@ -539,16 +539,19 @@ function approveSettlement($settlementManager, $currentUserId) {
                                           ($settlementData['guard'] ?? 0);
                     
                     if ($total_monthly_salary > 0) {
+                        // Keep 30-day basis for all payroll calculations except Working Days Salary
                         $days_in_month = 30;
+                        $working_days_month_days = 30;
                         if (!empty($settlementData['start_date'])) {
                             $start_ts = strtotime($settlementData['start_date']);
                             if ($start_ts !== false) {
-                                $days_in_month = (int)date('t', $start_ts);
+                                $working_days_month_days = (int)date('t', $start_ts);
                             }
                         }
 
-                        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
-                        $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+                        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                        $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
+                        $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
                         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
                         $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
                         
@@ -562,7 +565,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $working_days = (int)$start_date_obj->format('d');
-                                $working_days_salary = round($daily_rate * $working_days);
+                                $working_days_salary = round($working_daily_rate * $working_days);
                             } catch (Exception $e) {
                                 $working_days_salary = 0;
                             }
@@ -1021,7 +1024,9 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
     $settlementId = $_POST['settlement_id'] ?? 0;
     $empId = $_POST['emp_id'] ?? 0;
     $approvalComment = $_POST['approval_comment'] ?? '';
-    $isHRPayroll = ($_POST['is_hr_payroll'] ?? '0') === '1';
+    $postedHRPayroll = ($_POST['is_hr_payroll'] ?? '0') === '1';
+    $sessionUserTypeNormalized = preg_replace('/[\s-]+/', '_', strtolower(trim((string)($_SESSION['user_type'] ?? ''))));
+    $isHRPayroll = $postedHRPayroll || in_array($sessionUserTypeNormalized, ['hr_payroll', 'hrpayroll'], true);
     $attachmentCount = intval($_POST['attachment_count'] ?? 0);
     
     if (empty($settlementInvNo) || $settlementId <= 0) {
@@ -1178,16 +1183,19 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                                           ($settlementData['guard'] ?? 0);
                     
                     if ($total_monthly_salary > 0) {
+                        // Keep 30-day basis for all payroll calculations except Working Days Salary
                         $days_in_month = 30;
+                        $working_days_month_days = 30;
                         if (!empty($settlementData['start_date'])) {
                             $start_ts = strtotime($settlementData['start_date']);
                             if ($start_ts !== false) {
-                                $days_in_month = (int)date('t', $start_ts);
+                                $working_days_month_days = (int)date('t', $start_ts);
                             }
                         }
 
-                        $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
-                        $dailyRateDeduction = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+                        $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                        $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
+                        $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
                         $hourlyRateDeduction = round($dailyRateDeduction / 8, 2);
                         $overtimeHourlyRate = round((($basic_salary / 240) / 2) + ($total_monthly_salary / 240), 2);
                         
@@ -1201,7 +1209,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $working_days = (int)$start_date_obj->format('d');
-                                $working_days_salary = round($daily_rate * $working_days);
+                                $working_days_salary = round($working_daily_rate * $working_days);
                             } catch (Exception $e) {
                                 $working_days_salary = 0;
                             }
@@ -1677,14 +1685,17 @@ function getSettlementDetails($settlementManager) {
                     $basic_salary = (float)($salary['basic'] ?? 0);
                     $total_monthly_salary = $basic_salary + ($salary['housing'] ?? 0) + ($salary['transport'] ?? 0) + ($salary['food'] ?? 0) + ($salary['misc'] ?? 0) + ($salary['cashier'] ?? 0) + ($salary['fuel'] ?? 0) + ($salary['tel'] ?? 0) + ($salary['other'] ?? 0) + ($salary['guard'] ?? 0);
                     
+                    // Keep 30-day basis for all payroll calculations except Working Days Salary
                     $days_in_month = 30;
+                    $working_days_month_days = 30;
                     if (!empty($vacation['start_date'])) {
                         $start_ts = strtotime($vacation['start_date']);
                         if ($start_ts !== false) {
-                            $days_in_month = (int)date('t', $start_ts);
+                            $working_days_month_days = (int)date('t', $start_ts);
                         }
                     }
-                    $daily_rate = ($days_in_month > 0) ? round($total_monthly_salary / $days_in_month, 2) : 0;
+                    $daily_rate = round($total_monthly_salary / $days_in_month, 2);
+                    $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
                     
                     // Deduction calculation helpers
                     $dailyRateDeduction = round($total_monthly_salary / $days_in_month, 2);
@@ -1702,7 +1713,7 @@ function getSettlementDetails($settlementManager) {
                     if ($is_fly_annual && !empty($vacation['start_date'])) {
                         $start_date_obj = new DateTime($vacation['start_date']);
                         $working_days = (int)$start_date_obj->format('d');
-                        $working_days_salary = round($daily_rate * $working_days);
+                        $working_days_salary = round($working_daily_rate * $working_days);
                     }
                     
                     // Calculate vacation salary (Fly + Annual with payroll type only)
