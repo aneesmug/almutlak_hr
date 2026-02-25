@@ -368,6 +368,13 @@ if ($vacation['fly_type'] === 'annual') {
                     $other_earnings = (float)($vacation['other_earnings'] ?? 0);
                     
                     $days_in_month = 30; // Fixed 30 days for all calculations
+                    $working_days_month_days = 30;
+                    if (!empty($vacation['start_date'])) {
+                        $start_ts = strtotime($vacation['start_date']);
+                        if ($start_ts !== false) {
+                            $working_days_month_days = (int)date('t', $start_ts);
+                        }
+                    }
                     
                     // Calculate working days and vacation salary if salary_basic is available
                     if (!empty($vacation['salary_basic'])) {
@@ -388,9 +395,13 @@ if ($vacation['fly_type'] === 'annual') {
                         // Working days salary (days before vacation starts) - Only for Fly Annual
                         if ($is_fly_annual && !empty($vacation['start_date'])) {
                             $start_date_obj = new DateTime($vacation['start_date']);
-                            $working_days = (int)$start_date_obj->format('d') - 1;
+                            $working_days = (int)$start_date_obj->format('d');
                             if ($working_days > 0) {
-                                $working_days_salary = $daily_rate * $working_days;
+                                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                                    $working_days_salary = round($total_monthly_salary, 2);
+                                } else {
+                                    $working_days_salary = round(($total_monthly_salary / 30) * $working_days, 2);
+                                }
                             }
                         }
                         

@@ -557,7 +557,11 @@ if ($canSeeAllDepts) {
                                                             try {
                                                                 $start_date_obj = new DateTime($settlement['start_date']);
                                                                 $working_days = (int)$start_date_obj->format('d');
-                                                                $working_days_salary = round($working_daily_rate * $working_days);
+                                                                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                                                                    $working_days_salary = round($total_monthly_salary);
+                                                                } else {
+                                                                    $working_days_salary = round(($total_monthly_salary / 30) * $working_days);
+                                                                }
                                                             } catch (Exception $e) {
                                                                 $working_days_salary = 0;
                                                             }

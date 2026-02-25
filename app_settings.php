@@ -297,9 +297,8 @@
                 const empId = String(emp.emp_id || '').trim();
                 if (!empId) return;
                 const empName = (emp.name || '').trim();
-                const statusLabel = Number(emp.status) === 1 ? '<?= __('active') ?>' : '<?= __('terminated') ?>';
                 const selected = selectedIds.includes(empId) ? 'selected' : '';
-                const label = `${empName} (${empId}) - ${statusLabel}`;
+                const label = `${empName} (${empId})`;
                 optionsHtml += `<option value="${empId}" ${selected}>${label}</option>`;
             });
 

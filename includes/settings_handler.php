@@ -182,7 +182,6 @@ function get_full_access_candidates($conDB) {
         $employees[] = [
             'emp_id' => (string)($row['emp_id'] ?? ''),
             'name' => $parsedName,
-            'status' => (int)($row['status'] ?? 0),
         ];
     }
 

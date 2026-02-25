@@ -122,6 +122,10 @@ if (mysqli_num_rows($query) == 1) {
     $overtime_amount = 0;
     $deduction_amount = 0;
     $working_daily_rate = 0;
+    $working_days = 0;
+    $working_days_divisor_display = 30;
+    $working_days_daily_rate_display = 0;
+    $is_full_working_month = false;
     
     // Get approved vacation days from the request (vacdays = approved days)
     $approved_days = (float)($request['vacdays'] ?? 0);
@@ -206,7 +210,20 @@ if (mysqli_num_rows($query) == 1) {
             // Business rule: include the start day in working-days salary
             // Example: start on Feb 28 => 28 working days (full month for Feb)
             $working_days = (int)$start_date_obj->format('d');
-            $working_days_salary = round($working_daily_rate * $working_days);
+
+            // New business rule for Working Days Salary only:
+            // 1) If worked days complete the current month (28/29/30/31), pay full monthly salary.
+            // 2) If worked days are less than full month, calculate using 30-day divisor.
+            if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                $working_days_salary = round($total_monthly_salary);
+                $working_days_divisor_display = $working_days_month_days;
+                $working_days_daily_rate_display = $working_daily_rate;
+                $is_full_working_month = true;
+            } else {
+                $working_days_divisor_display = 30;
+                $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
+                $working_days_salary = round($working_days_daily_rate_display * $working_days);
+            }
         }
 
         // === VACATION SALARY ===
@@ -726,7 +743,11 @@ if (mysqli_num_rows($query) == 1) {
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
-                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <?= number_format($working_daily_rate, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $working_days_month_days; ?> days)</small>
+                                                    <?php if ($is_full_working_month): ?>
+                                                    <small class="text-muted d-block"><?= __('full_month_worked') ?? 'Full month worked' ?> (<?= htmlspecialchars($working_days); ?>/<?= htmlspecialchars($working_days_month_days); ?> <?= __('days') ?? 'days' ?>) = <?= number_format($total_monthly_salary, 2); ?> SAR</small>
+                                                    <?php else: ?>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <?= number_format($working_days_daily_rate_display, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $working_days_divisor_display; ?> <?= __('days') ?? 'days' ?>)</small>
+                                                    <?php endif; ?>
                                                 </div>
                                                 <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
                                             </li>
@@ -750,7 +771,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <li>
                                                 <div>
                                                     <span class="label text-success"><?= __('other_earnings') ?? 'Other Earnings' ?></span>
-                                                    <small class="text-muted d-block"><?= __('manual_payroll_adjustment') ?? 'Manual payroll adjustment' ?></small>
+                                                    <small class="text-muted d-block"><?= __('other_earnings_manual_adjustment') ?? 'Manual other earnings adjustment' ?></small>
                                                 </div>
                                                 <span class="value text-success">+<?=number_format($other_earnings, 2); ?> SAR</span>
                                             </li>
