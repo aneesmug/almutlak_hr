@@ -1,0 +1,180 @@
+# Vacation Deduction Calculation - Quick Reference
+
+## What Changed?
+
+**OLD Formula:**
+```
+Deductible Days = Vacation Days - Holiday Days
+❌ Weekend days were NOT excluded - employees lost vacation for weekends!
+```
+
+**NEW Formula:**
+```
+Deductible Days = Vacation Days - Weekend Days - Holiday Days
+✓ Both weekends AND holidays are excluded from deduction
+✓ Employees only lose vacation for actual working days
+```
+
+## Key Examples
+
+### Example 1: Vacation During Weekend
+```
+Vacation: Friday + Saturday (2 days)
+Weekends: Friday + Saturday (2 days)
+Holidays: None (0 days)
+
+CALCULATION: 2 - 2 - 0 = 0 days deducted ✓
+Meaning: No vacation balance used!
+```
+
+### Example 2: Vacation During Holiday
+```
+Vacation: Thursday - Monday (5 days)
+Weekends: Friday + Saturday (2 days)
+Eid Holiday: Friday - Sunday (3 days, assigned to your company)
+
+CALCULATION: 5 - 2 - 1 = 2 days deducted
+(Note: Fri-Sat already counted as weekend, only Sun additional)
+```
+
+### Example 3: Vacation Fully Covered
+```
+Vacation: Thursday - Monday (5 days)
+Weekends: Friday + Saturday (2 days)
+3-Day Eid: Thursday - Saturday (3 days)
+
+CALCULATION: 5 - 2 - 3 = 0 days deducted ✓
+Meaning: All vacation days covered by weekend + holiday!
+```
+
+## Who Gets What?
+
+### Company A Employee
+- Vacation: 5 days during Eid
+- Eid assigned to Company A: YES
+- **Deduction: 2 days** (5 - weekend - holiday)
+
+### Company B Employee  
+- Same vacation dates (5 days)
+- Eid assigned to Company B: NO
+- **Deduction: 5 days** (5 - weekend only)
+
+**→ Different deductions based on company assignment!**
+
+## Weekend Rules
+
+- **Automatic Detection:** No setup needed
+- **Always Excluded:** Friday (5) + Saturday (6)
+- **No Configuration:** Hardcoded for Saudi Arabia
+
+## Holiday Rules
+
+1. **Must Be Setup:** Create holidays in Holiday Management
+2. **Company-Specific:** Assign to relevant companies only
+3. **Automatic Filtering:** Employee's company automatically used
+
+## Files Updated
+
+| File | Change |
+|------|--------|
+| `includes/vacation_calculator.php` | Added 2 new helper methods for counting weekends & holidays |
+| `manage_holidays.php` | Added info box explaining new deduction formula |
+
+## New Functions
+
+```php
+// Count weekend days (Friday & Saturday) in date range
+countWeekendDays($start_date, $end_date)
+→ Returns: integer number of weekend days
+
+// Count holiday days overlapping with vacation
+countHolidayDaysInRange($emp_id, $start_date, $end_date, $company_id)
+→ Returns: float number of overlapping holiday days
+```
+
+## Testing Your Setup
+
+### Quick Test 1: Weekend Vacation
+1. Create vacation: Friday + Saturday
+2. Submit vacation request
+3. Verify: 0 days deducted
+
+### Quick Test 2: Holiday Vacation
+1. Create Eid holiday (3 days)
+2. Assign to your company
+3. Create vacation: 5 days including Eid
+4. Submit vacation request
+5. Verify: ~2 days deducted *(depending on weekend overlap)*
+
+### Quick Test 3: No Holiday Assignment
+1. Create vacation during same period for different company
+2. Verify: 5 days deducted *(because holiday not assigned to that company)*
+
+## Common Questions
+
+**Q: Why is my deduction only 2 days instead of 5?**
+- A: Because 2 days are weekends + 1 day is a holiday (5 - 2 - 1 = 2)
+
+**Q: My company's holiday isn't being deducted**
+- A: Check if holiday is assigned to your company in Holiday Management
+
+**Q: What if vacation spans multiple holidays?**
+- A: All applicable holidays are summed and deducted
+
+**Q: Can I see the calculation breakdown?**
+- A: Check vacation_calculator.php error logs - each calculation is logged
+
+## Verification Queries
+
+Run these SQL queries to verify setup:
+
+```sql
+-- See all active holidays with assigned companies
+SELECT h.holiday_name, GROUP_CONCAT(c.comp_name) as companies
+FROM emp_holidays h
+LEFT JOIN holiday_companies hc ON h.id = hc.holiday_id
+LEFT JOIN companies c ON hc.company_id = c.id
+WHERE h.is_active = 1
+GROUP BY h.id;
+
+-- Check weekend days in date range (for testing)
+SELECT DAYNAME('2026-02-27') as day;
+-- Friday = should be 5 or should be excluded
+
+-- See vacation deductions (from logs)
+-- Check error_log for "Vacation Deduction:" entries
+```
+
+## Implementation Checklist
+
+- [x] Updated vacation_calculator.php with new logic
+- [x] Added countWeekendDays() method
+- [x] Added countHolidayDaysInRange() method  
+- [x] Updated manage_holidays.php with explanation
+- [x] Created test queries
+- [x] Documentation complete
+
+## Rollback (if needed)
+
+If you need to revert to the old formula (without weekly deduction):
+
+1. Edit `includes/vacation_calculator.php`
+2. Find the updated `getUsedVacationDays()` method
+3. Revert to old query (remove `countWeekendDays()` call)
+4. Remove new helper methods
+
+But we recommend keeping the new logic - it's fairer to employees!
+
+## Performance Impact
+
+- Minimal: O(n) complexity where n = days in vacation period
+- No additional database queries (uses existing tables)
+- Logging adds negligible overhead
+
+## Support
+
+Need help?
+1. Check `VACATION_DEDUCTION_CALCULATION_GUIDE.md` for detailed examples
+2. Run test queries from `sql/test_vacation_deduction_calculation.sql`
+3. Check error logs for calculation breakdowns
+4. Verify holiday company assignments

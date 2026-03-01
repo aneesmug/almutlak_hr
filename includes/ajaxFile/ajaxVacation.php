@@ -3426,12 +3426,17 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             if ($is_fly_annual && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
                 $working_days = (int)$start_date_obj->format('d');
-                $working_days_salary = round($working_daily_rate * $working_days, 2);
+                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                    $working_days_salary = round($total_monthly_salary);
+                } else {
+                    $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
+                    $working_days_salary = round($working_days_daily_rate_display * $working_days);
+                }
             }
             
             // Calculate vacation salary (if Fly + Annual and vacation_salary_type = 'payroll')
             if ($is_fly_annual && $vacation_salary_type === 'payroll') {
-                $vacation_salary = round($daily_rate * $approved_days, 2);
+                $vacation_salary = round($daily_rate * $approved_days);
             }
             
             // USE STORED overtime_amount if available, otherwise recalculate
@@ -3475,23 +3480,23 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             
             // Calculate total payable - MUST MATCH vacation_report_details.php exactly
             if ($is_fly_annual) {
-                $total_payable = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction, 2);
+                $total_payable = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction, 0);
             }
         }
 
         echo json_encode([
             'status' => 200,
             'vac_type' => $vac_type,
-            'total_payable' => $total_payable,
-            'working_days_salary' => round($working_days_salary, 2),
-            'vacation_salary' => round($vacation_salary, 2),
-            'overtime_amount' => round($overtime_amount, 2),
-            'other_earnings' => round($other_earnings, 2),
-            'deduction_amount' => round($deduction_amount, 2),
-            'gosi_deduction' => round($gosi_deduction, 2),
-            'encashment_amount' => round($encashment_amount, 2),
-            'encash_gosi' => round($encash_gosi, 2),
-            'net_encashment' => round($net_encashment, 2)
+            'total_payable' => round($total_payable, 0),
+            'working_days_salary' => round($working_days_salary, 0),
+            'vacation_salary' => round($vacation_salary, 0),
+            'overtime_amount' => round($overtime_amount, 0),
+            'other_earnings' => round($other_earnings, 0),
+            'deduction_amount' => round($deduction_amount, 0),
+            'gosi_deduction' => round($gosi_deduction, 0),
+            'encashment_amount' => round($encashment_amount, 0),
+            'encash_gosi' => round($encash_gosi, 0),
+            'net_encashment' => round($net_encashment, 0)
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 500, 'message' => $e->getMessage()]);

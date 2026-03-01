@@ -1,0 +1,315 @@
+# Vacation Deduction Calculation - Visual Examples
+
+## Formula Comparison
+
+### OLD SYSTEM ❌
+```
+┌─────────────────────────────────────┐
+│  Vacation Days (5)                  │
+├─────────────────────────────────────┤
+│  Minus: Holiday Days (3)            │
+│  Result: 5 - 3 = 2 days deducted    │
+│                                     │
+│  ⚠️ WEEKEND DAYS NOT EXCLUDED!      │
+│  Employee loses vacation for        │
+│  Friday & Saturday (should be off)  │
+└─────────────────────────────────────┘
+```
+
+### NEW SYSTEM ✓
+```
+┌─────────────────────────────────────┐
+│  Vacation Days (5)                  │
+├─────────────────────────────────────┤
+│  Minus: Weekend Days (2)   ← NEW    │
+│  Minus: Holiday Days (1)   ← FIXED  │
+│  Result: 5 - 2 - 1 = 2 days         │
+│                                     │
+│  ✓ WEEKENDS EXCLUDED                │
+│  ✓ HOLIDAYS EXCLUDED                │
+│  ✓ ONLY WORKING DAYS CHARGED        │
+└─────────────────────────────────────┘
+```
+
+## Visual Calendar Example 1: Pure Weekend Vacation
+
+```
+VACATION: Friday (Feb 27) + Saturday (Feb 28)
+HOLIDAYS: None
+WEEKENDS: Friday + Saturday
+
+February 2026
+┌─────────────────────────────────────────────┐
+│ Sun │ Mon │ Tue │ Wed │ Thu │ Fri │ Sat │
+├─────────────────────────────────────────────┤
+│ 22  │ 23  │ 24  │ 25  │ 26  │ 27  │ 28  │
+│     │     │     │     │     │ [V] │ [V] │ ← VACATION
+│     │     │     │     │     │ [W] │ [W] │ ← WEEKEND
+├─────────────────────────────────────────────┤
+
+CALCULATION:
+  Total Vacation Days: 2
+  Weekend Days: 2 (Friday + Saturday)
+  Holiday Days: 0
+  ─────────────────────
+  Deductible: 2 - 2 - 0 = 0 days ✓
+
+RESULT: No vacation balance used!
+Employee still has full 30 days remaining
+```
+
+## Visual Calendar Example 2: Vacation with Holiday
+
+```
+VACATION: Thursday Feb 26 - Monday Mar 2 (5 days)
+HOLIDAYS: Eid (3 days)
+WEEKENDS: Friday + Saturday
+
+February - March 2026
+┌──────────────────────────────────────────────┐
+│ Wed │ Thu │ Fri │ Sat │ Sun │ Mon │ Tue │
+├──────────────────────────────────────────────┤
+│ 25  │ 26  │ 27  │ 28  │  1  │  2  │  3  │
+│     │ [V] │ [V] │ [V] │ [V] │ [V] │     │ ← VACATION (5 days)
+│     │     │ [W] │ [W] │     │     │     │ ← WEEKEND (2 days)
+│     │ [H] │ [H] │ [H] │ [H] │     │     │ ← HOLIDAY Eid (overlaps)
+├──────────────────────────────────────────────┤
+
+BREAKDOWN BY DAY:
+  Thu 26: VACATION + HOLIDAY = Not Charged ✓
+  Fri 27: VACATION + WEEKEND = Not Charged ✓
+  Sat 28: VACATION + WEEKEND = Not Charged ✓
+  Sun 1:  VACATION + HOLIDAY = Not Charged ✓
+  Mon 2:  VACATION + HOLIDAY = Not Charged ✓
+
+CALCULATION:
+  Total Vacation Days: 5
+  Weekend Days: 2 (Fri, Sat)
+  Holiday Days: 3 (Thu, Fri/Sat already counted, Sun)
+  
+  Actually: Only Sun counted as additional = 1 day holiday
+  ─────────────────────
+  Deductible: 5 - 2 - 1 = 2 days
+
+BUT if Eid is Thu-Sun (all 4 days):
+  Deductible: 5 - 2 - 2 = 1 day (or 0 if Eid on Thu)
+
+RESULT: Only 1-2 vacation days used
+```
+
+## Visual Calendar Example 3: Company-Specific Holidays
+
+```
+SAME VACATION FOR TWO EMPLOYEES
+Period: March 4-8 (5 days) - No weekends in this range
+
+COMPANY A: Has Eid (Mar 5-6)
+Company B: NO Eid Holiday
+
+March 2026
+┌──────────────────────────────────┐
+│ Wed │ Thu │ Fri │ Sat │ Sun │
+├──────────────────────────────────┤
+│  4  │  5  │  6  │  7  │  8  │
+│ [V] │ [V] │ [V] │ [V] │ [V] │ ← Both employees take vacation (5 days)
+│     │ [H] │ [H] │     │     │ ← Company A has these as holidays
+│     │     │     │     │     │ ← Company B does NOT have these
+└──────────────────────────────────┘
+
+EMPLOYEE FROM COMPANY A:
+  Total Vacation: 5 days
+  Weekends: 0
+  Company A Holidays: 2 (Mar 5-6)
+  Deductible: 5 - 0 - 2 = 3 days
+
+EMPLOYEE FROM COMPANY B:
+  Total Vacation: 5 days
+  Weekends: 0
+  Company B Holidays: 0
+  Deductible: 5 - 0 - 0 = 5 days
+
+RESULT: Same dates, different deductions! ✓
+```
+
+## Flow Chart: How Deduction is Calculated
+
+```
+┌─ START: Employee Takes Vacation ─┐
+│                                   │
+├─ Get Vacation Details ────────────┤
+│  • Start Date: Feb 26             │
+│  • End Date: Mar 2                │
+│  • Total Days: 5                  │
+│  • Employee Company: Company A    │
+│                                   │
+├─ Count Weekend Days ──────────────┤
+│  For each day in date range:      │
+│  • Is it Friday? → +1             │
+│  • Is it Saturday? → +1           │
+│  Result: 2 weekend days           │
+│                                   │
+├─ Count Holiday Days ──────────────┤
+│  Get Company A holidays that:     │
+│  • Are active (not archived)      │
+│  • Overlap with Feb 26 - Mar 2    │
+│  For each overlapping holiday:    │
+│  • Count days of overlap          │
+│  Result: 3 holiday days           │
+│  (but 2 overlap with weekends)    │
+│  = 1 additional holiday day       │
+│                                   │
+├─ Calculate Deduction ─────────────┤
+│  Deductible Days =                │
+│    Total Days (5)                 │
+│    - Weekend Days (2)             │
+│    - Holiday Days (1)             │
+│    = 2 days                       │
+│                                   │
+├─ Update Vacation Balance ─────────┤
+│  Balance Before: 30 days          │
+│  Deductible: 2 days               │
+│  Balance After: 28 days           │
+│                                   │
+└─ END: Deduction Complete ─────────┘
+```
+
+## Day-by-Day Breakdown Example
+
+```
+VACATION REQUEST: Feb 26 - Mar 2 (5 days)
+COMPANY A HOLIDAYS: Eid (Feb 27 - Mar 1)
+
+Date      Day          Type            Charged?
+────────  ──────────   ─────────────   ───────────
+Feb 26    Thursday     Vacation        ✗ No (Holiday)
+Feb 27    Friday       Vacation+       ✗ No (Weekend)
+                       Weekend+
+                       Holiday
+Feb 28    Saturday     Vacation+       ✗ No (Weekend)
+                       Weekend+
+                       Holiday
+Mar 1     Sunday       Vacation+       ✗ No (Holiday)
+                       Holiday
+Mar 2     Monday       Vacation+       ✓ YES (none)
+                       Holiday
+────────────────────────────────────────────────
+
+SUMMARY:
+  Days Not Charged: 4 (2 weekend + 2 holiday)
+  Days Charged: 1
+  
+  Total: 5 - 4 = 1 day charged
+  Wait... should be 2 days if Eid is 3 days
+  Recalculation: 5 - 2 (weekend) - 1 (additional holiday) = 2 ✓
+```
+
+## Comparison Table: Different Scenarios
+
+```
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                  VACATION DEDUCTION SCENARIOS                             ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ Scenario              │ Vac │ Wkd │ Hol │ Result  │ Charged │ Note       ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ 1. Weekend Only       │  2  │  2  │  0  │ 2-2-0=0 │ 0 days  │ ✓✓✓        ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ 2. Holiday Only       │  3  │  0  │  3  │ 3-0-3=0 │ 0 days  │ ✓✓✓        ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ 3. Weeknd + Holiday   │  5  │  2  │  1  │ 5-2-1=2 │ 2 days  │ ✓✓         ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ 4. Regular Vacation   │  5  │  0  │  0  │ 5-0-0=5 │ 5 days  │ Normal     ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ 5. Long w/ Holiday    │ 10  │  2  │  3  │10-2-3=5 │ 5 days  │ Efficient! ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║ 6. No Holiday Assign. │  5  │  2  │  0  │ 5-2-0=3 │ 3 days  │ Different  ║
+║    (Diff Company)     │     │     │     │         │         │ Company    ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+KEY:
+  Vac = Total Vacation Days
+  Wkd = Weekend Days (Fri + Sat)
+  Hol = Holiday Days (Company-specific, overlapping)
+  Result = Formula: Vac - Wkd - Hol
+  Charged = Days deducted from vacation balance
+```
+
+## Algorithm Flow (Pseudocode)
+
+```
+FUNCTION CalculateVacationDeduction(emp_id, vac_start, vac_end, vac_days):
+  
+  // Step 1: Get employee's company
+  company_id = GetEmployeeCompany(emp_id)
+  
+  // Step 2: Count weekend days
+  weekend_count = 0
+  FOR each day IN [vac_start, vac_end]:
+    IF IsFriday(day) OR IsSaturday(day):
+      weekend_count += 1
+  
+  // Step 3: Get holidays for this company
+  company_holidays = GetHolidaysForCompany(company_id, vac_start, vac_end)
+  
+  // Step 4: Count overlapping holiday days
+  holiday_count = 0
+  FOR each holiday IN company_holidays:
+    overlap_days = CalculateOverlap(
+      vac_start, vac_end,
+      holiday.start_date, holiday.end_date
+    )
+    holiday_count += overlap_days
+  
+  // Step 5: Calculate deductible days
+  deductible = MAX(0, vac_days - weekend_count - holiday_count)
+  
+  RETURN deductible
+END
+```
+
+## Before & After Comparison
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    EMPLOYEE PERSPECTIVE                      │
+├─────────────────────────────────────────────────────────────┤
+
+BEFORE (OLD SYSTEM):
+  "I took time off Thursday-Monday (5 days)"
+  "There were 2 holidays (Fri-Sat) in there"
+  "But I still lost 5 days from my vacation balance!"
+  ⚠️ Unfair - lost vacation for days they shouldn't work
+
+
+AFTER (NEW SYSTEM):
+  "I took time off Thursday-Monday (5 days)"
+  "There were 2 weekends (Fri-Sat) in there"
+  "There was a 3-day holiday (Eid) in there"
+  "I lost only 2 days from my vacation balance!"
+  ✓ Fair - only charged for actual working days
+
+  
+CALCULATION SHOWN:
+  5 days (total) - 2 days (weekend) - 1 day (holiday) = 2 days
+  ✓ Transparent and fair
+```
+
+## Testing Checklist
+
+```
+Use these visuals to test your implementation:
+
+☐ Test 1: Create weekend-only vacation (should = 0 charged)
+  Visual: Both days marked as [W] for weekend
+
+☐ Test 2: Create vacation with assigned holiday (should = reduced charge)
+  Visual: Holiday days marked [H], weekends [W], only [V] charged
+
+☐ Test 3: Same dates, different companies (should = different charges)
+  Visual: Company A shows [H], Company B shows no [H]
+
+☐ Test 4: Check error log shows breakdown
+  Visual: Log entry shows "weekend_days=2, holiday_days=1, deductible=2"
+
+☐ Test 5: Long vacation with multiple items
+  Visual: Mix of [V], [W], [H] showing complex overlap
+```

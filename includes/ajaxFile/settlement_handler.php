@@ -565,7 +565,11 @@ function approveSettlement($settlementManager, $currentUserId) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $working_days = (int)$start_date_obj->format('d');
-                                $working_days_salary = round($working_daily_rate * $working_days);
+                                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                                    $working_days_salary = round($total_monthly_salary);
+                                } else {
+                                    $working_days_salary = round(($total_monthly_salary / 30) * $working_days);
+                                }
                             } catch (Exception $e) {
                                 $working_days_salary = 0;
                             }
@@ -1209,7 +1213,11 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $working_days = (int)$start_date_obj->format('d');
-                                $working_days_salary = round($working_daily_rate * $working_days);
+                                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                                    $working_days_salary = round($total_monthly_salary);
+                                } else {
+                                    $working_days_salary = round(($total_monthly_salary / 30) * $working_days);
+                                }
                             } catch (Exception $e) {
                                 $working_days_salary = 0;
                             }
@@ -1713,7 +1721,11 @@ function getSettlementDetails($settlementManager) {
                     if ($is_fly_annual && !empty($vacation['start_date'])) {
                         $start_date_obj = new DateTime($vacation['start_date']);
                         $working_days = (int)$start_date_obj->format('d');
-                        $working_days_salary = round($working_daily_rate * $working_days);
+                        if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                            $working_days_salary = round($total_monthly_salary);
+                        } else {
+                            $working_days_salary = round(($total_monthly_salary / 30) * $working_days);
+                        }
                     }
                     
                     // Calculate vacation salary (Fly + Annual with payroll type only)

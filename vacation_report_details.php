@@ -262,7 +262,7 @@ if (mysqli_num_rows($query) == 1) {
             if ($is_fly_annual) {
                 // For Fly + Annual: Apply GOSI on working days + vacation salary
                 $gosi_base = $working_days_salary + $vacation_salary;
-                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 0);
             } elseif ($is_encashment) {
                 // For Encashment: GOSI calculated separately in encashment section
                 $gosi_deduction = 0;

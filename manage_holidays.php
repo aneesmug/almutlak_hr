@@ -25,10 +25,15 @@ if (mysqli_num_rows($query) == 1) {
             $date_range = trim($_POST['daterangepicker'] ?? '');
             $holiday_type = trim($_POST['holiday_type'] ?? 'other');
             $remarks = trim($_POST['remarks'] ?? '');
+            $company_ids = $_POST['company_ids'] ?? [];
             
             // Validation
             if (empty($holiday_name) || empty($date_range)) {
                 die(json_encode(['status' => 'error', 'message' => 'Holiday name and date range are required']));
+            }
+            
+            if (empty($company_ids)) {
+                die(json_encode(['status' => 'error', 'message' => 'At least one company must be selected']));
             }
             
             // Parse date range (format: "startdate - enddate")
@@ -77,10 +82,24 @@ if (mysqli_num_rows($query) == 1) {
                 $empid
             ]);
             
+            $holiday_id = $pdo->lastInsertId();
+            
+            // Assign companies to the holiday
+            $company_stmt = $pdo->prepare("INSERT INTO holiday_companies (holiday_id, company_id) VALUES (?, ?)");
+            foreach ($company_ids as $comp_id) {
+                $comp_id = (int)$comp_id;
+                try {
+                    $company_stmt->execute([$holiday_id, $comp_id]);
+                } catch (PDOException $e) {
+                    // Skip duplicate entries if transaction fails
+                    continue;
+                }
+            }
+            
             die(json_encode([
                 'status' => 'success',
                 'message' => 'Holiday added successfully',
-                'holiday_id' => $pdo->lastInsertId()
+                'holiday_id' => $holiday_id
             ]));
             
         } catch (Exception $e) {
@@ -96,9 +115,14 @@ if (mysqli_num_rows($query) == 1) {
             $date_range = trim($_POST['daterangepicker'] ?? '');
             $holiday_type = trim($_POST['holiday_type'] ?? 'other');
             $remarks = trim($_POST['remarks'] ?? '');
+            $company_ids = $_POST['company_ids'] ?? [];
             
             if (empty($holiday_id) || empty($holiday_name) || empty($date_range)) {
                 die(json_encode(['status' => 'error', 'message' => 'All fields are required']));
+            }
+            
+            if (empty($company_ids)) {
+                die(json_encode(['status' => 'error', 'message' => 'At least one company must be selected']));
             }
             
             // Parse date range
@@ -144,6 +168,22 @@ if (mysqli_num_rows($query) == 1) {
                 $empid,
                 $holiday_id
             ]);
+            
+            // Update company assignments: delete old and insert new
+            $delete_stmt = $pdo->prepare("DELETE FROM holiday_companies WHERE holiday_id = ?");
+            $delete_stmt->execute([$holiday_id]);
+            
+            // Insert new company assignments
+            $company_stmt = $pdo->prepare("INSERT INTO holiday_companies (holiday_id, company_id) VALUES (?, ?)");
+            foreach ($company_ids as $comp_id) {
+                $comp_id = (int)$comp_id;
+                try {
+                    $company_stmt->execute([$holiday_id, $comp_id]);
+                } catch (PDOException $e) {
+                    // Skip duplicate entries
+                    continue;
+                }
+            }
             
             die(json_encode(['status' => 'success', 'message' => 'Holiday updated successfully']));
             
@@ -208,20 +248,63 @@ if (mysqli_num_rows($query) == 1) {
                 die(json_encode(['status' => 'error', 'message' => 'Holiday not found']));
             }
             
+            // Get assigned companies for this holiday
+            $comp_stmt = $pdo->prepare("
+                SELECT hc.company_id, c.comp_name 
+                FROM holiday_companies hc
+                JOIN companies c ON hc.company_id = c.id
+                WHERE hc.holiday_id = ?
+            ");
+            $comp_stmt->execute([$holiday_id]);
+            $companies = $comp_stmt->fetchAll(PDO::FETCH_ASSOC);
+            $holiday['assigned_companies'] = $companies;
+            $holiday['company_ids'] = array_column($companies, 'company_id');
+            
             die(json_encode(['status' => 'success', 'data' => $holiday]));
             
         } catch (Exception $e) {
             die(json_encode(['status' => 'error', 'message' => $e->getMessage()]));
         }
     }
+    
+    // ===== GET COMPANIES LIST =====
+    if ($action === 'get_companies') {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id, comp_name, comp_id 
+                FROM companies 
+                WHERE 1=1 
+                ORDER BY comp_name ASC
+            ");
+            $stmt->execute();
+            $companies = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            die(json_encode(['status' => 'success', 'data' => $companies]));
+            
+        } catch (Exception $e) {
+            die(json_encode(['status' => 'error', 'message' => $e->getMessage()]));
+        }
+    }
 
-    // Page is loading - fetch holidays for display (both active and inactive)
+    // Page is loading - fetch holidays for display with company assignments
     $stmt = $pdo->prepare("
-        SELECT * FROM emp_holidays 
-        ORDER BY start_date DESC
+        SELECT h.* FROM emp_holidays h
+        ORDER BY h.start_date DESC
     ");
     $stmt->execute();
     $holidays = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Fetch company assignments for each holiday
+    foreach ($holidays as &$holiday) {
+        $comp_stmt = $pdo->prepare("
+            SELECT hc.company_id, c.comp_name 
+            FROM holiday_companies hc
+            JOIN companies c ON hc.company_id = c.id
+            WHERE hc.holiday_id = ?
+        ");
+        $comp_stmt->execute([$holiday['id']]);
+        $holiday['assigned_companies'] = $comp_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -327,6 +410,24 @@ if (mysqli_num_rows($query) == 1) {
                                     <h4 class="m-t-0 header-title">Holiday Management</h4>
                                     <p class="text-muted">Manage company holidays for vacation deduction calculations</p>
                                     
+                                    <!-- Info Box: Vacation Deduction Logic -->
+                                    <div class="alert alert-info alert-styled-left" style="margin-bottom: 20px; background-color: #e3f2fd; border-left: 4px solid #2196F3;">
+                                        <strong>💡 How Vacation Deduction Works:</strong>
+                                        <br>
+                                        <small>
+                                            <strong>Formula:</strong> Deductible Days = Total Vacation Days − Weekend Days − Holiday Days
+                                            <br>
+                                            <strong>Example:</strong> 5-day vacation from Thursday to Monday:
+                                            <ul style="margin: 5px 0 5px 20px; font-size: 0.9rem;">
+                                                <li>Total vacation: 5 days (Thu, Fri, Sat, Sun, Mon)</li>
+                                                <li>Weekends (Fri, Sat): 2 days (NOT deducted)</li>
+                                                <li>Eid holiday (3 days): 3 days (NOT deducted)</li>
+                                                <li><strong>Result: 5 − 2 − 3 = 0 days deducted</strong> ✓</li>
+                                            </ul>
+                                            <strong>Note:</strong> Holidays are filtered by employee's company. Weekends (Friday & Saturday) are always excluded.
+                                        </small>
+                                    </div>
+                                    
                                     <div style="margin-bottom: 20px;">
                                         <button class="btn btn-primary waves-effect" onclick="openAddHolidayModal()" style="margin-right: 10px;">
                                             <i class="mdi mdi-plus"></i> Add Holiday
@@ -351,6 +452,7 @@ if (mysqli_num_rows($query) == 1) {
                                                         <th>Start Date</th>
                                                         <th>End Date</th>
                                                         <th>Days</th>
+                                                        <th>Companies</th>
                                                         <th>Type</th>
                                                         <th>Status</th>
                                                         <th>Actions</th>
@@ -363,6 +465,15 @@ if (mysqli_num_rows($query) == 1) {
                                                             <td><?= date('M d, Y', strtotime($holiday['start_date'])) ?></td>
                                                             <td><?= date('M d, Y', strtotime($holiday['end_date'])) ?></td>
                                                             <td><span class="badge badge-info"><?= $holiday['total_days'] ?> days</span></td>
+                                                            <td>
+                                                                <?php if (!empty($holiday['assigned_companies'])): ?>
+                                                                    <?php foreach ($holiday['assigned_companies'] as $company): ?>
+                                                                        <span class="badge badge-primary" style="margin: 2px;"><?= htmlspecialchars($company['comp_name']) ?></span>
+                                                                    <?php endforeach; ?>
+                                                                <?php else: ?>
+                                                                    <span class="badge badge-danger">No Companies</span>
+                                                                <?php endif; ?>
+                                                            </td>
                                                             <td>
                                                                 <?php 
                                                                     $type_classes = [
@@ -490,6 +601,55 @@ if (mysqli_num_rows($query) == 1) {
                     }
                 }
             }
+            
+            function loadCompaniesForSelect(selectElement, selectedIds = []) {
+                $.ajax({
+                    url: 'manage_holidays.php',
+                    type: 'GET',
+                    data: { action: 'get_companies' },
+                    dataType: 'json',
+                    success: function(res) {
+                        if (res.status === 'success') {
+                            const $select = $(selectElement);
+                            $select.empty();
+                            
+                            // Add default option
+                            $select.append('<option></option>');
+                            
+                            res.data.forEach(function(company) {
+                                $select.append(
+                                    '<option value=\"' + company.id + '\">' + 
+                                    $('<div/>').text(company.comp_name).html() + 
+                                    '</option>'
+                                );
+                            });
+                            
+                            // Initialize or reinitialize Select2
+                            if ($select.hasClass('select2-hidden-accessible')) {
+                                $select.select2('destroy');
+                            }
+                            
+                            $select.select2({
+                                allowClear: true,
+                                placeholder: 'Select one or more companies',
+                                width: '100%'
+                            });
+                            
+                            // Pre-select values if provided
+                            if (Array.isArray(selectedIds) && selectedIds.length > 0) {
+                                $select.val(selectedIds).trigger('change');
+                            }
+                        } else {
+                            console.error('Error loading companies:', res.message);
+                            Swal.fire('Error', 'Failed to load companies', 'error');
+                        }
+                    },
+                    error: function() {
+                        console.error('Error loading companies');
+                        Swal.fire('Error', 'Error loading companies', 'error');
+                    }
+                });
+            }
 
             $(document).ready(function() {
                 // Initialize DataTable
@@ -566,6 +726,11 @@ if (mysqli_num_rows($query) == 1) {
                             </div>
                             
                             <div class="form-group">
+                                <label for="companies_select_add" class="text-left">Assign to Companies <span class="text-danger">*</span></label>
+                                <select class="form-control select2-multi" id="companies_select_add" multiple="multiple" data-placeholder="Select one or more companies"></select>
+                            </div>
+                            
+                            <div class="form-group">
                                 <label for="holiday_type" class="text-left">Holiday Type</label>
                                 <select class="form-control" id="holiday_type">
                                     <option value="religious">Religious</option>
@@ -581,6 +746,9 @@ if (mysqli_num_rows($query) == 1) {
                         </div>
                     `,
                     didOpen: function() {
+                        // Load companies
+                        loadCompaniesForSelect('#companies_select_add');
+                        
                         // Initialize date range picker after modal is shown
                         $('#daterangepicker_add').daterangepicker({
                             locale: {
@@ -605,6 +773,7 @@ if (mysqli_num_rows($query) == 1) {
                     preConfirm: function() {
                         const holidayName = document.getElementById('holiday_name').value.trim();
                         const dateRange = document.getElementById('daterangepicker_add').value.trim();
+                        const companies = $('#companies_select_add').val();
                         
                         if (!holidayName) {
                             Swal.showValidationMessage('Please enter holiday name');
@@ -616,12 +785,18 @@ if (mysqli_num_rows($query) == 1) {
                             return false;
                         }
                         
+                        if (!companies || companies.length === 0) {
+                            Swal.showValidationMessage('Please select at least one company');
+                            return false;
+                        }
+                        
                         return {
                             holiday_id: '',
                             holiday_name: holidayName,
                             daterangepicker: dateRange,
                             holiday_type: document.getElementById('holiday_type').value,
-                            remarks: document.getElementById('remarks').value.trim()
+                            remarks: document.getElementById('remarks').value.trim(),
+                            company_ids: companies
                         };
                     }
                 }).then((result) => {
@@ -663,6 +838,13 @@ if (mysqli_num_rows($query) == 1) {
                                         </div>
                                         
                                         <div class="form-group">
+                                            <label for="companies_select_edit" class="text-left">Assign to Companies <span class="text-danger">*</span></label>
+                                            <select class="form-control select2-multi" id="companies_select_edit" multiple="multiple" data-placeholder="Select one or more companies"></select>
+                                        </div>
+                                        
+                                        <div class="form-group">
+                                            <label for="holiday_type_edit" class="text-left">Holiday Type</label>
+                                            <select class="form-control" id="holiday_type_edit">
                                             <label for="holiday_type_edit" class="text-left">Holiday Type</label>
                                             <select class="form-control" id="holiday_type_edit">
                                                 <option value="religious" ${data.holiday_type === 'religious' ? 'selected' : ''}>Religious</option>
@@ -678,6 +860,9 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 `,
                                 didOpen: function() {
+                                    // Load companies and pre-select assigned ones
+                                    loadCompaniesForSelect('#companies_select_edit', data.company_ids || []);
+                                    
                                     // Initialize date range picker after modal is shown
                                     $('#daterangepicker_edit').daterangepicker({
                                         startDate: startDate,
@@ -699,6 +884,7 @@ if (mysqli_num_rows($query) == 1) {
                                 preConfirm: function() {
                                     const holidayName = document.getElementById('holiday_name_edit').value.trim();
                                     const dateRange = document.getElementById('daterangepicker_edit').value.trim();
+                                    const companies = $('#companies_select_edit').val();
                                     
                                     if (!holidayName) {
                                         Swal.showValidationMessage('Please enter holiday name');
@@ -710,12 +896,18 @@ if (mysqli_num_rows($query) == 1) {
                                         return false;
                                     }
                                     
+                                    if (!companies || companies.length === 0) {
+                                        Swal.showValidationMessage('Please select at least one company');
+                                        return false;
+                                    }
+                                    
                                     return {
                                         holiday_id: data.id,
                                         holiday_name: holidayName,
                                         daterangepicker: dateRange,
                                         holiday_type: document.getElementById('holiday_type_edit').value,
-                                        remarks: document.getElementById('remarks_edit').value.trim()
+                                        remarks: document.getElementById('remarks_edit').value.trim(),
+                                        company_ids: companies
                                     };
                                 }
                             }).then((result) => {
@@ -741,6 +933,15 @@ if (mysqli_num_rows($query) == 1) {
                 formData.append('daterangepicker', data.daterangepicker);
                 formData.append('holiday_type', data.holiday_type);
                 formData.append('remarks', data.remarks);
+                
+                // Append company IDs
+                if (data.company_ids && Array.isArray(data.company_ids)) {
+                    data.company_ids.forEach(function(companyId) {
+                        formData.append('company_ids[]', companyId);
+                    });
+                } else if (data.company_ids) {
+                    formData.append('company_ids[]', data.company_ids);
+                }
                 
                 $.ajax({
                     url: 'manage_holidays.php',

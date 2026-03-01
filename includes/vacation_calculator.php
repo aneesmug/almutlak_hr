@@ -267,17 +267,131 @@ class VacationCalculator {
         }
     }
 
+    
     /**
-     * Gets the sum of all GM-approved vacation days for an employee within a given date range.
+     * Counts weekend days (Friday & Saturday in Saudi Arabia) within a date range
      *
-     * @param string $emp_id The employee's ID.
-     * @param DateTime $period_start The start of the period.
-     * @param DateTime $period_end The end of the period.
-     * @return float The total vacation days used.
+     * @param string $start_date Date in Y-m-d format
+     * @param string $end_date Date in Y-m-d format
+     * @return int Number of weekend days in the range
      */
-    private function getUsedVacationDays($emp_id, DateTime $period_start, DateTime $period_end) {
+    private function countWeekendDays($start_date, $end_date) {
+        $start = new DateTime($start_date);
+        $end = new DateTime($end_date);
+        $end->modify('+1 day'); // Include end date in range
+        
+        $weekend_count = 0;
+        $current = clone $start;
+        
+        while ($current < $end) {
+            $day_of_week = (int)$current->format('N'); // 1=Monday, 7=Sunday
+            // Friday = 5, Saturday = 6 (Saudi weekend)
+            if ($day_of_week === 5 || $day_of_week === 6) {
+                $weekend_count++;
+            }
+            $current->modify('+1 day');
+        }
+        
+        return $weekend_count;
+    }
+
+    /**
+     * Counts holiday days that fall within a date range
+     *
+     * @param string $emp_id Employee ID
+     * @param string $start_date Date in Y-m-d format
+     * @param string $end_date Date in Y-m-d format
+     * @param int|null $company_id Company ID for filtering (optional)
+     * @return float Total holiday days that overlap with the date range
+     */
+    private function countHolidayDaysInRange($emp_id, $start_date, $end_date, $company_id = null) {
+        // Build query to get holidays that overlap with vacation period
+        $holiday_query = "SELECT h.start_date, h.end_date, h.total_days 
+                         FROM emp_holidays h
+                         LEFT JOIN holiday_companies hc ON h.id = hc.holiday_id
+                         WHERE h.is_active = 1 
+                         AND h.start_date <= ? 
+                         AND h.end_date >= ?";
+        
+        // If company_id is provided, filter by company
+        if ($company_id !== null) {
+            $holiday_query .= " AND (hc.company_id = ? OR hc.holiday_id IS NULL)";
+        }
+        
+        $h_stmt = $this->conDB->prepare($holiday_query);
+        if (!$h_stmt) {
+            error_log("countHolidayDaysInRange prepare failed");
+            return 0;
+        }
+        
+        if ($company_id !== null) {
+            $h_stmt->bind_param("ssi", $end_date, $start_date, $company_id);
+        } else {
+            $h_stmt->bind_param("ss", $end_date, $start_date);
+        }
+        
+        if (!$h_stmt->execute()) {
+            error_log("countHolidayDaysInRange execute failed");
+            $h_stmt->close();
+            return 0;
+        }
+        
+        $h_result = $h_stmt->get_result();
+        $total_holiday_days = 0;
+        $vacation_start = new DateTime($start_date);
+        $vacation_end = new DateTime($end_date);
+        
+        while ($holiday_row = $h_result->fetch_assoc()) {
+            $holiday_start = new DateTime($holiday_row['start_date']);
+            $holiday_end = new DateTime($holiday_row['end_date']);
+            
+            // Calculate overlap between holiday and vacation
+            $overlap_start = max($vacation_start, $holiday_start);
+            $overlap_end = min($vacation_end, $holiday_end);
+            
+            if ($overlap_start <= $overlap_end) {
+                // There is an overlap - count the overlapping days
+                $interval = $overlap_start->diff($overlap_end);
+                $overlapping_days = $interval->days + 1; // +1 to include both start and end dates
+                $total_holiday_days += $overlapping_days;
+            }
+        }
+        
+        $h_result->free();
+        $h_stmt->close();
+        
+        return $total_holiday_days;
+    }
+
+    /**
+     * Gets the total vacation days used by an employee within a given period.
+     * This method calculates deductions excluding both weekend days (Friday & Saturday)
+     * and company-specific holidays that fall within the vacation period.
+     *
+     * @param string $emp_id The employee ID
+     * @param DateTime $period_start The start of the period
+     * @param DateTime $period_end The end of the period
+     * @return float Total vacation days used (deducting weekends and holidays)
+     */
+    private function getUsedVacationDays($emp_id, $period_start, $period_end) {
         $start_str = $period_start->format('Y-m-d');
         $end_str = $period_end->format('Y-m-d');
+
+        // Get employee's company ID for holiday filtering
+        $emp_query = "SELECT `comp_no` FROM `employees` WHERE `emp_id` = ? LIMIT 1";
+        $emp_stmt = $this->conDB->prepare($emp_query);
+        $emp_company_id = null;
+        if ($emp_stmt) {
+            $emp_stmt->bind_param("s", $emp_id);
+            $emp_stmt->execute();
+            $emp_result = $emp_stmt->get_result();
+            if ($emp_result && $emp_result->num_rows > 0) {
+                $emp_row = $emp_result->fetch_assoc();
+                $emp_company_id = (int)$emp_row['comp_no'];
+            }
+            $emp_result->free();
+            $emp_stmt->close();
+        }
 
         // CRITICAL FIX: Emergency vacations are NOT deducted from available_balance
         // They are special leave that doesn't count against the employee's allocation.
@@ -302,7 +416,7 @@ class VacationCalculator {
             return 0;
         }
         
-        // === FIX: Calculate total with full holiday deduction ===
+        // === FIX: Calculate total with full holiday deduction (filtered by company) ===
         $result = $stmt->get_result();
         $total_used_days = 0.0;
         
@@ -311,35 +425,20 @@ class VacationCalculator {
             $vac_start = $vacation_row['start_date'];
             $vac_end = $vacation_row['return_date'];
             
-            // Get ALL active holidays that exist during this vacation period
-            // Business rule: subtract ALL holiday days, not just overlap
-            $holiday_query = "SELECT total_days FROM emp_holidays 
-                            WHERE is_active = 1 
-                            AND start_date <= ? 
-                            AND end_date >= ? ";
-            $h_stmt = $this->conDB->prepare($holiday_query);
-            if ($h_stmt) {
-                $h_stmt->bind_param("ss", $vac_end, $vac_start);
-                $h_stmt->execute();
-                $h_result = $h_stmt->get_result();
-                
-                $total_holiday_days = 0;
-                while ($holiday_row = $h_result->fetch_assoc()) {
-                    // Use the total_days field directly - this is the full holiday period
-                    $holiday_total = (float)($holiday_row['total_days'] ?? 0);
-                    $total_holiday_days += $holiday_total;
-                }
-                
-                $h_result->free();
-                $h_stmt->close();
-                
-                // Deductible days = vacation days - total holiday days
-                $deductible_days = max(0, $vac_days - $total_holiday_days);
-                $total_used_days += $deductible_days;
-            } else {
-                // If holiday query fails, use full vacation days (safer fallback)
-                $total_used_days += $vac_days;
-            }
+            // NEW: Count weekend days (Friday & Saturday) in vacation period
+            $weekend_days = $this->countWeekendDays($vac_start, $vac_end);
+            
+            // Count holiday days that overlap with vacation period (filtered by company)
+            $holiday_days = $this->countHolidayDaysInRange($emp_id, $vac_start, $vac_end, $emp_company_id);
+            
+            // Deductible days = vacation days - weekend days - holiday days
+            // This ensures that weekends and holidays are NOT charged against vacation balance
+            $deductible_days = max(0, $vac_days - $weekend_days - $holiday_days);
+            $total_used_days += $deductible_days;
+            
+            error_log("Vacation Deduction: emp=$emp_id, period=$vac_start to $vac_end, " .
+                      "total_vacation_days=$vac_days, weekend_days=$weekend_days, " .
+                      "holiday_days=$holiday_days, deductible_days=$deductible_days");
         }
         
         $result->free();
@@ -686,7 +785,6 @@ function update_vacation_balance_on_approval(mysqli $conDB, $vacation_id) {
             error_log("No rows affected when updating vacation balance for emp_id: $emp_id");
             return false;
         }
-        
     } catch (Exception $e) {
         error_log("Error in update_vacation_balance_on_approval: " . $e->getMessage());
         return false;

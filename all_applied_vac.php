@@ -3981,22 +3981,22 @@ if ($can_see_all_depts) {
                         
                         if (isEncashed) {
                             // For Encashed vacations, use encashment-specific data
-                            const encashmentAmount = parseFloat(vacationData.encashment_amount || 0);
-                            const encashGosi = parseFloat(vacationData.encash_gosi || 0);
+                            const encashmentAmount = Math.round(parseFloat(vacationData.encashment_amount || 0));
+                            const encashGosi = Math.round(parseFloat(vacationData.encash_gosi || 0));
                             const netEncashmentRaw = parseFloat(vacationData.net_encashment || (encashmentAmount - encashGosi));
-                            const netEncashment = Math.ceil(Math.max(0, netEncashmentRaw));
+                            const netEncashment = Math.round(Math.max(0, netEncashmentRaw));
                             
                             showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, netEncashment, 0, 0, 0, 0, 0, 0, true, encashmentAmount, encashGosi);
                         } else {
                             // For Annual Fly vacations, use the normal total_payable calculation
                             const totalPayableRaw = parseFloat(vacationData.total_payable || 0);
-                            const totalPayable = Math.ceil(Math.max(0, totalPayableRaw));
-                            const workingDaysSalary = parseFloat(vacationData.working_days_salary || 0);
-                            const vacationSalary = parseFloat(vacationData.vacation_salary || 0);
-                            const overtimeAmount = parseFloat(vacationData.overtime_amount || 0);
-                            const otherEarnings = parseFloat(vacationData.other_earnings || 0);
-                            const deductionAmount = parseFloat(vacationData.deduction_amount || 0);
-                            const gosiDeduction = parseFloat(vacationData.gosi_deduction || 0);
+                            const totalPayable = Math.round(Math.max(0, totalPayableRaw));
+                            const workingDaysSalary = Math.round(parseFloat(vacationData.working_days_salary || 0));
+                            const vacationSalary = Math.round(parseFloat(vacationData.vacation_salary || 0));
+                            const overtimeAmount = Math.round(parseFloat(vacationData.overtime_amount || 0));
+                            const otherEarnings = Math.round(parseFloat(vacationData.other_earnings || 0));
+                            const deductionAmount = Math.round(parseFloat(vacationData.deduction_amount || 0));
+                            const gosiDeduction = Math.round(parseFloat(vacationData.gosi_deduction || 0));
                             
                             showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, false, 0, 0);
                         }
