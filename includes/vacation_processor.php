@@ -140,10 +140,12 @@ class VacationProcessor
                 if (!in_array($vacation['vac_type'], $non_balance_deductible_leaves)) {
                     $this->calculator->calculateVacationBalance($vacation['emp_id'], $vacation_id);
                 }
-    
-                if ($vacation['vac_type'] !== 'Encashed') {
-                    $this->updateEmployeeFlyStatus($vacation['emp_id'], 1);
-                }
+                
+                // ❌ DISABLED: fly=1 should ONLY be set when start_date arrives (see session_check.php:552)
+                // DO NOT set fly=1 during approval - it will be set automatically when vacation starts
+                // if ($vacation['vac_type'] !== 'Encashed') {
+                //     $this->updateEmployeeFlyStatus($vacation['emp_id'], 1);
+                // }
             }
     
             return ['success' => true, 'message' => 'Vacation approval status has been updated.'];

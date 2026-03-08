@@ -441,13 +441,13 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                 <h4 class="header-title m-t-0 m-b-30"><?= __('all_employees_grouping') ?></h4>
                                 <ul class="nav nav-tabs tabs-bordered">
                                     <li class="nav-item">
-                                        <a href="#bydepartment-b1" data-toggle="tab" aria-expanded="false" class="nav-link active show">
-                                            <i class="fi-monitor mr-2"></i> <?= __('departments') ?>
+                                        <a href="#bycompany-b1" data-toggle="tab" aria-expanded="false" class="nav-link active show">
+                                            <i class="fa fa-layer-group mr-2"></i> <?= __('companies') ?>
                                         </a>
                                     </li>
                                     <li class="nav-item">
-                                        <a href="#bycompany-b1" data-toggle="tab" aria-expanded="false" class="nav-link">
-                                            <i class="fa fa-layer-group mr-2"></i> <?= __('companies') ?>
+                                        <a href="#bydepartment-b1" data-toggle="tab" aria-expanded="false" class="nav-link">
+                                            <i class="fi-monitor mr-2"></i> <?= __('departments') ?>
                                         </a>
                                     </li>
                                     <li class="nav-item">
@@ -457,7 +457,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                     </li>
                                 </ul>
                                 <div class="tab-content">
-                                    <div class="tab-pane active show" id="bydepartment-b1">
+                                    <div class="tab-pane" id="bydepartment-b1">
                                         <!-- <div class="tab-pane" id="bydepartment-b1"> -->
                                         <?php  ?><div class="row text-center">
 
@@ -546,7 +546,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
 
                                         </div>
                                     </div>
-                                    <div class="tab-pane" id="bycompany-b1">
+                                    <div class="tab-pane active show" id="bycompany-b1">
                                         <!-- <div class="tab-pane" id="bydepartment-b1"> -->
                                         <?php  ?><div class="row text-center">
 
@@ -589,7 +589,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                     $compCount = (int)$rec["empcountgrp"];
                                                     $percentage = round(($compCount / $totalEmployees) * 100, 1);
                                             ?>
-                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='filter_employee_by_comp.php?page=1&status=1&comp=<?= $rec["comp_no"] ?>'" style="cursor: pointer;">
+                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='company_departments_employees.php?company=<?= $rec["comp_no"] ?>'" style="cursor: pointer;">
                                                     <div class="stats-card" data-color="<?= $cardColor ?>">
                                                         <div class="stats-card-icon" data-color="<?= $cardColor ?>">
                                                             <div class="stats-card-count-circle"><?= $compCount ?></div>

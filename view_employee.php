@@ -2049,6 +2049,7 @@ if (mysqli_num_rows($query) == 1) {
 
 		<!-- App js -->
 		<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+		<script src="assets/js/businessTrip.js?t=<?= time() ?>"></script>
 		<script src="assets/js/empVacationHandle.js"></script>
 
 		<!-- Dropzone JS -->

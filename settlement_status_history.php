@@ -107,7 +107,8 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             if ($is_fly_annual && !empty($settlement['start_date'])) {
                 try {
                     $start_date_obj = new DateTime($settlement['start_date']);
-                    $working_days = (int)$start_date_obj->format('d');
+                    // Exclude the start day from working-days salary (working days BEFORE departure)
+                    $working_days = (int)$start_date_obj->format('d') - 1;
                     if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
                         $working_days_salary = round($total_monthly_salary);
                     } else {

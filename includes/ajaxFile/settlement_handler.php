@@ -564,7 +564,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         if ($is_fly_annual && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
-                                $working_days = (int)$start_date_obj->format('d');
+                                $working_days = (int)$start_date_obj->format('d') - 1;
                                 if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
                                     $working_days_salary = round($total_monthly_salary);
                                 } else {
@@ -1212,7 +1212,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         if ($is_fly_annual && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
-                                $working_days = (int)$start_date_obj->format('d');
+                                $working_days = (int)$start_date_obj->format('d') - 1;
                                 if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
                                     $working_days_salary = round($total_monthly_salary);
                                 } else {
@@ -1720,7 +1720,8 @@ function getSettlementDetails($settlementManager) {
                     // Calculate working days salary (Fly + Annual only)
                     if ($is_fly_annual && !empty($vacation['start_date'])) {
                         $start_date_obj = new DateTime($vacation['start_date']);
-                        $working_days = (int)$start_date_obj->format('d');
+                        // Exclude the start day from working-days salary (working days BEFORE departure)
+                        $working_days = (int)$start_date_obj->format('d') - 1;
                         if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
                             $working_days_salary = round($total_monthly_salary);
                         } else {
@@ -1877,4 +1878,5 @@ function getEmployeeSettlements($settlementManager, $currentUserId) {
 }
 
 ?>
+
 

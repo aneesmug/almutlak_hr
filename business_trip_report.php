@@ -1,0 +1,528 @@
+<?php
+/****************************************************************
+ * Business Trip Report - Detail View
+ * 
+ * Displays comprehensive business trip request details with:
+ * - Trip information (dates, destination, purpose, etc.)
+ * - Employee and department info
+ * - Approval chain timeline
+ * - Print-friendly formatting
+ * 
+ * Similar structure to vacation_report_details.php
+ ****************************************************************/
+
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/session_check.php';
+
+$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
+if (mysqli_num_rows($query) == 1) {
+    include("./includes/avatar_select.php");
+
+    // 1. Get and validate the IDs from the URL
+    $trip_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    $emp_id = isset($_GET['emp_id']) ? $_GET['emp_id'] : '';
+
+    if ($trip_id === 0 || empty($emp_id)) {
+        die("Invalid request parameters.");
+    }
+
+    // 2. Get Request Type ID for business_trip
+    $type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'business_trip' LIMIT 1");
+    if (!$type_query || mysqli_num_rows($type_query) == 0) {
+        die("CRITICAL ERROR: 'business_trip' type not found in `approval_request_types` table.");
+    }
+    $request_type_id = (int)mysqli_fetch_assoc($type_query)['id'];
+    mysqli_free_result($type_query);
+    $sql = "SELECT 
+                bt.*,
+                e.name as employee_name,
+                e.avatar,
+                e.emp_id,
+                d.dep_nme AS dept_name,
+                d.dep_nme_ar AS dept_name_ar,
+                s.section_name,
+                fc.name_en as from_city_name_en,
+                fc.name_ar as from_city_name_ar,
+                tc.name_en as to_city_name_en,
+                tc.name_ar as to_city_name_ar,
+                c.name AS destination_country_name
+            FROM emp_business_trip bt
+            JOIN employees e ON bt.emp_id = e.emp_id
+            LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN section s ON e.sectin_nme = s.id
+            LEFT JOIN saudi_cities fc ON bt.from_city_id = fc.id
+            LEFT JOIN saudi_cities tc ON bt.to_city_id = tc.id
+            LEFT JOIN countries c ON bt.destination_country = c.name
+            WHERE bt.id = ? AND bt.emp_id = ?";
+
+    $stmt = $conDB->prepare($sql);
+    $stmt->bind_param("is", $trip_id, $emp_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $request = $result->fetch_assoc();
+    $stmt->close();
+
+    if (!$request) {
+        die("Business trip request not found.");
+    }
+
+    // 4. Fetch approval chain
+    $approval_chain = [];
+    $request_inv_no = $request['request_inv_no'] ?? '';
+    
+    if (!empty($request_inv_no)) {
+        // Fetch the approval chain using the request_type_id we already retrieved
+        $chain_sql = "SELECT ra.*,
+                       e.name AS approver_name,
+                       e.emp_id AS approver_emp_id,
+                       al.user_type AS approver_role,
+                       d2.dep_nme AS approver_dept_name
+                   FROM request_approvers ra
+                   LEFT JOIN employees e ON ra.approver_id = e.emp_id
+                   LEFT JOIN admin_login al ON e.emp_id = al.emp_id
+                   LEFT JOIN department d2 ON e.dept = d2.id
+                   WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
+                   ORDER BY ra.approval_level ASC";
+        $stmt_chain = $conDB->prepare($chain_sql);
+        if ($stmt_chain) {
+            $stmt_chain->bind_param("si", $request_inv_no, $request_type_id);
+            $stmt_chain->execute();
+            $chain_result = $stmt_chain->get_result();
+            while ($chain_row = $chain_result->fetch_assoc()) {
+                $approval_chain[] = $chain_row;
+            }
+            $stmt_chain->close();
+        }
+    }
+
+    // 5. Format trip destination display
+    $trip_type = $request['trip_type'] ?? 'domestic';
+    $destination_display = '';
+    
+    if ($trip_type === 'international') {
+        $destination_display = htmlspecialchars((string)($request['destination_country_name'] ?? $request['destination_country'] ?? 'N/A'));
+    } else {
+        $from_city = ($is_rtl ?? false) ? ($request['from_city_name_ar'] ?? '') : ($request['from_city_name_en'] ?? '');
+        $to_city = ($is_rtl ?? false) ? ($request['to_city_name_ar'] ?? '') : ($request['to_city_name_en'] ?? '');
+        $destination_display = htmlspecialchars(trim($from_city) . ' → ' . trim($to_city));
+    }
+
+    // 6. Get current request status details
+    $current_status = $request['current_status'] ?? 'pending_approval';
+    $status_badge_class = 'secondary';
+    if ($current_status === 'pending_approval') $status_badge_class = 'warning';
+    if ($current_status === 'approved') $status_badge_class = 'success';
+    if ($current_status === 'rejected') $status_badge_class = 'danger';
+    if ($current_status === 'completed') $status_badge_class = 'info';
+
+?>
+
+<!doctype html>
+<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
+<head>
+    <meta charset="utf-8" />
+    <title><?= $site_title ?> - Business Trip Report</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <script src="assets/js/modernizr.min.js"></script>
+    <?php if ($is_rtl): ?>
+        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+    <?php endif; ?>
+    <script>
+        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+    </script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --text-color: #333;
+            --muted-color: #6c757d;
+            --border-color: #e9ecef;
+            --background-light: #f8f9fa;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+        }
+        body.enlarged {
+            background-color: #f4f7f6;
+        }
+        .report-wrapper {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 800px;
+            margin: 1rem auto;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.08);
+            color: var(--text-color);
+            font-size: 14px;
+        }
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .report-header .logo-container img { max-height: 40px; }
+        .report-header .report-meta { text-align: right; }
+        .report-header .report-title { font-size: 1.1rem; font-weight: 600; margin: 0; }
+        .report-header .report-subtitle { font-size: 0.8rem; color: var(--muted-color); margin: 0; }
+        
+        [dir="rtl"] .report-header { flex-direction: row-reverse; }
+        [dir="rtl"] .report-header .report-meta { text-align: left; }
+        
+        .report-body { padding: 1.5rem; }
+        
+        .employee-banner { display: flex; align-items: center; background-color: var(--background-light); padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid var(--border-color); }
+        .employee-banner .avatar { width: 60px; height: 60px; border-radius: 50%; margin-right: 1rem; object-fit: cover; }
+        .employee-banner .info { flex: 1; }
+        .employee-banner .info h4 { font-weight: 600; margin: 0 0 0.2rem 0; font-size: 1.1rem; }
+        .employee-banner .info p { color: var(--muted-color); margin: 0; font-size: 0.85rem; }
+        .employee-banner .status-badge { font-size: 0.85rem; padding: 0.35rem 0.75rem; }
+
+        [dir="rtl"] .employee-banner { flex-direction: row-reverse; }
+        [dir="rtl"] .employee-banner .avatar { margin-right: 0; margin-left: 1rem; order: 2; }
+        [dir="rtl"] .employee-banner .info { order: 1; text-align: right; }
+
+        .report-section { margin-bottom: 1.5rem; }
+        .section-title { font-weight: 600; color: var(--primary-color); margin-bottom: 1rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+        .section-title i { margin-right: 0.5rem; }
+        [dir="rtl"] .section-title i { margin-right: 0; margin-left: 0.5rem; }
+
+        .grid-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .detail-item .label { font-size: 0.8rem; color: var(--muted-color); margin-bottom: 0.1rem; }
+        .detail-item .value { font-weight: 500; font-size: 0.9rem; }
+        .detail-item .value.highlight { font-weight: 700; color: var(--success-color); }
+
+        .info-box { background-color: #e8f4f8; border-left: 4px solid var(--info-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; margin-bottom: 1rem; }
+        [dir="rtl"] .info-box { border-left: none; border-right: 4px solid var(--info-color); }
+
+        .approval-timeline { position: relative; padding-left: 5px; }
+        .timeline-item { position: relative; padding-bottom: 1rem; padding-left: 30px; min-height: 20px; }
+        .timeline-item:last-child { padding-bottom: 0; }
+        .timeline-item::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 0; width: 2px; background: var(--border-color); }
+        .timeline-item:last-child::before { display: none; }
+        .timeline-item .icon { position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; flex-shrink: 0; }
+        .timeline-item.approved .icon { background-color: var(--success-color); }
+        .timeline-item.pending .icon { background-color: var(--warning-color); }
+        .timeline-item.rejected .icon { background-color: var(--danger-color); }
+        .timeline-item.awaiting .icon { background-color: var(--info-color); }
+        .timeline-item.future .icon, .timeline-item .icon { background-color: #ced4da; }
+        .timeline-item .status { font-weight: 600; margin-left: 28px; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .timeline-item .approver-info { color: var(--muted-color); font-size: 0.85rem; margin-top: 0.5rem; margin-left: 28px; }
+        
+        [dir="rtl"] .approval-timeline { padding-left: 0; padding-right: 5px; }
+        [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 30px; }
+        [dir="rtl"] .timeline-item .status { margin-left: 0; margin-right: 28px; }
+        [dir="rtl"] .timeline-item .approver-info { margin-left: 0; margin-right: 28px; }
+        [dir="rtl"] .timeline-item::before { left: auto; right: 0; }
+        [dir="rtl"] .timeline-item .icon { left: auto; right: 0; }
+
+        #approvalStatusContainer { transition: all 0.3s ease-in-out; }
+        .toggle-approval-btn { margin: 2rem 0 1rem 0; }
+
+        .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; text-align: center; color: var(--muted-color); font-size: 0.8rem; }
+
+        @media print {
+            @page { size: A4; margin: 0.5cm; }
+            body { background-color: #fff !important; font-size: 12px; }
+            .no-print, .left.side-menu, .footer, .topbar { display: none !important; }
+            #wrapper, .content-page, .content, .container-fluid { padding: 0 !important; margin: 0 !important; }
+            .report-wrapper { max-width: 100%; margin: 0; box-shadow: none; border: none; border-radius: 0; }
+            .report-body { padding: 1cm 0.5cm; }
+            .employee-banner, .info-box { background-color: #f8f9fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .report-section { margin-bottom: 1rem; }
+        }
+    </style>
+</head>
+
+<body class="enlarged" data-keep-enlarged="true">
+    <div id="wrapper">
+        <div class="left side-menu no-print">
+            <div class="slimscroll-menu" id="remove-scroll">
+                <div class="topbar-left">
+                    <a href="dashboard.php" class="logo">
+                        <span><img src="<?= get_setting($conDB, 'logo') ?>" alt="" height="22"></span>
+                        <i><img src="<?= get_setting($conDB, 'white_logo') ?>" alt="" height="28"></i>
+                    </a>
+                </div>
+                <?php include("./includes/main_menu.php"); ?>
+                <div class="clearfix"></div>
+            </div>
+        </div>
+
+        <div class="content-page">
+            <?php include("./includes/topbar.php"); ?>
+            <div class="content">
+                <div class="container-fluid">
+                    <div class="text-right no-print mb-3">
+                        <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light">
+                            <i class="fa fa-print mr-1"></i> Print Report
+                        </a>
+                    </div>
+
+                    <div class="report-wrapper">
+                        <!-- Report Header -->
+                        <div class="report-header">
+                            <div class="logo-container">
+                                <img src="<?= get_setting($conDB, 'logo') ?>" alt="Company Logo">
+                            </div>
+                            <div class="report-meta">
+                                <p class="report-title"><?= __('business_trip_report') ?></p>
+                                <p class="report-subtitle"><?= __('request_id') ?>: #<?= display_or_na($request['id'] ?? null); ?></p>
+                            </div>
+                        </div>
+
+                        <!-- Report Body -->
+                        <div class="report-body">
+                            <!-- Employee Banner -->
+                            <div class="employee-banner">
+                                <img src="<?= getAvatarImagePath($request['avatar'] ?? '', $request['sex'] ?? 1); ?>" alt="Employee Avatar" class="avatar">
+                                <div class="info">
+                                    <h4><?= getDisplayName($request['employee_name'] ?? null); ?></h4>
+                                    <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= ($is_rtl ?? false ? $request['dept_name_ar'] : $request['dept_name']); ?><?= getDisplayName($request['section_name']) ? ' / ' . getDisplayName($request['section_name']) : '' ?></p>
+                                </div>
+                            </div>
+
+                            <!-- Trip Information Section -->
+                            <div class="report-section">
+                                <h5 class="section-title">
+                                    <i class="fa fa-briefcase"></i> <?= __('trip_information') ?>
+                                </h5>
+                                <div class="grid-details">
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('trip_type') ?></div>
+                                        <div class="value"><?= __((string)$trip_type) ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('status') ?></div>
+                                        <div class="value"><span class="badge badge-<?= $status_badge_class ?>"><?= __((string)$current_status) ?></span></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('submitted_on') ?></div>
+                                        <div class="value"><?= htmlspecialchars((string)$request['created_at']) ?></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Trip Details Section -->
+                            <div class="report-section">
+                                <h5 class="section-title">
+                                    <i class="fa fa-map-marker"></i> <?= __('trip_details') ?>
+                                </h5>
+                                <div class="grid-details">
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('destination') ?></div>
+                                        <div class="value"><?= $destination_display ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('start_date') ?></div>
+                                        <div class="value"><?= htmlspecialchars((string)$request['trip_start_date']) ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('end_date') ?></div>
+                                        <div class="value"><?= htmlspecialchars((string)$request['trip_end_date']) ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('duration') ?></div>
+                                        <div class="value">
+                                            <?php
+                                            $start = new DateTime($request['trip_start_date']);
+                                            $end = new DateTime($request['trip_end_date']);
+                                            $diff = $start->diff($end);
+                                            echo (int)($diff->format('%a') ?? 0) + 1 . ' ' . __('days');
+                                            ?>
+                                        </div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('purpose') ?></div>
+                                        <div class="value"><?= getDisplayName((string)$request['trip_purpose']) ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('transportation') ?></div>
+                                        <div class="value">
+                                            <?php 
+                                            $transport_type = $request['transportation_type'] ?? '';
+                                            if ($transport_type === 'own_car') {
+                                                echo '<i class="fa fa-car" style="margin-right: 8px;"></i>' . __('own_car');
+                                            } elseif ($transport_type === 'rental') {
+                                                echo '<i class="fa fa-taxi" style="margin-right: 8px;"></i>' . __('rental_car');
+                                            } elseif ($transport_type === 'by_air') {
+                                                echo '<i class="fa fa-plane" style="margin-right: 8px;"></i>' . __('by_air');
+                                            } else {
+                                                echo __($transport_type);
+                                            }
+                                            ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Additional Details (International Trips) -->
+                            <?php if ($trip_type === 'international'): ?>
+                            <div class="report-section">
+                                <h5 class="section-title">
+                                    <i class="fa fa-plane"></i> <?= __('international_trip_details') ?>
+                                </h5>
+                                <div class="grid-details">
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('destination_country') ?></div>
+                                        <div class="value"><?= getDisplayName((string)$request['destination_country']) ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('visa_required') ?></div>
+                                        <div class="value"><?= ((int)($request['visa_required'] ?? 0) === 1) ? __('yes') : __('no') ?></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
+                            <!-- Notes Section -->
+                            <?php if (!empty($request['request_notes'])): ?>
+                            <div class="report-section">
+                                <h5 class="section-title">
+                                    <i class="fa fa-sticky-note"></i> <?= __('additional_notes') ?>
+                                </h5>
+                                <div class="info-box">
+                                    <?= getDisplayName(htmlspecialchars((string)$request['request_notes'])) ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
+                            <!-- View Approval Status Button -->
+                            <div class="text-center no-print" style="margin: 2rem 0;">
+                                <button type="button" class="btn btn-outline-primary waves-effect waves-light" id="toggleApprovalBtn" onclick="toggleApprovalStatus()">
+                                    <i class="fa fa-eye mr-2"></i> <?= __('view_approval_status') ?>
+                                </button>
+                            </div>
+
+                            <!-- Approval Chain Timeline - Hidden by default -->
+                            <div id="approvalStatusContainer" style="display: none;">
+                                <div class="report-section">
+                                    <h5 class="section-title">
+                                        <i class="fa fa-check-circle"></i> <?= __('approval_chain') ?>
+                                    </h5>
+                                    <?php if (!empty($approval_chain)): ?>
+                                        <div class="approval-timeline">
+                                            <?php foreach ($approval_chain as $step): ?>
+                                                <?php
+                                                $step_status = $step['status'] ?? 'pending';
+                                                $step_class = 'future';
+                                                if ($step_status === 'approved') $step_class = 'approved';
+                                                elseif ($step_status === 'pending') $step_class = 'pending';
+                                                elseif ($step_status === 'rejected') $step_class = 'rejected';
+                                                elseif ($step_status === 'awaiting') $step_class = 'awaiting';
+                                                ?>
+                                                <div class="timeline-item <?= $step_class ?>">
+                                                    <div class="icon">
+                                                        <?php if ($step_status === 'approved'): ?>
+                                                            <i class="fa fa-check" style="font-size: 8px;"></i>
+                                                        <?php elseif ($step_status === 'rejected'): ?>
+                                                            <i class="fa fa-times" style="font-size: 8px;"></i>
+                                                        <?php else: ?>
+                                                            <i class="fa fa-clock" style="font-size: 8px;"></i>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="status">
+                                                        <strong><?= getDisplayName((string)($step['approver_name'] ?? ('Emp#' . (int)($step['approver_id'] ?? 0)))) ?></strong>
+                                                        <span class="badge badge-sm badge-<?php
+                                                            if ($step_status === 'approved') echo 'success';
+                                                            elseif ($step_status === 'rejected') echo 'danger';
+                                                            elseif ($step_status === 'pending') echo 'warning';
+                                                            else echo 'info';
+                                                        ?>"><?= __((string)$step_status) ?></span>
+                                                    </div>
+                                                    <div class="approver-info">
+                                                        <?= __('level') ." ". (int)($step['approval_level'] ?? 0) ?>
+                                                        <?php if (!empty($step['action_date'])): ?>
+                                                            • <?= htmlspecialchars((string)$step['action_date']) ?>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <?php if (!empty($step['note'])): ?>
+                                                        <div class="approver-info" style="font-style: italic; margin-top: 0.5rem;">
+                                                            <?= getDisplayName(htmlspecialchars((string)$step['note'])) ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="info-box">
+                                            No approval chain found for this request.
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <!-- Signature Lines -->
+                            <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin-top: 3rem; text-align: center;">
+                                    <div>
+                                        <div style="height: 50px; margin-bottom: 0.5rem;"></div>
+                                        <div style="border-top: 1px solid #333; padding-top: 0.5rem; font-size: 0.85rem; font-weight: 500;">
+                                            HR Manager Signature
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="height: 50px; margin-bottom: 0.5rem;"></div>
+                                        <div style="border-top: 1px solid #333; padding-top: 0.5rem; font-size: 0.85rem; font-weight: 500;">
+                                            Department Manager Signature
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="height: 50px; margin-bottom: 0.5rem;"></div>
+                                        <div style="border-top: 1px solid #333; padding-top: 0.5rem; font-size: 0.85rem; font-weight: 500;">
+                                            General Manager Signature
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Report Footer -->
+                        <div class="report-footer">
+                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <footer class="footer no-print"><?= $site_footer ?></footer>
+        </div>
+    </div>
+
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/metisMenu.min.js"></script>
+    <script src="assets/js/waves.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
+    <script src="assets/js/jquery.core.js"></script>
+    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+
+    <script>
+    function toggleApprovalStatus() {
+        const container = document.getElementById('approvalStatusContainer');
+        const btn = document.getElementById('toggleApprovalBtn');
+        
+        if (container.style.display === 'none' || container.style.display === '') {
+            container.style.display = 'block';
+            btn.innerHTML = '<i class="fa fa-eye-slash mr-2"></i> <?= __('hide_approval_status') ?>';
+        } else {
+            container.style.display = 'none';
+            btn.innerHTML = '<i class="fa fa-eye mr-2"></i> <?= __('view_approval_status') ?>';
+        }
+    }
+    </script>
+</body>
+</html>
+
+<?php
+    $conDB->close();
+}
+?>

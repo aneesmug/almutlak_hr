@@ -65,6 +65,38 @@ if (mysqli_num_rows($query) == 1) {
             $interval = $start->diff($end);
             $total_days = $interval->days + 1; // +1 to include both start and end dates
             
+            // ===== CHECK FOR DUPLICATE HOLIDAY =====
+            // Prevent duplicate entries with same start_date, end_date, holiday_type, and holiday_name
+            // Check for both ACTIVE and ARCHIVED versions
+            $check_dup_stmt = $pdo->prepare("
+                SELECT id, is_active FROM emp_holidays 
+                WHERE holiday_name = ? 
+                AND start_date = ? 
+                AND end_date = ? 
+                AND holiday_type = ?
+                LIMIT 1
+            ");
+            $check_dup_stmt->execute([$holiday_name, $start_date_db, $end_date_db, $holiday_type]);
+            $existing_holiday = $check_dup_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($existing_holiday) {
+                if ($existing_holiday['is_active'] == 1) {
+                    // Active duplicate exists - reject
+                    die(json_encode([
+                        'status' => 'error', 
+                        'message' => 'A holiday with the same name, dates, and type already exists and is active. Please use the edit function to modify it or archive it first.'
+                    ]));
+                } else {
+                    // Archived version exists - offer to reactivate
+                    die(json_encode([
+                        'status' => 'archived',
+                        'message' => 'A holiday with the same name, dates, and type was previously archived. Would you like to reactivate it?',
+                        'holiday_id' => $existing_holiday['id']
+                    ]));
+                }
+            }
+            // ===== END DUPLICATE CHECK =====
+            
             // Insert holiday using PDO
             $stmt = $pdo->prepare("
                 INSERT INTO emp_holidays 
@@ -150,6 +182,30 @@ if (mysqli_num_rows($query) == 1) {
             $interval = $start->diff($end);
             $total_days = $interval->days + 1;
             
+            // ===== CHECK FOR DUPLICATE HOLIDAY (EXCLUDING CURRENT RECORD) =====
+            // Prevent duplicate entries with same start_date, end_date, holiday_type, and holiday_name
+            // but allow editing the same record
+            $check_dup_stmt = $pdo->prepare("
+                SELECT id FROM emp_holidays 
+                WHERE holiday_name = ? 
+                AND start_date = ? 
+                AND end_date = ? 
+                AND holiday_type = ?
+                AND id != ?
+                AND is_active = 1
+                LIMIT 1
+            ");
+            $check_dup_stmt->execute([$holiday_name, $start_date_db, $end_date_db, $holiday_type, $holiday_id]);
+            $existing_holiday = $check_dup_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($existing_holiday) {
+                die(json_encode([
+                    'status' => 'error', 
+                    'message' => 'A holiday with the same name, dates, and type already exists. Please check your entries or archive the old record first.'
+                ]));
+            }
+            // ===== END DUPLICATE CHECK =====
+            
             // Update holiday
             $stmt = $pdo->prepare("
                 UPDATE emp_holidays 
@@ -201,11 +257,33 @@ if (mysqli_num_rows($query) == 1) {
                 die(json_encode(['status' => 'error', 'message' => 'Holiday ID is required']));
             }
             
-            // Soft delete - set is_active to 0
+            // Soft delete - set is_active to 0 for this specific record ONLY by ID
+            // This ensures only the selected holiday is archived, not any duplicates
             $stmt = $pdo->prepare("UPDATE emp_holidays SET is_active = 0, updated_by = ? WHERE id = ?");
             $stmt->execute([$empid, $holiday_id]);
             
             die(json_encode(['status' => 'success', 'message' => 'Holiday archived successfully']));
+            
+        } catch (Exception $e) {
+            die(json_encode(['status' => 'error', 'message' => $e->getMessage()]));
+        }
+    }
+
+    // ===== UNARCHIVE HOLIDAY =====
+    // Allows reactivating archived holidays (helpful for preventing duplicates)
+    if ($action === 'unarchive' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        try {
+            $holiday_id = (int)($_POST['holiday_id'] ?? 0);
+            
+            if (empty($holiday_id)) {
+                die(json_encode(['status' => 'error', 'message' => 'Holiday ID is required']));
+            }
+            
+            // Set is_active back to 1 to reactivate archived holiday
+            $stmt = $pdo->prepare("UPDATE emp_holidays SET is_active = 1, updated_by = ? WHERE id = ?");
+            $stmt->execute([$empid, $holiday_id]);
+            
+            die(json_encode(['status' => 'success', 'message' => 'Holiday reactivated successfully']));
             
         } catch (Exception $e) {
             die(json_encode(['status' => 'error', 'message' => $e->getMessage()]));
@@ -286,14 +364,24 @@ if (mysqli_num_rows($query) == 1) {
         }
     }
 
-    // Page is loading - fetch holidays for display with company assignments
+    // Determine filter from GET/POST or default to '1' (Active)
+    $status_filter = $_GET['status'] ?? $_POST['status_filter'] ?? '1';
+    $where = '';
+    if ($status_filter === '1') {
+        $where = 'WHERE h.is_active = 1';
+    } elseif ($status_filter === '0') {
+        $where = 'WHERE h.is_active = 0';
+    } // else show all
+
+    // Fetch holidays matching filter
     $stmt = $pdo->prepare("
         SELECT h.* FROM emp_holidays h
+        $where
         ORDER BY h.start_date DESC
     ");
     $stmt->execute();
     $holidays = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
     // Fetch company assignments for each holiday
     foreach ($holidays as &$holiday) {
         $comp_stmt = $pdo->prepare("
@@ -305,6 +393,7 @@ if (mysqli_num_rows($query) == 1) {
         $comp_stmt->execute([$holiday['id']]);
         $holiday['assigned_companies'] = $comp_stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+    unset($holiday);
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -417,14 +506,20 @@ if (mysqli_num_rows($query) == 1) {
                                         <small>
                                             <strong>Formula:</strong> Deductible Days = Total Vacation Days − Weekend Days − Holiday Days
                                             <br>
-                                            <strong>Example:</strong> 5-day vacation from Thursday to Monday:
+                                            <strong>Weekend Rules (Company-Specific):</strong>
+                                            <ul style="margin: 5px 0 5px 20px; font-size: 0.9rem;">
+                                                <li><strong>Head Office (Company 4):</strong> Friday & Saturday off (all departments)</li>
+                                                <li><strong>Head Office EXCEPT:</strong> Sales (Dept 14) & Purchase (Dept 13) = Friday only</li>
+                                                <li><strong>All Other Companies (1,2,3,5,6,7,8,9,10,11):</strong> Friday only</li>
+                                            </ul>
+                                            <strong>Example:</strong> 5-day vacation from Thursday to Monday (Head Office, Regular Dept):
                                             <ul style="margin: 5px 0 5px 20px; font-size: 0.9rem;">
                                                 <li>Total vacation: 5 days (Thu, Fri, Sat, Sun, Mon)</li>
-                                                <li>Weekends (Fri, Sat): 2 days (NOT deducted)</li>
-                                                <li>Eid holiday (3 days): 3 days (NOT deducted)</li>
-                                                <li><strong>Result: 5 − 2 − 3 = 0 days deducted</strong> ✓</li>
+                                                <li>Weekends (Fri, Sat): 2 days (NOT deducted per Head Office rules)</li>
+                                                <li>Holiday during period: 0 days</li>
+                                                <li><strong>Result: 5 − 2 − 0 = 3 days deducted</strong> ✓</li>
                                             </ul>
-                                            <strong>Note:</strong> Holidays are filtered by employee's company. Weekends (Friday & Saturday) are always excluded.
+                                            <strong>Note:</strong> Holidays are filtered by employee's company. Weekend calculation is based on employee's company and department assignment.
                                         </small>
                                     </div>
                                     
@@ -433,9 +528,9 @@ if (mysqli_num_rows($query) == 1) {
                                             <i class="mdi mdi-plus"></i> Add Holiday
                                         </button>
                                         <select class="form-control" name="status_filter" id="status_filter" style="max-width: 200px; display: inline-block;">
-                                            <option value="">All Records</option>
-                                            <option value="1" selected>Active</option>
-                                            <option value="0">Inactive</option>
+                                            <option value="" <?= $status_filter === '' ? 'selected' : '' ?>>All Records</option>
+                                            <option value="1" <?= $status_filter === '1' ? 'selected' : '' ?>>Active</option>
+                                            <option value="0" <?= $status_filter === '0' ? 'selected' : '' ?>>Inactive</option>
                                         </select>
                                     </div>
 
@@ -487,14 +582,14 @@ if (mysqli_num_rows($query) == 1) {
                                                                 <span class="<?= $class ?>"><?= ucfirst($type) ?></span>
                                                             </td>
                                                             <td>
-                                                                <?php if ($holiday['is_active'] == 1): ?>
+                                                                <?php if ((int)$holiday['is_active'] === 1): ?>
                                                                     <span class="badge badge-success">Active</span>
                                                                 <?php else: ?>
                                                                     <span class="badge badge-danger">Inactive</span>
                                                                 <?php endif; ?>
                                                             </td>
                                                             <td>
-                                                                <?php if ($holiday['is_active'] == 1): ?>
+                                                                <?php if ((int)$holiday['is_active'] === 1): ?>
                                                                     <div class='btn-group dropdown'>
                                                                         <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                                                         <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
@@ -507,7 +602,9 @@ if (mysqli_num_rows($query) == 1) {
                                                                         </div>
                                                                     </div>
                                                                 <?php else: ?>
-                                                                    <span class="badge badge-secondary">No Actions</span>
+                                                                    <a href='javascript:void(0);' class='btn btn-primary btn-sm' onclick="unarchiveHoliday(<?= $holiday['id'] ?>, '<?= htmlspecialchars($holiday['holiday_name']) ?>')">
+                                                                        <i class='mdi mdi-restore mr-1'></i>Unarchive
+                                                                    </a>
                                                                 <?php endif; ?>
                                                             </td>
                                                         </tr>
@@ -652,58 +749,77 @@ if (mysqli_num_rows($query) == 1) {
             }
 
             $(document).ready(function() {
+                console.log('Page loaded - initializing holidays table');
+                
+                // Get status parameter from URL, default to '1' (Active) to show only active records
+                const urlParams = new URLSearchParams(window.location.search);
+                const statusParam = urlParams.get('status') || '1';
+                
+                console.log('Status filter:', statusParam);
+                
+                // Set filter dropdown
+                $('#status_filter').val(statusParam);
+                
+                // IMPORTANT: Apply filter BEFORE DataTable initialization
+                // This ensures only the correct records are in the DOM before DataTable processes them
+                applyStatusFilter(statusParam);
+                
                 // Initialize DataTable
                 $('#holidays_table').DataTable({
                     responsive: true,
                     paging: true,
                     searching: true,
-                    ordering: true
+                    ordering: true,
+                    drawCallback: function(settings) {
+                        console.log('DataTable rows drawn');
+                    }
                 });
 
-                // Get status parameter from URL, default to '1' (Active)
-                const urlParams = new URLSearchParams(window.location.search);
-                const statusParam = urlParams.get('status') || '1';
-                
-                // Set filter dropdown to URL parameter value
-                $('#status_filter').val(statusParam);
-
-                // Apply filter based on URL parameter
-                applyStatusFilter(statusParam);
-
-                // Status filter - update URL when changed
+                // Status filter - reload page with correct status parameter
                 $('#status_filter').on('change', function() {
-                    const status = $(this).val();
-                    
-                    // Update URL with status parameter
-                    const newUrl = new URL(window.location);
-                    if (status === '') {
+                    var status = $(this).val();
+                    var newUrl = new URL(window.location.href);
+                    if (status === '' || status === 'all') {
                         newUrl.searchParams.set('status', 'all');
                     } else {
                         newUrl.searchParams.set('status', status);
                     }
-                    window.history.pushState({}, '', newUrl);
-                    
-                    // Apply filter
-                    applyStatusFilter(status);
+                    window.location.href = newUrl.toString();
                 });
             });
 
-            // Function to apply status filterthis
+            // Function to apply status filter
             function applyStatusFilter(status) {
-                if (status === 'all' || status === '') {
-                    // Show all records
-                    $('.holiday-row').show();
-                } else {
-                    // Show only matching status
-                    $('.holiday-row').each(function() {
-                        const rowStatus = $(this).data('status').toString();
-                        if (rowStatus === status) {
-                            $(this).show();
-                        } else {
-                            $(this).hide();
-                        }
-                    });
-                }
+                console.log('Filtering with status:', status);
+                
+                // Convert status to string for comparison
+                const filterValue = String(status);
+                
+                // Get all holiday rows
+                const rows = $('.holiday-row');
+                console.log('Total rows:', rows.length);
+                
+                let visibleCount = 0;
+                
+                rows.each(function() {
+                    const rowStatus = String($(this).attr('data-status'));
+                    console.log('Row data-status:', rowStatus, 'Filter value:', filterValue);
+                    
+                    if (filterValue === 'all' || filterValue === '') {
+                        // Show all records
+                        $(this).show();
+                        visibleCount++;
+                    } else if (filterValue === rowStatus) {
+                        // Show matching records
+                        $(this).show();
+                        visibleCount++;
+                    } else {
+                        // Hide non-matching records
+                        $(this).hide();
+                    }
+                });
+                
+                console.log('Visible rows after filter:', visibleCount);
             }
 
             function openAddHolidayModal() {
@@ -845,8 +961,6 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="form-group">
                                             <label for="holiday_type_edit" class="text-left">Holiday Type</label>
                                             <select class="form-control" id="holiday_type_edit">
-                                            <label for="holiday_type_edit" class="text-left">Holiday Type</label>
-                                            <select class="form-control" id="holiday_type_edit">
                                                 <option value="religious" ${data.holiday_type === 'religious' ? 'selected' : ''}>Religious</option>
                                                 <option value="national" ${data.holiday_type === 'national' ? 'selected' : ''}>National</option>
                                                 <option value="other" ${data.holiday_type === 'other' ? 'selected' : ''}>Other</option>
@@ -959,12 +1073,53 @@ if (mysqli_num_rows($query) == 1) {
                             }).then(() => {
                                 location.reload();
                             });
+                        } else if (res.status === 'archived') {
+                            // Archived duplicate found - offer to reactivate
+                            Swal.fire({
+                                title: 'Holiday Already Exists (Archived)',
+                                html: res.message,
+                                icon: 'question',
+                                showCancelButton: true,
+                                confirmButtonText: 'Yes, Reactivate It',
+                                cancelButtonText: 'No, Cancel',
+                                allowOutsideClick: false
+                            }).then((result) => {
+                                if (result.isConfirmed) {
+                                    // Reactivate the archived holiday
+                                    reactivateHoliday(res.holiday_id);
+                                }
+                            });
                         } else {
                             Swal.fire('Error', res.message, 'error');
                         }
                     },
                     error: function() {
                         Swal.fire('Error', 'Error saving holiday', 'error');
+                    }
+                });
+            }
+
+            function reactivateHoliday(holidayId) {
+                $.ajax({
+                    url: 'manage_holidays.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: { action: 'unarchive', holiday_id: holidayId },
+                    success: function(res) {
+                        if (res.status === 'success') {
+                            Swal.fire({
+                                title: 'Success!',
+                                text: res.message,
+                                icon: 'success'
+                            }).then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error', res.message, 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Error', 'Error reactivating holiday', 'error');
                     }
                 });
             }
@@ -1001,6 +1156,44 @@ if (mysqli_num_rows($query) == 1) {
                             },
                             error: function() {
                                 Swal.fire('Error', 'Error deleting holiday', 'error');
+                            }
+                        });
+                    }
+                });
+            }
+
+            function unarchiveHoliday(holidayId, holidayName) {
+                Swal.fire({
+                    title: 'Reactivate Holiday?',
+                    text: 'Do you want to reactivate "' + holidayName + '"?',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#28a745',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, Reactivate',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $.ajax({
+                            url: 'manage_holidays.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            data: { action: 'unarchive', holiday_id: holidayId },
+                            success: function(res) {
+                                if (res.status === 'success') {
+                                    Swal.fire({
+                                        title: 'Success!',
+                                        text: res.message,
+                                        icon: 'success'
+                                    }).then(() => {
+                                        location.reload();
+                                    });
+                                } else {
+                                    Swal.fire('Error', res.message, 'error');
+                                }
+                            },
+                            error: function() {
+                                Swal.fire('Error', 'Error reactivating holiday', 'error');
                             }
                         });
                     }

@@ -426,6 +426,7 @@ elseif ($ajaxType == 'applyVacation') {
         $is_annual_vacation = (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual');
         $is_encashed_vacation = ($vac_type === 'Encashed');
         $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual'); // NEW: Track if Fly | Annual specifically
+        $is_fly_emergency = ($vac_type === 'Fly' && $fly_type === 'emergency'); // NEW: Track if Fly | Emergency
 
         if ($is_annual_vacation) {
             // Fetch employee context (supervisor + department) for role resolution
@@ -518,9 +519,9 @@ elseif ($ajaxType == 'applyVacation') {
                 }
             }
 
-            // [NEW] For Fly | Annual vacations, ensure GR Officer is in the chain (after HR Payroll if exists)
-            // This is required for visa/exit re-entry fee processing
-            if ($is_fly_annual) {
+            // [NEW] For Fly | Annual OR Fly | Emergency vacations, ensure GR Officer is in the chain
+            // This is required for visa/exit re-entry processing and emergency handling
+            if ($is_fly_annual || $is_fly_emergency) {
                 $gr_officer_id = $resolveApprover('gr_officer');
                 if ($gr_officer_id && !in_array($gr_officer_id, $approver_chain, true)) {
                     $approver_chain[] = $gr_officer_id; // Append at end to ensure it's after HR Payroll
@@ -1341,8 +1342,8 @@ elseif ($ajaxType == 'applyVacation') {
         
         $first_approver = $chainResult['first_approver'];
 
-        // FLY | ANNUAL: ensure GR Officer is appended at the end of the approval chain (for visa/exit re-entry fee)
-        if ($is_fly_annual) {
+        // FLY | ANNUAL or FLY | EMERGENCY: ensure GR Officer is appended at the end of the approval chain (for visa/exit re-entry)
+        if ($is_fly_annual || $is_fly_emergency) {
             // Resolve GR Officer (user_type = 'gr_officer')
             $gr_officer_id = null;
             $stmt_gr = mysqli_prepare($conDB, "SELECT e.emp_id FROM employees e JOIN admin_login al ON e.emp_id = al.emp_id WHERE al.user_type = 'gr_officer' AND e.status = 1 ORDER BY e.emp_id ASC LIMIT 1");
@@ -2928,22 +2929,22 @@ elseif ($ajaxType == 'updateVacationPayments') {
                             mysqli_stmt_close($complete_stmt);
                         }
                         
-                        // Set employees.fly = 1 except for Encashment type and Excuse Leave types
-                        // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
-                        // CRITICAL: Do NOT update fly=1 for Encashed vacation type
-                        $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
-                        // Define excuse leave types that should NOT update fly status
-                        $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
-                        
-                        // Explicitly check vac_type != 'encashed' to prevent fly status update
-                        if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types) && !empty($vac_data['emp_id'])) {
-                            $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
-                            if ($stmtFly) {
-                                mysqli_stmt_bind_param($stmtFly, "s", $vac_data['emp_id']);
-                                mysqli_stmt_execute($stmtFly);
-                                mysqli_stmt_close($stmtFly);
-                            }
-                        }
+                        // ❌ DISABLED: fly=1 should ONLY be set when start_date arrives (see session_check.php:552)
+                        // DO NOT set fly=1 during approval - it will be set automatically when vacation starts
+                        // 
+                        // $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
+                        // // Define excuse leave types that should NOT update fly status
+                        // $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
+                        // 
+                        // // Explicitly check vac_type != 'encashed' to prevent fly status update
+                        // if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types) && !empty($vac_data['emp_id'])) {
+                        //     $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
+                        //     if ($stmtFly) {
+                        //         mysqli_stmt_bind_param($stmtFly, "s", $vac_data['emp_id']);
+                        //         mysqli_stmt_execute($stmtFly);
+                        //         mysqli_stmt_close($stmtFly);
+                        //     }
+                        // }
                     }
                 }
             }
@@ -2964,6 +2965,7 @@ elseif ($ajaxType == 'updateVacationPayments') {
 elseif ($ajaxType == 'updateVacationAdjustments') {
     try {
         $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $no_modifications = (int)($_POST['no_modifications'] ?? 0);
         $overtime_hours = (float)($_POST['overtime_hours'] ?? 0);
         $deduction_hours = (float)($_POST['deduction_hours'] ?? 0);
         $deduction_days = (float)($_POST['deduction_days'] ?? 0);
@@ -2978,6 +2980,18 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         // Basic validation for negative values
         if ($overtime_hours < 0 || $deduction_hours < 0 || $deduction_days < 0 || $other_earnings < 0 || $other_deductions < 0) {
             throw new Exception(__("invalid_negative_values_not_allowed"));
+        }
+
+        // If no modifications marked, set all adjustment values to 0 and add note
+        if ($no_modifications) {
+            $overtime_hours = 0;
+            $deduction_hours = 0;
+            $deduction_days = 0;
+            $other_earnings = 0;
+            $other_deductions = 0;
+            if (empty($payroll_note)) {
+                $payroll_note = __('no_modifications_required') || 'No modifications required';
+            }
         }
 
         // Ensure vacation exists and get employee salary info
@@ -3046,12 +3060,12 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         error_log("OVERTIME CALC - Emp: {$vacation_row['emp_id']}, Basic: {$basic_salary}, Total: {$salary_base}, Hours: {$overtime_hours}, Rate: {$overtime_hourly_rate}, Amount: {$overtime_amount}");
         
         // Update adjustments with calculation fields
-        $sql_adj = "UPDATE `emp_vacation` SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `other_earnings` = ?, `other_deductions` = ?, `payroll_note` = ?, `overtime_amount` = ?, `deduction_amount` = ?, `review` = IF(`review` IS NULL OR `review` = '', 'A', `review`) WHERE `id` = ?";
+        $sql_adj = "UPDATE `emp_vacation` SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `other_earnings` = ?, `other_deductions` = ?, `payroll_note` = ?, `overtime_amount` = ?, `deduction_amount` = ?, `no_modifications` = ?, `review` = IF(`review` IS NULL OR `review` = '', 'A', `review`) WHERE `id` = ?";
         $stmt_adj = mysqli_prepare($conDB, $sql_adj);
         if (!$stmt_adj) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
         }
-        mysqli_stmt_bind_param($stmt_adj, "dddddsddi", $overtime_hours, $deduction_hours, $deduction_days, $other_earnings, $other_deductions, $payroll_note, $overtime_amount, $deduction_amount, $vacation_id);
+        mysqli_stmt_bind_param($stmt_adj, "dddddsddii", $overtime_hours, $deduction_hours, $deduction_days, $other_earnings, $other_deductions, $payroll_note, $overtime_amount, $deduction_amount, $no_modifications, $vacation_id);
         if (!mysqli_stmt_execute($stmt_adj)) {
             $err = mysqli_stmt_error($stmt_adj);
             mysqli_stmt_close($stmt_adj);
@@ -3150,24 +3164,24 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                         // NOTE: Emergency vacations are unpaid leave - NO balance deduction applied
                     }
 
-                    // If completed in any branch, set employees.fly = 1 unless Encashment or Excuse Leave
-                    // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
-                    // CRITICAL: Do NOT update fly=1 for Encashed vacation type
-                    if ($did_complete && !empty($vacation_row['emp_id'])) {
-                        $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
-                        // Define excuse leave types that should NOT update fly status
-                        $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
-                        
-                        // Explicitly check vac_type != 'encashed' to prevent fly status update
-                        if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
-                            $stmtFly = mysqli_prepare($conDB, "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?");
-                            if ($stmtFly) {
-                                mysqli_stmt_bind_param($stmtFly, "s", $vacation_row['emp_id']);
-                                mysqli_stmt_execute($stmtFly);
-                                mysqli_stmt_close($stmtFly);
-                            }
-                        }
-                    }
+                    // ❌ DISABLED: fly=1 should ONLY be set when start_date arrives (see session_check.php:552)
+                    // DO NOT set fly=1 during completion - it will be set automatically when vacation starts
+                    // 
+                    // if ($did_complete && !empty($vacation_row['emp_id'])) {
+                    //     $vac_type_lower = strtolower($vac_data['vac_type'] ?? '');
+                    //     // Define excuse leave types that should NOT update fly status
+                    //     $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
+                    //     
+                    //     // Explicitly check vac_type != 'encashed' to prevent fly status update
+                    //     if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
+                    //         $stmtFly = mysqli_prepare($conDB, "UPDATE `employees` SET `fly` = 1 WHERE `emp_id` = ?");
+                    //         if ($stmtFly) {
+                    //             mysqli_stmt_bind_param($stmtFly, "s", $vacation_row['emp_id']);
+                    //             mysqli_stmt_execute($stmtFly);
+                    //             mysqli_stmt_close($stmtFly);
+                    //         }
+                    //     }
+                    // }
                 }
             }
             send_json_response("Success!", __("payroll_adjustments_saved"), "success", 200, $calc_details);
@@ -3269,8 +3283,8 @@ elseif ($ajaxType == 'getVacationDetails') {
                 'status' => 200,
                 'start_date' => $row['start_date'] ?? '',
                 'return_date' => $row['return_date'] ?? '',
-                'departure_date' => $row['departure_date'] ?? '',
-                'arrival_date' => $row['arrival_date'] ?? '',
+                'departure_date' => ($row['departure_date'] && $row['departure_date'] !== '0000-00-00') ? $row['departure_date'] : '',
+                'arrival_date' => ($row['arrival_date'] && $row['arrival_date'] !== '0000-00-00') ? $row['arrival_date'] : '',
                 'ticket_pay' => (float)($row['ticket_pay'] ?? 0),
                 'permit_fee' => (float)($row['permit_fee'] ?? 0),
                 'encashment_amount' => (float)($row['encashment_amount'] ?? 0),
@@ -3425,7 +3439,9 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             // Calculate working days salary (if Fly + Annual)
             if ($is_fly_annual && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
-                $working_days = (int)$start_date_obj->format('d');
+                // Business rule: exclude the start day from working-days salary (working days BEFORE departure)
+                // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
+                $working_days = (int)$start_date_obj->format('d') - 1;
                 if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
                     $working_days_salary = round($total_monthly_salary);
                 } else {

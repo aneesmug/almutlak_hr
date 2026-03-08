@@ -145,6 +145,7 @@
     // Recalculate total earnings and deductions for clarity
     $overtime_hours = (float)($eosrow['overtime_hours'] ?? 0);
     $overtime_days = (float)($eosrow['overtime_days'] ?? 0);
+    $other_earnings = (float)($eosrow['other_earnings'] ?? 0);
     
     // Calculate overtime earnings per new rule:
     // per-hour overtime rate = (basic/240)/2 + (contractBase/240)
@@ -159,7 +160,11 @@
         $overtime_earnings = $overtime_hours_amount + $overtime_days_amount;
     }
     
-    $total_earnings = (float)($eosrow['eos_amount'] ?? 0) + (float)($eosrow['anul_vac_salry'] ?? 0) + (float)($eosrow['curt_month_salry'] ?? 0) + $overtime_earnings;
+    $total_earnings = (float)($eosrow['eos_amount'] ?? 0)
+        + (float)($eosrow['anul_vac_salry'] ?? 0)
+        + (float)($eosrow['curt_month_salry'] ?? 0)
+        + $overtime_earnings
+        + $other_earnings;
     $loan_deduction = (float)($eosrow['deduct'] ?? 0);
     $net_payment = (float)($eosrow['net_payment'] ?? 0);
 
@@ -401,6 +406,13 @@
                                                             <tr>
                                                                 <td><span class="label-pair"><span>Overtime (Days) - <?=number_format($overtime_days, 2)?> days</span><span class="arabic-label">أيام <?=number_format($overtime_days, 2)?> - العمل الإضافي (أيام)</span></span></td>
                                                                 <td class="text-right text-success">+<?=number_format($overtime_hourly_rate * 8 * $overtime_days, 2)?></td>
+                                                            </tr>
+                                                            <?php endif; ?>
+
+                                                            <?php if ($other_earnings > 0): ?>
+                                                            <tr>
+                                                                <td><span class="label-pair"><span>Other Earnings</span><span class="arabic-label">مكاسب أخرى</span></span></td>
+                                                                <td class="text-right text-success">+<?=number_format($other_earnings, 2)?></td>
                                                             </tr>
                                                             <?php endif; ?>
                                                         

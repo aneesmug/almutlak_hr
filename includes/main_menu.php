@@ -12,6 +12,7 @@ $tempContractsLink = 'emp_temp_contant.php';
 $yearlyEOSLink = 'employee_audit_gen.php';
 $payrollLink = 'generate_payroll.php';
 $appliedVacationsLink = 'all_applied_vac.php';
+$appliedBusinessTripLink = 'all_applied_business_trip.php';
 $appliedLoanLink = 'all_applied_loan.php';
 $settlementsLink = 'all_settlements.php';
 $rejoinApprovalsLink = 'rejoin_approvals.php';
@@ -66,6 +67,7 @@ $page_roles = [
     'employee_salary_report.php' => ['Administrator'],
     'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
+    'all_applied_business_trip.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
     'all_settlements.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'rejoin_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
@@ -138,6 +140,12 @@ $can_see_applied_vac_page = [
     // Department & functional approvers
     'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Finance_Officer', 'Finance_Manager',
     // Asset / compliance related
+    'GR_Officer', 'Auditor'
+];
+
+$can_see_business_trip_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Manager', 'HR_Team', 'HR_Team_Manager',
+    'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Finance_Officer', 'Finance_Manager',
     'GR_Officer', 'Auditor'
 ];
 
@@ -234,6 +242,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty(array_intersect([$user_role, $user_type], $can_see_employees_bank_page));
 
 $show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_business_trip_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_loan_approvals_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_settlements_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page)) ||
@@ -698,6 +707,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'applied') !== false || strpos($current_page_name, 'approvals') !== false || strpos($current_page_name, 'resignations') !== false ? 'true' : 'false') ?>">
                 <?php if (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)): ?>
                     <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_business_trip_page) || in_array($user_type, $can_see_business_trip_page)): ?>
+                    <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa fa-plane"></i><span><?=__('business_trip', 'Business Trip') ?></span></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page)): ?>
                     <li><a href="<?= $rejoinApprovalsLink ?>"><i class="fa fa-plane-arrival"></i><span><?=__('rejoin_approvals', 'Rejoin Approvals') ?> <?= ($rejoin_pending_count > 0) ? "<span class='badgez badge-danger'>$rejoin_pending_count</span>" : "" ?></span></a></li>

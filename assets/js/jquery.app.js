@@ -5280,18 +5280,13 @@ function toggleLeaveFields() {
     const selectedType = $('#leave_type_select').val();
     
     // Hide all sections first
-    $('#dateSection, #reasonSection, #attachmentSection, #tripSection, #accommodationSection, #transportationSection').addClass('d-none');
+    $('#dateSection, #reasonSection, #attachmentSection').addClass('d-none');
     calculateTotalDays();
 
     if (!selectedType) return;
 
     // ALL leave types show: dates, reason, and attachment
     $('#dateSection, #reasonSection, #attachmentSection').removeClass('d-none');
-    
-    // Business Trip also needs destination, accommodation, and transportation
-    if (selectedType === 'Business Trip') {
-        $('#tripSection, #accommodationSection, #transportationSection').removeClass('d-none');
-    }
 }
 
 function calculateTotalDays() {
@@ -5532,27 +5527,6 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
             // Validate date range
             if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
                 Swal.showValidationMessage(__('end_date_before_start_date_validation'));
-                return false;
-            }
-
-            // Destination required for Business Trip
-            const destination = formData.get('trip_destination');
-            if (leaveType === 'Business Trip' && !destination.trim()) {
-                Swal.showValidationMessage(__('destination_required_validation'));
-                return false;
-            }
-
-            // Accommodation provided required for Business Trip
-            const accommodationProvided = formData.get('accommodation_provided');
-            if (leaveType === 'Business Trip' && !accommodationProvided) {
-                Swal.showValidationMessage(__('accommodation_required_validation'));
-                return false;
-            }
-
-            // Transportation provided required for Business Trip
-            const transportationProvided = formData.get('transportation_provided');
-            if (leaveType === 'Business Trip' && !transportationProvided) {
-                Swal.showValidationMessage(__('transportation_required_validation'));
                 return false;
             }
 
@@ -6665,60 +6639,108 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                 title: __('add_edit_adjustments_for', 'Add/Edit adjustments for {0}').replace('{0}', employeeName || ''),
                 html: `
                     <div class="text-left" style="padding: 10px 20px;">
-                        <div class="form-group">
-                            <label for="adj_overtime_hours" class="text-success font-weight-bold">
-                                <i class="fa fa-clock"></i> ${__('overtime_hours') || 'Overtime (Hours)'}
-                            </label>
-                            <input type="number" id="adj_overtime_hours" class="form-control payroll-calc-trigger" placeholder="0" step="0.5" min="0" value="${currentOvertimeHours || 0}">
+                        <div class="form-group p-3 bg-warning rounded" style="margin-bottom: 20px;">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="adj_no_modifications" onchange="
+                                    const noteField = document.getElementById('adj_payroll_note');
+                                    const overtimeField = document.getElementById('adj_overtime_hours');
+                                    document.querySelectorAll('.adj-field').forEach(el => {
+                                        el.disabled = this.checked;
+                                        if (this.checked) {
+                                            el.value = '0';
+                                        }
+                                    });
+                                    if (this.checked) {
+                                        noteField.value = 'No modifications needed';
+                                        // Trigger recalculation for payroll summary
+                                        setTimeout(() => {
+                                            overtimeField.dispatchEvent(new Event('change', { bubbles: true }));
+                                        }, 100);
+                                    } else {
+                                        noteField.value = '';
+                                    }
+                                ">
+                                <label class="custom-control-label" for="adj_no_modifications">
+                                    <strong><i class="fa fa-check-circle"></i> ${__('no_modifications_needed') || 'No Modifications Needed'}</strong>
+                                    <small class="d-block mt-1">${__('check_this_if_no_adjustments_required') || 'Check this if no overtime/deductions are required'}</small>
+                                </label>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="adj_other_deductions" class="font-weight-bold text-danger">
-                                <i class="fa fa-minus-circle"></i> ${__('other_deductions') || 'Other Deductions'}
-                            </label>
-                            <input type="number" id="adj_other_deductions" class="form-control payroll-calc-trigger" placeholder="0.00" step="0.01" min="0" value="${currentOtherDeductionsVal || 0}">
+                        
+                        <!-- EARNINGS SECTION -->
+                        <div style="padding: 12px; background-color: #d4edda; border: 2px solid #28a745; border-radius: 6px; margin-bottom: 20px;">
+                            <h5 style="color: #155724; margin-bottom: 15px; font-weight: bold;">
+                                <i class="fa fa-plus-circle"></i> ${__('earnings') || 'Earnings'}
+                            </h5>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label for="adj_overtime_hours" class="text-success font-weight-bold">
+                                        <i class="fa fa-clock"></i> ${__('overtime_hours') || 'Overtime (Hours)'}
+                                    </label>
+                                    <input type="number" id="adj_overtime_hours" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentOvertimeHours || 0}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="adj_other_earnings" class="font-weight-bold text-success">
+                                        <i class="fa fa-plus-circle"></i> ${__('other_earnings') || 'Other Earnings'}
+                                    </label>
+                                    <input type="number" id="adj_other_earnings" class="form-control payroll-calc-trigger adj-field" placeholder="0.00" step="0.01" min="0" value="${currentOtherEarnings || 0}">
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="adj_deduction_hours" class="text-danger font-weight-bold">
-                                <i class="fa fa-minus-circle"></i> ${__('deduction_hours') || 'Deduction (Hours)'}
-                            </label>
-                            <input type="number" id="adj_deduction_hours" class="form-control payroll-calc-trigger" placeholder="0" step="0.5" min="0" value="${currentDeductionHours || 0}">
-                        </div>
-                        <div class="form-group">
-                            <label for="adj_deduction_days" class="text-danger font-weight-bold">
-                                <i class="fa fa-calendar-minus"></i> ${__('deduction_days') || 'Deduction (Days)'}
-                            </label>
-                            <input type="number" id="adj_deduction_days" class="form-control payroll-calc-trigger" placeholder="0" step="0.5" min="0" value="${currentDeductionDays || 0}">
-                        </div>
-                        <div class="form-group">
-                            <label for="adj_other_earnings" class="font-weight-bold text-success">
-                                <i class="fa fa-plus-circle"></i> ${__('other_earnings') || 'Other Earnings'}
-                            </label>
-                            <input type="number" id="adj_other_earnings" class="form-control payroll-calc-trigger" placeholder="0.00" step="0.01" min="0" value="${currentOtherEarnings || 0}">
+                        
+                        <!-- DEDUCTIONS SECTION -->
+                        <div style="padding: 12px; background-color: #f8d7da; border: 2px solid #dc3545; border-radius: 6px; margin-bottom: 20px;">
+                            <h5 style="color: #721c24; margin-bottom: 15px; font-weight: bold;">
+                                <i class="fa fa-minus-circle"></i> ${__('deductions') || 'Deductions'}
+                            </h5>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label for="adj_deduction_hours" class="text-danger font-weight-bold">
+                                        <i class="fa fa-minus-circle"></i> ${__('deduction_hours') || 'Deduction (Hours)'}
+                                    </label>
+                                    <input type="number" id="adj_deduction_hours" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentDeductionHours || 0}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="adj_deduction_days" class="text-danger font-weight-bold">
+                                        <i class="fa fa-calendar-minus"></i> ${__('deduction_days') || 'Deduction (Days)'}
+                                    </label>
+                                    <input type="number" id="adj_deduction_days" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentDeductionDays || 0}">
+                                </div>
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <label for="adj_other_deductions" class="font-weight-bold text-danger">
+                                        <i class="fa fa-minus-circle"></i> ${__('other_deductions') || 'Other Deductions'}
+                                    </label>
+                                    <input type="number" id="adj_other_deductions" class="form-control payroll-calc-trigger adj-field" placeholder="0.00" step="0.01" min="0" value="${currentOtherDeductionsVal || 0}">
+                                </div>
+                            </div>
                         </div>
                         
                         <hr style="display: none;" id="payroll_summary_hr_top">
                         
                         <div class="form-group p-3 bg-light rounded" id="payroll_calculation_summary" style="display: none;">
                             <h6 class="text-primary mb-3"><i class="fa fa-calculator"></i> ${__('payroll_summary') || 'Payroll Summary'}</h6>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                                <span class="text-success font-weight-bold">${__('overtime_hours') || 'Overtime Amount'}:</span>
-                                <span class="text-success font-weight-bold">+<span id="calc_overtime_amount">0.00</span> SAR</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                                <span class="text-danger font-weight-bold">${__('deduction_amount') || 'Deduction Amount'}:</span>
-                                <span class="text-danger font-weight-bold">-<span id="calc_deduction_amount">0.00</span> SAR</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                                <span class="text-danger font-weight-bold">${__('other_deductions') || 'Other Deductions'}:</span>
-                                <span class="text-danger font-weight-bold">-<span id="calc_other_deductions">0.00</span> SAR</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                                <span class="text-success font-weight-bold">${__('other_earnings') || 'Other Earnings'}:</span>
-                                <span class="text-success font-weight-bold">+<span id="calc_other_earnings">0.00</span> SAR</span>
+                            <!-- Two-column layout for payroll summary -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                                    <span class="text-success font-weight-bold">${__('overtime_hours') || 'Overtime Amount'}:</span>
+                                    <span class="text-success font-weight-bold">+<span id="calc_overtime_amount">0.00</span> SAR</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                                    <span class="text-danger font-weight-bold">${__('deduction_amount') || 'Deduction Amount'}:</span>
+                                    <span class="text-danger font-weight-bold">-<span id="calc_deduction_amount">0.00</span> SAR</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                                    <span class="text-danger font-weight-bold">${__('other_deductions') || 'Other Deductions'}:</span>
+                                    <span class="text-danger font-weight-bold">-<span id="calc_other_deductions">0.00</span> SAR</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                                    <span class="text-success font-weight-bold">${__('other_earnings') || 'Other Earnings'}:</span>
+                                    <span class="text-success font-weight-bold">+<span id="calc_other_earnings">0.00</span> SAR</span>
+                                </div>
                             </div>
                             <hr style="margin: 10px 0;">
-                            <div style="display: flex; justify-content: space-between;">
-                                <span class="font-weight-bold text-info">${__('net_adjustment') || 'Net Adjustment'}:</span>
+                            <div style="display: flex; justify-content: center; padding: 8px 0;">
+                                <span class="font-weight-bold text-info">${__('net_adjustment') || 'Net Adjustment'}:&nbsp;</span>
                                 <span class="font-weight-bold text-info" id="calc_net_adjustment">0.00 SAR</span>
                             </div>
                         </div>
@@ -6729,14 +6751,15 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                             <label for="adj_payroll_note" class="font-weight-bold">
                                 <i class="fa fa-sticky-note"></i> ${__('payroll_note') || 'Note'}
                             </label>
-                            <textarea id="adj_payroll_note" class="form-control" rows="2" placeholder="${__('payroll_note_placeholder') || 'Add any notes about overtime/deductions...'}">${payrollNote || ''}</textarea>
+                            <textarea id="adj_payroll_note" class="form-control adj-field" rows="3" placeholder="${__('payroll_note_placeholder') || 'Add any notes about overtime/deductions...'}">${payrollNote || ''}</textarea>
                         </div>
                     </div>
                 `,
                 confirmButtonText: __('save_adjustments') || 'Save Adjustments',
                 showCancelButton: true,
                 allowOutsideClick: false,
-                width: '550px',
+                width: '60%',
+                // maxWidth: '1200px',
                 willOpen: () => {
                     const swalModal = Swal.getHtmlContainer();
                     
@@ -6827,7 +6850,65 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                     // Only call it when user modifies the fields
                     $(swalModal).on('change keyup', '.payroll-calc-trigger', calculatePayroll);
                 },
+                didRender: () => {
+                    // Add "Edit Date" button as a main action button alongside Save and Cancel
+                    const swalActions = Swal.getActions();
+                    if (swalActions) {
+                        const editDateBtn = document.createElement('button');
+                        editDateBtn.type = 'button';
+                        editDateBtn.className = 'btn btn-primary';
+                        editDateBtn.id = 'edit_date_btn_adj';
+                        editDateBtn.innerHTML = '<i class="fa fa-calendar-edit"></i> ' + (__('edit_dates') || 'Edit Dates');
+                        editDateBtn.style.marginRight = '10px';
+                        editDateBtn.style.padding = '.625em 1.1em';
+                        editDateBtn.style.fontSize = '1em';
+                        editDateBtn.style.borderRadius = '0.25em';
+                        
+                        // Close current modal and open payment modal to modify dates
+                        editDateBtn.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            
+                            // Fetch current vacation details to get payment values and employee name
+                            $.ajax({
+                                url: './includes/ajaxFile/ajaxVacation.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: {
+                                    ajaxType: 'getVacationDetails',
+                                    vacation_id: vacationId
+                                },
+                                success: function(data) {
+                                    if (data.status === 200) {
+                                        // Close current adjustments modal
+                                        Swal.hideLoading();
+                                        Swal.close();
+                                        
+                                        // Get employee name from vacation details
+                                        const empName = data.emp_name || 'Employee';
+                                        const ticketPay = data.ticket_pay || '0.00';
+                                        const permitFee = data.permit_fee || '0.00';
+                                        
+                                        // Open payment/date modification modal
+                                        setTimeout(() => {
+                                            addVacationPayments(vacationId, empName, ticketPay, permitFee);
+                                        }, 300);
+                                    }
+                                },
+                                error: function() {
+                                    Swal.fire('Error', __('error_loading_vacation_details') || 'Error loading vacation details', 'error');
+                                }
+                            });
+                        });
+                        
+                        // Insert the button as a main action button before the confirm button
+                        const confirmBtn = Swal.getConfirmButton();
+                        if (confirmBtn) {
+                            confirmBtn.parentElement.insertBefore(editDateBtn, confirmBtn);
+                        }
+                    }
+                },
                 preConfirm: () => {
+                    const no_modifications = document.getElementById('adj_no_modifications').checked;
                     const overtime_hours = parseFloat(document.getElementById('adj_overtime_hours').value) || 0;
                     const deduction_hours = parseFloat(document.getElementById('adj_deduction_hours').value) || 0;
                     const deduction_days = parseFloat(document.getElementById('adj_deduction_days').value) || 0;
@@ -6835,11 +6916,25 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                     const other_deductions = parseFloat(document.getElementById('adj_other_deductions').value) || 0;
                     const payroll_note = document.getElementById('adj_payroll_note').value || '';
 
+                    // Allow saving if "No modifications" is checked OR if there are actual values
+                    if (!no_modifications && overtime_hours === 0 && deduction_hours === 0 && deduction_days === 0 && other_earnings === 0 && other_deductions === 0 && !payroll_note) {
+                        Swal.showValidationMessage(__('please_enter_adjustments_or_check_no_modifications') || 'Please enter adjustments or check "No Modifications Needed"');
+                        return false;
+                    }
+
                     if (overtime_hours < 0 || deduction_hours < 0 || deduction_days < 0 || other_earnings < 0 || other_deductions < 0) {
                         Swal.showValidationMessage(__('invalid_negative_values_not_allowed') || 'Negative values not allowed');
                         return false;
                     }
-                    return { overtime_hours, deduction_hours, deduction_days, other_earnings, other_deductions, payroll_note };
+                    return { 
+                        no_modifications,
+                        overtime_hours, 
+                        deduction_hours, 
+                        deduction_days, 
+                        other_earnings, 
+                        other_deductions, 
+                        payroll_note 
+                    };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -6850,6 +6945,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         data: {
                             ajaxType: 'updateVacationAdjustments',
                             vacation_id: vacationId,
+                            no_modifications: result.value.no_modifications ? 1 : 0,
                             overtime_hours: result.value.overtime_hours,
                             deduction_hours: result.value.deduction_hours,
                             deduction_days: result.value.deduction_days,
@@ -6911,8 +7007,7 @@ function generateLeaveFormHTML(employeeGender) {
         { value: 'Maternity Leave', label: __('maternity_leave'), gender: 2 },
         { value: 'Marriage Leave', label: __('marriage_leave'), gender: null },
         { value: 'Newborn Leave', label: __('newborn_leave'), gender: 1 },
-        { value: 'Death Leave', label: __('death_leave'), gender: null },
-        { value: 'Business Trip', label: __('business_trip'), gender: null }
+        { value: 'Death Leave', label: __('death_leave'), gender: null }
     ];
 
     // Filter leave types based on employee gender
@@ -6952,42 +7047,6 @@ function generateLeaveFormHTML(employeeGender) {
                 </div>
             </div>
 
-            <!-- Trip Destination - Only for Business Trip -->
-            <div id="tripSection" class="form-group d-none">
-                <label for="trip_destination">${__('destination')} <span class="text-danger">*</span></label>
-                <input type="text" name="trip_destination" id="trip_destination" class="form-control" placeholder="${__('destination_placeholder')}" required>
-            </div>
-
-            <!-- Accommodation Question - Only for Business Trip -->
-            <div id="accommodationSection" class="form-group d-none">
-                <label>${__('accommodation_provided')} <span class="text-danger">*</span></label>
-                <div class="d-flex" style="gap: 20px;">
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="accommodation_yes" name="accommodation_provided" value="yes" required>
-                        <label class="custom-control-label" for="accommodation_yes">${__('yes')}</label>
-                    </div>
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="accommodation_no" name="accommodation_provided" value="no" required>
-                        <label class="custom-control-label" for="accommodation_no">${__('no')}</label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Transportation Question - Only for Business Trip -->
-            <div id="transportationSection" class="form-group d-none">
-                <label>${__('transportation_provided')} <span class="text-danger">*</span></label>
-                <div class="d-flex" style="gap: 20px;">
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="transportation_yes" name="transportation_provided" value="yes" required>
-                        <label class="custom-control-label" for="transportation_yes">${__('yes')}</label>
-                    </div>
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="transportation_no" name="transportation_provided" value="no" required>
-                        <label class="custom-control-label" for="transportation_no">${__('no')}</label>
-                    </div>
-                </div>
-            </div>
-            
             <!-- Reason/Notes - Required for ALL leave types -->
             <div id="reasonSection" class="form-group d-none">
                 <label for="reason">${__('reason_notes')} <span class="text-danger">*</span></label>

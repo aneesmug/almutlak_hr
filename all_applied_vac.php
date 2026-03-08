@@ -752,9 +752,10 @@ if ($can_see_all_depts) {
                                                                 $has_deduction_days = !empty($req['deduction_days']) && (float)$req['deduction_days'] > 0;
                                                                 $has_other_earnings = !empty($req['other_earnings']) && (float)$req['other_earnings'] > 0;
                                                                 $has_other_deductions = !empty($req['other_deductions']) && (float)$req['other_deductions'] > 0;
+                                                                $no_modifications = !empty($req['no_modifications']) && (int)$req['no_modifications'] === 1;
 
-                                                                // Deduction is pending if ALL adjustment fields are missing or zero
-                                                                if (!$has_overtime && !$has_deduction_hours && !$has_deduction_days && !$has_other_earnings && !$has_other_deductions) {
+                                                                // Deduction is pending if ALL adjustment fields are missing or zero AND no_modifications is NOT set
+                                                                if (!$has_overtime && !$has_deduction_hours && !$has_deduction_days && !$has_other_earnings && !$has_other_deductions && !$no_modifications) {
                                                                     $is_deduction_pending = true;
                                                                 }
                                                             }
@@ -803,6 +804,7 @@ if ($can_see_all_depts) {
                                                     $employee_name_js = htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES);
                                                     $employee_id_js = htmlspecialchars($req['emp_id'], ENT_QUOTES);
                                                     $vac_type_js = htmlspecialchars($req['vac_type']);
+                                                    $fly_type_js = htmlspecialchars($req['fly_type'] ?? '', ENT_QUOTES);
                                                     $start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
                                                     $end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
                                                     $days_js = htmlspecialchars($req['vacdays']);
@@ -810,7 +812,18 @@ if ($can_see_all_depts) {
                                                     $user_role_js = htmlspecialchars($user_type, ENT_QUOTES);
                                                     $has_supervisor_js = !empty($req['supervisor_id']) ? 'true' : 'false';
                                                     $is_simple_leave_js = ($req['vac_type'] != 'Fly') ? 'true' : 'false';
-                                                    $is_pending_with_me = ($req['current_status'] == 'pending_approval' && $req['current_approver_id'] == $empid);
+                                                    
+                                                    // Check if current user is ANY pending approver (not just the 'current' one)
+                                                    // This allows GR Officer and other later-stage approvers to see the approve button
+                                                    $is_pending_approver = false;
+                                                    if ($req['current_status'] == 'pending_approval' || $req['current_status'] == 'approved') {
+                                                        $check_approver = $conDB->prepare("SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND approver_id = ? AND status = 'pending' LIMIT 1");
+                                                        $check_approver->bind_param('si', $req['request_inv_no'], $empid);
+                                                        $check_approver->execute();
+                                                        $is_pending_approver = $check_approver->get_result()->num_rows > 0;
+                                                        $check_approver->close();
+                                                    }
+                                                    $is_pending_with_me = $is_pending_approver;
 
                                                     // Determine other conditional actions
                                                     $show_payment_button = false;
@@ -847,12 +860,13 @@ if ($can_see_all_depts) {
                                                     }
 
                                                     // 3. STEP 3: Show Adjustments button when adjustments are missing/pending
-                                                    // Adjustments are missing if ALL adjustment fields are empty/zero
+                                                    // Adjustments are missing if ALL adjustment fields are empty/zero AND no_modifications is not set
                                                     $adjustments_missing = (empty($req['overtime_hours']) || (float)$req['overtime_hours'] <= 0) &&
                                                         (empty($req['deduction_hours']) || (float)$req['deduction_hours'] <= 0) &&
                                                         (empty($req['deduction_days']) || (float)$req['deduction_days'] <= 0) &&
                                                         (empty($req['other_earnings']) || (float)$req['other_earnings'] <= 0) &&
-                                                        (empty($req['other_deductions']) || (float)$req['other_deductions'] <= 0);
+                                                        (empty($req['other_deductions']) || (float)$req['other_deductions'] <= 0) &&
+                                                        (empty($req['no_modifications']) || (int)$req['no_modifications'] !== 1);
 
                                                     // Fly | Annual: show adjustments button
                                                     if (
@@ -906,7 +920,7 @@ if ($can_see_all_depts) {
                                                                 </a>
                                                                 <?php if ($is_pending_with_me): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveRequest(<?= $req['id']; ?>, '<?= $employee_id_js; ?>', '<?= $employee_name_js; ?>', '<?= $vac_type_js; ?>', '<?= $start_date_js; ?>', '<?= $end_date_js; ?>', '<?= $days_js; ?>', <?= $current_level_js; ?>, '<?= $user_role_js; ?>', <?= $has_supervisor_js; ?>, <?= $is_simple_leave_js; ?>, <?= (int)($req['payer_emp_id'] ?? 0); ?>, <?= (int)$empid; ?>)">
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveRequest(<?= $req['id']; ?>, '<?= $employee_id_js; ?>', '<?= $employee_name_js; ?>', '<?= $vac_type_js; ?>', '<?= $fly_type_js; ?>', '<?= $start_date_js; ?>', '<?= $end_date_js; ?>', '<?= $days_js; ?>', <?= $current_level_js; ?>, '<?= $user_role_js; ?>', <?= $has_supervisor_js; ?>, <?= $is_simple_leave_js; ?>, <?= (int)($req['payer_emp_id'] ?? 0); ?>, <?= (int)$empid; ?>)">
                                                                         <i class="fa fa-check text-success"></i> <?= __('approve') ?>
                                                                     </a>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="rejectVacationRequest(<?= $req['id']; ?>, '<?= $employee_name_js; ?>', '<?= $vac_type_js; ?>', '<?= $start_date_js; ?>', '<?= $end_date_js; ?>', '<?= $days_js; ?>')">
@@ -961,7 +975,7 @@ if ($can_see_all_depts) {
                                                                     </a>
                                                                 <?php endif; ?>
 
-                                                                <?php if ($settlementExists && $settlementStatus === 'completed' && $settlementId && $settlementInvNo): ?>
+                                                                <?php if (($settlementExists && $settlementStatus === 'completed' && $settlementId && $settlementInvNo) AND ($isHR_Payroll || $is_system_admin)): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="viewSettlementDetails(<?= (int)$settlementId; ?>, '<?= htmlspecialchars($settlementInvNo, ENT_QUOTES); ?>')">
                                                                         <i class="fa fa-file-alt text-info"></i> <?= __('settlement_report') ?: 'Settlement Report' ?>
@@ -1285,10 +1299,10 @@ if ($can_see_all_depts) {
          * @param {boolean} hasSupervisor - Does the employee have a supervisor assigned?
          * @param {boolean} isSimpleLeave - Is this a simple leave (not annual vacation)?
          */
-        function approveRequest(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, payerEmpId, currentUserId) {
+        function approveRequest(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave, payerEmpId, currentUserId) {
             // Debug logging
             console.log('approveRequest called with:', {
-                vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, 
+                vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, 
                 currentLevel, userRole, hasSupervisor, isSimpleLeave, payerEmpId, currentUserId
             });
 
@@ -1650,7 +1664,7 @@ if ($can_see_all_depts) {
             // For GR Officer, ALWAYS show the approval modal with comment and permit fee
             if (userRole === 'gr_officer') {
                 console.log('✓ GR Officer detected - showing approval modal with comment and permit fee');
-                proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
                 return;
             }
 
@@ -1827,13 +1841,13 @@ if ($can_see_all_depts) {
                                 } else {
                                     // No assets - proceed with normal approval
                                     console.log('✓ No assets assigned - proceeding with normal approval');
-                                    proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                                    proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
                                 }
                             },
                             error: function() {
                                 // On error, proceed with normal approval as fallback
                                 console.log('✓ Error checking assets - proceeding with normal approval as fallback');
-                                proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                                proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
                             }
                         });
                     },
@@ -1928,21 +1942,21 @@ if ($can_see_all_depts) {
                         }
 
                         // If we can't fetch vacation details and not an asset manager, proceed with normal approval
-                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
                     }
                 });
                 return;
             }
             
             // For Encashed vacations or any other case not handled above, proceed with normal approval
-            proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+            proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
         }
 
         /**
          * Internal function to show the approval modal
          * Separated from approveRequest to allow asset check first
          */
-        function proceedWithApproval(vacationId, employeeId, employeeName, vacType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave) {
+        function proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave) {
             // Remove request details panel from the approval modal per requirement
             let infoHtml = '';
 
@@ -1956,7 +1970,9 @@ if ($can_see_all_depts) {
             const isHR_SeniorBP = (userRole === 'hr_senior_bp');
             const isHR_Payroll = (userRole === 'hr_payroll');
             const isGR_Officer = (userRole === 'gr_officer'); // [NEW] Enable GR Officer role
-            const isAnnualFly = (vacType === 'Fly');
+            const isAnnualFly = (vacType === 'Fly' && flyType === 'annual');
+            const isEmergencyFly = (vacType === 'Fly' && flyType === 'emergency'); // NEW: Track Fly | Emergency
+            const isFlyVacation = (isAnnualFly || isEmergencyFly); // NEW: True for any Fly vacation requiring GR Officer
 
             // Determine if current user is from asset clearance roles (IT, Admin, Transportation)
             const assetDeptMap = { it: 6, admin: 1, transport: 17 };
@@ -2038,7 +2054,7 @@ if ($can_see_all_depts) {
             }
 
             // [NEW] --- GR Officer Visa/Re-Entry Fee Section ---
-            if (isGR_Officer && isAnnualFly) {
+            if (isGR_Officer && isFlyVacation) {
                 hrPayrollHtml = `
                     <div class="swal-gr-officer-fields text-left mt-3">
                         <hr>
@@ -2125,7 +2141,7 @@ if ($can_see_all_depts) {
                 if (isLevel1) {
                     // Level 1 Manager: Chain will be auto-built from assets (no UI needed)
                     // Show additional note for Fly + Annual vacations about GR Officer
-                    const grOfficerNote = isAnnualFly ? `<br><i class="fa fa-passport"></i> ${__('gr_officer_auto_added', 'GR Officer will be automatically added for exit & re-entry visa processing.')}` : '';
+                    const grOfficerNote = isFlyVacation ? `<br><i class="fa fa-passport"></i> ${__('gr_officer_auto_added', 'GR Officer will be automatically added for visa/emergency handling.')}` : '';
                     chainHtml = `
                         <div class="swal-approval-chain text-left mt-3">
                             <hr>
@@ -2202,7 +2218,7 @@ if ($can_see_all_depts) {
                     };
 
                     // --- Initialize Date Pickers for Payment / Travel / Return Fields ---
-                    if ((isHR_Assistant || isHR_Payroll || isGR_Officer) && isAnnualFly) {
+                    if ((isHR_Assistant || isHR_Payroll || isGR_Officer) && isFlyVacation) {
                         // Fetch existing departure and arrival dates from database
                         $.ajax({
                             url: './includes/ajaxFile/ajaxVacation.php',
@@ -2675,7 +2691,7 @@ if ($can_see_all_depts) {
                     // HR Payroll will set these dates through the adjustments modal, not the approval modal
 
                     // [UPDATED] Validate GR Officer required fields if GR Officer is approving Fly | Annual
-                    if ((isGR_Officer && isAnnualFly)) {
+                    if ((isGR_Officer && isFlyVacation)) {
                         const permitFee = $(swalModal).find('#swal_permit_fee').val();
                         if (!permitFee || parseFloat(permitFee) <= 0) {
                             Swal.showValidationMessage(__('permit_fee_required') || 'Permit & Visa Fees are required');
@@ -3300,10 +3316,10 @@ if ($can_see_all_depts) {
                         $('#return_date_update').datepicker('setDate', appliedEnd);
                         $('#return_date_update').val(appliedEndDate);
                     }
-                    if (currentDepartureDate && currentDepartureDate !== '') {
+                    if (currentDepartureDate && currentDepartureDate !== '' && currentDepartureDate !== '0000-00-00') {
                         $('#departure_date_update').val(currentDepartureDate);
                     }
-                    if (currentArrivalDate && currentArrivalDate !== '') {
+                    if (currentArrivalDate && currentArrivalDate !== '' && currentArrivalDate !== '0000-00-00') {
                         $('#arrival_date_update').val(currentArrivalDate);
                     } else if (appliedEndDate && appliedEndDate !== '') {
                         // Default to applied end date if no current arrival date

@@ -14,6 +14,7 @@ if (!isset($_GET['comp']) || !is_numeric($_GET['comp'])) {
     exit;
 }
 $company_id = (int)$_GET['comp'];
+$department_id = (isset($_GET['dept']) && is_numeric($_GET['dept'])) ? (int)$_GET['dept'] : 0;
 
 $can_see_all_employees = function_exists('canSeeAllEmployeesByRole')
     ? canSeeAllEmployeesByRole(true)
@@ -65,18 +66,32 @@ if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
 }
 
-// --- Get Department Name ---
+// --- Get Company Name ---
 $dept_name_stmt = $conDB->prepare("SELECT `comp_name` FROM `companies` WHERE `comp_id` = ?");
 $dept_name_stmt->bind_param("i", $company_id);
 $dept_name_stmt->execute();
 $department_name = $dept_name_stmt->get_result()->fetch_assoc()['comp_name'] ?? 'Unknown Department';
 $dept_name_stmt->close();
 
+$selected_department_name = '';
+if ($department_id > 0) {
+    $selected_dept_stmt = $conDB->prepare("SELECT `dep_nme` FROM `department` WHERE `id` = ? LIMIT 1");
+    if ($selected_dept_stmt) {
+        $selected_dept_stmt->bind_param("i", $department_id);
+        $selected_dept_stmt->execute();
+        $selected_department_name = $selected_dept_stmt->get_result()->fetch_assoc()['dep_nme'] ?? '';
+        $selected_dept_stmt->close();
+    }
+}
+
 
 // --- Pagination & Filtering Setup ---
 $limit_options = [12, 24, 48, 96];
 $search_term = $_GET['search'] ?? '';
-$status_filter = $_GET['status'] ?? 'all'; // 'all', 'active', 'inactive', 'on_vacation'
+$status_filter = $_GET['status'] ?? 'active'; // 'all', 'active', 'inactive', 'on_vacation'
+if (!in_array($status_filter, ['all', 'active', 'inactive', 'on_vacation'], true)) {
+    $status_filter = 'active';
+}
 $items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $limit_options[0];
 $show_all = isset($_GET['limit']) && $_GET['limit'] == 'all';
 if ($show_all) {
@@ -108,6 +123,12 @@ $where_clauses = ["`comp_no` = ?"]; // Company is the base filter for this page
 
 $params = [$company_id];
 $types = "i";
+
+if ($department_id > 0) {
+    $where_clauses[] = "`dept` = ?";
+    $params[] = $department_id;
+    $types .= "i";
+}
 
 // --- NEW ACCESS CONTROL: Always apply company and department filters ---
 $company_filter = getCompanyFilterSQL('comp_no', false);
@@ -265,7 +286,12 @@ if ($total_items > 0) {
             <div class="content">
                 <div class="container-fluid">
                     <div class="card-box">
-                        <h4 class="header-title m-t-0 m-b-30">Employees in: <?= htmlspecialchars($department_name) ?></h4>
+                        <h4 class="header-title m-t-0 m-b-30">
+                            Employees in: <?= htmlspecialchars($department_name) ?>
+                            <?php if ($department_id > 0 && $selected_department_name !== ''): ?>
+                                - <?= htmlspecialchars($selected_department_name) ?>
+                            <?php endif; ?>
+                        </h4>
 
                         <!-- ** NEW ** Filter controls -->
                         <div class="row filter-controls mx-auto mb-5">
@@ -330,6 +356,7 @@ if ($total_items > 0) {
                             <div class="col-12">
                                 <?php
                                 $pagination_params = ['comp' => $company_id]; // Company is always a param
+                                if ($department_id > 0) $pagination_params['dept'] = $department_id;
                                 if (!empty($search_term)) $pagination_params['search'] = $search_term;
                                 if (!empty($status_filter) && $status_filter != 'all') $pagination_params['status'] = $status_filter;
                                 

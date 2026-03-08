@@ -1562,6 +1562,7 @@ if (!function_exists('load_email_template')) {
         // Map request types to template files
         $template_map = [
             'smart_request' => 'smart_request_email_template.html',
+            'business_trip' => 'smart_request_email_template.html',
             'general_request' => 'general_request_email_template.html',
             'vacation_request' => 'vacation_request_email_template.html',
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
@@ -1594,6 +1595,7 @@ if (!function_exists('load_email_template')) {
             'APPROVER_NAME' => 'Team Member',
             'REQUEST_ID' => 'N/A',
             'REQUEST_TITLE' => 'N/A',
+            'SUBMITTED_BY' => 'N/A',
             'REQUESTER_NAME' => 'N/A',
             'REQUEST_URL' => $base_url . '/dashboard.php',
             'EMAIL_MESSAGE' => 'A new request requires your attention.',
@@ -1631,6 +1633,12 @@ if (!function_exists('load_email_template')) {
             'SALARY' => 'N/A',
             'COMPANY_NAME' => 'N/A',
             'ALL_EMPLOYEES_URL' => $base_url . '/reg_employee.php',
+            // Business Trip email template fields
+            'TRIP_TYPE' => 'N/A',
+            'DESTINATION' => 'N/A',
+            'TRIP_START_DATE' => 'N/A',
+            'TRIP_END_DATE' => 'N/A',
+            'TRIP_DATES' => 'N/A',
             // Settlement email template fields
             'SETTLEMENT_AMOUNT' => 'N/A',
             'REQUEST_SOURCE' => 'N/A',
@@ -1882,6 +1890,62 @@ if (!function_exists('get_request_details_for_email')) {
                         $template_data['DESCRIPTION'] = $row['description'] ?? 'No description provided';
                         $template_data['EMAIL_MESSAGE'] = 'A General Request requires your approval.';
                         $template_data['REQUEST_URL'] = $base_url . '/view_general_request.php?id=' . urlencode($inv_no);
+
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            return false;
+        } elseif ($request_type === 'business_trip') {
+            // Fetch business trip request details
+            $sql = "SELECT bt.*, 
+                           e.name as employee_name,
+                           d.dep_nme as department_name,
+                           fc.name_en as from_city_name_en, fc.name_ar as from_city_name_ar,
+                           tc.name_en as to_city_name_en, tc.name_ar as to_city_name_ar,
+                           c.name as country_name
+                    FROM emp_business_trip bt
+                    LEFT JOIN employees e ON bt.emp_id = e.emp_id
+                    LEFT JOIN department d ON e.dept = d.id
+                    LEFT JOIN saudi_cities fc ON bt.from_city_id = fc.id
+                    LEFT JOIN saudi_cities tc ON bt.to_city_id = tc.id
+                    LEFT JOIN countries c ON bt.destination_country = c.name
+                    WHERE bt.request_inv_no = ? 
+                    LIMIT 1";
+
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        // Trip destination display
+                        $destination = '';
+                        if (strtolower($row['trip_type'] ?? '') === 'international') {
+                            $destination = $row['country_name'] ?? $row['destination_country'] ?? 'N/A';
+                        } else {
+                            $from_city = $row['from_city_name_en'] ?? '';
+                            $to_city = $row['to_city_name_en'] ?? '';
+                            $destination = trim($from_city) . ' → ' . trim($to_city);
+                        }
+
+                        $template_data['REQUEST_TYPE'] = 'Business Trip Request';
+                        $template_data['REQUEST_TYPE_LOWER'] = 'business trip request';
+                        $template_data['REQUEST_TITLE'] = 'Business Trip Request';
+                        $template_data['EMPLOYEE_NAME'] = $row['employee_name'] ?? 'N/A';
+                        $template_data['SUBMITTED_BY'] = $row['employee_name'] ?? 'N/A';
+                        $template_data['DEPARTMENT'] = $row['department_name'] ?? 'N/A';
+                        $template_data['TRIP_TYPE'] = ucfirst(str_replace('_', ' ', $row['trip_type'] ?? 'domestic'));
+                        $template_data['DESTINATION'] = $destination;
+                        $template_data['TRIP_START_DATE'] = isset($row['trip_start_date']) ? date('d M Y', strtotime($row['trip_start_date'])) : 'N/A';
+                        $template_data['TRIP_END_DATE'] = isset($row['trip_end_date']) ? date('d M Y', strtotime($row['trip_end_date'])) : 'N/A';
+                        $template_data['TRIP_DATES'] = (isset($row['trip_start_date']) ? date('d M Y', strtotime($row['trip_start_date'])) : 'N/A') . ' to ' . (isset($row['trip_end_date']) ? date('d M Y', strtotime($row['trip_end_date'])) : 'N/A');
+                        $template_data['EMAIL_MESSAGE'] = 'A new business trip request requires your approval.';
+                        $template_data['REQUEST_URL'] = $base_url . '/business_trip_report.php?id=' . urlencode($row['id'] ?? 0) . '&emp_id=' . urlencode($row['emp_id'] ?? '');
 
                         mysqli_free_result($result);
                         mysqli_stmt_close($stmt);
@@ -2432,24 +2496,24 @@ if (!function_exists('handle_approval_action')) {
                                 // --- [END SETTLEMENT INTEGRATION] ---
 
                                 // --- [UPDATED] Fly Status Management ---
-                                // Set fly=1 at final HR_Payroll approval, except Encashment and Excuse Leave types
-                                // Excuse leave types (Sick Leave, Exam Leave, etc.) don't require rejoin tracking
-                                // CRITICAL: Do NOT update fly=1 for Encashed vacation type
-                                if ($final_status === 'completed' && !empty($vacation_emp_id)) {
-                                    $vac_type_lower = strtolower($vacation_type ?? '');
-                                    // Define excuse leave types that should NOT update fly status
-                                    $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
-                                    
-                                    // Check both vac_type and remarks for Encashed vacation
-                                    if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
-                                        $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
-                                        if ($stmtFly) {
-                                            mysqli_stmt_bind_param($stmtFly, "i", $vacation_emp_id);
-                                            mysqli_stmt_execute($stmtFly);
-                                            mysqli_stmt_close($stmtFly);
-                                        }
-                                    }
-                                }
+                                // ❌ DISABLED: fly=1 should ONLY be set when start_date arrives (see session_check.php:552)
+                                // DO NOT set fly=1 during approval - it will be set automatically when vacation starts
+                                // 
+                                // if ($final_status === 'completed' && !empty($vacation_emp_id)) {
+                                //     $vac_type_lower = strtolower($vacation_type ?? '');
+                                //     // Define excuse leave types that should NOT update fly status
+                                //     $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
+                                //     
+                                //     // Check both vac_type and remarks for Encashed vacation
+                                //     if ($vac_type_lower !== 'encashed' && !in_array($vac_type_lower, $excuse_leave_types)) {
+                                //         $stmtFly = mysqli_prepare($conDB, "UPDATE employees SET fly = 1 WHERE emp_id = ?");
+                                //         if ($stmtFly) {
+                                //             mysqli_stmt_bind_param($stmtFly, "i", $vacation_emp_id);
+                                //             mysqli_stmt_execute($stmtFly);
+                                //             mysqli_stmt_close($stmtFly);
+                                //         }
+                                //     }
+                                // }
 
                                 $is_leave_request = !empty($request_inv_no) && strpos($request_inv_no, 'LV-') === 0;
 
@@ -3476,18 +3540,90 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $vacation_start = $vac_details['start_date'] ?? null;
         $vacation_end = $vac_details['return_date'] ?? null;
         $holiday_days = 0;
+        $weekend_days = 0;
+        $excluded_days = 0;
         
         if (!empty($vacation_start) && !empty($vacation_end)) {
-            // Get all active holidays that fall within the vacation period
-            $active_holidays = get_active_holidays_in_range($conDB, $vacation_start, $vacation_end);
+            // Get employee's company and department for weekend rules
+            $emp_company_id = 1;
+            $emp_dept_id = 0;
+            $emp_company_sql = "SELECT e.company_id, e.dept_id FROM employees e WHERE e.emp_id = ?";
+            $emp_company_stmt = mysqli_prepare($conDB, $emp_company_sql);
+            if ($emp_company_stmt) {
+                mysqli_stmt_bind_param($emp_company_stmt, "i", $emp_id);
+                if (mysqli_stmt_execute($emp_company_stmt)) {
+                    $emp_company_res = mysqli_stmt_get_result($emp_company_stmt);
+                    $emp_company = mysqli_fetch_assoc($emp_company_res);
+                    if ($emp_company_res) mysqli_free_result($emp_company_res);
+                    mysqli_stmt_close($emp_company_stmt);
+                    
+                    $emp_company_id = (int)($emp_company['company_id'] ?? 1);
+                    $emp_dept_id = (int)($emp_company['dept_id'] ?? 0);
+                } else {
+                    mysqli_stmt_close($emp_company_stmt);
+                }
+            }
             
-            // Calculate how many holiday days fall within the vacation period
-            $holiday_days = calculate_holiday_days_in_vacation($active_holidays, $vacation_start, $vacation_end);
+            // Get all active holidays that fall within the vacation period (filtered by company)
+            $active_holidays = get_active_holidays_in_range($conDB, $vacation_start, $vacation_end, $emp_company_id);
             
-            // Adjust days to deduct by subtracting holiday days
-            if ($holiday_days > 0) {
-                $days_to_deduct = max(0, $days_to_deduct - $holiday_days); // Don't go below 0
-                error_log("DEBUG: Vacation ID {$vac_id_safe} has {$holiday_days} holiday days. Adjusted deduction from {$vac_details['vacdays']} to {$days_to_deduct} days.");
+            // Single-pass day classification to avoid double-counting
+            // A day that is BOTH a weekend AND a holiday should only be excluded once
+            $holiday_date_set = [];
+            $app_tz = get_setting($conDB, 'timezone') ?: 'Asia/Riyadh';
+            $tz = new DateTimeZone($app_tz);
+            foreach ($active_holidays as $h) {
+                try {
+                    $h_start = new DateTime($h['start_date'], $tz);
+                    $h_end = new DateTime($h['end_date'], $tz);
+                    $vac_s = new DateTime($vacation_start, $tz);
+                    $vac_e = new DateTime($vacation_end, $tz);
+                    $overlap_start = max($h_start->getTimestamp(), $vac_s->getTimestamp());
+                    $overlap_end = min($h_end->getTimestamp(), $vac_e->getTimestamp());
+                    if ($overlap_start <= $overlap_end) {
+                        $cur = new DateTime('@' . $overlap_start);
+                        $cur->setTimezone($tz);
+                        $oe = new DateTime('@' . $overlap_end);
+                        $oe->setTimezone($tz);
+                        while ($cur <= $oe) {
+                            $holiday_date_set[$cur->format('Y-m-d')] = true;
+                            $cur->modify('+1 day');
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log("Error building holiday date set: " . $e->getMessage());
+                }
+            }
+            
+            // Count excluded days (weekend OR holiday) without double-counting
+            $weekend_day_numbers = get_weekend_days($emp_company_id, $emp_dept_id);
+            $excluded_days = 0;
+            $weekend_days = 0;
+            $holiday_days = 0;
+            try {
+                $day_cur = new DateTime($vacation_start);
+                $day_end = new DateTime($vacation_end);
+                while ($day_cur <= $day_end) {
+                    $dow = (int)$day_cur->format('w');
+                    $date_str = $day_cur->format('Y-m-d');
+                    $is_weekend = in_array($dow, $weekend_day_numbers, true);
+                    $is_holiday = isset($holiday_date_set[$date_str]);
+                    if ($is_weekend || $is_holiday) {
+                        $excluded_days++;
+                        if ($is_weekend) $weekend_days++;
+                        if ($is_holiday && !$is_weekend) $holiday_days++;
+                    }
+                    $day_cur->modify('+1 day');
+                }
+            } catch (Exception $e) {
+                error_log("Error in single-pass day classification: " . $e->getMessage());
+            }
+            
+            // Adjust days to deduct
+            if ($excluded_days > 0) {
+                $original_days = $days_to_deduct;
+                $days_to_deduct = max(0, $days_to_deduct - $excluded_days);
+                error_log("DEBUG: Vacation ID {$vac_id_safe} - Weekends: {$weekend_days}, Holidays (non-weekend): {$holiday_days}, Total excluded: {$excluded_days}. Adjusted deduction from {$original_days} to {$days_to_deduct} days.");
             }
         }
         // ===== END HOLIDAY CALCULATION =====
@@ -4953,9 +5089,49 @@ if (!function_exists('translateContractPeriod')) {
  * @param string $start_date Start date (YYYY-MM-DD)
  * @param string $end_date End date (YYYY-MM-DD)
  * @return array Array of active holidays within the date range
+/**
+ * Get weekend days for a company based on business rules
+ * 
+ * Business Rules:
+ * - Head Office (company_id = 1): Friday (5) and Saturday (6) are off
+ *   - EXCEPTION: Sales (dept_id = 14) and Purchase (dept_id = 13): Friday (5) only
+ * - All other companies: Friday (5) only
+ * 
+ * @param int $company_id Company ID from companies table
+ * @param int|null $dept_id Department ID (optional, used for exceptions)
+ * @return array Array of day numbers that are weekends (0=Sunday, ..., 5=Friday, 6=Saturday)
+ */
+if (!function_exists('get_weekend_days')) {
+    function get_weekend_days($company_id = 4, $dept_id = null)
+    {
+        $company_id = (int)$company_id;
+        $dept_id = (int)($dept_id ?? 0);
+        
+        // Head Office (company_id = 1) has special rules
+        if ($company_id === 4) {
+            // Sales and Purchase departments have only Friday off
+            if ($dept_id === 13 || $dept_id === 14) {
+                return [5]; // Friday only
+            }
+            // All other departments at Head Office: Friday and Saturday
+            return [5, 6]; // Friday and Saturday
+        }
+        
+        // All other companies: Friday off only
+        return [5]; // Friday only
+    }
+}
+
+/**
+ * Helper function to get role label with proper formatting
+ * 
+ * @param mysqli $conDB Database connection
+ * @param string $start_date Start date (YYYY-MM-DD)
+ * @param string $end_date End date (YYYY-MM-DD)
+ * @return array Array of active holidays within the date range
  */
 if (!function_exists('get_active_holidays_in_range')) {
-    function get_active_holidays_in_range($conDB, $start_date, $end_date)
+    function get_active_holidays_in_range($conDB, $start_date, $end_date, $company_id = null)
     {
         $holidays = [];
         
@@ -4964,20 +5140,38 @@ if (!function_exists('get_active_holidays_in_range')) {
         }
         
         try {
-            // Find all active holidays that overlap with the vacation period
-            // Overlap condition: holiday_start <= vacation_end AND holiday_end >= vacation_start
-            $sql = "SELECT * FROM emp_holidays 
-                    WHERE is_active = 1 
-                    AND start_date <= ? 
-                    AND end_date >= ? 
-                    ORDER BY start_date ASC";
-            
-            $stmt = mysqli_prepare($conDB, $sql);
-            if (!$stmt) {
-                return $holidays;
+            if ($company_id !== null) {
+                // Filter by company: only return holidays assigned to this company
+                $sql = "SELECT h.* FROM emp_holidays h
+                        INNER JOIN holiday_companies hc ON h.id = hc.holiday_id
+                        WHERE h.is_active = 1 
+                        AND h.start_date <= ? 
+                        AND h.end_date >= ? 
+                        AND hc.company_id = ?
+                        ORDER BY h.start_date ASC";
+                
+                $stmt = mysqli_prepare($conDB, $sql);
+                if (!$stmt) {
+                    return $holidays;
+                }
+                
+                mysqli_stmt_bind_param($stmt, "ssi", $end_date, $start_date, $company_id);
+            } else {
+                // No company filter (backward compatible)
+                $sql = "SELECT * FROM emp_holidays 
+                        WHERE is_active = 1 
+                        AND start_date <= ? 
+                        AND end_date >= ? 
+                        ORDER BY start_date ASC";
+                
+                $stmt = mysqli_prepare($conDB, $sql);
+                if (!$stmt) {
+                    return $holidays;
+                }
+                
+                mysqli_stmt_bind_param($stmt, "ss", $end_date, $start_date);
             }
             
-            mysqli_stmt_bind_param($stmt, "ss", $end_date, $start_date);
             if (!mysqli_stmt_execute($stmt)) {
                 mysqli_stmt_close($stmt);
                 return $holidays;
@@ -5019,37 +5213,46 @@ if (!function_exists('calculate_holiday_days_in_vacation')) {
         }
         
         try {
-            // IMPORTANT: Count ALL holiday days in active holidays during the vacation period
-            // NOT just the overlap with vacation dates
-            // This is the business rule: if holidays exist during vacation period, subtract full holiday days
+            $vac_start = new DateTime($vacation_start_date);
+            $vac_end = new DateTime($vacation_end_date);
             
+            // Use a set to track unique holiday dates (avoids double-counting overlapping holidays)
+            $holiday_dates = [];
+            
+            global $conDB;
+            $app_tz = (isset($conDB) && $conDB) ? (get_setting($conDB, 'timezone') ?: 'Asia/Riyadh') : 'Asia/Riyadh';
+            $tz = new DateTimeZone($app_tz);
             foreach ($holidays as $holiday) {
-                $holiday_total = (float)($holiday['total_days'] ?? 0);
-                
-                // Use the holiday's total_days field directly
-                // This represents the full holiday duration regardless of vacation start/end
-                if ($holiday_total > 0) {
-                    $holiday_days += $holiday_total;
-                } else {
-                    // Fallback: calculate from dates if total_days not provided
-                    try {
-                        $holiday_start = new DateTime($holiday['start_date']);
-                        $holiday_end = new DateTime($holiday['end_date']);
-                        
-                        $interval = $holiday_start->diff($holiday_end);
-                        $days_in_holiday = $interval->days + 1; // +1 to include both start and end dates
-                        $holiday_days += $days_in_holiday;
-                    } catch (Exception $e) {
-                        error_log("Error calculating holiday days from dates: " . $e->getMessage());
+                try {
+                    $h_start = new DateTime($holiday['start_date'], $tz);
+                    $h_end = new DateTime($holiday['end_date'], $tz);
+                    
+                    // Calculate actual overlap between holiday and vacation period
+                    $overlap_start = max($h_start->getTimestamp(), $vac_start->getTimestamp());
+                    $overlap_end = min($h_end->getTimestamp(), $vac_end->getTimestamp());
+                    
+                    if ($overlap_start <= $overlap_end) {
+                        $current = new DateTime('@' . $overlap_start);
+                        $current->setTimezone($tz);
+                        $end = new DateTime('@' . $overlap_end);
+                        $end->setTimezone($tz);
+                        while ($current <= $end) {
+                            $holiday_dates[$current->format('Y-m-d')] = true;
+                            $current->modify('+1 day');
+                        }
                     }
+                } catch (Exception $e) {
+                    error_log("Error calculating holiday overlap: " . $e->getMessage());
                 }
             }
+            
+            $holiday_days = count($holiday_dates);
             
         } catch (Exception $e) {
             error_log("Error calculating holiday days: " . $e->getMessage());
         }
         
-        return max(0, $holiday_days); // Ensure non-negative value
+        return max(0, $holiday_days);
     }
 }
 
@@ -5065,6 +5268,62 @@ if (!function_exists('calculate_working_vacation_days')) {
     {
         $working_days = $total_vacation_days - $holiday_days;
         return max(0, $working_days); // Ensure non-negative value
+    }
+}
+
+/**
+ * Calculate weekend days within a vacation period based on company rules
+ * 
+ * Weekends are counted as days that are not deducted from vacation balance
+ * Company-specific rules apply (see get_weekend_days())
+ * 
+ * @param string $vacation_start_date Vacation start date (YYYY-MM-DD)
+ * @param string $vacation_end_date Vacation end date (YYYY-MM-DD)
+ * @param int $company_id Company ID (default: 1 for Head Office)
+ * @param int|null $dept_id Department ID (optional, for exceptions)
+ * @return int Number of weekend days within the vacation period
+ */
+if (!function_exists('calculate_weekend_days_in_vacation')) {
+    function calculate_weekend_days_in_vacation($vacation_start_date, $vacation_end_date, $company_id = 1, $dept_id = null)
+    {
+        $weekend_days = 0;
+        
+        if (empty($vacation_start_date) || empty($vacation_end_date)) {
+            return $weekend_days;
+        }
+        
+        try {
+            // Get weekend day numbers for this company/department
+            $weekend_day_numbers = get_weekend_days($company_id, $dept_id);
+            
+            if (empty($weekend_day_numbers)) {
+                return $weekend_days; // No specific weekends configured
+            }
+            
+            // Create date objects
+            $start = new DateTime($vacation_start_date);
+            $end = new DateTime($vacation_end_date);
+            
+            // Iterate through each day in the vacation period
+            $current = clone $start;
+            while ($current <= $end) {
+                // Get day of week (0=Sunday, 1=Monday, ..., 5=Friday, 6=Saturday)
+                $day_of_week = (int)$current->format('w');
+                
+                // Check if this day is a weekend for this company
+                if (in_array($day_of_week, $weekend_day_numbers, true)) {
+                    $weekend_days++;
+                }
+                
+                // Move to next day
+                $current->modify('+1 day');
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error calculating weekend days: " . $e->getMessage());
+        }
+        
+        return max(0, $weekend_days); // Ensure non-negative value
     }
 }
 

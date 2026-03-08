@@ -395,7 +395,8 @@ if ($vacation['fly_type'] === 'annual') {
                         // Working days salary (days before vacation starts) - Only for Fly Annual
                         if ($is_fly_annual && !empty($vacation['start_date'])) {
                             $start_date_obj = new DateTime($vacation['start_date']);
-                            $working_days = (int)$start_date_obj->format('d');
+                            // Exclude the start day from working-days salary (working days BEFORE departure)
+                            $working_days = (int)$start_date_obj->format('d') - 1;
                             if ($working_days > 0) {
                                 if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
                                     $working_days_salary = round($total_monthly_salary, 2);

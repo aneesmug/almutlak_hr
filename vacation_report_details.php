@@ -207,9 +207,9 @@ if (mysqli_num_rows($query) == 1) {
         // NOT for Encashment or Local Vacation + Annual
         if ($is_fly_annual && !empty($request['start_date'])) {
             $start_date_obj = new DateTime($request['start_date']);
-            // Business rule: include the start day in working-days salary
-            // Example: start on Feb 28 => 28 working days (full month for Feb)
-            $working_days = (int)$start_date_obj->format('d');
+            // Business rule: exclude the start day from working-days salary (working days BEFORE departure)
+            // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
+            $working_days = (int)$start_date_obj->format('d') - 1;
 
             // New business rule for Working Days Salary only:
             // 1) If worked days complete the current month (28/29/30/31), pay full monthly salary.
