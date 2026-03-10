@@ -50,14 +50,14 @@ if ($currentPage < 1) {
     $currentPage = 1;
 }
 
-$currentFilter = $_GET['status'] ?? null;
+$current_filter = $_GET['status'] ?? null;
 
 // Determine effective filter: either from URL or a default based on role
-if ($currentFilter === null) {
+if ($current_filter === null) {
     if ($is_system_admin) {
-        $currentFilter = 'all';
+        $current_filter = 'all';
     } else {
-        $currentFilter = 'my_pending';
+        $current_filter = 'my_pending';
     }
 }
 
@@ -72,10 +72,10 @@ $canSeeAllDepts = ($is_system_admin ?? false) || ($isHR ?? false);
 $isFinanceRole = (isset($user_type) && stripos($user_type, 'finance') !== false);
 $canSeeAllDepts = $canSeeAllDepts || $isFinanceRole;
 
-$pageTitle = $allStatuses[$currentFilter] ?? __('all_requests');
+$pageTitle = $allStatuses[$current_filter] ?? __('all_requests');
 
 // Build WHERE clause based on filter
-if ($currentFilter === 'my_pending') {
+if ($current_filter === 'my_pending') {
     // Settlements assigned to current user for approval
     // Use JOIN (not LEFT JOIN) to only get requests where user is the pending approver
     $joinSql = " JOIN `request_approvers` ra_pending ON ra_pending.request_inv_no = s.request_inv_no 
@@ -84,20 +84,20 @@ if ($currentFilter === 'my_pending') {
     $params[] = $empid;
     $paramTypes .= "i";
     $whereClauses[] = "s.settlement_status != 'rejected'";
-} elseif ($currentFilter === 'my_dept') {
+} elseif ($current_filter === 'my_dept') {
     // All settlements from user's department
     $whereClauses[] = "e.dept = ?";
     $params[] = $user_dept;
     $paramTypes .= "i";
     $deptFilterApplied = true;
-} elseif (in_array($currentFilter, ['pending_approval', 'approved', 'rejected', 'completed'])) {
+} elseif (in_array($current_filter, ['pending_approval', 'approved', 'rejected', 'completed'])) {
     // Filter by settlement status
     // For 'pending_approval', also include 'pending' for backward compatibility
-    if ($currentFilter === 'pending_approval') {
+    if ($current_filter === 'pending_approval') {
         $whereClauses[] = "(s.settlement_status = 'pending_approval' OR s.settlement_status = 'pending')";
     } else {
         $whereClauses[] = "s.settlement_status = ?";
-        $params[] = $currentFilter;
+        $params[] = $current_filter;
         $paramTypes .= "s";
     }
 }
@@ -111,7 +111,7 @@ if (!empty($searchTerm)) {
 }
 
 // Department scoping for non-admin users
-if (!$canSeeAllDepts && !$deptFilterApplied && $currentFilter !== 'my_pending') {
+if (!$canSeeAllDepts && !$deptFilterApplied && $current_filter !== 'my_pending') {
     $whereClauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = s.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
     array_push($params, $user_dept, $requestTypeId, $empid);
     $paramTypes .= "iii";
@@ -133,7 +133,7 @@ $whereSql = " WHERE " . implode(" AND ", $whereClauses);
 
 // Count total items
 // For 'my_pending' filter, use JOIN instead of LEFT JOIN since we only want assigned requests
-$joinClause = ($currentFilter === 'my_pending') ? 
+$joinClause = ($current_filter === 'my_pending') ? 
     $joinSql . " LEFT JOIN employees approver_emp ON ra_pending.approver_id = approver_emp.emp_id" :
     "LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = s.request_inv_no 
          AND ra_pending.request_type_id = $requestTypeId AND ra_pending.status = 'pending'
@@ -162,7 +162,7 @@ $settlements = [];
 if ($totalItems > 0) {
     // Main query to fetch settlement details
     // For 'my_pending' filter, use JOIN instead of LEFT JOIN since we only want assigned requests
-    $mainJoinClause = ($currentFilter === 'my_pending') ? 
+    $mainJoinClause = ($current_filter === 'my_pending') ? 
         $joinSql . " LEFT JOIN employees approver_emp ON ra_pending.approver_id = approver_emp.emp_id" :
         "LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = s.request_inv_no 
              AND ra_pending.request_type_id = $requestTypeId AND ra_pending.status = 'pending'
@@ -468,7 +468,7 @@ if ($canSeeAllDepts) {
                                             <label for="statusFilter" class="font-weight-bold"><?= __('filter_by_status') ?></label>
                                             <select class="form-control" id="statusFilter" onchange="applyFilters()">
                                                 <?php foreach ($allStatuses as $status_key => $status_value): ?>
-                                                    <option value="<?= $status_key; ?>" <?php if ($currentFilter == $status_key) echo 'selected'; ?>>
+                                                    <option value="<?= $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
                                                         <?= htmlspecialchars($status_value); ?>
                                                     </option>
                                                 <?php endforeach; ?>
@@ -483,6 +483,11 @@ if ($canSeeAllDepts) {
                                                 <div class="input-group-append">
                                                     <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
                                                 </div>
+                                                <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
+                                                </div>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
@@ -724,7 +729,7 @@ if ($canSeeAllDepts) {
                                 <!-- Pagination -->
                                 <div class="row mt-4">
                                     <div class="col-xl-12">
-                                        <?= generate_pagination_controls($currentPage, $totalPages, $totalItems, $itemsPerPage, $limitOptions, $showAll, ['status' => $currentFilter, 'search' => $searchTerm], $unfilteredTotalItems) ?>
+                                        <?= generate_pagination_controls($currentPage, $totalPages, $totalItems, $itemsPerPage, $limitOptions, $showAll, ['status' => $current_filter, 'search' => $searchTerm], $unfilteredTotalItems) ?>
                                     </div>
                                 </div>
                             </div>

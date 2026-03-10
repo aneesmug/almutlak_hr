@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
 // Restrict access: Employees cannot view this detailed report page
@@ -289,6 +288,11 @@ if ($can_see_all_depts) {
                                                 <div class="input-group-append">
                                                     <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
                                                 </div>
+                                                <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
+                                                </div>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
@@ -712,7 +716,7 @@ if ($can_see_all_depts) {
                                     </tr>
                                     <tr style="border-bottom: 1px solid #dee2e6;">
                                         <td style="padding: 8px; font-weight: 600;">Transportation:</td>
-                                        <td style="padding: 8px;"><i class="fa fa-plane"></i> ${data.transportation_type || '-'}</td>
+                                        <td style="padding: 8px;"><i class="fa fa-plane"></i> ${__(data.transportation_type)}</td>
                                     </tr>
                                     <tr>
                                         <td style="padding: 8px; font-weight: 600;">Reference Number:</td>

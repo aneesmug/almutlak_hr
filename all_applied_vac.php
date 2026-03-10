@@ -631,6 +631,13 @@ if ($can_see_all_depts) {
                                                 <div class="input-group-append">
                                                     <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
                                                 </div>
+                                                
+                                                <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
+                                                </div>
+                                                <?php endif; ?>
+
                                             </div>
                                         </div>
                                     </div>
@@ -3057,24 +3064,27 @@ if ($can_see_all_depts) {
                             <strong>${appliedStartDate} to ${appliedEndDate}</strong> (${appliedDays} days)
                         </div>
                         
-                        <!-- Start Date Field (for adjusting after ticket reservation) -->
-                        <div class="form-group mb-3">
-                            <label for="start_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                <i class="fa fa-calendar-alt"></i> ${__('start_date') || 'Start Date'}
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" id="start_date_update" class="form-control" placeholder="Select start date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                            <small class="form-text text-muted">First day of vacation period (within applied dates)</small>
-                        </div>
-                        
-                        <!-- Return Date Field (for adjusting after ticket reservation) -->
-                        <div class="form-group mb-3">
-                            <label for="return_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                <i class="fa fa-calendar-alt"></i> ${__('return_date') || 'Return Date (Last Working Day)'}
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" id="return_date_update" class="form-control" placeholder="Select return date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                            <small class="form-text text-muted">Last working day (days calculated must equal ${appliedDays} days)</small>
+                        <!-- 2-Column Grid Layout for Dates -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <!-- Start Date Field -->
+                            <div class="form-group mb-0">
+                                <label for="start_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                    <i class="fa fa-calendar-alt"></i> ${__('start_date') || 'Start Date'}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" id="start_date_update" class="form-control" placeholder="Select start date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                                <small class="form-text text-muted">First day of vacation period</small>
+                            </div>
+                            
+                            <!-- Return Date Field -->
+                            <div class="form-group mb-0">
+                                <label for="return_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                    <i class="fa fa-calendar-alt"></i> ${__('return_date') || 'Return Date (Last Working Day)'}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" id="return_date_update" class="form-control" placeholder="Select return date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                                <small class="form-text text-muted">Last working day (days = ${appliedDays})</small>
+                            </div>
                         </div>
                         
                         <!-- Days Calculation Display -->
@@ -3086,43 +3096,49 @@ if ($can_see_all_depts) {
                             <div id="days_status_message" style="margin-top: 8px; padding: 8px; border-radius: 4px; display: none;"></div>
                         </div>
                         
-                        <div class="form-group mb-3">
-                            <label for="departure_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                <i class="fa fa-plane-departure"></i> ${__('departure_date')}
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" id="departure_date_update" class="form-control" placeholder="Select departure date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                            <small class="form-text text-muted">Must be within vacation period (${appliedStartDate} to ${appliedEndDate})</small>
+                        <!-- 2-Column Grid Layout for Travel Dates -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                            <div class="form-group mb-0">
+                                <label for="departure_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                    <i class="fa fa-plane-departure"></i> ${__('departure_date')}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" id="departure_date_update" class="form-control" placeholder="Select departure date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                                <small class="form-text text-muted">Must be within vacation period</small>
+                            </div>
+                            
+                            <div class="form-group mb-0">
+                                <label for="arrival_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                    <i class="fa fa-plane-arrival"></i> ${__('arrival_date')}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" id="arrival_date_update" class="form-control" placeholder="Select arrival date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
+                                <small class="form-text text-muted">Must be within vacation period</small>
+                            </div>
                         </div>
                         
-                        <div class="form-group mb-3">
-                            <label for="arrival_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                <i class="fa fa-plane-arrival"></i> ${__('arrival_date')}
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="text" id="arrival_date_update" class="form-control" placeholder="Select arrival date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                            <small class="form-text text-muted">Must be within vacation period (${appliedStartDate} to ${appliedEndDate})</small>
-                        </div>
-                        
-                        <div class="form-group mb-3">
-                            <label for="ticket_pay_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                <i class="fa fa-plane"></i> ${__('ticket_payment')}
-                            </label>
-                            <input type="number" id="ticket_pay_update" class="form-control" placeholder="${__('ticket_payment')}" value="${currentTicketPay}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
-                        </div>
-                        
-                        <div class="form-group mb-3">
-                            <label for="permit_fee_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                <i class="fa fa-passport"></i> ${__('permit_fee')}
-                            </label>
-                            <input type="number" id="permit_fee_update" class="form-control" readonly placeholder="${__('permit_fee')}" value="${currentPermitFee}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                        <!-- 2-Column Grid Layout for Payment Fields -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="form-group mb-0">
+                                <label for="ticket_pay_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                    <i class="fa fa-plane"></i> ${__('ticket_payment')}
+                                </label>
+                                <input type="number" id="ticket_pay_update" class="form-control" placeholder="${__('ticket_payment')}" value="${currentTicketPay}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            </div>
+                            
+                            <div class="form-group mb-0">
+                                <label for="permit_fee_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
+                                    <i class="fa fa-passport"></i> ${__('permit_fee')}
+                                </label>
+                                <input type="number" id="permit_fee_update" class="form-control" readonly placeholder="${__('permit_fee')}" value="${currentPermitFee}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+                            </div>
                         </div>
                     </div>
                 `,
                 confirmButtonText: __('update_payments'),
                 showCancelButton: true,
                 allowOutsideClick: false,
-                width: '550px',
+                width: '60%',
                 didOpen: () => {
                     // Helper function to format date object to "yyyy-mm-dd" string
                     function formatDateForInput(dateObj) {

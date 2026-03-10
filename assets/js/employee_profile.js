@@ -270,9 +270,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     const formattedDate = formatDateToString(minStartDate);
                     console.log('✅ Active vacation found - Return date:', activeReturnDate, '- Min start date for 2nd vacation:', formattedDate);
                 } else {
-                    // No active vacation - allow from tomorrow onwards
+                    // No active vacation - allow from 3 days ago onwards
                     minStartDate = new Date();
-                    minStartDate.setDate(minStartDate.getDate() + 1); // Tomorrow
+                    minStartDate.setDate(minStartDate.getDate() - 3); // 3 days ago
                     const formattedDate = formatDateToString(minStartDate);
                     console.log('✅ No active vacation - Min start date:', formattedDate);
                 }
@@ -357,7 +357,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 format: "yyyy-mm-dd",
                 todayHighlight: false,
                 autoclose: true,
-                startDate: '+1d'
+                startDate: '-2d'
             }).on('changeDate', function (e) {
                 var departureDate = e.date;
                 $('#arrival_date').datepicker('setStartDate', departureDate);
@@ -367,7 +367,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 format: "yyyy-mm-dd",
                 todayHighlight: false,
                 autoclose: true,
-                startDate: '+1d'
+                startDate: '-2d'
             }).on('changeDate', function (e) {
                 var arrivalDate = e.date;
                 $('#departure_date').datepicker('setEndDate', arrivalDate);

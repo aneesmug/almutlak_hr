@@ -5994,9 +5994,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     const formattedDate = formatDateToString(minStartDate);
                     console.log('✅ Active vacation found - Return date:', activeReturnDate, '- Min start date for 2nd vacation:', formattedDate);
                 } else {
-                    // No active vacation - allow from tomorrow onwards
+                    // No active vacation - allow from 3 days ago onwards
                     minStartDate = new Date();
-                    minStartDate.setDate(minStartDate.getDate() + 1); // Tomorrow
+                    minStartDate.setDate(minStartDate.getDate() - 3); // 3 days ago
                     const formattedDate = formatDateToString(minStartDate);
                     console.log('✅ No active vacation - Min start date:', formattedDate);
                 }
@@ -12216,4 +12216,13 @@ function renderAllowedEmployeesCard(employeeText, title = 'Allowed Employees') {
     }).join('');
     
     return '<div class="allowed-employees-card-content">' + badges + '</div>';
+}
+
+function resetFilters(perpage) {
+    // Reset all filter controls to default values
+    document.getElementById('statusFilter').value = 'my_pending';
+    document.getElementById('searchFilter').value = '';
+    // Redirect to base URL without any filters
+    const baseUrl = window.location.href.split('?')[0];
+    window.location.href = `${baseUrl}?status=my_pending&limit=${perpage}&page=1`;
 }

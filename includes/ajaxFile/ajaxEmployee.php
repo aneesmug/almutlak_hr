@@ -23,6 +23,7 @@ if($ajaxType == 'emp_search') {
     $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 ".$company_filter.$department_filter.$employee_filter." ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
     $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
+        $row['name'] = parseName($row['name']);
         $name[] = $row;
     }
     mysqli_free_result($stmt); // <-- FIX
@@ -1974,6 +1975,70 @@ elseif($ajaxType == 'upload_employee_document') {
         }
         send_json_response("error", $e->getMessage(), "error");
     }
+}
+
+/* ===================================================================
+ * NEW AJAX OPERATIONS FOR EOS SUPERVISOR REASSIGNMENT
+ * =================================================================== */
+
+elseif ($ajaxType == 'get_eos_subordinates') {
+    /**
+     * Get all employees who have the specified employee as their direct supervisor
+     * Used for EOS process to reassign supervisors before termination
+     */
+    $super_emp_id = isset($_POST['emp_id']) ? mysqli_real_escape_string($conDB, $_POST['emp_id']) : '';
+    
+    if (empty($super_emp_id)) {
+        send_json_response("error", "Employee ID is required", "error");
+    }
+    
+    $subordinates_query = mysqli_query($conDB, "SELECT 
+        e.emp_id, e.name, e.supervisor_id, e.dept, d.dep_nme as department
+        FROM employees e
+        LEFT JOIN department d ON e.dept = d.id
+        WHERE e.supervisor_id = '{$super_emp_id}' AND e.status = 1
+        ORDER BY e.name
+    ");
+    
+    $subordinates = [];
+    if ($subordinates_query) {
+        while ($row = mysqli_fetch_assoc($subordinates_query)) {
+            $subordinates[] = $row;
+        }
+        mysqli_free_result($subordinates_query);
+    }
+    
+    $data = [
+        'data' => $subordinates,
+        'status' => 200
+    ];
+    echo json_encode($data);
+
+} elseif ($ajaxType == 'update_subordinate_supervisor') {
+    /**
+     * Update the direct supervisor for an employee
+     * Used when EOS employee's subordinates need to be reassigned to new supervisors
+     */
+    $emp_id = isset($_POST['emp_id']) ? mysqli_real_escape_string($conDB, $_POST['emp_id']) : '';
+    $new_supervisor_id = isset($_POST['new_supervisor_id']) ? mysqli_real_escape_string($conDB, $_POST['new_supervisor_id']) : '';
+    
+    if (empty($emp_id) || empty($new_supervisor_id)) {
+        send_json_response("error", "Employee ID and New Supervisor ID are required", "error");
+    }
+    
+    // Update the employee's supervisor
+    $update_query = mysqli_query($conDB, "
+        UPDATE employees
+        SET supervisor_id = '{$new_supervisor_id}'
+        WHERE emp_id = '{$emp_id}' AND status = 1
+    ");
+    
+    if ($update_query && mysqli_affected_rows($conDB) > 0) {
+        send_json_response("success", "Supervisor updated successfully", "success");
+    } else {
+        send_json_response("error", "Failed to update supervisor", "error");
+    }
+
 }
 
 ?>

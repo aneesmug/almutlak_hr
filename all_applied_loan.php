@@ -367,6 +367,11 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                     <div class="input-group-append">
                                                         <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
                                                     </div>
+                                                    <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
+                                                    <div class="input-group-append">
+                                                        <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
+                                                    </div>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>

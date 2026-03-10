@@ -579,6 +579,55 @@ if ($settlement_type_id > 0) {
 }
 // --- END NEW SETTLEMENT PENDING COUNT ---
 
+// --- Fetch Business Trip Pending Approval Count (NEW) ---
+$business_trip_pending_count = 0;
+$business_trip_type_id = 0;
+$business_trip_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'business_trip' LIMIT 1");
+if ($row = mysqli_fetch_assoc($business_trip_type_query)) {
+    $business_trip_type_id = (int)$row['id'];
+}
+if ($business_trip_type_id > 0) {
+    if ($is_system_admin || $user_role == 'Administrator') {
+        // Admin: count all distinct business trip requests still pending anywhere
+        $business_trip_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                             FROM request_approvers ra
+                                                                             JOIN emp_business_trip bt ON bt.request_inv_no = ra.request_inv_no
+                                                                             WHERE ra.status = 'pending' 
+                                                                                 AND ra.request_type_id = $business_trip_type_id
+                                                                                 AND bt.current_status = 'pending_approval'";
+        $res_bt_admin = mysqli_query($conDB, $business_trip_pending_query_admin);
+        if ($res_bt_admin && ($rbta = mysqli_fetch_assoc($res_bt_admin))) {
+            $business_trip_pending_count = (int)$rbta['count'];
+        }
+    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+        // Department Manager: count all business trip requests from their department employees
+        // Also applies to GM and HR Managers
+        $business_trip_pending_query_dept = "SELECT COUNT(DISTINCT bt.request_inv_no) AS count
+                                                                           FROM emp_business_trip bt
+                                                                           JOIN employees e ON bt.emp_id = e.emp_id
+                                                                           WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                                               AND bt.current_status = 'pending_approval'";
+        $res_bt_dept = mysqli_query($conDB, $business_trip_pending_query_dept);
+        if ($res_bt_dept && ($rbtd = mysqli_fetch_assoc($res_bt_dept))) {
+            $business_trip_pending_count = (int)$rbtd['count'];
+        }
+    } else {
+        // Regular user: count requests awaiting THIS user's approval
+        $business_trip_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                     FROM request_approvers ra
+                                                                     JOIN emp_business_trip bt ON bt.request_inv_no = ra.request_inv_no
+                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                         AND ra.status = 'pending'
+                                                                         AND ra.request_type_id = $business_trip_type_id
+                                                                         AND bt.current_status = 'pending_approval'";
+        $res_bt = mysqli_query($conDB, $business_trip_pending_query);
+        if ($res_bt && ($rbt = mysqli_fetch_assoc($res_bt))) {
+            $business_trip_pending_count = (int)$rbt['count'];
+        }
+    }
+}
+// --- END NEW BUSINESS TRIP PENDING COUNT ---
+
 // Initialize counts to 0
 $status_cont_vacapl = 0;
 $status_cont_vacaphr = 0;
@@ -611,7 +660,7 @@ if ($rec = mysqli_fetch_assoc($sql_count_aprl)) {
 
 // --- CALCULATE TOTAL COUNTS FOR PARENT MENUS ---
 // Total count for Approvals menu
-$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $status_cont_contaprl;
+$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $business_trip_pending_count + $status_cont_contaprl;
 
 // Total count for Requests menu
 $requests_total_count = $smart_request_count + $general_request_count;
@@ -708,9 +757,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)): ?>
                     <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_business_trip_page) || in_array($user_type, $can_see_business_trip_page)): ?>
-                    <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa fa-plane"></i><span><?=__('business_trip', 'Business Trip') ?></span></a></li>
-                <?php endif; ?>
+                <?php /*if (in_array($user_role, $can_see_business_trip_page) || in_array($user_type, $can_see_business_trip_page)): ?>
+                    <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa fa-plane"></i><span><?=__('business_trip', 'Business Trip') ?></span><?= ($business_trip_pending_count > 0) ? "<span class='badgez badge-danger'>$business_trip_pending_count</span>" : "" ?></a></li>
+                <?php endif;*/ ?>
                 <?php if (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page)): ?>
                     <li><a href="<?= $rejoinApprovalsLink ?>"><i class="fa fa-plane-arrival"></i><span><?=__('rejoin_approvals', 'Rejoin Approvals') ?> <?= ($rejoin_pending_count > 0) ? "<span class='badgez badge-danger'>$rejoin_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>

@@ -192,6 +192,26 @@
         $assets_query = mysqli_query($conDB, "SELECT COUNT(*) as assigned_assets_count FROM `employee_assets` WHERE `emp_id` = '{$emprow['empid']}' AND `status` = 'Assigned'");
         $assets_count_rec = mysqli_fetch_assoc($assets_query);
         $assigned_assets_count = $assets_count_rec['assigned_assets_count'];
+
+        // --- NEW: Check for subordinates (employees who have this employee as direct supervisor) ---
+        $subordinates_query = mysqli_query($conDB, "SELECT 
+            e.emp_id, e.name, e.supervisor_id, d.dep_nme as department
+            FROM employees e
+            LEFT JOIN department d ON e.dept = d.id
+            WHERE e.supervisor_id = '{$emprow['empid']}' AND e.status = 1
+            ORDER BY e.name
+        ");
+        $subordinates = [];
+        $has_subordinates = false;
+        if ($subordinates_query) {
+            while ($sub_row = mysqli_fetch_assoc($subordinates_query)) {
+                $sub_row['name'] = parseName($sub_row['name']);
+                $subordinates[] = $sub_row;
+                $has_subordinates = true;
+            }
+            mysqli_free_result($subordinates_query);
+        }
+        // --- END: Subordinates check ---
 		
     } else {
 		header("Location: ./reg_employee.php");
@@ -393,6 +413,14 @@
             $errors['country'] = "EOS processing is not allowed for employees from country ID: 121.";
         }
         
+        // Check if subordinates have been reassigned before allowing EOS
+        if ($has_subordinates) {
+            $subordinates_updated = isset($_POST['subordinates_updated']) ? $_POST['subordinates_updated'] : '';
+            if (empty($subordinates_updated) || $subordinates_updated !== 'true') {
+                $errors['subordinates'] = "Cannot process termination. This employee is a direct supervisor to " . count($subordinates) . " employee(s). You must reassign their supervisors before proceeding with EOS.";
+            }
+        }
+        
         if(empty($errors) && $assigned_assets_count > 0){
             $errors['assets'] = "Cannot process termination. Employee has outstanding assets that must be returned first.";
         } else {
@@ -575,9 +603,6 @@
         });
     }
 
-	$checkGander = ($emprow['sex'] == 'Male')?'./assets/emp_pics/defult.png':'./assets/emp_pics/defultFemale.jpg';
-	$emp_avatar_display = (!empty($emprow['avatar']) && file_exists(ltrim($emprow['avatar'], './'))) ? $emprow['avatar'] : $checkGander;
-
 ?>
 	<!doctype html>
 	<html lang="<?=$current_lang?>" dir="<?=($is_rtl) ? 'rtl' : 'ltr'?>">
@@ -658,7 +683,7 @@
                                                 <div class="card-body">
                                                     <div class="row">
                                                         <div class="col-md-2 text-center">
-                                                            <img src="<?=$emp_avatar_display ?>" alt="<?=$emprow['name'] ?>" class="rounded-circle img-thumbnail" width="120" />
+                                                            <img src="<?= getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1); ?>" alt="<?= htmlspecialchars($emprow['name']); ?>" class="rounded-circle img-thumbnail" width="120">
                                                         </div>
                                                         <div class="col-md-10">
                                                             <div class="row">
@@ -735,6 +760,7 @@
                                         </div>
                                     </div>
 
+                                    <?php if ($assigned_assets_count > 0): ?>
                                     <!-- Assigned Assets Section -->
                                     <div class="card mt-4">
                                         <div class="card-header bg-light"><h5 class="m-0"><?=__('Assigned Assets for Clearance');?></h5></div>
@@ -781,6 +807,7 @@
                                             </table>
                                         </div>
                                     </div>
+                                    <?php endif; ?>
 
                                     <!-- EOS Calculation Section -->
                                     <div class="card mt-4">
@@ -792,6 +819,15 @@
                                                 </div>
                                             <?php endif; ?>
 
+                                            <?php if ($has_subordinates): ?>
+                                                <div class="alert alert-warning text-center" id="subordinates-warning-alert">
+                                                    <strong><?=__('Action Required:');?></strong> 
+                                                    <button type="button" class="btn btn-sm btn-warning" id="show-subordinates-btn" onclick="showSubordinatesModal()">
+                                                        <i class="fa fa-users"></i> <?= count($subordinates) . ' ' . __('Employee(s) need supervisor reassignment') ?>
+                                                    </button>
+                                                </div>
+                                            <?php endif; ?>
+
                                             <?php if ($eos_id == ""): ?>
                                                 <form id="calculatorForm" action="emp_end_of_service.php?emp_id=<?=$_GET['emp_id']?>" method="post">
                                                     <fieldset <?= ($assigned_assets_count > 0) ? 'disabled' : '' ?>>
@@ -799,8 +835,15 @@
                                                             <div class="alert alert-danger"><?=htmlspecialchars($general_error_message); ?></div>
                                                         <?php endif; ?>
                                                         <?php if (!empty($errors['assets'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['assets']); ?></div><?php endif; ?>
+                                                        <?php if (!empty($errors['subordinates'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['subordinates']); ?></div><?php endif; ?>
                                                         <?php if (!empty($errors['country'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['country']); ?></div><?php endif; ?>
                                                         <?php if (!empty($errors['duplicate_eos'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['duplicate_eos']); ?></div><?php endif; ?>
+                                                        
+                                                        <!-- Hidden fields for subordinates tracking -->
+                                                        <input type="hidden" id="subordinates_updated" name="subordinates_updated" value="<?= $has_subordinates ? 'false' : 'true' ?>">
+                                                        <input type="hidden" id="subordinates_json" value='<?= htmlspecialchars(json_encode($subordinates), ENT_QUOTES, 'UTF-8'); ?>'>
+                                                        <input type="hidden" id="has_subordinates" value="<?= $has_subordinates ? '1' : '0' ?>">
+                                                        
                                                         <div class="form-row align-items-end">
                                                             <div class="form-group col-lg-6">
                                                                 <label><strong><?=__('Type of Contract');?>:</strong></label>
@@ -1414,6 +1457,263 @@
                 }
             });
 		</script>
+
+        <!-- NEW: SweetAlert2 Modal for Supervisor Reassignment -->
+        <script type="text/javascript">
+            /**
+             * Show SweetAlert2 modal for reassigning supervisors
+             * Called when EOS employee is a direct supervisor to other employees
+             */
+            function showSubordinatesModal() {
+                const hasSubordinates = parseInt($('#has_subordinates').val());
+                if (!hasSubordinates) return;
+
+                const subordinatesJson = $('#subordinates_json').val();
+                let subordinates = [];
+                try {
+                    subordinates = JSON.parse(subordinatesJson);
+                } catch (e) {
+                    console.error('Failed to parse subordinates JSON', e);
+                    Swal.fire({
+                        title: '<?= __("error") ?>',
+                        text: '<?= __("failed_to_load_subordinates") ?>',
+                        icon: 'error',
+                        confirmButtonText: '<?= __("ok") ?>'
+                    });
+                    return;
+                }
+
+                if (subordinates.length === 0) {
+                    return;
+                }
+
+                // Build table HTML for subordinates with checkboxes
+                let tableHtml = `
+                    <div style="text-align: left; max-height: 350px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #dee2e6; border-radius: 4px;">
+                        <table class="table table-sm table-bordered" style="margin-bottom: 0;">
+                            <thead class="bg-light" style="position: sticky; top: 0;">
+                                <tr>
+                                    <th style="width: 50px; text-align: center;">
+                                        <input type="checkbox" id="select-all-subordinates" style="cursor: pointer;" title="<?= __('select_all') ?>">
+                                    </th>
+                                    <th><?= __('employee_id') ?></th>
+                                    <th><?= __('name') ?></th>
+                                    <th><?= __('department') ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                subordinates.forEach(function(sub, index) {
+                    tableHtml += `
+                        <tr class="subordinate-row">
+                            <td style="text-align: center;">
+                                <input type="checkbox" class="subordinate-checkbox" data-emp-id="${sub.emp_id}" data-emp-name="${sub.name}" style="cursor: pointer;">
+                            </td>
+                            <td><strong>${sub.emp_id}</strong></td>
+                            <td>${sub.name}</td>
+                            <td>${sub.department || '-'}</td>
+                        </tr>
+                    `;
+                });
+
+                tableHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                        
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff;">
+                            <label style="margin: 0 0 10px 0; display: block; font-weight: 600;">
+                                <i class="fa fa-users"></i> <?= __('select_new_supervisor_for_all') ?>
+                            </label>
+                            <select id="bulk-supervisor-select" class="form-control" style="width: 100%;">
+                                <option value="">-- <?= __('select_supervisor') ?> --</option>
+                            </select>
+                            <small style="color: #6c757d; margin-top: 5px; display: block;">
+                                <i class="fa fa-info-circle"></i> <?= __('selected_employees_will_assigned_this_supervisor') ?>
+                            </small>
+                        </div>
+                    </div>
+                `;
+
+                // Show SweetAlert modal
+                Swal.fire({
+                    title: '<?= __('reassign_supervisors') ?>',
+                    html: tableHtml,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: '<?= __('save_and_update') ?>',
+                    cancelButtonText: '<?= __('cancel') ?>',
+                    cancelButtonColor: '#d33',
+                    confirmButtonColor: '#3085d6',
+                    width: '55%',
+                    allowOutsideClick: false,
+                    didOpen: function(modal) {
+                        // Load available employees for supervisor selection
+                        $.ajax({
+                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            type: 'POST',
+                            dataType: 'JSON',
+                            data: { ajaxType: 'emp_search' },
+                            success: function(res) {
+                                if (res.data && res.data.length > 0) {
+                                    // Populate select2 for bulk supervisor select
+                                    const employees = res.data;
+                                    
+                                    $('#bulk-supervisor-select').select2({
+                                        data: employees.map(emp => ({
+                                            id: emp.emp_id,
+                                            text: emp.emp_id + ' - ' + emp.name
+                                        })),
+                                        placeholder: '<?= __("start_typing_to_search") ?>',
+                                        allowClear: true,
+                                        width: '100%'
+                                    });
+                                    
+                                    // Prevent select2 dropdown from being hidden by SweetAlert
+                                    $('#bulk-supervisor-select').on('select2:open', function() {
+                                        setTimeout(function() {
+                                            $('body').addClass('swal2-open');
+                                        }, 0);
+                                    });
+                                }
+                            }
+                        });
+                        
+                        // Handle "Select All" checkbox
+                        $(document).on('change', '#select-all-subordinates', function() {
+                            const isChecked = $(this).is(':checked');
+                            $('.subordinate-checkbox').prop('checked', isChecked);
+                        });
+                        
+                        // Handle individual checkboxes
+                        $(document).on('change', '.subordinate-checkbox', function() {
+                            const totalCheckboxes = $('.subordinate-checkbox').length;
+                            const checkedCheckboxes = $('.subordinate-checkbox:checked').length;
+                            
+                            // Update "Select All" checkbox state
+                            if (checkedCheckboxes === totalCheckboxes) {
+                                $('#select-all-subordinates').prop('checked', true);
+                            } else {
+                                $('#select-all-subordinates').prop('checked', false);
+                            }
+                        });
+                    },
+                    preConfirm: function() {
+                        // Get selected subordinates
+                        let selectedSubordinates = [];
+                        $('.subordinate-checkbox:checked').each(function() {
+                            selectedSubordinates.push({
+                                emp_id: $(this).data('emp-id'),
+                                emp_name: $(this).data('emp-name')
+                            });
+                        });
+                        
+                        // Get selected supervisor
+                        const newSupervisorId = $('#bulk-supervisor-select').val();
+                        
+                        // Validate selections
+                        if (selectedSubordinates.length === 0) {
+                            Swal.showValidationMessage('<?= __("please_select_at_least_one_employee") ?>');
+                            return false;
+                        }
+                        
+                        if (!newSupervisorId) {
+                            Swal.showValidationMessage('<?= __("please_select_new_supervisor") ?>');
+                            return false;
+                        }
+                        
+                        // Make AJAX calls to update all selected subordinates
+                        let updatePromises = [];
+                        selectedSubordinates.forEach(function(sub) {
+                            updatePromises.push(
+                                $.ajax({
+                                    url: './includes/ajaxFile/ajaxEmployee.php',
+                                    type: 'POST',
+                                    dataType: 'JSON',
+                                    data: {
+                                        ajaxType: 'update_subordinate_supervisor',
+                                        emp_id: sub.emp_id,
+                                        new_supervisor_id: newSupervisorId
+                                    }
+                                })
+                            );
+                        });
+                        
+                        return Promise.all(updatePromises).then(function(responses) {
+                            // Check if all updates succeeded
+                            let allSuccess = true;
+                            responses.forEach(function(res) {
+                                if (res.status !== 'success' && res.message?.includes('success') === false) {
+                                    allSuccess = false;
+                                }
+                            });
+                            
+                            if (!allSuccess) {
+                                throw new Error('<?= __("failed_to_update_some_supervisors") ?>');
+                            }
+                            
+                            return {
+                                success: true,
+                                selectedCount: selectedSubordinates.length,
+                                supervisorId: newSupervisorId
+                            };
+                        });
+                    }
+                }).then(function(result) {
+                    if (result.isConfirmed && result.value && result.value.success) {
+                        // Update hidden field to mark as updated
+                        $('#subordinates_updated').val('true');
+                        
+                        // Show success message
+                        Swal.fire({
+                            title: '<?= __("success") ?>',
+                            html: `<strong>${result.value.selectedCount}</strong> <?= __("supervisors_updated_successfully") ?>`,
+                            icon: 'success',
+                            confirmButtonText: '<?= __("ok") ?>',
+                            confirmButtonColor: '#28a745'
+                        }).then(function() {
+                            // Enable the Register EOS button
+                            $('#show-subordinates-btn').prop('disabled', true);
+                            $('#subordinates-warning-alert').fadeOut(function() {
+                                $(this).html('<div class="alert alert-success"><i class="fa fa-check"></i> <?= __("all_supervisors_reassigned") ?></div>').fadeIn();
+                            });
+                        });
+                    }
+                });
+            }
+
+            // On page load, check if we need to show the subordinates modal
+            $(document).ready(function() {
+                const hasSubordinates = parseInt($('#has_subordinates').val());
+                if (hasSubordinates) {
+                    // Disable the submit button until supervisors are updated
+                    const registerBtn = $('button[name="submit"]');
+                    registerBtn.prop('disabled', true);
+                    
+                    // If supervisors not updated yet, optionally auto-show the modal
+                    const subordinatesUpdated = $('#subordinates_updated').val();
+                    if (subordinatesUpdated !== 'true') {
+                        // You can uncomment this to auto-show modal on page load
+                        // showSubordinatesModal();
+                    } else {
+                        registerBtn.prop('disabled', false);
+                    }
+                }
+            });
+
+            // Monitor changes to subordinates_updated and enable/disable button
+            $(document).on('change', '#subordinates_updated', function() {
+                const val = $(this).val();
+                const registerBtn = $('button[name="submit"]');
+                if (val === 'true') {
+                    registerBtn.prop('disabled', false);
+                } else {
+                    registerBtn.prop('disabled', true);
+                }
+            });
+        </script>
+
         <?php if (!empty($error_1)): ?>
         <script type="text/javascript">
             $(document).ready(function() {
