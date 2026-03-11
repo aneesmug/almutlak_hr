@@ -220,7 +220,7 @@ $status_badges = [
                                                             <?= __('actions', 'Actions') ?> <span class="caret"></span>
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right" style="z-index: 1050; position: absolute;">
-                                                            <a class="dropdown-item" href="business_trip_report.php?id=<?= (int)$trip['id'] ?>&emp_id=<?= urlencode((string)($trip['emp_id'] ?? $emp_id)) ?>" target="_blank">
+                                                            <a class="dropdown-item" href="business_trip_report_details.php?id=<?= (int)$trip['id'] ?>&emp_id=<?= urlencode((string)($trip['emp_id'] ?? $emp_id)) ?>" target="_blank">
                                                                 <i class="fa fa-eye"></i> <?= __('view_report', 'View Report') ?>
                                                             </a>
                                                             <a class="dropdown-item" href="business_trip_status_history.php?request_inv_no=<?= urlencode((string)$trip['request_inv_no']) ?>" target="_blank">

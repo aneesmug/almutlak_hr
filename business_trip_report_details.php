@@ -218,7 +218,7 @@ if (mysqli_num_rows($query) == 1) {
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 <head>
     <meta charset="utf-8" />
-    <title><?= $site_title ?> - Business Trip Report</title>
+    <title><?= $site_title ?> - <?= __('business_trip_report') ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
@@ -726,7 +726,7 @@ if (mysqli_num_rows($query) == 1) {
 
                         <!-- Report Footer -->
                         <div class="report-footer">
-                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?></p>
+                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?> - <?= __('business_trip_report') ?></p>
                         </div>
                     </div>
                 </div>

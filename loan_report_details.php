@@ -595,7 +595,7 @@ if (mysqli_num_rows($query) == 1) {
                                         </div>
                                         <!-- Report Footer -->
                                         <div class="report-footer">
-                                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?></p>
+                                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?> - <?= __('loan_report_title') ?></p>
                                         </div>
                                 </div>
                             </div> <!-- /.report-wrapper -->

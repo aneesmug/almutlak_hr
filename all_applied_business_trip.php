@@ -370,7 +370,7 @@ if ($can_see_all_depts) {
                                                         <?php endif; ?>
                                                     </div>
                                                     <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
-                                                        <a href="business_trip_report.php?id=<?= (int)$trip['id']; ?>&emp_id=<?= urlencode((string)$trip['emp_id']); ?>" target="_blank" class="btn btn-info btn-block waves-effect">
+                                                        <a href="business_trip_report_details.php?id=<?= (int)$trip['id']; ?>&emp_id=<?= urlencode((string)$trip['emp_id']); ?>" target="_blank" class="btn btn-info btn-block waves-effect">
                                                             <i class="fa fa-eye"></i> <?= __('view_report') ?>
                                                         </a>
                                                         <div class="btn-group flex-fill" style="position: relative; z-index: 1000;">

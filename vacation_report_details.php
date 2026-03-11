@@ -343,7 +343,7 @@ if (mysqli_num_rows($query) == 1) {
 
     <head>
         <meta charset="utf-8" />
-        <title><?= $site_title ?> - Vacation Report</title>
+        <title><?= $site_title ?> - <?= __('vacation_report_title') ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -1188,7 +1188,7 @@ if (mysqli_num_rows($query) == 1) {
                             </div>
                             <!-- Report Footer -->
                         <div class="report-footer">
-                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?></p>
+                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?> - <?= __('vacation_report_title') ?></p>
                         </div>
                         </div>
 
