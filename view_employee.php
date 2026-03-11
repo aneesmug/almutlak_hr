@@ -1296,7 +1296,7 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 											</div>
 											<div class="table-responsive">
-												<?php if ($user_type <> "dept_user") { ?>
+												<?php if ($isHR || $is_system_admin || $isDeptHr) { ?>
 													<div class="mb-3">
 														<button type="button" class="btn btn-primary btn-sm" onclick="addManualVacationHistory(<?= (int)$emprow['empid'] ?>, '<?= htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) ?>')">
 															<i class="mdi mdi-plus-circle mr-1"></i><?= __('add_manual_vacation_history') ?>
