@@ -1296,7 +1296,13 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 											</div>
 											<div class="table-responsive">
-
+												<?php if ($user_type <> "dept_user") { ?>
+													<div class="mb-3">
+														<button type="button" class="btn btn-primary btn-sm" onclick="addManualVacationHistory(<?= (int)$emprow['empid'] ?>, '<?= htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) ?>')">
+															<i class="mdi mdi-plus-circle mr-1"></i><?= __('add_manual_vacation_history') ?>
+														</button>
+													</div>
+												<?php } ?>
 												<h4 class="m-t-0 header-title"></h4>
 												<table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
@@ -2587,6 +2593,7 @@ if (mysqli_num_rows($query) == 1) {
 									openResignationWizard(emp_id, emp_name);
 								}, 100);
 							});
+
 						}
 					});
 				});
@@ -3131,6 +3138,8 @@ if (mysqli_num_rows($query) == 1) {
 				// Changed to use new rejoin approval system
 				submitRejoinRequest(vacationId, returndate, empId, empName);
 			}
+
+
 		</script>
 
 		<!-- Document Viewer JavaScript -->

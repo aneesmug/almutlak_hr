@@ -82,6 +82,11 @@ if ($emprow['status'] == 1) {
 					$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"window.location.href='add_vac_emp.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-plane-departure\"></i><span>" . __('add_vacation') . "</span></div>";
 				}
 			}
+			
+			// Add Manual Vacation (HR/Admin only)
+			if ($isHR || $is_system_admin || $isDeptHr) {
+				$moreActionsHtml .= "<div class=\"menu-item text-info\" onclick=\"addManualVacationHistory(" . (int)$emprow['empid'] . ", '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', " . (int)$emprow['country'] . ");\" role=\"button\"><i class=\"fa fa-plus-circle\"></i><span>" . __('add_manual_vacation', 'Add Manual Vacation') . "</span></div>";
+			}
 		}
 	}
 	

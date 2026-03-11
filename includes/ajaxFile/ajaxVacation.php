@@ -4831,6 +4831,134 @@ elseif ($ajaxType == 'addManualHistory') {
 }
 
 // ================================================================
+// --- ADD MANUAL VACATION HISTORY (Admin/HR Manual Entry) ---
+// For executives/management who submit vacation via email
+// ================================================================
+elseif ($ajaxType == 'addManualVacationHistory') {
+    try {
+        $emp_id = (int)($_POST['emp_id'] ?? 0);
+        $vac_type = trim($_POST['vac_type'] ?? '');
+        $start_date = trim($_POST['start_date'] ?? '');
+        $return_date = trim($_POST['return_date'] ?? '');
+        $vacdays = isset($_POST['vacdays']) ? (float)$_POST['vacdays'] : 0;
+        $fly_type = trim($_POST['fly_type'] ?? 'N/A');
+        $permit_no = trim($_POST['permit_no'] ?? '');
+        $remarks = trim($_POST['remarks'] ?? '');
+
+        // Validate required inputs
+        if ($emp_id <= 0) {
+            throw new Exception(__('invalid_employee_id'));
+        }
+        if (empty($vac_type)) {
+            throw new Exception(__('vacation_type_required'));
+        }
+        if (empty($start_date)) {
+            throw new Exception(__('start_date_required'));
+        }
+        if (empty($return_date)) {
+            throw new Exception(__('return_date_required'));
+        }
+        if ($vacdays <= 0) {
+            throw new Exception(__('invalid_number_of_days'));
+        }
+
+        // Validate date format
+        $date_re = '/^\d{4}-\d{2}-\d{2}$/';
+        if (!preg_match($date_re, $start_date) || !preg_match($date_re, $return_date)) {
+            throw new Exception(__('invalid_date_format_expected_yyyy_mm_dd'));
+        }
+
+        // Validate date logic
+        $start_time = strtotime($start_date);
+        $return_time = strtotime($return_date);
+        if ($return_time < $start_time) {
+            throw new Exception(__('return_date_must_be_after_start_date'));
+        }
+
+        // Check if employee exists
+        $sql_check = "SELECT `emp_id`, `dept` FROM `employees` WHERE `emp_id` = :emp_id LIMIT 1";
+        $stmt_check = $pdo->prepare($sql_check);
+        $stmt_check->execute([':emp_id' => $emp_id]);
+        $employee = $stmt_check->fetch(PDO::FETCH_ASSOC);
+
+        if (!$employee) {
+            throw new Exception(__('employee_not_found'));
+        }
+
+        // Get current admin/HR user
+        $current_user_id = (int)($_SESSION['empid'] ?? 0);
+        if ($current_user_id <= 0) {
+            throw new Exception(__('user_not_authenticated'));
+        }
+
+        // Generate unique request invoice number for manual entry
+        $request_inv_no = 'MANUAL-' . date('YmdHis') . '-' . $emp_id;
+
+        // Prepare SQL for inserting into emp_vacation
+        // For manual entry: status = 'approved' (since admin is creating it)
+        $sql_insert = "INSERT INTO `emp_vacation` 
+                    (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `start_date`, `return_date`, `vacdays`, `permit_no`, `remarks`, `request_inv_no`, `current_status`, `current_approval_level`, `is_deductible`, `review`, `created_at`) 
+                VALUES 
+                    (:emp_id, :submitted_by, :vac_type, :fly_type, :start_date, :return_date, :vacdays, :permit_no, :remarks, :request_inv_no, 'approved', 3, 1, 'A', NOW())";
+
+        $stmt_insert = $pdo->prepare($sql_insert);
+        $stmt_insert->execute([
+            ':emp_id' => $emp_id,
+            ':submitted_by' => $current_user_id,
+            ':vac_type' => $vac_type,
+            ':fly_type' => $fly_type,
+            ':start_date' => $start_date,
+            ':return_date' => $return_date,
+            ':vacdays' => $vacdays,
+            ':permit_no' => $permit_no,
+            ':remarks' => $remarks,
+            ':request_inv_no' => $request_inv_no
+        ]);
+
+        $vacation_id = $pdo->lastInsertId();
+
+        // Deduct vacation days from employee's balance
+        $sql_balance = "SELECT `id`, `available_balance`, `remaining_balance` FROM `emp_vacation_balance` 
+                       WHERE `emp_id` = :emp_id ORDER BY `last_updated` DESC LIMIT 1";
+        $stmt_balance = $pdo->prepare($sql_balance);
+        $stmt_balance->execute([':emp_id' => $emp_id]);
+        $balance_record = $stmt_balance->fetch(PDO::FETCH_ASSOC);
+
+        if ($balance_record) {
+            // Calculate new balance after deducting vacation days
+            $new_available_balance = max(0, (float)$balance_record['available_balance'] - $vacdays);
+            $new_remaining_balance = max(0, (float)$balance_record['remaining_balance'] - $vacdays);
+
+            // Update the balance
+            $sql_update_balance = "UPDATE `emp_vacation_balance` 
+                                 SET `available_balance` = :available_balance, 
+                                     `remaining_balance` = :remaining_balance, 
+                                     `used_days` = `used_days` + :vacdays,
+                                     `last_updated` = NOW() 
+                                 WHERE `id` = :balance_id";
+            $stmt_update_balance = $pdo->prepare($sql_update_balance);
+            $stmt_update_balance->execute([
+                ':available_balance' => $new_available_balance,
+                ':remaining_balance' => $new_remaining_balance,
+                ':vacdays' => $vacdays,
+                ':balance_id' => $balance_record['id']
+            ]);
+        }
+
+        // Log the manual vacation entry
+        ActivityLogger::logSubmit('Vacation-Manual', 'ajaxVacation.php', $vacation_id, 
+            "Manual vacation entry added: {$request_inv_no}, Type: {$vac_type}, Days: {$vacdays}, Period: {$start_date} to {$return_date}", 
+            'emp_vacation');
+
+        send_json_response(__('success'), __('manual_vacation_history_saved_successfully'), 'success');
+
+    } catch (Exception $e) {
+        send_json_response(__('error'), $e->getMessage(), 'error');
+    }
+    exit;
+}
+
+// ================================================================
 // --- SIMPLE LEAVE APPLICATION (2-LEVEL APPROVAL) ---
 // Approval Chain: Direct Supervisor (or Dept Manager) → HR Senior BP
 // ================================================================

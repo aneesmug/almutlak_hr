@@ -12226,3 +12226,240 @@ function resetFilters(perpage) {
     const baseUrl = window.location.href.split('?')[0];
     window.location.href = `${baseUrl}?status=my_pending&limit=${perpage}&page=1`;
 }
+
+/**
+ * Generate HTML for Manual Vacation History Form
+ * Used in addManualVacationHistory() modal
+ * @param {number} country - Employee country code (191 = excluded from Fly option)
+ */
+function manualVacationHistory_HTML(country) {
+    const vacationTypes = [
+        { value: 'Local Vacation', label: __('local_vacation') },
+        { value: 'Encashed', label: __('encashed') }
+    ];
+    
+    // Add Fly option only if country is not 191
+    if (country !== 191) {
+        vacationTypes.unshift({ value: 'Fly', label: __('fly') });
+    }
+
+    const flyTypes = [
+        { value: 'annual', label: __('annual') },
+        { value: 'emergency', label: __('emergency') }
+    ];
+
+    let vacationTypeOptions = '<option value="">' + __('select') + '</option>';
+    vacationTypes.forEach(vt => {
+        vacationTypeOptions += '<option value="' + vt.value + '">' + vt.label + '</option>';
+    });
+
+    let flyTypeOptions = '<option value="">' + __('select') + '</option>';
+    flyTypes.forEach(ft => {
+        flyTypeOptions += '<option value="' + ft.value + '">' + ft.label + '</option>';
+    });
+
+    const html = `
+    <form id="manualVacationHistoryForm">
+        <div class="form-row">
+            <div class="form-group col-md-6">
+                <label for="mvh_vac_type">${__('vacation_type')}</label>
+                <select class="form-control" id="mvh_vac_type" name="vac_type" required>
+                    ${vacationTypeOptions}
+                </select>
+            </div>
+            <div class="form-group col-md-6" id="mvh_fly_type_group" style="display:none;">
+                <label for="mvh_fly_type">${__('fly_type')}</label>
+                <select class="form-control" id="mvh_fly_type" name="fly_type">
+                    ${flyTypeOptions}
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-6">
+                <label for="mvh_start_date">${__('start_date')}</label>
+                <input type="text" class="form-control" id="mvh_start_date" name="start_date" placeholder="YYYY-MM-DD" required>
+            </div>
+            <div class="form-group col-md-6">
+                <label for="mvh_return_date">${__('return_date')}</label>
+                <input type="text" class="form-control" id="mvh_return_date" name="return_date" placeholder="YYYY-MM-DD" required>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-6">
+                <label for="mvh_days">${__('days')}</label>
+                <input type="number" class="form-control" id="mvh_days" name="days" step="0.5" min="0" readonly>
+            </div>
+            <div class="form-group col-md-6" id="mvh_permit_no_group" style="display:none;">
+                <label for="mvh_permit_no">${__('permit_no')}</label>
+                <input type="text" class="form-control" id="mvh_permit_no" name="permit_no">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group col-md-12">
+                <label for="mvh_remarks">${__('remarks')}</label>
+                <textarea class="form-control" id="mvh_remarks" name="remarks" rows="3"></textarea>
+            </div>
+        </div>
+    </form>
+    `;
+    return html;
+}
+
+/**
+ * Add Manual Vacation History - Allow admin to manually record vacation entries
+ * Used for executives/management who submit vacation via email
+ * @param {number} empid - Employee ID
+ * @param {string} empname - Employee name
+ * @param {number} country - Employee country code (191 = excluded from Fly option)
+ */
+function addManualVacationHistory(empid, empname, country) {
+    if (!empid) {
+        Swal.fire({
+            title: __('error'),
+            text: __('invalid_employee'),
+            icon: 'error'
+        });
+        return;
+    }
+
+    Swal.fire({
+        title: '<i class="fa fa-plus-circle"></i> ' + __('add_manual_vacation_history'),
+        html: manualVacationHistory_HTML(country),
+        showCancelButton: true,
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
+        confirmButtonText: '<i class="fa fa-save"></i> ' + __('save'),
+        cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
+        showLoaderOnConfirm: true,
+        allowOutsideClick: false,
+        width: '600px',
+        willOpen: function() {
+            const swalModal = Swal.getHtmlContainer();
+
+            // Setup event listeners for form fields
+            $('#mvh_vac_type').on('change', function() {
+                const vacType = $(this).val();
+                if (vacType === 'Fly') {
+                    $('#mvh_fly_type_group').show();
+                    $('#mvh_fly_type').prop('required', true);
+                    $('#mvh_permit_no_group').show();
+                    $('#mvh_permit_no').prop('required', true);
+                } else {
+                    $('#mvh_fly_type_group').hide();
+                    $('#mvh_fly_type').prop('required', false);
+                    $('#mvh_permit_no_group').hide();
+                    $('#mvh_permit_no').prop('required', false);
+                }
+            });
+
+            // Calculate days when dates change
+            $('#mvh_start_date, #mvh_return_date').on('change', function() {
+                const startDate = $('#mvh_start_date').val();
+                const returnDate = $('#mvh_return_date').val();
+                
+                if (startDate && returnDate) {
+                    const start = new Date(startDate);
+                    const end = new Date(returnDate);
+                    
+                    if (end >= start) {
+                        // Calculate days (inclusive of both start and end dates)
+                        const days = (end - start) / (1000 * 60 * 60 * 24) + 1;
+                        $('#mvh_days').val(days);
+                    } else {
+                        Swal.showValidationMessage(__('return_date_must_be_after_start_date'));
+                        $('#mvh_days').val('');
+                    }
+                }
+            });
+
+            // Setup date pickers
+            setupGlobalRTLDatepicker();
+            $('#mvh_start_date').datepicker({
+                format: 'yyyy-mm-dd',
+                todayHighlight: false,
+                autoclose: true
+            });
+            $('#mvh_return_date').datepicker({
+                format: 'yyyy-mm-dd',
+                todayHighlight: false,
+                autoclose: true
+            });
+
+            $('#mvh_start_date').on('changeDate', function(e) {
+                $('#mvh_return_date').datepicker('setStartDate', e.date);
+            });
+        },
+        preConfirm: function() {
+            const vacType = $('#mvh_vac_type').val();
+            const startDate = $('#mvh_start_date').val();
+            const returnDate = $('#mvh_return_date').val();
+            const days = $('#mvh_days').val();
+            const flyType = $('#mvh_fly_type').val();
+            const permitNo = $('#mvh_permit_no').val();
+            const remarks = $('#mvh_remarks').val();
+
+            // Validation
+            if (!vacType) {
+                Swal.showValidationMessage(__('select_vacation_type'));
+                return false;
+            }
+            if (!startDate) {
+                Swal.showValidationMessage(__('enter_start_date'));
+                return false;
+            }
+            if (!returnDate) {
+                Swal.showValidationMessage(__('enter_return_date'));
+                return false;
+            }
+            if (!days || days <= 0) {
+                Swal.showValidationMessage(__('invalid_number_of_days'));
+                return false;
+            }
+            if (vacType === 'Fly' && !flyType) {
+                Swal.showValidationMessage(__('select_fly_type'));
+                return false;
+            }
+
+            // Submit to backend
+            return $.ajax({
+                url: './includes/ajaxFile/ajaxVacation.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: {
+                    ajaxType: 'addManualVacationHistory',
+                    emp_id: empid,
+                    vac_type: vacType,
+                    start_date: startDate,
+                    return_date: returnDate,
+                    vacdays: days,
+                    fly_type: flyType || 'N/A',
+                    permit_no: permitNo,
+                    remarks: remarks
+                },
+                error: function(j, e) {
+                    Swal.showValidationMessage(__('error_occurred') + ': ' + e);
+                    console.error('Error:', j, e);
+                }
+            });
+        }
+    }).then((result) => {
+        if (result.isConfirmed && result.value) {
+            const response = result.value;
+            if (response.type === 'success') {
+                Swal.fire({
+                    title: __('success'),
+                    text: response.message,
+                    icon: 'success',
+                    confirmButtonColor: APP_COLORS.primary
+                }).then(() => location.reload());
+            } else {
+                Swal.fire({
+                    title: __('error'),
+                    text: response.message,
+                    icon: 'error',
+                    confirmButtonColor: APP_COLORS.danger_dark
+                });
+            }
+        }
+    });
+}

@@ -248,47 +248,48 @@ if (mysqli_num_rows($query) == 1) {
             --info-color: #17a2b8;
         }
         body.enlarged {
-            background-color: #f4f7f6;
+                background-color: #f4f7f6;
         }
         .report-wrapper {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            max-width: 800px;
-            margin: 1rem auto;
+            max-width: 800px; /* Reduced width */
+            margin: 1rem auto; /* Reduced margin */
             background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,.08);
             color: var(--text-color);
-            font-size: 14px;
+            font-size: 14px; /* Base font size */
         }
         .report-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem 1.5rem;
+            padding: 1rem 1.5rem; /* Reduced padding */
             border-bottom: 1px solid var(--border-color);
         }
-        .report-header .logo-container img { max-height: 40px; }
+        .report-header .logo-container img { max-height: 40px; } /* Reduced logo size */
         .report-header .report-meta { text-align: right; }
         .report-header .report-title { font-size: 1.1rem; font-weight: 600; margin: 0; }
         .report-header .report-subtitle { font-size: 0.8rem; color: var(--muted-color); margin: 0; }
         
+        /* RTL Overrides */
         [dir="rtl"] .report-header { flex-direction: row-reverse; }
         [dir="rtl"] .report-header .report-meta { text-align: left; }
         
-        .report-body { padding: 1.5rem; }
+        .report-body { padding: 1.5rem; } /* Reduced padding */
         
         .employee-banner { display: flex; align-items: center; background-color: var(--background-light); padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid var(--border-color); }
-        .employee-banner .avatar { width: 60px; height: 60px; border-radius: 50%; margin-right: 1rem; object-fit: cover; }
+        .employee-banner .avatar { width: 60px; height: 60px; border-radius: 50%; margin-right: 1rem; }
         .employee-banner .info { flex: 1; }
         .employee-banner .info h4 { font-weight: 600; margin: 0 0 0.2rem 0; font-size: 1.1rem; }
         .employee-banner .info p { color: var(--muted-color); margin: 0; font-size: 0.85rem; }
-        .employee-banner .status-badge { font-size: 0.85rem; padding: 0.35rem 0.75rem; }
-
+        
+        /* RTL Overrides */
         [dir="rtl"] .employee-banner { flex-direction: row-reverse; }
         [dir="rtl"] .employee-banner .avatar { margin-right: 0; margin-left: 1rem; order: 2; }
         [dir="rtl"] .employee-banner .info { order: 1; text-align: right; }
 
-        .report-section { margin-bottom: 1.5rem; }
+        .report-section { margin-bottom: 1.5rem; } /* Reduced margin */
         .section-title { font-weight: 600; color: var(--primary-color); margin-bottom: 1rem; font-size: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
         .section-title i { margin-right: 0.5rem; }
         [dir="rtl"] .section-title i { margin-right: 0; margin-left: 0.5rem; }
@@ -297,33 +298,49 @@ if (mysqli_num_rows($query) == 1) {
         .detail-item .label { font-size: 0.8rem; color: var(--muted-color); margin-bottom: 0.1rem; }
         .detail-item .value { font-weight: 500; font-size: 0.9rem; }
         .detail-item .value.highlight { font-weight: 700; color: var(--success-color); }
+        .detail-item .value.font-monospace { font-family: 'Courier New', monospace; letter-spacing: 0.5px; font-size: 0.85rem; }
 
         .info-box { background-color: #e8f4f8; border-left: 4px solid var(--info-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; margin-bottom: 1rem; }
         [dir="rtl"] .info-box { border-left: none; border-right: 4px solid var(--info-color); }
 
+        .payment-summary { background-color: var(--background-light); border-radius: 6px; padding: 1rem; border: 1px solid var(--border-color); }
+        .payment-summary ul { list-style: none; padding-left: 0; margin-bottom: 0;}
+        .payment-summary li { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; font-size: 0.9rem; border-bottom: 1px solid #e9ecef; }
+        .payment-summary li:last-child { border-bottom: none; }
+        .payment-summary .total-payable { background-color: #e9f5ec; margin: 1rem -1rem -1rem; padding: 1rem 1rem; border-top: 1px solid #c3e6cb; }
+        .payment-summary .total-payable .label { font-weight: 700; color: #155724; }
+        .payment-summary .total-payable .value { font-size: 1.1rem; font-weight: 700; color: #155724; }
+        
+        [dir="rtl"] .payment-summary li { flex-direction: row-reverse; }
+        
         .approval-timeline { position: relative; padding-left: 5px; }
         .timeline-item { position: relative; padding-bottom: 1rem; padding-left: 30px; min-height: 20px; }
         .timeline-item:last-child { padding-bottom: 0; }
         .timeline-item::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 0; width: 2px; background: var(--border-color); }
         .timeline-item:last-child::before { display: none; }
-        .timeline-item .icon { position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; flex-shrink: 0; }
+        .timeline-item .icon { position: absolute; left: -9px; top: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; border: 2px solid #fff; }
         .timeline-item.approved .icon { background-color: var(--success-color); }
         .timeline-item.pending .icon { background-color: var(--warning-color); }
         .timeline-item.rejected .icon { background-color: var(--danger-color); }
-        .timeline-item.awaiting .icon { background-color: var(--info-color); }
         .timeline-item.future .icon, .timeline-item .icon { background-color: #ced4da; }
-        .timeline-item .status { font-weight: 600; margin-left: 28px; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-        .timeline-item .approver-info { color: var(--muted-color); font-size: 0.85rem; margin-top: 0.5rem; margin-left: 28px; }
+        .timeline-item .status { font-weight: 600; line-height: 20px; font-size: 0.9rem; }
         
         [dir="rtl"] .approval-timeline { padding-left: 0; padding-right: 5px; }
         [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 30px; }
-        [dir="rtl"] .timeline-item .status { margin-left: 0; margin-right: 28px; }
-        [dir="rtl"] .timeline-item .approver-info { margin-left: 0; margin-right: 28px; }
         [dir="rtl"] .timeline-item::before { left: auto; right: 0; }
-        [dir="rtl"] .timeline-item .icon { left: auto; right: 0; }
-
-        #approvalStatusContainer { transition: all 0.3s ease-in-out; }
+        [dir="rtl"] .timeline-item .icon { left: auto; right: -9px; }
+        
+        .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
+        
+        [dir="rtl"] .notes-section { border-left: none; border-right: 4px solid var(--warning-color); }
+        
         .toggle-approval-btn { margin: 2rem 0 1rem 0; }
+        #approvalStatusContainer { display: flex; transition: all 0.3s ease-in-out; }
+        
+        .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
+        .signature-area { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; text-align: center; margin-top: 2.5rem; }
+        .signature-box { border-top: 1px solid var(--muted-color); padding-top: 0.5rem; }
+        .signature-box p { margin: 0; color: var(--muted-color); font-size: 0.8rem; }
 
         .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; text-align: center; color: var(--muted-color); font-size: 0.8rem; }
 
@@ -334,7 +351,8 @@ if (mysqli_num_rows($query) == 1) {
             #wrapper, .content-page, .content, .container-fluid { padding: 0 !important; margin: 0 !important; }
             .report-wrapper { max-width: 100%; margin: 0; box-shadow: none; border: none; border-radius: 0; }
             .report-body { padding: 1cm 0.5cm; }
-            .employee-banner, .info-box { background-color: #f8f9fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .employee-banner, .payment-summary, .notes-section { background-color: #f8f9fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .signature-area { margin-top: 3rem; }
             .report-section { margin-bottom: 1rem; }
         }
     </style>
@@ -563,7 +581,7 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                     <div class="detail-item">
                                         <div class="label\"><?= __('daily_allowance', 'Daily Allowance') ?> (<?= __('calculated', 'Calculated') ?>)</div>
-                                        <div class="value\"><?= number_format($calc_daily_allowance_total, 0) ?></div>
+                                        <div class="value\"><?= number_format($calc_daily_allowance_total, 2) ?></div>
                                     </div>
                                     <?php if ($other_allowance_total > 0): ?>
                                     <div class="detail-item">
@@ -586,7 +604,7 @@ if (mysqli_num_rows($query) == 1) {
                             </div>
                             <?php endif; ?>
 
-                            <?php if ($is_hr_payroll_viewer): ?>
+                            <?php if ($is_hr_payroll_viewer || $is_system_admin): ?>
                             <div class="report-section">
                                 <h5 class="section-title">
                                     <i class="fa fa-calculator"></i> <?= __('troubleshooting_calculation', 'Troubleshooting Calculation (HR Payroll)') ?>
@@ -700,28 +718,14 @@ if (mysqli_num_rows($query) == 1) {
                             </div>
 
                             <!-- Signature Lines -->
-                            <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border-color);">
-                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin-top: 3rem; text-align: center;">
-                                    <div>
-                                        <div style="height: 50px; margin-bottom: 0.5rem;"></div>
-                                        <div style="border-top: 1px solid #333; padding-top: 0.5rem; font-size: 0.85rem; font-weight: 500;">
-                                            HR Manager Signature
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div style="height: 50px; margin-bottom: 0.5rem;"></div>
-                                        <div style="border-top: 1px solid #333; padding-top: 0.5rem; font-size: 0.85rem; font-weight: 500;">
-                                            Department Manager Signature
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div style="height: 50px; margin-bottom: 0.5rem;"></div>
-                                        <div style="border-top: 1px solid #333; padding-top: 0.5rem; font-size: 0.85rem; font-weight: 500;">
-                                            General Manager Signature
-                                        </div>
-                                    </div>
+                            <div class="report-footer">
+                                <div class="signature-area">
+                                    <div class="signature-box"><p><?= __('compensation_signature') ?></p></div>
+                                    <div class="signature-box"><p><?= __('hr_manager_signature') ?></p></div>
+                                    <div class="signature-box"><p><?= __('general_manager_signature') ?></p></div>
                                 </div>
                             </div>
+
                         </div>
 
                         <!-- Report Footer -->

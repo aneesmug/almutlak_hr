@@ -333,7 +333,7 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
             <?php endif; ?>
             <div class="text-center mt-4">
                 <a href="all_applied_business_trip.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= __('back_to_requests') ?></a>
-                <a href="business_trip_report.php?id=<?= (int)$trip['id'] ?>&emp_id=<?= urlencode($trip['emp_id']) ?>" target="_blank" class="btn btn-back ml-2"><i class="fas fa-file-pdf"></i> <?= __('view_report') ?></a>
+                <a href="business_trip_report_details.php?id=<?= (int)$trip['id'] ?>&emp_id=<?= urlencode($trip['emp_id']) ?>" target="_blank" class="btn btn-back ml-2"><i class="fas fa-file-pdf"></i> <?= __('view_report') ?></a>
             </div>
         </div>
     </div>

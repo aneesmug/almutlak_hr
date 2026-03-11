@@ -387,7 +387,8 @@ if ($can_see_all_depts) {
                                                                         <i class="fa fa-plane text-info"></i> <?= __('send_travel_email')?>
                                                                     </button>
                                                                 <?php endif; ?>
-                                                                <?php if (($trip['current_status'] ?? '') === 'approved' && ($trip['transportation_type'] ?? '') === 'by_air' && !empty($trip['travel_email_sent']) && !$isHRPayrollRole && empty($trip['has_allowance_record'])): ?>
+                                                                <?php //if (($trip['current_status'] ?? '') === 'approved' && ($trip['transportation_type'] ?? '') === 'by_air' && !empty($trip['travel_email_sent']) && !$isHRPayrollRole && empty($trip['has_allowance_record'])): ?>
+                                                                <?php if ( ($trip['current_status'] ?? '') === 'approved' && empty($trip['has_allowance_record']) ): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                     <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openBusinessTripAllowanceModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
                                                                         <i class="fa fa-money-bill-wave text-success"></i> <?= __('add_other_amount') ?: 'Add Other Amount' ?>

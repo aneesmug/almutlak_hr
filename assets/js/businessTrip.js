@@ -888,7 +888,7 @@ function openBusinessTripAllowanceModal(tripId, employeeName) {
                     text: result.value.message || 'Allowances saved successfully.',
                     icon: 'success',
                     confirmButtonColor: APP_COLORS.success
-                });
+                }).then(() => location.reload());
             }
         });
     }).fail(function() {
@@ -981,7 +981,7 @@ function openHRPayrollTicketFareModal(tripId, employeeName) {
                     text: result.value.message || 'Ticket fare saved successfully.',
                     icon: 'success',
                     confirmButtonColor: APP_COLORS.success
-                });
+                }).then(() => location.reload());
             }
         });
     }).fail(function() {

@@ -1677,7 +1677,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripAllowanc
             throw new Exception('Invalid trip ID');
         }
 
-        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, transportation_type, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
         $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
         if (!$stmtTrip) {
             throw new Exception('Database error: ' . mysqli_error($conDB));
@@ -1692,7 +1692,9 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripAllowanc
             throw new Exception('Business trip not found');
         }
 
-        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+        // Only check travel_email_sent if transportation is by_air
+        $transport_type = (string)($trip['transportation_type'] ?? '');
+        if ($transport_type === 'by_air' && (int)($trip['travel_email_sent'] ?? 0) !== 1) {
             throw new Exception('Travel email must be sent before entering ticket allowances.');
         }
 
@@ -1828,7 +1830,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'saveBusinessTripAllowan
             ];
         }
 
-        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, transportation_type, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
         $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
         if (!$stmtTrip) {
             throw new Exception('Database error: ' . mysqli_error($conDB));
@@ -1843,7 +1845,9 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'saveBusinessTripAllowan
             throw new Exception('Business trip not found');
         }
 
-        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+        // Only check travel_email_sent if transportation is by_air
+        $transport_type = (string)($trip['transportation_type'] ?? '');
+        if ($transport_type === 'by_air' && (int)($trip['travel_email_sent'] ?? 0) !== 1) {
             throw new Exception('Travel email must be sent before adding allowances.');
         }
 
@@ -2005,7 +2009,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripTicketFa
             throw new Exception('Invalid trip ID');
         }
 
-        $sqlTrip = "SELECT id, travel_email_sent FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $sqlTrip = "SELECT id, travel_email_sent, transportation_type FROM emp_business_trip WHERE id = ? LIMIT 1";
         $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
         if (!$stmtTrip) {
             throw new Exception('Database error: ' . mysqli_error($conDB));
@@ -2019,7 +2023,9 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripTicketFa
         if (!$trip) {
             throw new Exception('Business trip not found');
         }
-        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+        // Only check travel_email_sent if transportation is by_air
+        $transport_type = (string)($trip['transportation_type'] ?? '');
+        if ($transport_type === 'by_air' && (int)($trip['travel_email_sent'] ?? 0) !== 1) {
             throw new Exception('Travel email must be sent before adding ticket fare.');
         }
 
@@ -2101,7 +2107,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'saveBusinessTripTicketF
             throw new Exception('An allowance record already exists for this trip. Contact administrator to modify.');
         }
 
-        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, transportation_type, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
         $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
         if (!$stmtTrip) {
             throw new Exception('Database error: ' . mysqli_error($conDB));
@@ -2115,7 +2121,9 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'saveBusinessTripTicketF
         if (!$trip) {
             throw new Exception('Business trip not found');
         }
-        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+        // Only check travel_email_sent if transportation is by_air
+        $transport_type = (string)($trip['transportation_type'] ?? '');
+        if ($transport_type === 'by_air' && (int)($trip['travel_email_sent'] ?? 0) !== 1) {
             throw new Exception('Travel email must be sent before adding ticket fare.');
         }
 
