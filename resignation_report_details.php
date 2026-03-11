@@ -240,7 +240,7 @@ if (mysqli_num_rows($query) == 1) {
             .info-table td.label { background-color: var(--background-light); font-weight: 600; color: var(--text-color); width: 35%; }
             .info-table td.value { color: var(--text-color); }
 
-            .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; }
+            .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; text-align: center; color: var(--muted-color); font-size: 0.8rem; }
 
             @media print {
                 @page { size: A4; margin: 0.5cm; }
@@ -466,11 +466,10 @@ if (mysqli_num_rows($query) == 1) {
                                 <?php endif; ?>
                             </div>
                             
-                            <div class="report-footer">
-                                <p class="text-muted text-center mb-0">
-                                    <small><?= __('generated_on') ?>: <?= date('d M Y H:i'); ?></small>
-                                </p>
-                            </div>
+                            <!-- Report Footer -->
+                        <div class="report-footer">
+                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?></p>
+                        </div>
                         </div>
 
                     </div>

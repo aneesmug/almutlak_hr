@@ -186,13 +186,8 @@ elseif ($vacation['current_status'] === 'rejected') { $status_class = 'danger'; 
 elseif (strpos($vacation['current_status'], 'pending') !== false) { $status_class = 'warning'; $status_icon = 'fa-clock'; }
 elseif (strpos($vacation['current_status'], 'completed') !== false) { $status_class = 'primary'; $status_icon = 'fa-check-circle'; }
 
-$avatar_path = 'assets/images/users/avatar-1.jpg';
-if (!empty($vacation['avatar'])) {
-    $avatar_candidate = $vacation['avatar'];
-    if (is_file(__DIR__ . '/' . $avatar_candidate)) {
-        $avatar_path = $avatar_candidate;
-    }
-}
+// Use getAvatarImagePath function for proper gender-based default avatars
+$avatar_path = getAvatarImagePath($vacation['avatar'] ?? '', $vacation['sex'] ?? 1);
 
 // Translate fly_type
 $fly_type_display = '';

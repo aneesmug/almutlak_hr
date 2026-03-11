@@ -464,6 +464,8 @@ if (mysqli_num_rows($query) == 1) {
             .signature-box { border-top: 1px solid var(--muted-color); padding-top: 0.5rem; }
             .signature-box p { margin: 0; color: var(--muted-color); font-size: 0.8rem; }
 
+            .report-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); margin-top: 1.5rem; text-align: center; color: var(--muted-color); font-size: 0.8rem; }
+
             @media print {
                 @page { size: A4; margin: 0.5cm; }
                 body { background-color: #fff !important; font-size: 12px; }
@@ -1184,6 +1186,10 @@ if (mysqli_num_rows($query) == 1) {
                                     <div class="signature-box"><p><?= __('general_manager_signature') ?></p></div>
                                 </div>
                             </div>
+                            <!-- Report Footer -->
+                        <div class="report-footer">
+                            <p>Automatically generated on <?= date('Y-m-d H:i:s') ?> by <?= $site_title ?></p>
+                        </div>
                         </div>
 
                     </div>

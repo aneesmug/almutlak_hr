@@ -58,6 +58,95 @@ function getIsRtlFlag()
     return false;
 }
 
+function ensureBusinessTripAllowancesTable($conDB)
+{
+    // Validation only: DB schema is managed manually/migration scripts.
+    $requiredTables = ['emp_business_trip_allowances', 'emp_business_trip_allowance_items'];
+    foreach ($requiredTables as $tableName) {
+        $tblSql = "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1";
+        $tblStmt = mysqli_prepare($conDB, $tblSql);
+        if (!$tblStmt) {
+            throw new Exception('Failed to validate allowance tables: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($tblStmt, 's', $tableName);
+        mysqli_stmt_execute($tblStmt);
+        $tblRes = mysqli_stmt_get_result($tblStmt);
+        $tableExists = ($tblRes && mysqli_num_rows($tblRes) > 0);
+        mysqli_stmt_close($tblStmt);
+
+        if (!$tableExists) {
+            throw new Exception('Required table is missing: ' . $tableName . '. Please run db/create_emp_business_trip_allowances.sql');
+        }
+    }
+
+    $requiredHeadColumns = [
+        'trip_id', 'request_inv_no', 'emp_id', 'ticket_fares', 'other_allowance',
+        'allowance_days', 'total_allowance', 'notes', 'created_by', 'updated_by'
+    ];
+
+    foreach ($requiredHeadColumns as $columnName) {
+        $colSql = "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'emp_business_trip_allowances' AND COLUMN_NAME = ? LIMIT 1";
+        $colStmt = mysqli_prepare($conDB, $colSql);
+        if (!$colStmt) {
+            throw new Exception('Failed to validate allowance table columns: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($colStmt, 's', $columnName);
+        mysqli_stmt_execute($colStmt);
+        $colRes = mysqli_stmt_get_result($colStmt);
+        $columnExists = ($colRes && mysqli_num_rows($colRes) > 0);
+        mysqli_stmt_close($colStmt);
+
+        if (!$columnExists) {
+            throw new Exception('Missing column in emp_business_trip_allowances: ' . $columnName);
+        }
+    }
+}
+
+function normalizeAllowanceType($rawType)
+{
+    $type = strtolower(trim((string)$rawType));
+    $map = [
+        'ticket' => 'ticket_fares',
+        'ticket_fares' => 'ticket_fares',
+        'hotel' => 'hotel_allowance',
+        'hotel_allowance' => 'hotel_allowance',
+        'transport' => 'transportation_allowance',
+        'transportation' => 'transportation_allowance',
+        'transportation_allowance' => 'transportation_allowance',
+        'others' => 'others',
+        'other' => 'others',
+        'other_allowance' => 'others'
+    ];
+    return $map[$type] ?? 'others';
+}
+
+function calculateTripAllowanceDays($startDate, $endDate)
+{
+    try {
+        $startDate = trim((string)$startDate);
+        $endDate = trim((string)$endDate);
+        if ($startDate === '' || $endDate === '') {
+            return 0;
+        }
+
+        $start = new DateTime($startDate);
+        $end = new DateTime($endDate);
+        if ($end < $start) {
+            return 0;
+        }
+
+        return (int)$start->diff($end)->format('%a') + 1;
+    } catch (Exception $e) {
+        return 0;
+    }
+}
+
+function isCurrentUserHRPayroll()
+{
+    $userType = strtolower((string)($GLOBALS['user_type'] ?? ($_SESSION['user_type'] ?? '')));
+    return (strpos($userType, 'hr_payroll') !== false);
+}
+
 /**
  * Generate unique Business Trip Request ID
  * Format: BT-YYYYMMDDHHMMSS-EMPID-RND
@@ -1308,7 +1397,11 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getTravelerDetailsBusin
                     $has_attachment = true;
                     $passport_doc_ext = strtoupper((string)($doc_row['docu_ext'] ?? ''));
                     $passport_doc_is_image = in_array(strtolower($passport_doc_ext), ['jpg', 'jpeg', 'png']);
-                    $passport_doc_url = './assets/emp_documents/' . urlencode($doc_path);
+                    $passport_doc_url = './assets/emp_documents/' . rawurlencode($doc_path);
+                    $full_doc_path = __DIR__ . '/../../assets/emp_documents/' . $doc_path;
+                    if (is_file($full_doc_path)) {
+                        $passport_doc_url .= '?v=' . (string)filemtime($full_doc_path);
+                    }
                 }
                 mysqli_free_result($doc_query);
             }
@@ -1457,7 +1550,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'sendTravelEmailBusiness
         if ($has_new_upload) {
             $emp_id_for_passport = $trip['emp_id'];
             $file_extension = strtolower(pathinfo($_FILES['passport_file']['name'], PATHINFO_EXTENSION));
-            $new_filename = $emp_id_for_passport . '_passport_' . time() . '.' . $file_extension;
+            $new_filename = $emp_id_for_passport . '_passport_' . date('YmdHis') . '_' . substr(md5(uniqid((string)mt_rand(), true)), 0, 8) . '.' . $file_extension;
             $destination_dir = __DIR__ . '/../../assets/emp_documents/';
             
             if (!is_dir($destination_dir)) {
@@ -1570,6 +1663,570 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'sendTravelEmailBusiness
             'title' => 'Error',
             'message' => $e->getMessage(),
             'type' => 'error'
+        ]);
+    }
+    exit;
+}
+
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripAllowances') {
+    try {
+        ensureBusinessTripAllowancesTable($conDB);
+
+        $trip_id = (int)($_POST['trip_id'] ?? 0);
+        if ($trip_id <= 0) {
+            throw new Exception('Invalid trip ID');
+        }
+
+        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
+        if (!$stmtTrip) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($stmtTrip, 'i', $trip_id);
+        mysqli_stmt_execute($stmtTrip);
+        $resTrip = mysqli_stmt_get_result($stmtTrip);
+        $trip = mysqli_fetch_assoc($resTrip);
+        mysqli_stmt_close($stmtTrip);
+
+        if (!$trip) {
+            throw new Exception('Business trip not found');
+        }
+
+        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+            throw new Exception('Travel email must be sent before entering ticket allowances.');
+        }
+
+        $computed_allowance_days = calculateTripAllowanceDays($trip['trip_start_date'] ?? '', $trip['trip_end_date'] ?? '');
+
+        $row = null;
+        $sql = "SELECT * FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1";
+        $stmt = mysqli_prepare($conDB, $sql);
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, 'i', $trip_id);
+            mysqli_stmt_execute($stmt);
+            $res = mysqli_stmt_get_result($stmt);
+            $row = mysqli_fetch_assoc($res);
+            mysqli_stmt_close($stmt);
+        }
+
+        $lines = [];
+        if (!empty($row['id'])) {
+            $allowance_id = (int)$row['id'];
+            $sqlLines = "SELECT allowance_type, unit_amount, qty, line_total FROM emp_business_trip_allowance_items WHERE allowance_id = ? ORDER BY line_order ASC, id ASC";
+            $stmtLines = mysqli_prepare($conDB, $sqlLines);
+            if ($stmtLines) {
+                mysqli_stmt_bind_param($stmtLines, 'i', $allowance_id);
+                mysqli_stmt_execute($stmtLines);
+                $resLines = mysqli_stmt_get_result($stmtLines);
+                while ($resLines && ($line = mysqli_fetch_assoc($resLines))) {
+                    $lines[] = [
+                        'allowance_type' => (string)($line['allowance_type'] ?? 'others'),
+                        'unit_amount' => (float)($line['unit_amount'] ?? 0),
+                        'qty' => (int)($line['qty'] ?? 1),
+                        'line_total' => (float)($line['line_total'] ?? 0)
+                    ];
+                }
+                mysqli_stmt_close($stmtLines);
+            }
+        }
+
+        if (empty($lines)) {
+            if ((float)($row['ticket_fares'] ?? 0) > 0) {
+                $lines[] = ['allowance_type' => 'ticket_fares', 'unit_amount' => (float)$row['ticket_fares'], 'qty' => 1, 'line_total' => (float)$row['ticket_fares']];
+            }
+            if ((float)($row['other_allowance'] ?? 0) > 0) {
+                $lines[] = ['allowance_type' => 'others', 'unit_amount' => (float)$row['other_allowance'], 'qty' => 1, 'line_total' => (float)$row['other_allowance']];
+            }
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'data' => [
+                'trip_start_date' => (string)($trip['trip_start_date'] ?? ''),
+                'trip_end_date' => (string)($trip['trip_end_date'] ?? ''),
+                'ticket_fares' => (float)($row['ticket_fares'] ?? 0),
+                'other_allowance' => (float)($row['other_allowance'] ?? 0),
+                'hotel_allowance' => 0.0,
+                'transportation_allowance' => 0.0,
+                'allowance_per_day' => 0.0,
+                'allowance_weeks' => 0,
+                'allowance_days' => $computed_allowance_days,
+                'total_allowance' => (float)($row['total_allowance'] ?? 0),
+                'notes' => (string)($row['notes'] ?? ''),
+                'lines' => $lines
+            ]
+        ]);
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ]);
+    }
+    exit;
+}
+
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'saveBusinessTripAllowances') {
+    try {
+        ensureBusinessTripAllowancesTable($conDB);
+
+        $trip_id = (int)($_POST['trip_id'] ?? 0);
+        if ($trip_id <= 0) {
+            throw new Exception('Invalid trip ID');
+        }
+
+        // Check if allowance record already exists for this trip
+        $checkExistingSql = "SELECT id FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1";
+        $checkStmt = mysqli_prepare($conDB, $checkExistingSql);
+        if (!$checkStmt) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($checkStmt, 'i', $trip_id);
+        mysqli_stmt_execute($checkStmt);
+        $checkRes = mysqli_stmt_get_result($checkStmt);
+        $existingRecord = mysqli_fetch_assoc($checkRes);
+        mysqli_stmt_close($checkStmt);
+
+        if ($existingRecord) {
+            throw new Exception('An allowance record already exists for this trip. Please contact administrator to update it.');
+        }
+
+        $line_items_raw = (string)($_POST['line_items'] ?? '[]');
+        $line_items = json_decode($line_items_raw, true);
+        if (!is_array($line_items) || empty($line_items)) {
+            throw new Exception('At least one allowance line is required.');
+        }
+
+        $ticket_fares = 0.0;
+        $other_allowance = 0.0;
+        $notes = trim((string)($_POST['notes'] ?? ''));
+
+        $prepared_lines = [];
+        $total_allowance = 0.0;
+        foreach ($line_items as $index => $line) {
+            $type = normalizeAllowanceType($line['allowance_type'] ?? 'others');
+            $unit_amount = max(0, (float)($line['unit_amount'] ?? 0));
+            $qty = max(1, (int)($line['qty'] ?? 1));
+            if ($type === 'ticket_fares') {
+                $qty = 1;
+            }
+            $line_total = $unit_amount * $qty;
+
+            if ($type === 'ticket_fares') {
+                $ticket_fares += $line_total;
+            } else {
+                $other_allowance += $line_total;
+            }
+
+            $total_allowance += $line_total;
+
+            $prepared_lines[] = [
+                'allowance_type' => $type,
+                'unit_amount' => $unit_amount,
+                'qty' => $qty,
+                'line_total' => $line_total,
+                'line_order' => $index + 1
+            ];
+        }
+
+        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
+        if (!$stmtTrip) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($stmtTrip, 'i', $trip_id);
+        mysqli_stmt_execute($stmtTrip);
+        $resTrip = mysqli_stmt_get_result($stmtTrip);
+        $trip = mysqli_fetch_assoc($resTrip);
+        mysqli_stmt_close($stmtTrip);
+
+        if (!$trip) {
+            throw new Exception('Business trip not found');
+        }
+
+        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+            throw new Exception('Travel email must be sent before adding allowances.');
+        }
+
+        $trip_start_date = (string)($trip['trip_start_date'] ?? '');
+        $existing_trip_end_date = (string)($trip['trip_end_date'] ?? '');
+        $updated_trip_end_date = $existing_trip_end_date;
+
+        $posted_return_date = trim((string)($_POST['return_date'] ?? ''));
+        if ($posted_return_date !== '') {
+            try {
+                $startObj = new DateTime($trip_start_date);
+                $returnObj = new DateTime($posted_return_date);
+                if ($returnObj < $startObj) {
+                    throw new Exception('Return date must be after or equal to start date.');
+                }
+                $updated_trip_end_date = $returnObj->format('Y-m-d');
+            } catch (Exception $e) {
+                throw new Exception('Invalid return date.');
+            }
+        }
+
+        $allowance_days = calculateTripAllowanceDays($trip_start_date, $updated_trip_end_date);
+
+        $request_inv_no = (string)($trip['request_inv_no'] ?? '');
+        $emp_id = (string)($trip['emp_id'] ?? '');
+        $current_user_id = (int)($_SESSION['empid'] ?? 0);
+
+        mysqli_begin_transaction($conDB);
+
+        if ($updated_trip_end_date !== $existing_trip_end_date) {
+            $updTripSql = "UPDATE emp_business_trip SET trip_end_date = ? WHERE id = ? LIMIT 1";
+            $updTripStmt = mysqli_prepare($conDB, $updTripSql);
+            if (!$updTripStmt) {
+                throw new Exception('Failed to update return date: ' . mysqli_error($conDB));
+            }
+            mysqli_stmt_bind_param($updTripStmt, 'si', $updated_trip_end_date, $trip_id);
+            if (!mysqli_stmt_execute($updTripStmt)) {
+                throw new Exception('Failed to update return date: ' . mysqli_stmt_error($updTripStmt));
+            }
+            mysqli_stmt_close($updTripStmt);
+        }
+
+        $sql = "INSERT INTO emp_business_trip_allowances
+            (trip_id, request_inv_no, emp_id, ticket_fares, other_allowance, allowance_days, total_allowance, notes, created_by, updated_by)
+            VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                request_inv_no = VALUES(request_inv_no),
+                emp_id = VALUES(emp_id),
+                ticket_fares = VALUES(ticket_fares),
+                other_allowance = VALUES(other_allowance),
+                allowance_days = VALUES(allowance_days),
+                total_allowance = VALUES(total_allowance),
+                notes = VALUES(notes),
+                updated_by = VALUES(updated_by),
+                updated_at = NOW()";
+
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception('Failed to save allowances: ' . mysqli_error($conDB));
+        }
+
+        mysqli_stmt_bind_param(
+            $stmt,
+            'issddidsii',
+            $trip_id,
+            $request_inv_no,
+            $emp_id,
+            $ticket_fares,
+            $other_allowance,
+            $allowance_days,
+            $total_allowance,
+            $notes,
+            $current_user_id,
+            $current_user_id
+        );
+
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception('Failed to save allowances: ' . mysqli_stmt_error($stmt));
+        }
+        mysqli_stmt_close($stmt);
+
+        $allowance_id = 0;
+        $selSql = "SELECT id FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1";
+        $selStmt = mysqli_prepare($conDB, $selSql);
+        if (!$selStmt) {
+            throw new Exception('Failed to load allowance record ID: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($selStmt, 'i', $trip_id);
+        mysqli_stmt_execute($selStmt);
+        $selRes = mysqli_stmt_get_result($selStmt);
+        if ($selRes && ($selRow = mysqli_fetch_assoc($selRes))) {
+            $allowance_id = (int)$selRow['id'];
+        }
+        mysqli_stmt_close($selStmt);
+
+        if ($allowance_id <= 0) {
+            throw new Exception('Failed to prepare allowance details.');
+        }
+
+        $delSql = "DELETE FROM emp_business_trip_allowance_items WHERE allowance_id = ?";
+        $delStmt = mysqli_prepare($conDB, $delSql);
+        if (!$delStmt) {
+            throw new Exception('Failed to clear old allowance lines: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($delStmt, 'i', $allowance_id);
+        mysqli_stmt_execute($delStmt);
+        mysqli_stmt_close($delStmt);
+
+        $insLineSql = "INSERT INTO emp_business_trip_allowance_items (allowance_id, trip_id, allowance_type, unit_amount, qty, line_total, line_order) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        $insLineStmt = mysqli_prepare($conDB, $insLineSql);
+        if (!$insLineStmt) {
+            throw new Exception('Failed to prepare allowance line insert: ' . mysqli_error($conDB));
+        }
+
+        foreach ($prepared_lines as $line) {
+            $lineType = $line['allowance_type'];
+            $lineAmount = $line['unit_amount'];
+            $lineQty = $line['qty'];
+            $lineTotal = $line['line_total'];
+            $lineOrder = $line['line_order'];
+            mysqli_stmt_bind_param($insLineStmt, 'iisdidi', $allowance_id, $trip_id, $lineType, $lineAmount, $lineQty, $lineTotal, $lineOrder);
+            if (!mysqli_stmt_execute($insLineStmt)) {
+                throw new Exception('Failed to save allowance line: ' . mysqli_stmt_error($insLineStmt));
+            }
+        }
+        mysqli_stmt_close($insLineStmt);
+
+        mysqli_commit($conDB);
+
+        echo json_encode([
+            'status' => 'success',
+            'title' => 'Saved',
+            'message' => 'Ticket and allowances saved successfully.',
+            'total_allowance' => round($total_allowance, 2),
+            'trip_end_date' => $updated_trip_end_date,
+            'allowance_days' => $allowance_days
+        ]);
+    } catch (Exception $e) {
+        @mysqli_rollback($conDB);
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ]);
+    }
+    exit;
+}
+
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripTicketFareOnly') {
+    try {
+        ensureBusinessTripAllowancesTable($conDB);
+
+        if (!isCurrentUserHRPayroll()) {
+            throw new Exception('Only HR Payroll can manage ticket fare only.');
+        }
+
+        $trip_id = (int)($_POST['trip_id'] ?? 0);
+        if ($trip_id <= 0) {
+            throw new Exception('Invalid trip ID');
+        }
+
+        $sqlTrip = "SELECT id, travel_email_sent FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
+        if (!$stmtTrip) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($stmtTrip, 'i', $trip_id);
+        mysqli_stmt_execute($stmtTrip);
+        $resTrip = mysqli_stmt_get_result($stmtTrip);
+        $trip = mysqli_fetch_assoc($resTrip);
+        mysqli_stmt_close($stmtTrip);
+
+        if (!$trip) {
+            throw new Exception('Business trip not found');
+        }
+        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+            throw new Exception('Travel email must be sent before adding ticket fare.');
+        }
+
+        $allowance_id = 0;
+        $stmtHead = mysqli_prepare($conDB, "SELECT id FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1");
+        if ($stmtHead) {
+            mysqli_stmt_bind_param($stmtHead, 'i', $trip_id);
+            mysqli_stmt_execute($stmtHead);
+            $resHead = mysqli_stmt_get_result($stmtHead);
+            if ($resHead && ($rowHead = mysqli_fetch_assoc($resHead))) {
+                $allowance_id = (int)$rowHead['id'];
+            }
+            mysqli_stmt_close($stmtHead);
+        }
+
+        $ticket_unit_amount = 0.0;
+        $ticket_qty = 1;
+        $ticket_total = 0.0;
+        if ($allowance_id > 0) {
+            $stmtLine = mysqli_prepare($conDB, "SELECT unit_amount, qty, line_total FROM emp_business_trip_allowance_items WHERE allowance_id = ? AND allowance_type = 'ticket_fares' ORDER BY line_order ASC, id ASC LIMIT 1");
+            if ($stmtLine) {
+                mysqli_stmt_bind_param($stmtLine, 'i', $allowance_id);
+                mysqli_stmt_execute($stmtLine);
+                $resLine = mysqli_stmt_get_result($stmtLine);
+                if ($resLine && ($rowLine = mysqli_fetch_assoc($resLine))) {
+                    $ticket_unit_amount = (float)($rowLine['unit_amount'] ?? 0);
+                    $ticket_qty = max(1, (int)($rowLine['qty'] ?? 1));
+                    $ticket_total = (float)($rowLine['line_total'] ?? 0);
+                }
+                mysqli_stmt_close($stmtLine);
+            }
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'data' => [
+                'ticket_unit_amount' => $ticket_unit_amount,
+                'ticket_qty' => $ticket_qty,
+                'ticket_total' => $ticket_total
+            ]
+        ]);
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ]);
+    }
+    exit;
+}
+
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'saveBusinessTripTicketFareOnly') {
+    try {
+        ensureBusinessTripAllowancesTable($conDB);
+
+        if (!isCurrentUserHRPayroll()) {
+            throw new Exception('Only HR Payroll can save ticket fare only.');
+        }
+
+        $trip_id = (int)($_POST['trip_id'] ?? 0);
+        $ticket_unit_amount = max(0, (float)($_POST['ticket_unit_amount'] ?? 0));
+        $ticket_qty = max(1, (int)($_POST['ticket_qty'] ?? 1));
+        if ($trip_id <= 0) {
+            throw new Exception('Invalid trip ID');
+        }
+
+        // Check if allowance record already exists for this trip
+        $checkExistingSql = "SELECT id FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1";
+        $checkStmt = mysqli_prepare($conDB, $checkExistingSql);
+        if (!$checkStmt) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($checkStmt, 'i', $trip_id);
+        mysqli_stmt_execute($checkStmt);
+        $checkRes = mysqli_stmt_get_result($checkStmt);
+        $existingRecord = mysqli_fetch_assoc($checkRes);
+        mysqli_stmt_close($checkStmt);
+
+        if ($existingRecord) {
+            throw new Exception('An allowance record already exists for this trip. Contact administrator to modify.');
+        }
+
+        $sqlTrip = "SELECT id, request_inv_no, emp_id, travel_email_sent, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
+        if (!$stmtTrip) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($stmtTrip, 'i', $trip_id);
+        mysqli_stmt_execute($stmtTrip);
+        $resTrip = mysqli_stmt_get_result($stmtTrip);
+        $trip = mysqli_fetch_assoc($resTrip);
+        mysqli_stmt_close($stmtTrip);
+
+        if (!$trip) {
+            throw new Exception('Business trip not found');
+        }
+        if ((int)($trip['travel_email_sent'] ?? 0) !== 1) {
+            throw new Exception('Travel email must be sent before adding ticket fare.');
+        }
+
+        $allowance_days = calculateTripAllowanceDays($trip['trip_start_date'] ?? '', $trip['trip_end_date'] ?? '');
+
+        $request_inv_no = (string)($trip['request_inv_no'] ?? '');
+        $emp_id = (string)($trip['emp_id'] ?? '');
+        $current_user_id = (int)($_SESSION['empid'] ?? 0);
+
+        mysqli_begin_transaction($conDB);
+
+        $insHeadSql = "INSERT INTO emp_business_trip_allowances
+            (trip_id, request_inv_no, emp_id, ticket_fares, other_allowance, allowance_days, total_allowance, notes, created_by, updated_by)
+            VALUES
+            (?, ?, ?, 0, 0, 0, 0, '', ?, ?)
+            ON DUPLICATE KEY UPDATE
+                request_inv_no = VALUES(request_inv_no),
+                emp_id = VALUES(emp_id),
+                updated_by = VALUES(updated_by),
+                updated_at = NOW()";
+        $insHeadStmt = mysqli_prepare($conDB, $insHeadSql);
+        if (!$insHeadStmt) {
+            throw new Exception('Failed to initialize allowance record: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($insHeadStmt, 'issii', $trip_id, $request_inv_no, $emp_id, $current_user_id, $current_user_id);
+        if (!mysqli_stmt_execute($insHeadStmt)) {
+            throw new Exception('Failed to initialize allowance record: ' . mysqli_stmt_error($insHeadStmt));
+        }
+        mysqli_stmt_close($insHeadStmt);
+
+        $allowance_id = 0;
+        $selHeadStmt = mysqli_prepare($conDB, "SELECT id FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1");
+        if (!$selHeadStmt) {
+            throw new Exception('Failed to find allowance record: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($selHeadStmt, 'i', $trip_id);
+        mysqli_stmt_execute($selHeadStmt);
+        $selHeadRes = mysqli_stmt_get_result($selHeadStmt);
+        if ($selHeadRes && ($selHeadRow = mysqli_fetch_assoc($selHeadRes))) {
+            $allowance_id = (int)$selHeadRow['id'];
+        }
+        mysqli_stmt_close($selHeadStmt);
+
+        if ($allowance_id <= 0) {
+            throw new Exception('Failed to prepare allowance record id.');
+        }
+
+        $delTicketStmt = mysqli_prepare($conDB, "DELETE FROM emp_business_trip_allowance_items WHERE allowance_id = ? AND allowance_type = 'ticket_fares'");
+        if (!$delTicketStmt) {
+            throw new Exception('Failed to clear ticket fare lines: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($delTicketStmt, 'i', $allowance_id);
+        mysqli_stmt_execute($delTicketStmt);
+        mysqli_stmt_close($delTicketStmt);
+
+        $ticket_total = $ticket_unit_amount * $ticket_qty;
+        $insTicketStmt = mysqli_prepare($conDB, "INSERT INTO emp_business_trip_allowance_items (allowance_id, trip_id, allowance_type, unit_amount, qty, line_total, line_order) VALUES (?, ?, 'ticket_fares', ?, ?, ?, 1)");
+        if (!$insTicketStmt) {
+            throw new Exception('Failed to prepare ticket fare insert: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($insTicketStmt, 'iidid', $allowance_id, $trip_id, $ticket_unit_amount, $ticket_qty, $ticket_total);
+        if (!mysqli_stmt_execute($insTicketStmt)) {
+            throw new Exception('Failed to save ticket fare line: ' . mysqli_stmt_error($insTicketStmt));
+        }
+        mysqli_stmt_close($insTicketStmt);
+
+        $aggSql = "SELECT
+            SUM(CASE WHEN allowance_type = 'ticket_fares' THEN line_total ELSE 0 END) AS ticket_fares,
+            SUM(CASE WHEN allowance_type IN ('others', 'other_allowance') THEN line_total ELSE 0 END) AS other_allowance,
+            SUM(line_total) AS total_allowance
+            FROM emp_business_trip_allowance_items WHERE allowance_id = ?";
+        $aggStmt = mysqli_prepare($conDB, $aggSql);
+        if (!$aggStmt) {
+            throw new Exception('Failed to aggregate allowance totals: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($aggStmt, 'i', $allowance_id);
+        mysqli_stmt_execute($aggStmt);
+        $aggRes = mysqli_stmt_get_result($aggStmt);
+        $agg = mysqli_fetch_assoc($aggRes) ?: [];
+        mysqli_stmt_close($aggStmt);
+
+        $updHeadSql = "UPDATE emp_business_trip_allowances
+            SET ticket_fares = ?, other_allowance = ?, allowance_days = ?, total_allowance = ?, updated_by = ?, updated_at = NOW()
+            WHERE id = ?";
+        $updHeadStmt = mysqli_prepare($conDB, $updHeadSql);
+        if (!$updHeadStmt) {
+            throw new Exception('Failed to update allowance totals: ' . mysqli_error($conDB));
+        }
+        $aggTicket = (float)($agg['ticket_fares'] ?? 0);
+        $aggOther = (float)($agg['other_allowance'] ?? 0);
+        $aggDays = $allowance_days;
+        $aggTotal = (float)($agg['total_allowance'] ?? 0);
+        mysqli_stmt_bind_param($updHeadStmt, 'ddidii', $aggTicket, $aggOther, $aggDays, $aggTotal, $current_user_id, $allowance_id);
+        if (!mysqli_stmt_execute($updHeadStmt)) {
+            throw new Exception('Failed to update allowance totals: ' . mysqli_stmt_error($updHeadStmt));
+        }
+        mysqli_stmt_close($updHeadStmt);
+
+        mysqli_commit($conDB);
+
+        echo json_encode([
+            'status' => 'success',
+            'title' => 'Saved',
+            'message' => 'Ticket fare saved successfully.',
+            'ticket_total' => round($ticket_total, 2)
+        ]);
+    } catch (Exception $e) {
+        @mysqli_rollback($conDB);
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage()
         ]);
     }
     exit;

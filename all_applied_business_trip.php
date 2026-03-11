@@ -49,6 +49,7 @@ $types = "";
 $join_sql = "";
 $dept_filter_applied = false;
 $isFinanceRole = (isset($user_type) && stripos($user_type, 'finance') !== false);
+$isHRPayrollRole = (isset($user_type) && stripos($user_type, 'hr_payroll') !== false);
 $can_see_all_depts = ($is_system_admin ?? false) || ($isHR ?? false) || $isFinanceRole;
 
 $page_title = $all_statuses[$current_filter] ?? __('all_requests');
@@ -147,7 +148,8 @@ if ($total_items > 0) {
         fc.name_en as from_city_name_en,
         fc.name_ar as from_city_name_ar,
         tc.name_en as to_city_name_en,
-        tc.name_ar as to_city_name_ar
+        tc.name_ar as to_city_name_ar,
+        (CASE WHEN ba.id IS NOT NULL THEN 1 ELSE 0 END) as has_allowance_record
     FROM emp_business_trip bt
     JOIN employees e ON bt.emp_id = e.emp_id
     LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = bt.request_inv_no AND ra_pending.request_type_id = ? AND ra_pending.status = 'pending'
@@ -155,6 +157,7 @@ if ($total_items > 0) {
     LEFT JOIN request_approvers ra_rejected ON ra_rejected.request_inv_no = bt.request_inv_no AND ra_rejected.request_type_id = ? AND ra_rejected.status = 'rejected'
     LEFT JOIN saudi_cities fc ON bt.from_city_id = fc.id
     LEFT JOIN saudi_cities tc ON bt.to_city_id = tc.id
+    LEFT JOIN emp_business_trip_allowances ba ON ba.trip_id = bt.id
     $join_sql
     $where_sql";
     $sql .= " GROUP BY bt.id ORDER BY bt.created_at DESC";
@@ -219,6 +222,7 @@ if ($can_see_all_depts) {
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
@@ -383,6 +387,18 @@ if ($can_see_all_depts) {
                                                                         <i class="fa fa-plane text-info"></i> <?= __('send_travel_email')?>
                                                                     </button>
                                                                 <?php endif; ?>
+                                                                <?php if (($trip['current_status'] ?? '') === 'approved' && ($trip['transportation_type'] ?? '') === 'by_air' && !empty($trip['travel_email_sent']) && !$isHRPayrollRole && empty($trip['has_allowance_record'])): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openBusinessTripAllowanceModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
+                                                                        <i class="fa fa-money-bill-wave text-success"></i> <?= __('add_other_amount') ?: 'Add Other Amount' ?>
+                                                                    </button>
+                                                                <?php endif; ?>
+                                                                <?php if (($trip['current_status'] ?? '') === 'approved' && ($trip['transportation_type'] ?? '') === 'by_air' && !empty($trip['travel_email_sent']) && $isHRPayrollRole && empty($trip['has_allowance_record'])): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openHRPayrollTicketFareModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
+                                                                        <i class="fa fa-ticket-alt text-primary"></i> <?= __('add_ticket_fare_only') ?: 'HR Payroll Ticket Fare' ?>
+                                                                    </button>
+                                                                <?php endif; ?>
                                                                 <?php if ($can_take_action): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                     <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveBusinessTripRequest('<?= htmlspecialchars((string)$trip['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip_type_text, ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['trip_start_date'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['trip_end_date'], ENT_QUOTES); ?>')">
@@ -431,9 +447,11 @@ if ($can_see_all_depts) {
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
+    <script src="plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+    <script src="assets/js/businessTrip.js?t=<?= time() ?>"></script>
     <script>
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
@@ -760,10 +778,15 @@ if ($can_see_all_depts) {
                             const openBtn = document.getElementById('open-passport-btn');
                             const replaceBtn = document.getElementById('replace-passport-btn');
                             const replaceInput = document.getElementById('replace_passport_input');
+                            let selectedReplacementUrl = null;
 
                             if (openBtn) {
                                 openBtn.addEventListener('click', function() {
-                                    window.open(data.passport_doc_url, '_blank');
+                                    if (selectedReplacementUrl) {
+                                        window.open(selectedReplacementUrl, '_blank');
+                                    } else {
+                                        window.open(data.passport_doc_url, '_blank');
+                                    }
                                 });
                             }
 
@@ -798,14 +821,48 @@ if ($can_see_all_depts) {
                                 replaceBtn.addEventListener('click', () => {
                                     replaceInput.click();
                                 });
+
+                                replaceInput.addEventListener('change', () => {
+                                    if (!replaceInput.files || replaceInput.files.length === 0) {
+                                        return;
+                                    }
+
+                                    const file = replaceInput.files[0];
+                                    const maxSize = 5 * 1024 * 1024;
+                                    if (file.size > maxSize) {
+                                        Swal.fire({
+                                            title: 'Error',
+                                            text: 'Passport file is too large. Maximum size is 5MB.',
+                                            icon: 'error'
+                                        });
+                                        replaceInput.value = '';
+                                        return;
+                                    }
+
+                                    if (selectedReplacementUrl) {
+                                        URL.revokeObjectURL(selectedReplacementUrl);
+                                    }
+                                    selectedReplacementUrl = URL.createObjectURL(file);
+                                    replaceBtn.innerHTML = '<i class="fa fa-check"></i> ' + (__('replacement_selected') || 'Replacement selected');
+                                    replaceBtn.classList.remove('btn-warning');
+                                    replaceBtn.classList.add('btn-success');
+                                });
                             }
                         }
                     }).then((result) => {
                         if (result.isConfirmed) {
                             const passportFile = document.getElementById('passport_file');
+                            const replacePassportFile = document.getElementById('replace_passport_input');
                             const maxSize = 5 * 1024 * 1024;
 
-                            if (passportFile && passportFile.files && passportFile.files.length > 0 && passportFile.files[0].size > maxSize) {
+                            let selectedPassportFile = null;
+                            if (passportFile && passportFile.files && passportFile.files.length > 0) {
+                                selectedPassportFile = passportFile.files[0];
+                            } else if (replacePassportFile && replacePassportFile.files && replacePassportFile.files.length > 0) {
+                                selectedPassportFile = replacePassportFile.files[0];
+                            }
+
+                            if (selectedPassportFile && selectedPassportFile.size > maxSize) {
                                 Swal.fire({
                                     title: 'Error',
                                     text: 'Passport file is too large. Maximum size is 5MB.',
@@ -829,8 +886,8 @@ if ($can_see_all_depts) {
                             const formData = new FormData();
                             formData.append('ajaxType', 'sendTravelEmailBusinessTrip');
                             formData.append('trip_id', tripId);
-                            if (passportFile && passportFile.files && passportFile.files.length > 0) {
-                                formData.append('passport_file', passportFile.files[0]);
+                            if (selectedPassportFile) {
+                                formData.append('passport_file', selectedPassportFile);
                             }
 
                             $.ajax({

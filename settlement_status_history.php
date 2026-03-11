@@ -256,13 +256,8 @@ elseif ($settlement['settlement_status'] === 'rejected') { $status_class = 'dang
 elseif ($settlement['settlement_status'] === 'pending' || $settlement['settlement_status'] === 'pending_approval') { $status_class = 'warning'; $status_icon = 'fa-clock'; }
 elseif ($settlement['settlement_status'] === 'completed') { $status_class = 'primary'; $status_icon = 'fa-check-circle'; }
 
-$avatar_path = 'assets/images/users/avatar-1.jpg';
-if (!empty($settlement['avatar'])) {
-    $avatar_candidate = $settlement['avatar'];
-    if (is_file(__DIR__ . '/' . $avatar_candidate)) {
-        $avatar_path = $avatar_candidate;
-    }
-}
+// Use getAvatarImagePath function for proper gender-based default avatars
+$avatar_path = getAvatarImagePath($settlement['avatar'] ?? '', $settlement['sex'] ?? 1);
 
 ?>
 <!doctype html>

@@ -2489,6 +2489,15 @@ RTL Support
             
             // Evaluations table doesn't exist in current schema
             $eval_count = 0;
+
+            // Business trip history count
+            $business_trip_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_business_trip WHERE emp_id = '$emp_id_escaped'");
+            $business_trip_count = 0;
+            if ($business_trip_count_query) {
+                $business_trip_count_result = mysqli_fetch_assoc($business_trip_count_query);
+                $business_trip_count = (int)($business_trip_count_result['total'] ?? 0);
+                mysqli_free_result($business_trip_count_query);
+            }
             ?>
             <div class="action-cards-grid">
                 <a href="employee_vacation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card blue" style="position: relative;">
@@ -2548,6 +2557,16 @@ RTL Support
                     <i class="fa fa-star action-icon"></i>
                     <div class="action-title"><?= __('evaluations') ?></div>
                     <div class="action-desc"><?= __('view_performance_evaluations') ?></div>
+                    <button class="action-btn"><?= __('view') ?></button>
+                </a>
+
+                <a href="employee_business_trip_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card info" style="position: relative;">
+                    <?php if ($business_trip_count > 0): ?>
+                        <span class="badge badge-success" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $business_trip_count ?></span>
+                    <?php endif; ?>
+                    <i class="fa fa-plane action-icon"></i>
+                    <div class="action-title"><?= __('business_trip_history', 'Business Trip History') ?></div>
+                    <div class="action-desc"><?= __('view_all_business_trip_records', 'View all business trip records') ?></div>
                     <button class="action-btn"><?= __('view') ?></button>
                 </a>
             </div>

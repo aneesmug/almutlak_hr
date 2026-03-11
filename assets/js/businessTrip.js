@@ -756,3 +756,235 @@ function openBusinessTripApplyModal(empid, deptId, country) {
     });
     */
 }
+
+function openBusinessTripAllowanceModal(tripId, employeeName) {
+    Swal.fire({
+        title: __('loading') || 'Loading...',
+        html: __('loading_allowance_details') || 'Loading allowance details...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    $.ajax({
+        url: './includes/ajaxFile/ajaxBusinessTrip.php',
+        type: 'POST',
+        dataType: 'JSON',
+        data: {
+            ajaxType: 'getBusinessTripAllowances',
+            trip_id: tripId
+        }
+    }).done(function(response) {
+        if (response.status !== 'success') {
+            Swal.fire(__('error') || 'Error', response.message || 'Failed to load allowance details.', 'error');
+            return;
+        }
+
+        const allowance = response.data || {};
+        const tripStartDate = (allowance.trip_start_date || '').toString();
+        const tripEndDate = (allowance.trip_end_date || '').toString();
+        const otherAllowanceAmount = Number(allowance.other_allowance || 0).toFixed(2);
+
+        const html = `
+            <div style="text-align:left; max-height:520px; overflow-y:auto;">
+                <div style="border:1px solid #e9ecef; border-radius:8px; padding:12px; background:#f8f9fa; margin-bottom:12px;">
+                    <div class="form-row">
+                        <div class="form-group col-6 mb-0">
+                            <label class="mb-1"><strong>${__('start_date') || 'Start Date'}</strong></label>
+                            <input type="date" id="allowance_start_date" class="form-control" value="${tripStartDate}" readonly>
+                        </div>
+                        <div class="form-group col-6 mb-0">
+                            <label class="mb-1"><strong>${__('return_date') || __('end_date') || 'Return Date'}</strong></label>
+                            <input type="text" id="allowance_return_date" class="form-control" value="${tripEndDate}" placeholder="YYYY-MM-DD" autocomplete="off">
+                        </div>
+                    </div>
+                </div>
+                <div style="border:1px solid #e9ecef; border-radius:8px; padding:12px; background:#fff; margin-bottom:12px;">
+                    <div class="form-group mb-0">
+                        <label class="mb-1"><strong>${__('other_allowance') || 'Other Allowance'}</strong></label>
+                        <input type="number" min="0" step="0.01" id="other_allowance_amount" class="form-control" value="${otherAllowanceAmount}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="allowance_notes_input"><strong>${__('notes') || 'Notes'}</strong></label>
+                    <textarea id="allowance_notes_input" class="form-control" rows="3" placeholder="${__('optional_notes') || 'Optional notes...'}">${allowance.notes || ''}</textarea>
+                </div>
+            </div>
+        `;
+
+        Swal.fire({
+            title: __('add_other_amount') || 'Add Other Amount',
+            html,
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: __('save') || 'Save',
+            cancelButtonText: __('cancel') || 'Cancel',
+            confirmButtonColor: APP_COLORS.success,
+            cancelButtonColor: APP_COLORS.danger,
+            allowOutsideClick: false,
+            didOpen: () => {
+                const $returnDate = $('#allowance_return_date');
+
+                if ($returnDate.length && typeof $returnDate.datepicker === 'function') {
+                    $returnDate.datepicker({
+                        format: 'yyyy-mm-dd',
+                        autoclose: true,
+                        todayHighlight: true
+                    });
+
+                    if (tripStartDate) {
+                        $returnDate.datepicker('setStartDate', tripStartDate);
+                    }
+
+                    $returnDate.datepicker('update', tripEndDate || tripStartDate || '');
+                }
+            },
+            preConfirm: () => {
+                const returnDateInput = document.getElementById('allowance_return_date');
+                const returnDate = (returnDateInput?.value || '').trim();
+                if (!returnDate) {
+                    Swal.showValidationMessage(__('return_date_required') || 'Return date is required.');
+                    return false;
+                }
+                if (tripStartDate && returnDate < tripStartDate) {
+                    Swal.showValidationMessage(__('end_date_must_be_after_start_date') || 'Return date must be after or equal to start date.');
+                    return false;
+                }
+
+                const otherAmount = parseFloat(document.getElementById('other_allowance_amount')?.value || '0');
+                if (isNaN(otherAmount) || otherAmount < 0) {
+                    Swal.showValidationMessage(__('invalid_amount') || 'Invalid amount');
+                    return false;
+                }
+
+                const lineItems = [
+                    { allowance_type: 'others', unit_amount: otherAmount, qty: 1 }
+                ];
+
+                return $.ajax({
+                    url: './includes/ajaxFile/ajaxBusinessTrip.php',
+                    type: 'POST',
+                    dataType: 'JSON',
+                    data: {
+                        ajaxType: 'saveBusinessTripAllowances',
+                        trip_id: tripId,
+                        line_items: JSON.stringify(lineItems),
+                        return_date: returnDate,
+                        notes: document.getElementById('allowance_notes_input')?.value || ''
+                    }
+                }).then(function(saveResponse) {
+                    if (saveResponse.status !== 'success') {
+                        throw new Error(saveResponse.message || 'Failed to save allowances.');
+                    }
+                    return saveResponse;
+                }).catch(function(err) {
+                    Swal.showValidationMessage(err.message || 'Failed to save allowances.');
+                });
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: result.value.title || 'Saved',
+                    text: result.value.message || 'Allowances saved successfully.',
+                    icon: 'success',
+                    confirmButtonColor: APP_COLORS.success
+                });
+            }
+        });
+    }).fail(function() {
+        Swal.fire(__('error') || 'Error', __('error_loading_allowances') || 'An error occurred while loading allowance details.', 'error');
+    });
+}
+
+function openHRPayrollTicketFareModal(tripId, employeeName) {
+    Swal.fire({
+        title: __('loading') || 'Loading...',
+        html: __('loading_ticket_fare') || 'Loading ticket fare details...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    $.ajax({
+        url: './includes/ajaxFile/ajaxBusinessTrip.php',
+        type: 'POST',
+        dataType: 'JSON',
+        data: {
+            ajaxType: 'getBusinessTripTicketFareOnly',
+            trip_id: tripId
+        }
+    }).done(function(response) {
+        if (response.status !== 'success') {
+            Swal.fire(__('error') || 'Error', response.message || 'Failed to load ticket fare.', 'error');
+            return;
+        }
+
+        const data = response.data || {};
+        const fareAmount = Number(data.ticket_unit_amount || 0).toFixed(2);
+        const fareQty = 1;
+
+        const html = `
+            <div style="text-align:left;">
+                <div style="background:#f8f9fa; padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid #e9ecef;">
+                    <strong>${__('employee') || 'Employee'}:</strong> ${employeeName}<br>
+                    <strong>${__('trip_id') || 'Trip ID'}:</strong> ${tripId}
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-12">
+                        <label><strong>${__('ticket_fare_amount') || 'Ticket Fare Amount'}</strong></label>
+                        <input type="number" min="0" step="0.01" id="hr_ticket_amount" class="form-control" value="${fareAmount}">
+                    </div>
+                </div>
+            </div>
+        `;
+
+        Swal.fire({
+            title: __('hr_payroll_ticket_fare') || 'HR Payroll Ticket Fare',
+            html,
+            width: '520px',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: __('save') || 'Save',
+            cancelButtonText: __('cancel') || 'Cancel',
+            confirmButtonColor: APP_COLORS.success,
+            cancelButtonColor: APP_COLORS.danger,
+            preConfirm: () => {
+                const amount = parseFloat(document.getElementById('hr_ticket_amount')?.value || '0');
+                if (isNaN(amount) || amount < 0) {
+                    Swal.showValidationMessage(__('invalid_amount') || 'Invalid amount.');
+                    return false;
+                }
+
+                return $.ajax({
+                    url: './includes/ajaxFile/ajaxBusinessTrip.php',
+                    type: 'POST',
+                    dataType: 'JSON',
+                    data: {
+                        ajaxType: 'saveBusinessTripTicketFareOnly',
+                        trip_id: tripId,
+                        ticket_unit_amount: amount,
+                        ticket_qty: fareQty
+                    }
+                }).then(function(saveResponse) {
+                    if (saveResponse.status !== 'success') {
+                        throw new Error(saveResponse.message || 'Failed to save ticket fare.');
+                    }
+                    return saveResponse;
+                }).catch(function(err) {
+                    Swal.showValidationMessage(err.message || 'Failed to save ticket fare.');
+                });
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: result.value.title || 'Saved',
+                    text: result.value.message || 'Ticket fare saved successfully.',
+                    icon: 'success',
+                    confirmButtonColor: APP_COLORS.success
+                });
+            }
+        });
+    }).fail(function() {
+        Swal.fire(__('error') || 'Error', __('error_loading_ticket_fare') || 'An error occurred while loading ticket fare details.', 'error');
+    });
+}

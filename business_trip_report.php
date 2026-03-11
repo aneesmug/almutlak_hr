@@ -16,6 +16,9 @@ require_once __DIR__ . '/includes/session_check.php';
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
+    $viewer_admin = mysqli_fetch_assoc($query);
+    $viewer_user_type = strtolower((string)($viewer_admin['user_type'] ?? ''));
+    $is_hr_payroll_viewer = (strpos($viewer_user_type, 'hr_payroll') !== false);
     include("./includes/avatar_select.php");
 
     // 1. Get and validate the IDs from the URL
@@ -65,6 +68,100 @@ if (mysqli_num_rows($query) == 1) {
     if (!$request) {
         die("Business trip request not found.");
     }
+
+    $trip_allowance_days = 0;
+    try {
+        $trip_start = new DateTime((string)($request['trip_start_date'] ?? ''));
+        $trip_end = new DateTime((string)($request['trip_end_date'] ?? ''));
+        if ($trip_end >= $trip_start) {
+            $trip_allowance_days = (int)$trip_start->diff($trip_end)->format('%a') + 1;
+        }
+    } catch (Exception $e) {
+        $trip_allowance_days = 0;
+    }
+
+    $basic_salary = 0.0;
+    $salary_sql = "SELECT basic FROM emp_salary WHERE emp_id = ? AND status = 1 ORDER BY id DESC LIMIT 1";
+    $stmt_salary = $conDB->prepare($salary_sql);
+    if ($stmt_salary) {
+        $stmt_salary->bind_param("s", $emp_id);
+        $stmt_salary->execute();
+        $salary_result = $stmt_salary->get_result();
+        if ($salary_result && ($salary_row = $salary_result->fetch_assoc())) {
+            $basic_salary = (float)($salary_row['basic'] ?? 0);
+        }
+        $stmt_salary->close();
+    }
+
+    $salary_scales = [
+        ['level' => 1, 'min' => 500, 'max' => 2700, 'hotel' => 125, 'transport' => 50],
+        ['level' => 2, 'min' => 2850, 'max' => 5950, 'hotel' => 200, 'transport' => 75],
+        ['level' => 3, 'min' => 6150, 'max' => 7950, 'hotel' => 350, 'transport' => 100],
+        ['level' => 4, 'min' => 8300, 'max' => 11450, 'hotel' => 450, 'transport' => 150],
+        ['level' => 5, 'min' => 12350, 'max' => 20450, 'hotel' => 650, 'transport' => 200],
+    ];
+
+    $matched_scale = null;
+    foreach ($salary_scales as $scale) {
+        if ($basic_salary >= $scale['min'] && $basic_salary <= $scale['max']) {
+            $matched_scale = $scale;
+            break;
+        }
+    }
+
+    $calc_hotel_daily = (float)($matched_scale['hotel'] ?? 0);
+    $calc_transport_daily = (float)($matched_scale['transport'] ?? 0);
+    $calc_hotel_total = $calc_hotel_daily * max(0, $trip_allowance_days);
+    $calc_transport_total = $calc_transport_daily * max(0, $trip_allowance_days);
+
+    $week1_days = min(max($trip_allowance_days, 0), 7);
+    $week2_days = min(max($trip_allowance_days - 7, 0), 7);
+    $week3_days = max($trip_allowance_days - 14, 0);
+
+    $week1_daily_rate = ($basic_salary > 0) ? ($basic_salary / 60) : 0;
+    $week2_daily_rate = ($basic_salary > 0) ? ($basic_salary / 90) : 0;
+    $week3_daily_rate = ($basic_salary > 0) ? ($basic_salary / 120) : 0;
+
+    $week1_daily_total = round($week1_daily_rate * $week1_days);
+    $week2_daily_total = round($week2_daily_rate * $week2_days);
+    $week3_daily_total = round($week3_daily_rate * $week3_days);
+    $calc_daily_allowance_total = round($week1_daily_total + $week2_daily_total + $week3_daily_total);
+
+    // 3.5 Fetch allowance summary and line items (if any)
+    $allowance_summary = null;
+    $allowance_items = [];
+
+    $allowance_sql = "SELECT * FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1";
+    $stmt_allowance = $conDB->prepare($allowance_sql);
+    if ($stmt_allowance) {
+        $stmt_allowance->bind_param("i", $trip_id);
+        $stmt_allowance->execute();
+        $allowance_result = $stmt_allowance->get_result();
+        $allowance_summary = $allowance_result ? $allowance_result->fetch_assoc() : null;
+        $stmt_allowance->close();
+    }
+
+    if (!empty($allowance_summary['id'])) {
+        $allowance_id = (int)$allowance_summary['id'];
+        $items_sql = "SELECT allowance_type, unit_amount, qty, line_total
+                      FROM emp_business_trip_allowance_items
+                      WHERE allowance_id = ?
+                      ORDER BY line_order ASC, id ASC";
+        $stmt_items = $conDB->prepare($items_sql);
+        if ($stmt_items) {
+            $stmt_items->bind_param("i", $allowance_id);
+            $stmt_items->execute();
+            $items_result = $stmt_items->get_result();
+            while ($items_result && ($item_row = $items_result->fetch_assoc())) {
+                $allowance_items[] = $item_row;
+            }
+            $stmt_items->close();
+        }
+    }
+
+    $ticket_fares_total = (float)($allowance_summary['ticket_fares'] ?? 0);
+    $other_allowance_total = (float)($allowance_summary['other_allowance'] ?? 0);
+    $report_grand_total = $ticket_fares_total + $calc_hotel_total + $calc_transport_total + $calc_daily_allowance_total + $other_allowance_total;
 
     // 4. Fetch approval chain
     $approval_chain = [];
@@ -380,6 +477,147 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="label"><?= __('visa_required') ?></div>
                                         <div class="value"><?= ((int)($request['visa_required'] ?? 0) === 1) ? __('yes') : __('no') ?></div>
                                     </div>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
+                            <!-- Allowances & Ticket Fares Section -->
+                            <?php if (!empty($allowance_summary) || !empty($allowance_items) || $trip_allowance_days > 0): ?>
+                            <div class="report-section">
+                                <h5 class="section-title">
+                                    <i class="fa fa-money-bill-wave"></i> <?= __('allowances_and_ticket_fares', 'Allowances and Ticket Fares') ?>
+                                </h5>
+
+                                <?php 
+                                // Get transportation type to check if tickets should be shown
+                                $transport_type_for_tickets = $request['transportation_type'] ?? '';
+                                $show_ticket_fares = ($transport_type_for_tickets === 'by_air');
+                                
+                                // Filter out zero-value "others" items and ticket_fares if not by_air
+                                $filtered_allowance_items = array_filter($allowance_items, function($item) use ($show_ticket_fares) {
+                                    $type = (string)($item['allowance_type'] ?? 'others');
+                                    $total = (float)($item['line_total'] ?? 0);
+                                    // Hide zero-value others
+                                    if ($type === 'others' && $total == 0) {
+                                        return false;
+                                    }
+                                    // Hide ticket_fares if not by_air transportation
+                                    if ($type === 'ticket_fares' && !$show_ticket_fares) {
+                                        return false;
+                                    }
+                                    return true;
+                                });
+                                ?>
+                                <?php if (!empty($filtered_allowance_items)): ?>
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-sm table-bordered mb-0">
+                                            <thead style="background-color: var(--background-light);">
+                                                <tr>
+                                                    <th><?= __('allowance_type', 'Allowance Type') ?></th>
+                                                    <th class="text-center"><?= __('amount', 'Amount') ?></th>
+                                                    <th class="text-center"><?= __('qty', 'Qty') ?></th>
+                                                    <th class="text-center"><?= __('total', 'Total') ?></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($filtered_allowance_items as $allowance_item): ?>
+                                                    <?php
+                                                    $line_type = (string)($allowance_item['allowance_type'] ?? 'others');
+                                                    $line_type_label_map = [
+                                                        'ticket_fares' => __('ticket_fares', 'Ticket Fares'),
+                                                        'hotel_allowance' => __('hotel_allowance', 'Hotel Allowance'),
+                                                        'transportation_allowance' => __('transportation_allowance', 'Transportation Allowance'),
+                                                        'others' => __('other_allowance', 'Others')
+                                                    ];
+                                                    $line_type_label = $line_type_label_map[$line_type] ?? ucwords(str_replace('_', ' ', $line_type));
+                                                    $line_amount = (float)($allowance_item['unit_amount'] ?? 0);
+                                                    $line_qty = (int)($allowance_item['qty'] ?? 0);
+                                                    $line_total = (float)($allowance_item['line_total'] ?? 0);
+                                                    ?>
+                                                    <tr>
+                                                        <td><?= htmlspecialchars((string)$line_type_label) ?></td>
+                                                        <td class="text-center"><?= number_format($line_amount, 2) ?></td>
+                                                        <td class="text-center"><?= $line_qty ?></td>
+                                                        <td class="text-center"><strong><?= number_format($line_total, 2) ?></strong></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php endif; ?>
+
+                                <div class="grid-details">
+                                    <?php if ($show_ticket_fares): ?>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('ticket_fares', 'Ticket Fares') ?></div>
+                                        <div class="value\"><?= number_format($ticket_fares_total, 2) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <div class="detail-item">
+                                        <div class="label\"><?= __('hotel_allowance', 'Hotel Allowance') ?> (<?= __('calculated', 'Calculated') ?>)</div>
+                                        <div class="value\"><?= number_format($calc_hotel_total, 2) ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label\"><?= __('transportation_allowance', 'Transportation Allowance') ?> (<?= __('calculated', 'Calculated') ?>)</div>
+                                        <div class="value\"><?= number_format($calc_transport_total, 2) ?></div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="label\"><?= __('daily_allowance', 'Daily Allowance') ?> (<?= __('calculated', 'Calculated') ?>)</div>
+                                        <div class="value\"><?= number_format($calc_daily_allowance_total, 0) ?></div>
+                                    </div>
+                                    <?php if ($other_allowance_total > 0): ?>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('other_allowance', 'Others') ?></div>
+                                        <div class="value\"><?= number_format($other_allowance_total, 2) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <div class="detail-item">
+                                        <div class="label"><?= __('grand_total', 'Grand Total') ?></div>
+                                        <div class="value highlight\"><?= number_format($report_grand_total, 2) ?></div>
+                                    </div>
+                                </div>
+
+                                <?php if (!empty($allowance_summary['notes'])): ?>
+                                    <div class="info-box" style="margin-top: 1rem;">
+                                        <strong><?= __('notes', 'Notes') ?>:</strong>
+                                        <?= getDisplayName(htmlspecialchars((string)$allowance_summary['notes'])) ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if ($is_hr_payroll_viewer): ?>
+                            <div class="report-section">
+                                <h5 class="section-title">
+                                    <i class="fa fa-calculator"></i> <?= __('troubleshooting_calculation', 'Troubleshooting Calculation (HR Payroll)') ?>
+                                </h5>
+                                <div class="info-box">
+                                    <div><strong><?= __('basic_salary', 'Basic Salary') ?>:</strong> <?= number_format($basic_salary, 2) ?></div>
+                                    <div><strong><?= __('allowance_days', 'Allowance Days') ?>:</strong> <?= (int)$trip_allowance_days ?></div>
+                                    <div><strong><?= __('salary_level', 'Salary Level') ?>:</strong> <?= $matched_scale ? ('Level ' . (int)$matched_scale['level'] . ' (' . (int)$matched_scale['min'] . ' - ' . (int)$matched_scale['max'] . ')') : __('out_of_scale', 'Out of defined scale') ?></div>
+                                    <hr style="margin:8px 0;">
+                                    <div><strong><?= __('hotel_allowance', 'Hotel Allowance') ?>:</strong> <?= number_format($calc_hotel_daily, 2) ?> × <?= (int)$trip_allowance_days ?> = <?= number_format($calc_hotel_total, 2) ?></div>
+                                    <div><strong><?= __('transportation_allowance', 'Transportation Allowance') ?>:</strong> <?= number_format($calc_transport_daily, 2) ?> × <?= (int)$trip_allowance_days ?> = <?= number_format($calc_transport_total, 2) ?></div>
+                                    <div><strong><?= __('daily_allowance', 'Daily Allowance') ?>:</strong> <?= number_format($calc_daily_allowance_total, 0) ?></div>
+                                    <div style="padding-left: 12px;">
+                                        1st week: (<?= number_format($basic_salary, 2) ?> / 60) × <?= (int)$week1_days ?> = <?= number_format($week1_daily_total, 0) ?>
+                                    </div>
+                                    <div style="padding-left: 12px;">
+                                        2nd week: (<?= number_format($basic_salary, 2) ?> / 90) × <?= (int)$week2_days ?> = <?= number_format($week2_daily_total, 0) ?>
+                                    </div>
+                                    <div style="padding-left: 12px;">
+                                        3rd week: (<?= number_format($basic_salary, 2) ?> / 120) × <?= (int)$week3_days ?> = <?= number_format($week3_daily_total, 0) ?>
+                                    </div>
+                                    <div><strong><?= __('other_allowance', 'Others') ?>:</strong> <?= number_format($other_allowance_total, 2) ?></div>
+                                    <?php if ($show_ticket_fares): ?>
+                                    <div><strong><?= __('ticket_fares', 'Ticket Fares') ?>:</strong> <?= number_format($ticket_fares_total, 2) ?></div>
+                                    <?php endif; ?>
+                                    <hr style="margin:8px 0;">
+                                    <?php if ($show_ticket_fares): ?>
+                                    <div><strong><?= __('grand_total', 'Grand Total') ?>:</strong> <?= number_format($ticket_fares_total, 2) ?> + <?= number_format($calc_hotel_total, 2) ?> + <?= number_format($calc_transport_total, 2) ?> + <?= number_format($calc_daily_allowance_total, 2) ?> + <?= number_format($other_allowance_total, 2) ?> = <?= number_format($report_grand_total, 2) ?></div>
+                                    <?php else: ?>
+                                    <div><strong><?= __('grand_total', 'Grand Total') ?>:</strong> <?= number_format($calc_hotel_total, 2) ?> + <?= number_format($calc_transport_total, 2) ?> + <?= number_format($calc_daily_allowance_total, 2) ?> + <?= number_format($other_allowance_total, 2) ?> = <?= number_format($report_grand_total, 2) ?></div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <?php endif; ?>

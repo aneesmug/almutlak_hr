@@ -23,7 +23,7 @@ if ($request_inv_no === '') {
 // Business trip details
 $trip = null;
 $sql = "SELECT bt.*, 
-               e.name AS employee_name, e.avatar, e.dept,
+               e.name AS employee_name, e.avatar, e.sex, e.dept,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
                fc.name_en as from_city_name_en, fc.name_ar as from_city_name_ar,
@@ -126,13 +126,8 @@ elseif ($trip['current_status'] === 'rejected') { $status_class = 'danger'; $sta
 elseif (strpos($trip['current_status'], 'pending') !== false) { $status_class = 'warning'; $status_icon = 'fa-clock'; }
 elseif (strpos($trip['current_status'], 'completed') !== false) { $status_class = 'primary'; $status_icon = 'fa-check-circle'; }
 
-$avatar_path = 'assets/images/users/avatar-1.jpg';
-if (!empty($trip['avatar'])) {
-    $avatar_candidate = $trip['avatar'];
-    if (is_file(__DIR__ . '/' . $avatar_candidate)) {
-        $avatar_path = $avatar_candidate;
-    }
-}
+// Use getAvatarImagePath function for proper gender-based default avatars
+$avatar_path = getAvatarImagePath($trip['avatar'] ?? '', $trip['sex'] ?? 1);
 
 // Trip destination display
 $destination_display = '';
@@ -203,7 +198,7 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
 <body class="enlarged">
     <div class="page-header">
         <div class="container">
-            <h3><i class="fas fa-history"></i> <?= __('approval_history') ?></h3>
+            <h3><i class="fas fa-history"></i> <?= __('business_trip_approval_history') ?></h3>
             <p class="mb-0"><?= __('complete_approval_timeline') ?></p>
         </div>
     </div>
@@ -212,12 +207,13 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
         <!-- Employee Info -->
         <div class="info-card">
             <div class="employee-header">
-                <img src="<?= htmlspecialchars($avatar_path) ?>" class="employee-avatar" alt="avatar" />
+                <img src="<?= $avatar_path ?>" class="employee-avatar" alt="avatar" />
                 <div>
                     <h4 style="margin:0;"><?= getDisplayName($trip['employee_name'])?></h4>
                     <div class="text-muted" style="margin-top:6px;">
-                        <i class="fas fa-id-card"></i> <?= htmlspecialchars($trip['emp_id']) ?> | 
-                        <i class="fas fa-building"></i> <?= htmlspecialchars($trip['department_name']) ?>
+                        <strong><?= __('emp_id') ?>:</strong> <?= htmlspecialchars($trip['emp_id']) ?>
+                        &nbsp; | &nbsp;
+                        <strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false ? $trip['department_name_ar'] ?? 'N/A' : $vacation['department_name'] ?? 'N/A') ?>
                     </div>
                 </div>
             </div>
@@ -228,18 +224,18 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
                 <div class="info-card">
                     <h5><i class="fas fa-plane"></i> <?= __('trip_details')?></h5>
                     <div class="info-row"><div class="info-label"><i class="fas fa-barcode"></i> <?= __('request_id') ?>:</div><div class="info-value"><code><?= htmlspecialchars($trip['request_inv_no']) ?></code></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-map-marker-alt"></i> <?= __('destination')?>:</div><div class="info-value"><strong><?= $destination_display ?></strong></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-tag"></i> <?= __('trip_type')?>:</div><div class="info-value"><strong><?= ucfirst(str_replace('_', ' ', $trip['trip_type'] ?? 'domestic')) ?></strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-map-marker-alt"></i> <?= __('destination')?>:</div><div class="info-value"><strong><?= getDisplayName($destination_display) ?></strong></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-tag"></i> <?= __('trip_type')?>:</div><div class="info-value"><strong><?= getDisplayName(ucfirst(str_replace('_', ' ', $trip['trip_type'] ?? 'domestic'))) ?></strong></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-calendar-alt"></i> <?= __('start_date') ?>:</div><div class="info-value"><?= htmlspecialchars($trip['trip_start_date'] ?? 'N/A') ?></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-calendar-check"></i> <?= __('end_date') ?>:</div><div class="info-value"><?= htmlspecialchars($trip['trip_end_date'] ?? 'N/A') ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('purpose') ?>:</div><div class="info-value"><?= htmlspecialchars($trip['trip_purpose'] ?? 'N/A') ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('purpose') ?>:</div><div class="info-value"><?= htmlspecialchars(getDisplayName($trip['trip_purpose'] ?? 'N/A')) ?></div></div>
                 </div>
             </div>
 
             <div class="col-md-6">
                 <div class="info-card">
                     <h5><i class="fas fa-file-alt"></i> <?= __('request_information')?></h5>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-circle"></i> <?= __('status') ?>:</div><div class="info-value"><span class="badge badge-<?= htmlspecialchars($status_class) ?>"><i class="fas <?= htmlspecialchars($status_icon) ?>"></i> <?= ucfirst(str_replace('_', ' ', $trip['current_status'])) ?></span></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-circle"></i> <?= __('status') ?>:</div><div class="info-value"><span class="badge badge-<?= htmlspecialchars($status_class) ?>"><i class="fas <?= htmlspecialchars($status_icon) ?>"></i> <?= htmlspecialchars(getDisplayName(ucfirst(str_replace('_', ' ', $trip['current_status'])))) ?></span></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-user-check"></i> <?= __('approval_level') ?>:</div><div class="info-value"><?= (int)($trip['current_approval_level'] ?? 0) ?></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-calendar"></i> <?= __('submitted_date') ?>:</div><div class="info-value"><?= isset($trip['created_at']) ? date('d M Y H:i', strtotime($trip['created_at'])) : 'N/A' ?></div></div>
                 </div>
@@ -277,10 +273,10 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
                                     elseif ($status === 'pending') $badge_class = 'warning';
                                     elseif ($status === 'awaiting') $badge_class = 'info';
                                     ?>
-                                    <span class="badge badge-<?= htmlspecialchars($badge_class) ?>"><?= ucfirst(htmlspecialchars($status)) ?></span>
+                                    <span class="badge badge-<?= htmlspecialchars($badge_class) ?>"><?= htmlspecialchars(getDisplayName(ucfirst(str_replace('_', ' ', $status)))) ?></span>
                                 </td>
-                                <td><?= $item['action_date'] ? date('d M Y H:i', strtotime($item['action_date'])) : 'Pending' ?></td>
-                                <td><small><?= htmlspecialchars($item['note'] ?? '-') ?></small></td>
+                                <td><?= $item['action_date'] ? date('d M Y H:i', strtotime($item['action_date'])) : __('pending') ?></td>
+                                <td><small><?= htmlspecialchars(getDisplayName($item['note'] ?? '-')) ?></small></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>

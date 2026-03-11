@@ -115,14 +115,9 @@ elseif ($loan['status'] === 'rejected') { $status_class = 'danger'; $status_icon
 elseif (strpos($loan['status'], 'pending') !== false) { $status_class = 'warning'; $status_icon = 'fa-clock'; }
 elseif ($loan['status'] === 'paid') { $status_class = 'info'; $status_icon = 'fa-check-double'; }
 
-$avatar_path = 'assets/images/users/avatar-1.jpg';
-if (!empty($loan['avatar'])) {
-    $avatar_candidate = $loan['avatar'];
-    // If stored path is relative to project root
-    if (is_file(__DIR__ . '/' . $avatar_candidate)) {
-        $avatar_path = $avatar_candidate;
-    }
-}
+// Use getAvatarImagePath function for proper gender-based default avatars
+$avatar_path = getAvatarImagePath($loan['avatar'] ?? '', $loan['sex'] ?? 1);
+
 ?>
 <!doctype html>
 <html lang="<?= isset($current_lang) ? $current_lang : 'en' ?>" <?= (isset($is_rtl) && $is_rtl) ? 'dir="rtl"' : '' ?>>
