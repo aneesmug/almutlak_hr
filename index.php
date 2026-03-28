@@ -170,7 +170,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                             </button>
                         </div>
                             <div class="store-buttons-grid">
-                            <a href="assets/apk/almutlak-wms.apk" download class="w-full flex items-center justify-center gap-2 bg-black text-white py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150" title="Get it on Google Play" aria-label="Get it on Google Play">
+                            <a id="android-btn" href="assets/apk/almutlak-wms.apk" download class="w-full flex items-center justify-center gap-2 bg-black text-white py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150" title="Get it on Google Play" aria-label="Get it on Google Play" style="display:none;">
                                 <svg class="w-7 h-7 flex-shrink-0" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
                                     <polygon points="30,20 300,256 30,492" fill="#00D26A"/>
                                     <polygon points="30,20 390,150 300,256" fill="#00A0FF"/>
@@ -199,6 +199,17 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         </div>
         
         <script src="assets/js/jquery.min.js"></script>
+        <script>
+        // Show Android button only on Android devices
+        (function() {
+            var ua = navigator.userAgent || navigator.vendor || window.opera;
+            var isAndroid = /android/i.test(ua);
+            if (isAndroid) {
+                var btn = document.getElementById('android-btn');
+                if (btn) btn.style.display = 'flex';
+            }
+        })();
+        </script>
         <script>
         $(document).ready(function() {
             const iqamaInput = $('#id_iqama');
