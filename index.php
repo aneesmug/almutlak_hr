@@ -67,6 +67,23 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         <meta content="A fully featured system which can be used to build CRM, CMS, etc." name="description" />
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+        <!-- PWA: Add to Home Screen support (iOS Safari + Android Chrome) -->
+        <link rel="manifest" href="/system/manifest.json">
+        <meta name="theme-color" content="#1a3c6e">
+        <!-- iOS specific PWA tags -->
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="Al-Mutlak WMS">
+        <link rel="apple-touch-icon" href="/system/pwa-icon-192.png">
+        <!-- Register service worker for PWA installability -->
+        <script>
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/system/sw.js');
+            });
+          }
+        </script>
         <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -80,6 +97,19 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         <style>
             body { font-family: 'Roboto', sans-serif; }
             #password-field-container, #new-password-container, #remember-me-container, #user-feedback-container, #forgot-password-link { display: none; }
+
+            .store-buttons-grid {
+                display: grid;
+                grid-template-columns: repeat(1, minmax(0, 1fr));
+                gap: 0.75rem;
+                width: 100%;
+            }
+
+            @media (min-width: 640px) {
+                .store-buttons-grid:has(> a:nth-child(2)) {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
         </style>
     </head>
     <body>
@@ -138,6 +168,30 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                             <button class="w-full flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150" name="submit" type="submit" id="submitBtn">
                                 <span>تسجيل الدخول (Log In)</span>
                             </button>
+                        </div>
+                            <div class="store-buttons-grid">
+                            <a href="assets/apk/almutlak-wms.apk" download class="w-full flex items-center justify-center gap-2 bg-black text-white py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150" title="Get it on Google Play" aria-label="Get it on Google Play">
+                                <svg class="w-7 h-7 flex-shrink-0" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                                    <polygon points="30,20 300,256 30,492" fill="#00D26A"/>
+                                    <polygon points="30,20 390,150 300,256" fill="#00A0FF"/>
+                                    <polygon points="300,256 390,150 480,200 390,256" fill="#FF4B55"/>
+                                    <polygon points="300,256 390,256 480,312 390,362" fill="#FFD93B"/>
+                                    <polygon points="30,492 300,256 390,362" fill="#00D26A"/>
+                                </svg>
+                                <span class="text-left leading-tight">
+                                    <span class="block text-[10px] font-medium tracking-wide uppercase">Get it on</span>
+                                    <span class="block text-lg font-semibold">Google Play</span>
+                                </span>
+                            </a>
+                            <!-- <a href="javascript:void(0);" class="w-full flex items-center justify-center gap-2 bg-black text-white py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-700 transition duration-150" title="Download on the App Store" aria-label="Download on the App Store">
+                                <svg class="w-7 h-7 flex-shrink-0" viewBox="0 0 384 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                                    <path fill="#ffffff" d="M318.7 268.7c-.2-46.5 38-68.8 39.7-69.8-21.7-31.7-55.6-36-67.7-36.5-28.9-2.9-56.4 17-71.1 17-14.8 0-37.8-16.6-62.1-16.2-31.9 .5-61.4 18.6-77.8 47.2-33.2 57.6-8.5 142.8 23.8 189.4 15.8 22.8 34.6 48.3 59.4 47.4 23.9-1 32.9-15.5 61.8-15.5s37 15.5 62.3 15c25.8-.4 42.1-23.3 57.7-46.2 18.1-26.4 25.5-52 25.9-53.3-.6-.3-49.6-19-49.9-75zM271.2 131.3c13-15.8 21.8-37.8 19.4-59.7-18.7 .7-41.3 12.5-54.7 28.3-12.1 14-22.7 36.4-19.8 57.9 20.8 1.6 42.1-10.6 55.1-26.5z"/>
+                                </svg>
+                                <span class="text-left leading-tight">
+                                    <span class="block text-[10px] font-medium tracking-wide uppercase">Download on the</span>
+                                    <span class="block text-lg font-semibold">App Store</span>
+                                </span>
+                            </a> -->
                         </div>
                     </form>
                 </div>

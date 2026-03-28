@@ -1,33 +1,68 @@
 <?php
+// Authentication guard
+require_once __DIR__ . '/includes/session_check.php';
+
 // Helper function to redirect safely
 function redirectBack() {
     if (!empty($_SERVER['HTTP_REFERER'])) {
         header('Location: ' . $_SERVER['HTTP_REFERER']);
     } else {
-        // Fallback to dashboard or index if no referrer
         header('Location: dashboard.php');
     }
     exit();
 }
 
+// Allowed file extensions for download
+$allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'];
+
+// Allowed base directories (relative to application root)
+$allowedBaseDirs = [
+    realpath(__DIR__ . '/assets/emp_documents'),
+    realpath(__DIR__ . '/assets/cars'),
+    realpath(__DIR__ . '/assets/machines'),
+    realpath(__DIR__ . '/assets/locations'),
+    realpath(__DIR__ . '/assets/uploads'),
+    realpath(__DIR__ . '/assets/attachments'),
+    realpath(__DIR__ . '/assets/gallery'),
+];
+// Remove any false values from directories that don't exist yet
+$allowedBaseDirs = array_filter($allowedBaseDirs);
+
 // Check if file parameter exists and is not empty
 if(isset($_GET['file']) && !empty(trim($_GET['file']))){
-//    $path = "./assets/emp_documents/" . $_GET['file'];
-    $path = "./" . $_GET['file'];
-    $filename = $_GET['file'];
-	
-	//exploding the file based on . operator
-		$file_ext = explode('.',$filename);
-		//count taken (if more than one . exist; files like abc.fff.2013.pdf
-		$file_ext_count=count($file_ext);
-		//minus 1 to make the offset correct
-		$cnt=$file_ext_count-1;
-		// the variable will have a value pdf as per the sample file name mentioned above.
-		$file_extension= $file_ext[$cnt];
+    // Resolve real path to prevent path traversal attacks
+    $requestedPath = realpath(__DIR__ . '/' . $_GET['file']);
+
+    // Safety check: ensure resolved path is within an allowed directory
+    $isAllowed = false;
+    if ($requestedPath !== false) {
+        foreach ($allowedBaseDirs as $baseDir) {
+            if (strncmp($requestedPath, $baseDir, strlen($baseDir)) === 0) {
+                $isAllowed = true;
+                break;
+            }
+        }
+    }
+
+    if (!$isAllowed) {
+        http_response_code(403);
+        exit('Access denied.');
+    }
+
+    $path = $requestedPath;
+    $filename = basename($path);
+
+    $file_extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+    // Block disallowed extensions
+    if (!in_array($file_extension, $allowedExtensions)) {
+        http_response_code(403);
+        exit('File type not allowed.');
+    }
 
     if(file_exists($path)) {
-		
-		if($file_extension == "jpg" OR $file_extension == "jpeg"){
+
+        if($file_extension == "jpg" || $file_extension == "jpeg"){
 			header('Content-Description: File Transfer');
 			header('Content-Type: image/jpeg');
 			header('Content-Disposition: attachment; filename='.basename($filename));

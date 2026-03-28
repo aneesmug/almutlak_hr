@@ -411,7 +411,29 @@ elseif ($ajaxType == 'applyVacation') {
         $first_approver_id = (int)($_POST['first_approver_id'] ?? 0);
         $vac_type = escape_string($_POST['vac_type'] ?? '');
         $fly_type = escape_string($_POST['fly_type'] ?? '');
-        $replacement_per = escape_string($_POST['replacement_per'] ?? '');
+        // Normalize replacement_per BEFORE escaping: treat placeholder text and indicators as no replacement
+        $replacement_per_raw = trim($_POST['replacement_per'] ?? '');
+        
+        // Check for common dropdown placeholder/no-selection values (case-insensitive)
+        // Includes: empty values, "null", placeholder text, and common "no selection" option values
+        $no_replacement_indicators = [
+            '', '0', 'null', 'none', 'undefined', 'false', '-1', 'select',
+            'no_replacement', 'no replacement', 'no replacement available', 
+            'noreplacem', 'not applicable', 'n/a', 'na', 
+            'select one', 'select employee', 'choose employee', 'please select',
+            'nope', 'no one', 'nobody'
+        ];
+        
+        // If raw value matches any no-replacement indicator, set to empty
+        $replacement_per_raw_lower = strtolower(str_replace([' ', '-', '_'], '', $replacement_per_raw));
+        foreach ($no_replacement_indicators as $indicator) {
+            if ($replacement_per_raw_lower === strtolower(str_replace([' ', '-', '_'], '', $indicator))) {
+                $replacement_per_raw = '';
+                break;
+            }
+        }
+        
+        $replacement_per = escape_string($replacement_per_raw);
         $start_date = escape_string($_POST['start_date'] ?? '');
         $end_date = escape_string($_POST['end_date'] ?? '');
         $departure_date = escape_string($_POST['departure_date'] ?? '');
@@ -666,7 +688,7 @@ elseif ($ajaxType == 'applyVacation') {
             throw new Exception(__("missing_required_fields_employee,_vacation_type_or_first_approver"));
         }
 
-        // 2.1 For non-employee roles, replacement employee must be provided and valid
+        // 2.1 For non-employee roles, replacement employee is optional but must be valid if provided
         $requester_user_type = 'employee';
         $stmtRequesterRole = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
         if ($stmtRequesterRole) {
@@ -680,30 +702,36 @@ elseif ($ajaxType == 'applyVacation') {
             mysqli_stmt_close($stmtRequesterRole);
         }
 
-        if ($requester_user_type !== 'employee') {
-            if (empty($replacement_per)) {
-                throw new Exception('Replacement employee is required for non-employee roles during vacation.');
-            }
-            if ((string)$replacement_per === (string)$emp_id) {
-                throw new Exception('Replacement employee cannot be the same as vacation employee.');
-            }
+        // Validate replacement person only if one is provided
+        if (!empty($replacement_per)) {
+            // Additional safety check: if replacement_per doesn't look like a valid ID format, treat as empty
+            // Valid IDs are typically numeric, may have leading zeros, no spaces/special chars (except common separators)
+            $looks_like_id = preg_match('/^[0-9]+$/', $replacement_per) || preg_match('/^[A-Za-z0-9\-_]+$/', $replacement_per);
+            
+            if (!$looks_like_id) {
+                // Doesn't look like an ID, treat as "no replacement" selected
+                $replacement_per = '';
+            } else {
+                if ((string)$replacement_per === (string)$emp_id) {
+                    throw new Exception('Replacement employee cannot be the same as vacation employee.');
+                }
 
-            $stmtReplacementCheck = mysqli_prepare($conDB, "
-                SELECT e.emp_id
-                FROM employees e
-                INNER JOIN admin_login al ON al.emp_id = e.emp_id
-                WHERE e.emp_id = ? AND e.status = 1
-                LIMIT 1
-            ");
-            if ($stmtReplacementCheck) {
-                mysqli_stmt_bind_param($stmtReplacementCheck, "s", $replacement_per);
-                mysqli_stmt_execute($stmtReplacementCheck);
-                $repRes = mysqli_stmt_get_result($stmtReplacementCheck);
-                $replacementValid = ($repRes && mysqli_num_rows($repRes) > 0);
-                if ($repRes) mysqli_free_result($repRes);
-                mysqli_stmt_close($stmtReplacementCheck);
-                if (!$replacementValid) {
-                    throw new Exception('Replacement employee must be active and have a valid system role account.');
+                $stmtReplacementCheck = mysqli_prepare($conDB, "
+                    SELECT e.emp_id
+                    FROM employees e
+                    WHERE e.emp_id = ? AND e.status = 1
+                    LIMIT 1
+                ");
+                if ($stmtReplacementCheck) {
+                    mysqli_stmt_bind_param($stmtReplacementCheck, "s", $replacement_per);
+                    mysqli_stmt_execute($stmtReplacementCheck);
+                    $repRes = mysqli_stmt_get_result($stmtReplacementCheck);
+                    $replacementValid = ($repRes && mysqli_num_rows($repRes) > 0);
+                    if ($repRes) mysqli_free_result($repRes);
+                    mysqli_stmt_close($stmtReplacementCheck);
+                    if (!$replacementValid) {
+                        throw new Exception('Selected replacement employee must be active.');
+                    }
                 }
             }
         }
@@ -1127,7 +1155,7 @@ elseif ($ajaxType == 'applyVacation') {
         $emp_id_esc = mysqli_real_escape_string($conDB, $emp_id);
         $vac_type_esc = mysqli_real_escape_string($conDB, $vac_type);
         $fly_type_esc = mysqli_real_escape_string($conDB, $fly_type);
-        $replacement_per_esc = mysqli_real_escape_string($conDB, $replacement_per);
+        $replacement_per_esc = !empty($replacement_per) ? "'" . mysqli_real_escape_string($conDB, $replacement_per) . "'" : 'NULL';
         $start_date_esc = mysqli_real_escape_string($conDB, $start_date);
         $end_date_esc = mysqli_real_escape_string($conDB, $end_date);
         $notes_esc = mysqli_real_escape_string($conDB, $notes ?? '');
@@ -1152,7 +1180,7 @@ elseif ($ajaxType == 'applyVacation') {
         $sql = "INSERT INTO `emp_vacation` 
                     (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `replacement_person`, `start_date`, `return_date`, `departure_date`, `arrival_date`, `vacdays`, `remarks`, `vacation_salary_type`, `attachment_path`, `encashment_amount`, `request_inv_no`, `is_deductible`, `current_status`, `current_approval_level`,`review`) 
                 VALUES 
-                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', '$replacement_per_esc', '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', $attachment_path_sql, $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
+                    ('$emp_id_esc', $submitted_by_val, '$vac_type_esc', '$fly_type_esc', $replacement_per_esc, '$start_date_esc', '$end_date_esc', $departure_date_sql, $arrival_date_sql, $vacdays_int, '$notes_esc', '$vacation_salary_type_esc', $attachment_path_sql, $encashment_amount_val, '$request_inv_no_esc', $is_deductible, 'pending_approval', 1,'A')";
 
         if (!mysqli_query($conDB, $sql)) {
 
@@ -3188,6 +3216,118 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         } else {
             send_json_response("Info", __("no_changes_were_made_to_the_adjustments"), "info");
         }
+    } catch (Exception $e) {
+        send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+// ================================================================
+// --- CANCEL VACATION REQUEST HANDLER ---
+// ================================================================
+// Purpose: Allow employees to cancel their own vacation requests before approval
+// ================================================================
+elseif ($ajaxType == 'cancelVacationRequest') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+
+        if (empty($vacation_id)) {
+            throw new Exception(__("vacation_id_is_missing"));
+        }
+
+        if (empty($current_user_id)) {
+            throw new Exception(__("session_expired_please_log_in_again"));
+        }
+
+        // Fetch vacation details
+        $sql = "SELECT `id`, `emp_id`, `current_status`, `request_inv_no`, `vac_type`, `start_date`, `return_date` 
+                FROM `emp_vacation` 
+                WHERE `id` = ?";
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception(__('database_prepare_error'));
+        }
+
+        mysqli_stmt_bind_param($stmt, "i", $vacation_id);
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception(__('database_execute_error'));
+        }
+
+        $result = mysqli_stmt_get_result($stmt);
+        $vacation = mysqli_fetch_assoc($result);
+        mysqli_stmt_close($stmt);
+
+        if (!$vacation) {
+            throw new Exception(__("vacation_record_not_found"));
+        }
+
+        // Verify that the vacation belongs to the current employee
+        // Convert both to string for comparison to handle string/int type mismatch
+        $vacation_emp_id = (string)trim($vacation['emp_id']);
+        $session_emp_id = (string)trim($current_user_id);
+        
+        if (empty($session_emp_id) || $session_emp_id === '0') {
+            throw new Exception(__("session_expired_please_log_in_again"));
+        }
+        
+        if ($vacation_emp_id !== $session_emp_id) {
+            throw new Exception(__("you_can_only_cancel_your_own_vacation_requests"));
+        }
+
+        // Check if vacation can be cancelled
+        // Only allow cancellation during approval workflow: pending_approval, apply, approved, and all HR/GM approval stages
+        // Block cancellation only after: completed, rejected, or already cancelled
+        $cancellable_statuses = ['apply', 'pending_approval', 'pending', 'hr_assistant_approved', 'hr_manager_approved', 'gm_approved', 'approved'];
+        if (!in_array($vacation['current_status'], $cancellable_statuses)) {
+            throw new Exception(sprintf(__("vacation_cannot_be_cancelled_current_status_is"), $vacation['current_status']));
+        }
+
+        // No date restrictions - allow cancellation anytime during approval workflow
+
+        // Update vacation status to 'cancelled'
+        $update_sql = "UPDATE `emp_vacation` 
+                       SET `current_status` = 'cancelled'
+                       WHERE `id` = ?";
+        $update_stmt = mysqli_prepare($conDB, $update_sql);
+        if (!$update_stmt) {
+            throw new Exception(__('database_prepare_error'));
+        }
+
+        mysqli_stmt_bind_param($update_stmt, "i", $vacation_id);
+        if (!mysqli_stmt_execute($update_stmt)) {
+            throw new Exception(__('database_execute_error'));
+        }
+
+        $affected_rows = mysqli_stmt_affected_rows($update_stmt);
+        mysqli_stmt_close($update_stmt);
+
+        if ($affected_rows === 0) {
+            throw new Exception(__("failed_to_update_vacation_status"));
+        }
+
+        // Log the cancellation action
+        $log_status = 'cancelled';
+        $log_note = sprintf('Vacation request cancelled by employee. Type: %s, Dates: %s to %s', 
+                            $vacation['vac_type'],
+                            date('d M Y', strtotime($vacation['start_date'])),
+                            date('d M Y', strtotime($vacation['return_date'])));
+        
+        $log_sql = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+                    VALUES (?, ?, ?, ?, ?, NOW())";
+        $log_stmt = mysqli_prepare($conDB, $log_sql);
+        if ($log_stmt) {
+            $log_stmt->bind_param('issss', $current_user_id, $vacation['request_inv_no'], $userwel, $log_status, $log_note);
+            $log_stmt->execute();
+            $log_stmt->close();
+        }
+
+        // Send success response
+        send_json_response(
+            __("success"),
+            sprintf(__("vacation_request_cancelled_successfully"), $vacation['request_inv_no']),
+            "success"
+        );
+
     } catch (Exception $e) {
         send_json_response("Error", $e->getMessage(), "error", 500);
     }

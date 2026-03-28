@@ -41,6 +41,7 @@ $all_statuses = [
     'pending_deduction' => __('approved_pending_deduction'),
     'approved' => __('approved'),
     'rejected' => __('rejected'),
+    'cancelled' => __('cancelled'),
     'all' => __('all_requests')
 ];
 
@@ -98,6 +99,7 @@ if ($current_filter === 'my_pending') {
     $where_clauses[] = "ra.status = 'pending'";
     $where_clauses[] = "v.current_status != 'rejected'";
     $where_clauses[] = "v.current_status != 'completed'";
+    $where_clauses[] = "v.current_status != 'cancelled'";
 } elseif ($current_filter === 'my_dept') {
     // Show all requests from the user's department
     $where_clauses[] = "e.dept = ?";
@@ -131,7 +133,7 @@ if ($current_filter === 'my_pending') {
     $where_clauses[] = "v.current_status = 'approved'";
     $where_clauses[] = "v.fly_type = 'annual'";
     $where_clauses[] = "(v.overtime_hours IS NULL OR v.overtime_hours = 0) AND (v.deduction_hours IS NULL OR v.deduction_hours = 0) AND (v.deduction_days IS NULL OR v.deduction_days = 0) AND (v.other_earnings IS NULL OR v.other_earnings = 0) AND (v.other_deductions IS NULL OR v.other_deductions = 0)";
-} elseif (in_array($current_filter, ['pending_approval', 'approved', 'rejected'])) {
+} elseif (in_array($current_filter, ['pending_approval', 'approved', 'rejected', 'cancelled'])) {
     // Filter by the main status on the vacation table
     $where_clauses[] = "v.current_status = ?";
     $params[] = $current_filter;
@@ -719,6 +721,11 @@ if ($can_see_all_depts) {
                                                                     $badge_class = 'primary';
                                                                     $status_text = __('completed');
                                                                     $status_icon = "<i class='fa fa-solid fa-badge-check text-white'></i>";
+                                                                    break;
+                                                                case 'cancelled':
+                                                                    $badge_class = 'dark';
+                                                                    $status_text = __('cancelled_by_employee');
+                                                                    $status_icon = "<i class='fa fa-solid fa-ban text-white'></i>";
                                                                     break;
                                                                 default:
                                                                     $status_text = __($req['current_status']);
@@ -1313,6 +1320,8 @@ if ($can_see_all_depts) {
                 currentLevel, userRole, hasSupervisor, isSimpleLeave, payerEmpId, currentUserId
             });
 
+            // COMMENTED OUT: All payer/payment modal logic - payer assignment is now handled in settlement, not during approval
+            /*
             // Check if current user is Finance Manager
             const currentUserType = document.body.getAttribute('data-user-type') || '<?php echo $_SESSION['user_type'] ?? ""; ?>';
             const isFinanceManager = (currentUserType === 'finance');
@@ -1534,8 +1543,10 @@ if ($can_see_all_depts) {
                 });
                 return;
             }
+            */
 
-            // Helper function to show the Assign Payer modal
+            // Helper function to show the Assign Payer modal - COMMENTED OUT (payer assignment in settlement)
+            /*
             function showAssignPayerModal(vacId) {
                 $.ajax({
                     url: './includes/ajaxFile/ajaxLoan.php',
@@ -1621,6 +1632,7 @@ if ($can_see_all_depts) {
                     });
                 });
             }
+            */
 
             // Helper function to show normal approval modal
             function showNormalApprovalModal(vacId, empId, empName, vType, sDate, eDate, tDays) {
@@ -2905,7 +2917,8 @@ if ($can_see_all_depts) {
                 });
         }
 
-        // AJAX call for sending approval with payer selection (Finance Manager)
+        // AJAX call for sending approval with payer selection (Finance Manager) - COMMENTED OUT (payer assignment in settlement)
+        /*
         function sendApprovalWithPayer(vacationId, approverRole, payerId, approvalComment = '') {
             // Show loading state
             Swal.fire({
@@ -2948,6 +2961,7 @@ if ($can_see_all_depts) {
                 }
             });
         }
+        */
 
         /**
          * =Slightly modified rejectVacationRequest

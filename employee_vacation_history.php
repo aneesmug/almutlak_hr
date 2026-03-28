@@ -38,21 +38,21 @@ $stmt->execute();
 $vacation_result = $stmt->get_result();
 
 $all_statuses = [
-    'apply' => 'Applied',
-    'pending' => 'Assistant Pending',
-    'hr_assistant_approved' => 'HR Assistant Approved',
-    'hr_manager_approved' => 'HR Manager Approved',
-    'gm_approved' => 'GM Approved',
-    'rejected' => 'Rejected'
+    'draft' => __('draft'),
+    'pending_approval' => __('pending_approval'),
+    'approved' => __('approved'),
+    'completed' => __('completed'),
+    'rejected' => __('rejected'),
+    'cancelled' => __('cancelled')
 ];
 
 $status_badges = [
-    'apply' => 'badge-secondary',
-    'pending' => 'badge-warning',
-    'hr_assistant_approved' => 'badge-info',
-    'hr_manager_approved' => 'badge-primary',
-    'gm_approved' => 'badge-success',
-    'rejected' => 'badge-danger'
+    'draft' => 'badge-secondary',
+    'pending_approval' => 'badge-warning',
+    'approved' => 'badge-success',
+    'completed' => 'badge-info',
+    'rejected' => 'badge-danger',
+    'cancelled' => 'badge-dark'
 ];
 ?>
 
@@ -65,9 +65,9 @@ $status_badges = [
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <!-- <link href="./plugins/sweet-alert/sweetalert2.min.css" rel="stylesheet" type="text/css" /> -->
     <link href="./assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="./assets/css/metisMenu.min.css" rel="stylesheet" type="text/css" />
-    <link href="./assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="./assets/css/style.css" rel="stylesheet" type="text/css" />
     <style>
         :root {
@@ -209,14 +209,21 @@ $status_badges = [
                                                 </td>
                                                 <td>
                                                     <span class="badge <?= $status_badges[$vac['current_status']] ?? 'badge-secondary' ?>">
-                                                        <?= $all_statuses[$vac['current_status']] ?? ucfirst(str_replace('_', ' ', $vac['current_status'])) ?>
+                                                        <?= isset($all_statuses[$vac['current_status']]) ? (is_callable($all_statuses[$vac['current_status']]) ? $all_statuses[$vac['current_status']]() : $all_statuses[$vac['current_status']]) : ucfirst(str_replace('_', ' ', $vac['current_status'])) ?>
                                                     </span>
                                                 </td>
                                                 <td><?= date('M d, Y', strtotime($vac['created_at'])) ?></td>
                                                 <td>
-                                                    <a href="vacation_report_details.php?id=<?= $vac['id'] ?>&emp_id=<?= $vac['emp_id'] ?>" class="btn btn-sm btn-info" title="View Details">
-                                                        <i class="fa fa-eye"></i>
-                                                    </a>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <a href="vacation_report_details.php?id=<?= $vac['id'] ?>&emp_id=<?= $vac['emp_id'] ?>" class="btn btn-info" title="View Details">
+                                                            <i class="fa fa-eye"></i>
+                                                        </a>
+                                                        <?php if ($vac['current_status'] !== 'completed' && $vac['current_status'] !== 'cancelled' && $vac['current_status'] !== 'rejected'): ?>
+                                                            <button type="button" class="btn btn-danger" onclick="cancelVacationRequest(<?= $vac['id'] ?>, '<?= htmlspecialchars(addslashes($vac['vac_type']), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(date('M d, Y', strtotime($vac['start_date']))), ENT_QUOTES) ?>')" title="Cancel Request">
+                                                                <i class="fa fa-times"></i>
+                                                            </button>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         <?php endwhile; ?>
@@ -240,8 +247,72 @@ $status_badges = [
     <script src="./assets/js/bootstrap.bundle.min.js"></script>
     <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/employee_profile.js"></script>
     <script>
+        // Cancel vacation request function
+        function cancelVacationRequest(vacationId, vacType, startDate) {
+            // Show SweetAlert2 confirmation dialog
+            Swal.fire({
+                title: __('cancel_vacation_request'),
+                // html: `<p>Are you sure you want to cancel this <strong>${vacType}</strong> vacation request starting on <strong>${startDate}</strong>?</p><p style="color: #dc3545; font-size: 12px; margin-top: 10px;">This action cannot be undone.</p>`,
+                html: `<p>${__('are_you_sure_cancel_vacation', { vacType: vacType, startDate: startDate })}</p><p style="color: #dc3545; font-size: 12px; margin-top: 10px;">${__('this_action_cannot_be_undone')}</p>`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: __('yes_cancel_request'),
+                cancelButtonText: __('keep_request'),
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Show loading state
+                    Swal.fire({
+                        title: __('cancelling_request'),
+                        html: __('please_wait_while_cancelling'),
+                        icon: 'info',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    // Send AJAX request to cancel the vacation
+                    $.ajax({
+                        url: './includes/ajaxFile/ajaxVacation.php',
+                        type: 'POST',
+                        dataType: 'JSON',
+                        data: {
+                            ajaxType: 'cancelVacationRequest',
+                            vacation_id: vacationId
+                        },
+                        success: function(response) {
+                            Swal.fire({
+                                title: response.title || __('success'),
+                                text: response.message || __('your_vacation_request_has_been_cancelled_successfully'),
+                                icon: response.type || 'success',
+                                confirmButtonText: __('ok'),
+                                allowOutsideClick: false
+                            }).then(() => {
+                                location.reload();
+                            });
+                        },
+                        error: function(xhr) {
+                            const response = xhr.responseJSON || {};
+                            Swal.fire({
+                                title: response.title || __('error'),
+                                text: response.message || __('failed_to_cancel_vacation_request'),
+                                icon: 'error',
+                                confirmButtonText: __('ok')
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
         $(document).ready(function() {
             $('.datatable').DataTable({
                 order: [[6, 'desc']],

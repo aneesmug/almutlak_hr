@@ -4,5 +4,12 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"/^node -v; npm -v; java -version 2>&1; echo \"ANDROID_HOME=\\$env:ANDROID_HOME\"; echo \"ANDROID_SDK_ROOT=\\$env:ANDROID_SDK_ROOT\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			}
+		}
+	}
 }

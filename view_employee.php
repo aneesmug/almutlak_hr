@@ -1383,8 +1383,8 @@ if (mysqli_num_rows($query) == 1) {
 																			<a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect">
 																				<i class="fa fa-edit"></i>
 																			</a>
-																			<?php if ($user_type == $access1) { ?>
-																				<a href="javascript:void(0);" class="btn btn-sm btn-danger waves-effect">
+																			<?php if ($is_system_admin) { ?>
+																				<a href="javascript:void(0);" class="btn btn-sm btn-danger waves-effect deleteAjax" data-id="<?= $id_emp_reg ?>" data-tbl="emp_vacation" data-file='0' >
 																					<i class="fa fa-solid fa-remove"></i>
 																				</a>
 																			<?php } ?>
