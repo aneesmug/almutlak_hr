@@ -11117,6 +11117,9 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                                 if (result.value.approvedAmount && result.value.approvedAmount > 0) {
                                     formData.append('approved_amount', result.value.approvedAmount);
                                 }
+                                    if (result.value.paymentProofFile) {
+                                        formData.append('payment_proof', result.value.paymentProofFile);
+                                    }
                             }
                         } else if (isFinanceEmployee) {
                             // Finance Officer at final approval

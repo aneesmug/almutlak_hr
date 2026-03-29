@@ -69,18 +69,18 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
         <!-- PWA: Add to Home Screen support (iOS Safari + Android Chrome) -->
-        <link rel="manifest" href="/system/manifest.json">
+        <link rel="manifest" href="/manifest.json">
         <meta name="theme-color" content="#1a3c6e">
         <!-- iOS specific PWA tags -->
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
         <meta name="apple-mobile-web-app-title" content="Al-Mutlak WMS">
-        <link rel="apple-touch-icon" href="/system/pwa-icon-192.png">
+        <link rel="apple-touch-icon" sizes="192x192" href="/pwa-icon-192.png">
         <!-- Register service worker for PWA installability -->
         <script>
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-              navigator.serviceWorker.register('/system/sw.js');
+              navigator.serviceWorker.register('/sw.js');
             });
           }
         </script>
@@ -110,9 +110,41 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
             }
+            #page-loader {
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                background: #1a3c6e;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 1.5rem;
+                transition: opacity 0.4s ease;
+            }
+            #page-loader.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .loader-spinner {
+                width: 52px;
+                height: 52px;
+                border: 5px solid rgba(255,255,255,0.2);
+                border-top-color: #ffffff;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
         </style>
     </head>
     <body>
+        <!-- Page Loader -->
+        <div id="page-loader">
+            <img src="assets/images/logo_color_sm.png" alt="Al-Mutlak" style="width:120px;opacity:0.9;">
+            <div class="loader-spinner"></div>
+        </div>
         <div class="fixed inset-0 z-[-1]">
             <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('assets/images/login-background.webp');"></div>
             <div class="absolute inset-0 bg-black/60"></div>
@@ -193,6 +225,34 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                                 </span>
                             </a> -->
                         </div>
+
+                        <!-- iOS Add to Home Screen Guide (shown only on iOS) -->
+                        <div id="ios-install-banner" style="display:none;" class="mt-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                            <p class="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                                <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                                Install App on Your iPhone
+                            </p>
+                            <ol class="text-sm text-blue-700 space-y-2 list-none">
+                                <li class="flex items-start gap-2">
+                                    <span class="font-bold text-blue-900 min-w-[20px]">1.</span>
+                                    <span>Tap the <strong>Share</strong> button
+                                        <svg class="inline w-4 h-4 mx-1 -mt-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-2.08V4.83L9.42 6.42 8 5l4-4zm4 5v11c0 1.1-.9 2-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h3v2H6v11h12V10h-3V8h3a2 2 0 012 2z"/></svg>
+                                        at the bottom of your browser.
+                                    </span>
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <span class="font-bold text-blue-900 min-w-[20px]">2.</span>
+                                    <span>Scroll down and tap <strong>"Add to Home Screen"</strong>
+                                        <svg class="inline w-4 h-4 mx-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>.
+                                    </span>
+                                </li>
+                                <li class="flex items-start gap-2">
+                                    <span class="font-bold text-blue-900 min-w-[20px]">3.</span>
+                                    <span>Tap <strong>"Add"</strong> in the top-right corner to save the app icon.</span>
+                                </li>
+                            </ol>
+                        </div>
+
                     </form>
                 </div>
             </div>
@@ -200,13 +260,28 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         
         <script src="assets/js/jquery.min.js"></script>
         <script>
-        // Show Android button only on Android devices
+        // Hide loader when page is fully loaded
+        window.addEventListener('load', function() {
+            var loader = document.getElementById('page-loader');
+            if (loader) {
+                loader.classList.add('hidden');
+                setTimeout(function() { loader.style.display = 'none'; }, 400);
+            }
+        });
+        </script>
+        <script>
+        // Show Android button only on Android, iOS banner only on iOS
         (function() {
             var ua = navigator.userAgent || navigator.vendor || window.opera;
             var isAndroid = /android/i.test(ua);
+            var isIOS = /iphone|ipad|ipod/i.test(ua) && !window.MSStream;
             if (isAndroid) {
                 var btn = document.getElementById('android-btn');
                 if (btn) btn.style.display = 'flex';
+            }
+            if (isIOS) {
+                var banner = document.getElementById('ios-install-banner');
+                if (banner) banner.style.display = 'block';
             }
         })();
         </script>

@@ -9,6 +9,14 @@
 			"/^node -v; npm -v; java -version 2>&1; echo \"ANDROID_HOME=\\$env:ANDROID_HOME\"; echo \"ANDROID_SDK_ROOT=\\$env:ANDROID_SDK_ROOT\"$/": {
 				"approve": true,
 				"matchCommandLine": true
+			},
+			"/^Test-Path \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\pwa-icon-192\\.png\" ; Test-Path \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\pwa-icon-512\\.png\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^Get-Item \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\pwa-icon-192\\.png\", \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\pwa-icon-512\\.png\" \\| Select-Object Name, Length$/": {
+				"approve": true,
+				"matchCommandLine": true
 			}
 		}
 	}

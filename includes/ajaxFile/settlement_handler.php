@@ -287,6 +287,27 @@ function getFinanceEmployees() {
     }
 }
 
+function getUploadErrorMessage($errorCode) {
+    switch ((int)$errorCode) {
+        case UPLOAD_ERR_INI_SIZE:
+            return 'Payment proof exceeds the server upload_max_filesize limit';
+        case UPLOAD_ERR_FORM_SIZE:
+            return 'Payment proof exceeds the maximum allowed form size';
+        case UPLOAD_ERR_PARTIAL:
+            return 'Payment proof was only partially uploaded';
+        case UPLOAD_ERR_NO_FILE:
+            return 'Payment proof is required for final approval';
+        case UPLOAD_ERR_NO_TMP_DIR:
+            return 'Server temporary upload folder is missing';
+        case UPLOAD_ERR_CANT_WRITE:
+            return 'Server failed to write the payment proof file';
+        case UPLOAD_ERR_EXTENSION:
+            return 'Payment proof upload was blocked by a server extension';
+        default:
+            return 'Failed to upload payment proof';
+    }
+}
+
 function approveSettlement($settlementManager, $currentUserId) {
     global $conDB, $pdo;
     
@@ -353,7 +374,12 @@ function approveSettlement($settlementManager, $currentUserId) {
             }
             
             // Handle payment proof file upload
-            if (isset($_FILES['payment_proof']) && $_FILES['payment_proof']['error'] === UPLOAD_ERR_OK) {
+            if (!isset($_FILES['payment_proof'])) {
+                echo json_encode(['success' => false, 'message' => 'Payment proof is required for final approval']);
+                return;
+            }
+
+            if ($_FILES['payment_proof']['error'] === UPLOAD_ERR_OK) {
                 $uploadDir = __DIR__ . '/../../uploads/settlement_proofs/';
                 if (!is_dir($uploadDir)) {
                     mkdir($uploadDir, 0755, true);
@@ -370,7 +396,10 @@ function approveSettlement($settlementManager, $currentUserId) {
                     return;
                 }
             } else {
-                echo json_encode(['success' => false, 'message' => 'Payment proof is required for final approval']);
+                echo json_encode([
+                    'success' => false,
+                    'message' => getUploadErrorMessage($_FILES['payment_proof']['error'])
+                ]);
                 return;
             }
         }

@@ -2,12 +2,12 @@
 // Enables PWA "Add to Home Screen" on iOS Safari and Android Chrome.
 // Strategy: Network-first for all pages (always fresh content from server).
 
-const CACHE_NAME = 'almutlak-wms-v1';
+const CACHE_NAME = 'almutlak-wms-v3';
 
 // Assets to pre-cache for offline splash screen only
 const PRECACHE_ASSETS = [
-  '/system/pwa-icon-192.png',
-  '/system/pwa-icon-512.png'
+  '/pwa-icon-192.png',
+  '/pwa-icon-512.png'
 ];
 
 self.addEventListener('install', event => {

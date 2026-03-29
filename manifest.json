@@ -2,25 +2,31 @@
   "name": "Al-Mutlak WMS",
   "short_name": "Al-Mutlak",
   "description": "Al-Mutlak Workforce Management System",
-  "start_url": "/system/index.php",
+  "start_url": "./index.php",
   "display": "standalone",
   "background_color": "#1a3c6e",
   "theme_color": "#1a3c6e",
   "orientation": "portrait-primary",
-  "scope": "/system/",
+  "scope": "./",
   "lang": "en",
   "icons": [
     {
-      "src": "/system/pwa-icon-192.png",
+      "src": "/pwa-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/system/pwa-icon-512.png",
+      "src": "/pwa-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
