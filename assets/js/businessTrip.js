@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Business Trip Request Management
  * 
  * This module handles all Business Trip request functionality:
@@ -456,7 +456,7 @@ function openBusinessTripApplyModal(empid, deptId, country) {
 
             // Load employee info - using same approach as vacation form
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data: {ajaxType: "emp_data", empid: empid},
@@ -520,7 +520,7 @@ function openBusinessTripApplyModal(empid, deptId, country) {
 
             // Get direct supervisor
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data: { ajaxType: 'get_direct_supervisor', emp_id: empid },

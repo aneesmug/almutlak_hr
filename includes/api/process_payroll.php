@@ -585,24 +585,28 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
     // MODIFIED: If no vacation found, only delete auto-generated vacation benefits, preserve manually added ones
     // Check if there are any manually added benefits by looking for benefits that are NOT auto-generated
     if (!$vacation) {
-        // Only remove auto-generated vacation benefits (which will have specific ID patterns)
-        // Preserve any vacation benefits that were manually added/modified
-        // We identify auto-generated ones by their specific naming pattern
+        // Only remove orphaned auto-generated vacation benefits.
+        // Use distinct placeholder names because this query references the same values in outer and inner scopes.
         $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits 
-            WHERE emp_id = :emp_id 
-            AND month = :month_year 
+            WHERE emp_id = :outer_emp_id 
+            AND month = :outer_month_year 
             AND (benefit LIKE 'Working Days Salary for Vacation%' OR benefit LIKE 'Vacation Salary Benefit%')
             AND id IN (
                 SELECT id FROM (
                     SELECT pb.id FROM payroll_benefits pb
                     LEFT JOIN emp_vacation ev ON pb.benefit LIKE CONCAT('%', CONCAT('(ID: ', ev.id, ')'))
-                    WHERE pb.emp_id = :emp_id 
-                    AND pb.month = :month_year 
+                    WHERE pb.emp_id = :inner_emp_id 
+                    AND pb.month = :inner_month_year 
                     AND (pb.benefit LIKE 'Working Days Salary for Vacation%' OR pb.benefit LIKE 'Vacation Salary Benefit%')
                     AND ev.id IS NULL
                 ) AS subquery
             )");
-        $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        $stmtDelete->execute([
+            ':outer_emp_id' => $empId,
+            ':outer_month_year' => $monthYear,
+            ':inner_emp_id' => $empId,
+            ':inner_month_year' => $monthYear
+        ]);
         return;
     }
     

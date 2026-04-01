@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 
 
@@ -1582,7 +1582,7 @@ break;
 
                             $.ajax({
 
-                                url: "./includes/ajaxFile/ajaxEmployee.php",
+                                url: "./includes/ajaxFile/hrHandler.php",
 
                                 type: "POST",
 

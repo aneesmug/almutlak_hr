@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /****************************************************************
  * MODIFICATION SUMMARY (001-manual_vacation.php):
  * 1. NEW FILE CREATION: This is a new page dedicated to the manual entry of historical vacation data.
@@ -112,7 +112,7 @@ if (!$is_system_admin && !$isHR && !$isDeptHr) {
                         return;
                     }
                     return $.ajax({
-                        url: './includes/ajaxFile/ajaxEmployee.php',
+                        url: './includes/ajaxFile/hrHandler.php',
                         type: 'POST',
                         dataType: 'JSON',
                         data: {
@@ -181,7 +181,7 @@ if (!$is_system_admin && !$isHR && !$isDeptHr) {
 
 
                     return $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: 'JSON',
                         data: postData

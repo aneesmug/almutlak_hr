@@ -1,4 +1,4 @@
-<?php
+﻿<?php
     header('Content-Type: application/json');
 	require_once __DIR__ . '/../../includes/db.php';
     require_once __DIR__ . '/../../includes/session_check.php';
@@ -6,7 +6,7 @@
     include("./../../includes/helper_functions.php"); // --- Helper Function ---
 
 /****************************************************************
- * MODIFICATION SUMMARY (012-ajaxEmployee.php):
+ * MODIFICATION SUMMARY (012-hrHandler.php):
  * 1. ADDED `mysqli_free_result()` after all `mysqli_query` loops to prevent "Commands out of sync" errors.
  * 2. This is critical for stabilizing the $conDB connection.
  * 3. [FIXED] ADDED `get_hr_assistants` ajaxType block, which was missing and causing an error in `all_applied_vac.php`.
@@ -775,7 +775,7 @@ elseif($ajaxType == 'unassign_asset') {
             $fileName = "return_" . $_POST['asset_record_id'] . "_" . time() . '.' . $fileExtension;
             $targetPath = $uploadDir . $fileName;
 
-            if (move_uploaded_file($_FILES['return_attachment']['tmp_name'], $targetPath)) {
+            if (store_uploaded_file_securely($_FILES['return_attachment']['tmp_name'], $targetPath)) {
                 $attachment_path = $targetPath;
             } else {
                 throw new Exception(__('server_could_not_save_the_uploaded_file'));
@@ -848,28 +848,20 @@ elseif($ajaxType == 'unassign_asset') {
     }
     exit;
 } elseif($ajaxType == 'avatar') {
-    $data = $_POST['image'];
+    $data = $_POST['image'] ?? '';
     $id = $_POST['id'];
     $emp_id = $_POST['emp_id'];
     $emptype = isset($_POST['emptype']) ? $_POST['emptype'] : '';
     $emp_name = isset($_POST['emp_name']) ? str_replace(' ', '', $_POST['emp_name']) : '';
-    list($type, $data) = explode(';', $data);
-    list(, $data) = explode(',', $data);
-    $data = base64_decode($data);
+
     $imageName = time() . '.png';
     $filepath = "./../../assets/emp_pics/";
     $filepathup = "./assets/emp_pics/";
     $imagenameu = $emp_id."".$id."".$emp_name."".$imageName;
-    if (empty($data) || (isset($data['error']) && $data['error'] == UPLOAD_ERR_NO_FILE)) {
-        send_json_response(__("error"), __("no_picture_uploaded"), "error");
+    if (!save_cropped_image($data, $filepath, $imagenameu)) {
+        send_json_response(__("error"), __("failed_to_save_image_file"), "error");
+        exit;
     } else {
-        // Save the file
-        $file_saved = file_put_contents($filepath . $emp_id."".$id."".$emp_name."".$imageName , $data);
-        
-        if (!$file_saved) {
-            send_json_response(__("error"), __("failed_to_save_image_file"), "error");
-            exit;
-        }
         
         // Update database based on emptype
         if ($emptype == 'employee') {
@@ -878,7 +870,7 @@ elseif($ajaxType == 'unassign_asset') {
                 $stmt->execute([':emp_id' => $emp_id, ':filepath' => $filepathup . $imagenameu]);
                 
                 // Log avatar upload
-                ActivityLogger::logUpload('Employee', 'ajaxEmployee.php', $emp_id, [
+                ActivityLogger::logUpload('Employee', 'hrHandler.php', $emp_id, [
                     'file_type' => 'Profile Picture',
                     'file_path' => $filepathup . $imagenameu,
                     'file_size' => strlen($data)
@@ -900,7 +892,7 @@ elseif($ajaxType == 'unassign_asset') {
                 $stmt->execute([':avatar' => $filepathup . $imagenameu, ':id' => $id, ':emp_id' => $emp_id]);
                 
                 // Log avatar update
-                ActivityLogger::logUpdate('Employee', 'ajaxEmployee.php', $id, $old_data ?? [], [
+                ActivityLogger::logUpdate('Employee', 'hrHandler.php', $id, $old_data ?? [], [
                     'avatar' => $filepathup . $imagenameu
                 ], "Updated employee profile picture: {$emp_name}", 'employees');
                 
@@ -1013,7 +1005,7 @@ elseif($ajaxType == 'unassign_asset') {
             $pdo->commit();
             
             // Log salary update
-            ActivityLogger::logUpdate('Employee Salary', 'ajaxEmployee.php', $new_salary_id, $old_values ?? [], $new_values, 
+            ActivityLogger::logUpdate('Employee Salary', 'hrHandler.php', $new_salary_id, $old_values ?? [], $new_values, 
                 "Updated salary for employee ID: {$emp_id}, Total: {$postedTotal}", 'emp_salary');
 
             send_json_response(__("success"), __("salary_updated_successfully"), "success");
@@ -1081,7 +1073,7 @@ elseif($ajaxType == 'unassign_asset') {
         $file_extension= $file_ext[$cnt];
         $filename_po = $id.strtoupper($title_up).$rand.".".$file_extension;
         $uploadFilePath = $uploadDir.$filename_po; 
-        move_uploaded_file($tmp_name, $uploadFilePath);
+        store_uploaded_file_securely($tmp_name, $uploadFilePath);
     }
     $sql="INSERT INTO `portfolio` (`emp_id`, `title`, `description`, `attachment`, `created_at`) VALUES ('".$emp_id."', '".$title_up."', '".$description_up."', '".$filename_po."', '".date('Y-m-d H:i:s')."')";
     if(mysqli_query($conDB, $sql)){
@@ -1091,11 +1083,6 @@ elseif($ajaxType == 'unassign_asset') {
     }
 } elseif($ajaxType == 'id_iqama_update'){
     try{
-        // BEFORE these lines can even run, or in the file you are including.
-        ini_set('display_errors', 1);
-        ini_set('display_startup_errors', 1);
-        error_reporting(E_ALL);
-        // --- END DEBUGGING BLOCK ---
         include("./../../includes/Hijri_GregorianConvert.php");
         $DateConv = new Hijri_GregorianConvert;
         $format="YYYY-MM-DD";
@@ -1163,8 +1150,8 @@ elseif($ajaxType == 'unassign_asset') {
         $uploadFilePath = $uploadDir . $filename_po;
 
         // Move uploaded file
-        if (!move_uploaded_file($tmp_name, $uploadFilePath)) {
-            throw new Exception(__('failed_to_move_uploaded_file'));
+        if (!store_uploaded_file_securely($tmp_name, $uploadFilePath)) {
+            throw new Exception(__('upload_failed'));
         }
         
         // Begin transaction for multiple database operations
@@ -1191,7 +1178,7 @@ elseif($ajaxType == 'unassign_asset') {
             ]);
             
             // Log document upload with pending status
-            ActivityLogger::logUpload('Employee', 'ajaxEmployee.php', $emp_id_up, [
+            ActivityLogger::logUpload('Employee', 'hrHandler.php', $emp_id_up, [
                 'document_type' => $docu_typ_up,
                 'file_name' => $filename_po,
                 'file_ext' => $file_ext,
@@ -1209,7 +1196,7 @@ elseif($ajaxType == 'unassign_asset') {
             ]);
             
             // Log document upload
-            ActivityLogger::logUpload('Employee', 'ajaxEmployee.php', $emp_id_up, [
+            ActivityLogger::logUpload('Employee', 'hrHandler.php', $emp_id_up, [
                 'document_type' => $docu_typ_up,
                 'file_name' => $filename_po,
                 'file_ext' => $file_ext,
@@ -1366,7 +1353,7 @@ elseif($ajaxType == 'unassign_asset') {
             $uploadPath = $uploadDir . $uniqueFilename;
             
             // Move uploaded file
-            if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
+            if (store_uploaded_file_securely($file['tmp_name'], $uploadPath)) {
                 $attachmentPath = 'assets/emp_notes/' . $uniqueFilename;
             } else {
                 send_json_response(__("error"), __("failed_to_upload_attachment"), "error");
@@ -1528,37 +1515,16 @@ elseif($ajaxType == 'unassign_asset') {
         exit;
     }
 
-    // --- Handle base64 image upload from Croppie ---
-    if (isset($_POST['image_base64'])) {
-        $data = $_POST['image_base64'];
-        // Basic check for base64 string
-        if (preg_match('/^data:image\/(\w+);base64,/', $data, $type_match)) {
-            $data = substr($data, strpos($data, ',') + 1);
-            $image_type = strtolower($type_match[1]); // jpg, png, gif
-
-            $data = base64_decode($data);
-            if ($data === false) {
-                echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('base64_decode_failed')]);
-                exit;
-            }
-
-            $uploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
-            $fileName = 'avatar_' . time() . '.' . $image_type;
-            $targetPath = $uploadDir . $fileName;
-
-            if (file_put_contents($targetPath, $data)) {
-                $path = $targetPath;
-            } else {
-                echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('could_not_save_the_cropped_image')]);
-                exit;
-            }
-        } else {
-            echo json_encode(['type' => 'error', 'title' => __('invalid_image'), 'message' => __('the_provided_image_data_was_not_in_a_valid_format')]);
+    // --- Handle cropped profile picture upload from Croppie ---
+    if (isset($_POST['profile_img'])) {
+        $uploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
+        $fileName = 'avatar_' . time() . '_' . mt_rand(1000, 9999) . '.png';
+        $targetPath = $uploadDir . $fileName;
+        if (!save_cropped_image($_POST['profile_img'], $uploadDir, $fileName)) {
+            echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('invalid_or_corrupt_image_data')]);
             exit;
         }
+        $path = $targetPath;
     }
     // --- Handle standard file uploads (for other document types in the future) ---
     else if (isset($_FILES['file']) && $_FILES['file']['error'] == UPLOAD_ERR_OK) {
@@ -1570,7 +1536,7 @@ elseif($ajaxType == 'unassign_asset') {
         $fileName = time() . '_' . uniqid() . '.' . $fileExtension;
         $targetPath = $uploadDir . $fileName;
 
-        if (move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
+        if (store_uploaded_file_securely($_FILES['file']['tmp_name'], $targetPath)) {
             $path = $targetPath;
         } else {
             echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('server_could_not_save_the_uploaded_file')]);
@@ -1916,7 +1882,7 @@ elseif($ajaxType == 'upload_employee_document') {
         $filepathup = 'assets/emp_documents/';
 
         // Move uploaded file
-        if (!move_uploaded_file($file['tmp_name'], $uploadFilePath)) {
+        if (!store_uploaded_file_securely($file['tmp_name'], $uploadFilePath)) {
             send_json_response("error", __("failed_to_save_uploaded_file"), "error");
             exit;
         }

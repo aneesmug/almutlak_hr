@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 require_once __DIR__ . '/includes/session_check.php';
 
@@ -1340,6 +1340,9 @@ if (mysqli_num_rows($query) == 1) {
 															$current_status = $rec["current_status"] ?? 'pending';
 															$remarks_get = $rec["remarks"];
 															$arrived_date_get = $rec["arrived_date"];
+															$can_cancel_vacation =
+																(string)($emprow['empid'] ?? '') === (string)($empid ?? '') &&
+																!in_array($current_status, ['completed', 'cancelled', 'rejected'], true);
 
 															$date_reg_emp = $rec["created_at"];
 															$timestamp_reg = strtotime("$date_reg_emp");
@@ -1383,6 +1386,15 @@ if (mysqli_num_rows($query) == 1) {
 																			<a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect">
 																				<i class="fa fa-edit"></i>
 																			</a>
+																			<?php if ($can_cancel_vacation) { ?>
+																				<button
+																					type="button"
+																					class="btn btn-sm btn-warning waves-effect"
+																					onclick="cancelVacationRequest(<?= (int)$id_emp_reg ?>, '<?= htmlspecialchars(addslashes($vac_type), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(date('M d, Y', strtotime($start_date))), ENT_QUOTES) ?>')"
+																					title="<?= __('cancel_vacation_request') ?>">
+																					<i class="fa fa-times"></i>
+																				</button>
+																			<?php } ?>
 																			<?php if ($is_system_admin) { ?>
 																				<a href="javascript:void(0);" class="btn btn-sm btn-danger waves-effect deleteAjax" data-id="<?= $id_emp_reg ?>" data-tbl="emp_vacation" data-file='0' >
 																					<i class="fa fa-solid fa-remove"></i>
@@ -2077,7 +2089,7 @@ if (mysqli_num_rows($query) == 1) {
 			function submitRejoinRequest(vacationId, returndate, empId, empName) {
 				// First, check if there's an active rejoin request
 				$.ajax({
-					url: './includes/ajaxFile/ajaxVacation.php',
+					url: './includes/ajaxFile/leaveHandler.php',
 					type: 'POST',
 					dataType: 'JSON',
 					data: {
@@ -2245,7 +2257,7 @@ if (mysqli_num_rows($query) == 1) {
 				});
 
 				$.ajax({
-					url: './includes/ajaxFile/ajaxVacation.php',
+					url: './includes/ajaxFile/leaveHandler.php',
 					type: 'POST',
 					dataType: 'JSON',
 					data: {
@@ -2283,6 +2295,66 @@ if (mysqli_num_rows($query) == 1) {
 							confirmButtonText: __('ok', 'OK')
 						});
 					}
+				});
+			}
+
+			function cancelVacationRequest(vacationId, vacType, startDate) {
+				Swal.fire({
+					title: __('cancel_vacation_request'),
+					html: `<p>${__('are_you_sure_cancel_vacation', { vacType: vacType, startDate: startDate })}</p><p style="color: #dc3545; font-size: 12px; margin-top: 10px;">${__('this_action_cannot_be_undone')}</p>`,
+					icon: 'warning',
+					showCancelButton: true,
+					confirmButtonColor: '#dc3545',
+					cancelButtonColor: '#6c757d',
+					confirmButtonText: __('yes_cancel_request'),
+					cancelButtonText: __('keep_request'),
+					allowOutsideClick: false,
+					allowEscapeKey: false
+				}).then((result) => {
+					if (!result.isConfirmed) {
+						return;
+					}
+
+					Swal.fire({
+						title: __('cancelling_request'),
+						html: __('please_wait_while_cancelling'),
+						icon: 'info',
+						allowOutsideClick: false,
+						allowEscapeKey: false,
+						didOpen: () => {
+							Swal.showLoading();
+						}
+					});
+
+					$.ajax({
+						url: './includes/ajaxFile/leaveHandler.php',
+						type: 'POST',
+						dataType: 'JSON',
+						data: {
+							ajaxType: 'cancelVacationRequest',
+							vacation_id: vacationId
+						},
+						success: function(response) {
+							Swal.fire({
+								title: response.title || __('success'),
+								text: response.message || __('your_vacation_request_has_been_cancelled_successfully'),
+								icon: response.type || 'success',
+								confirmButtonText: __('ok'),
+								allowOutsideClick: false
+							}).then(() => {
+								location.reload();
+							});
+						},
+						error: function(xhr) {
+							const response = xhr.responseJSON || {};
+							Swal.fire({
+								title: response.title || __('error'),
+								text: response.message || __('failed_to_cancel_vacation_request'),
+								icon: 'error',
+								confirmButtonText: __('ok')
+							});
+						}
+					});
 				});
 			}
 
@@ -2387,7 +2459,7 @@ if (mysqli_num_rows($query) == 1) {
 				});
 
 				$.ajax({
-					url: './includes/ajaxFile/ajaxVacation.php',
+					url: './includes/ajaxFile/leaveHandler.php',
 					type: 'POST',
 					dataType: 'JSON',
 					data: {
@@ -3099,7 +3171,7 @@ if (mysqli_num_rows($query) == 1) {
 				loadingIndicator.removeClass('hidden');
 				noDataMessage.addClass('hidden');
 				noteTable.clear().draw();
-				const apiUrl = './includes/ajaxFile/ajaxEmployee.php';
+				const apiUrl = './includes/ajaxFile/hrHandler.php';
 				// Prepare the data for the POST request
 				const postData = new URLSearchParams();
 				postData.append('ajaxType', 'view_notes');

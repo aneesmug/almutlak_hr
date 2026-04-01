@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * Test Script: Verify Cross-Company Approver Access
  * 
@@ -69,10 +69,10 @@ if (count($approvers) > 0) {
 
 echo "\n";
 
-// Test 3: Verify the SQL query used in ajaxEmployee.php works
+// Test 3: Verify the SQL query used in hrHandler.php works
 echo "Test 3: Simulating AJAX call for get_hr_senior_bp...\n";
 
-// Simulate what ajaxEmployee.php does now (without company filter)
+// Simulate what hrHandler.php does now (without company filter)
 $sql_ajax = "SELECT e.emp_id, e.name, al.user_type 
         FROM employees e 
         JOIN admin_login al ON e.emp_id = al.emp_id 

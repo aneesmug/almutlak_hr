@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 	// require_once __DIR__ . '/includes/db.php';
 	// Initialize the application and load translations
 	require_once __DIR__ . '/includes/session_check.php';	
@@ -1074,7 +1074,7 @@ if(isset($_POST['submit'])){
 								return false;
 							}
 							$.ajax({
-								url: './includes/ajaxFile/ajaxEmployee.php',
+								url: './includes/ajaxFile/hrHandler.php',
 								type: 'POST',
 								dataType: "JSON",
 								data: {'id': emid, 'iqama_exp':iqama_exp, 'iqama_exp_g':iqama_exp_g, ajaxType:'id_iqama_update' },

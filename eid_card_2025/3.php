@@ -1,4 +1,4 @@
-<?php
+﻿<?php
     include("./includes/db_config.php");
 ?>
 <!doctype html>
@@ -105,7 +105,7 @@
                         return false;
                     }
                     $.ajax({
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             type: 'POST',
                             dataType: "JSON",
                             data: {

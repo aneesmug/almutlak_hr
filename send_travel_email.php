@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * =================================================================
  * SEND TRAVEL COMPANY EMAIL NOTIFICATION
@@ -7,7 +7,7 @@
  * when an annual fly vacation is approved.
  * 
  * Usage:
- * - Called from ajaxVacation.php after final approval of annual fly vacation
+ * - Called from leaveHandler.php after final approval of annual fly vacation
  * - Can also be called manually by passing vacation_id parameter
  * 
  * Parameters:

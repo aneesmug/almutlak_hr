@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
@@ -1125,7 +1125,7 @@ elseif ($ajaxType == 'applyVacation') {
             $fileName = "vac_" . $request_inv_no . "_" . time() . '.' . $fileExtension;
             $targetPath = $uploadDir . $fileName;
 
-            if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetPath)) {
+            if (store_uploaded_file_securely($_FILES['attachment']['tmp_name'], $targetPath)) {
                 $attachment_path = $targetPath;
             } else {
             }
@@ -1191,7 +1191,7 @@ elseif ($ajaxType == 'applyVacation') {
         $inserted_id = mysqli_insert_id($conDB);
         
         // Log vacation request submission
-        ActivityLogger::logSubmit('Vacation', 'ajaxVacation.php', $inserted_id, "Submitted vacation request: {$request_inv_no}, Days: {$vacdays}", 'emp_vacation');
+        ActivityLogger::logSubmit('Vacation', 'leaveHandler.php', $inserted_id, "Submitted vacation request: {$request_inv_no}, Days: {$vacdays}", 'emp_vacation');
 
         // === NEW: Notify employee when someone else applies vacation on their behalf ===
         // Check if the person applying (submitted_by) is different from the employee
@@ -1836,7 +1836,7 @@ elseif ($ajaxType == 'approveVacation') {
             if ($payerResult['is_payer']) {
                 if ($payerResult['success']) {
                     // Payer payment processed successfully
-                    ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+                    ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, 
                         "Payer approved: Payment amount {$paymentAmount} SAR, Proof: {$payerResult['payment_proof']}", 'emp_vacation');
                     
                     // For ENCASHED vacations, mark as completed immediately (no asset clearance needed)
@@ -1847,7 +1847,7 @@ elseif ($ajaxType == 'approveVacation') {
                             mysqli_stmt_execute($update_encashed_stmt);
                             mysqli_stmt_close($update_encashed_stmt);
                             
-                            ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+                            ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, 
                                 "Encashed vacation marked as completed after payer payment - no asset clearance required", 'emp_vacation');
                         }
                     }
@@ -2006,7 +2006,7 @@ elseif ($ajaxType == 'approveVacation') {
         $vacation_details = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
         $old_vacation = mysqli_fetch_assoc($vacation_details);
         if ($old_vacation) {
-            ActivityLogger::logApproval('Vacation', 'ajaxVacation.php', $vacation_id, 'approved', "Approved vacation request: {$request_inv_no}", 'emp_vacation');
+            ActivityLogger::logApproval('Vacation', 'leaveHandler.php', $vacation_id, 'approved', "Approved vacation request: {$request_inv_no}", 'emp_vacation');
         }
         if ($vacation_details) mysqli_free_result($vacation_details);
 
@@ -2270,7 +2270,7 @@ elseif ($ajaxType == 'approveVacation') {
                             
                             // Log CC notification sent
                             if ($cc_sent_count > 0) {
-                                ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+                                ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, 
                                     "Sent CC notification to {$cc_sent_count} HR team members for request {$vac_data['request_inv_no']}", 
                                     'emp_vacation');
                             }
@@ -2339,7 +2339,7 @@ elseif ($ajaxType == 'approveVacation') {
                             }
 
                             if ($sent_count2 > 0) {
-                                ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id,
+                                ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id,
                                     "Sent Finance CC notification to {$sent_count2} members for request {$vac_data2['request_inv_no']}",
                                     'emp_vacation');
                             }
@@ -2464,7 +2464,7 @@ elseif ($ajaxType == 'processPayment') {
         mysqli_stmt_close($stmt);
         
         // 3. Log the payment action
-        ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+        ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, 
             "Payment processed by HR Payroll - Request {$request_inv_no}", 'emp_vacation');
         
         // 4. Send success response with next steps
@@ -2536,7 +2536,7 @@ elseif ($ajaxType == 'modifyPayment') {
         mysqli_stmt_close($stmt);
         
         // 3. Log the modification
-        ActivityLogger::logUpdate('Vacation', 'ajaxVacation.php', $vacation_id, 
+        ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, 
             "Payment marked for modification by HR Payroll - Note: {$payment_note}", 'emp_vacation');
         
         // 4. Send success response
@@ -2619,7 +2619,7 @@ elseif ($ajaxType == 'rejectVacation') {
         $vacation_details = mysqli_query($conDB, "SELECT * FROM emp_vacation WHERE id = {$vacation_id}");
         $old_vacation = mysqli_fetch_assoc($vacation_details);
         if ($old_vacation) {
-            ActivityLogger::logApproval('Vacation', 'ajaxVacation.php', $vacation_id, 'rejected', "Rejected vacation request: {$request_inv_no}, Reason: {$rejection_note}", 'emp_vacation');
+            ActivityLogger::logApproval('Vacation', 'leaveHandler.php', $vacation_id, 'rejected', "Rejected vacation request: {$request_inv_no}, Reason: {$rejection_note}", 'emp_vacation');
             
             // NOTE: DO NOT REFUND/RESTORE VACATION BALANCE ON REJECTION
             // Days are only deducted at FINAL APPROVAL, not at submission or rejection
@@ -2827,6 +2827,111 @@ elseif ($ajaxType == 'returnVacation') {
     } catch (Exception $e) {
 
         send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+// ================================================================
+// --- SYSTEM ADMIN: UPDATE VACATION START/RETURN DATES ---
+// ================================================================
+elseif ($ajaxType == 'updateVacationDatesAdmin') {
+    try {
+        if (!($is_system_admin ?? false)) {
+            throw new Exception(__('access_denied') ?: 'Access denied');
+        }
+
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $start_date = trim((string)($_POST['start_date'] ?? ''));
+        $return_date = trim((string)($_POST['return_date'] ?? ''));
+
+        if ($vacation_id <= 0) {
+            throw new Exception(__('vacation_id_is_missing'));
+        }
+
+        if ($start_date === '' || $return_date === '') {
+            throw new Exception('Start and return date are required');
+        }
+
+        $start_obj = DateTime::createFromFormat('Y-m-d', $start_date);
+        $return_obj = DateTime::createFromFormat('Y-m-d', $return_date);
+
+        if (!$start_obj || $start_obj->format('Y-m-d') !== $start_date) {
+            throw new Exception('Invalid start date');
+        }
+
+        if (!$return_obj || $return_obj->format('Y-m-d') !== $return_date) {
+            throw new Exception('Invalid return date');
+        }
+
+        if ($return_obj < $start_obj) {
+            throw new Exception('Return date must be the same as or after start date');
+        }
+
+        $select_sql = "SELECT id, request_inv_no, emp_id, start_date, return_date, vacdays FROM emp_vacation WHERE id = ? LIMIT 1";
+        $select_stmt = mysqli_prepare($conDB, $select_sql);
+        if (!$select_stmt) {
+            throw new Exception(__('database_prepare_error') . ': ' . mysqli_error($conDB));
+        }
+
+        mysqli_stmt_bind_param($select_stmt, 'i', $vacation_id);
+        mysqli_stmt_execute($select_stmt);
+        $existing_result = mysqli_stmt_get_result($select_stmt);
+        $existing = $existing_result ? mysqli_fetch_assoc($existing_result) : null;
+        mysqli_stmt_close($select_stmt);
+
+        if (!$existing) {
+            throw new Exception(__('vacation_request_not_found'));
+        }
+
+        $new_vacdays = (int)$start_obj->diff($return_obj)->days + 1;
+
+        if ((string)$existing['start_date'] === $start_date && (string)$existing['return_date'] === $return_date) {
+            send_json_response('Info', 'No changes were made to the vacation dates', 'info');
+            exit;
+        }
+
+        $update_sql = "UPDATE emp_vacation SET start_date = ?, return_date = ?, vacdays = ? WHERE id = ?";
+        $update_stmt = mysqli_prepare($conDB, $update_sql);
+        if (!$update_stmt) {
+            throw new Exception(__('database_prepare_error') . ': ' . mysqli_error($conDB));
+        }
+
+        mysqli_stmt_bind_param($update_stmt, 'ssii', $start_date, $return_date, $new_vacdays, $vacation_id);
+        if (!mysqli_stmt_execute($update_stmt)) {
+            throw new Exception(__('database_prepare_error') . ': ' . mysqli_stmt_error($update_stmt));
+        }
+        mysqli_stmt_close($update_stmt);
+
+        $log_note = sprintf(
+            'System Admin updated vacation dates from %s to %s (%s days) -> %s to %s (%s days)',
+            (string)$existing['start_date'],
+            (string)$existing['return_date'],
+            (string)$existing['vacdays'],
+            $start_date,
+            $return_date,
+            $new_vacdays
+        );
+
+        $log_sql = "INSERT INTO smt_request_status (emp_id, inv_no, emp_name, status, note, created_at) VALUES (?, ?, ?, 'updated', ?, NOW())";
+        $log_stmt = mysqli_prepare($conDB, $log_sql);
+        if ($log_stmt) {
+            $request_inv_no = (string)$existing['request_inv_no'];
+            mysqli_stmt_bind_param($log_stmt, 'isss', $current_user_id, $request_inv_no, $userwel, $log_note);
+            mysqli_stmt_execute($log_stmt);
+            mysqli_stmt_close($log_stmt);
+        }
+
+        if (class_exists('ActivityLogger')) {
+            ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, $log_note, 'emp_vacation');
+        }
+
+        send_json_response('Success!', 'Vacation dates updated successfully. New duration: ' . $new_vacdays . ' days.', 'success', 200, [
+            'start_date' => $start_date,
+            'return_date' => $return_date,
+            'vacdays' => $new_vacdays
+        ]);
+    } catch (Exception $e) {
+        send_json_response('Error', $e->getMessage(), 'error', 500);
     }
     exit;
 }
@@ -3915,7 +4020,7 @@ elseif ($ajaxType == 'sendTravelEmail') {
                 @mkdir($destination_dir, 0775, true);
             }
             $destination_path = $destination_dir . $new_filename;
-            if (!move_uploaded_file($_FILES['passport_file']['tmp_name'], $destination_path)) {
+            if (!store_uploaded_file_securely($_FILES['passport_file']['tmp_name'], $destination_path)) {
                 throw new Exception(__("failed_to_store_passport_document"));
             }
             // Upsert into emp_docu
@@ -4072,7 +4177,7 @@ elseif ($ajaxType == 'replacePassportDoc') {
             @mkdir($destination_dir, 0775, true);
         }
         $destination_path = $destination_dir . $new_filename;
-        if (!move_uploaded_file($file['tmp_name'], $destination_path)) {
+        if (!store_uploaded_file_securely($file['tmp_name'], $destination_path)) {
             throw new Exception(__('failed_moving_uploaded_file'));
         }
         // Upsert record
@@ -4116,7 +4221,7 @@ elseif ($ajaxType == 'replacePassportDoc') {
 }
 
 
-// --- OTHER AJAX FUNCTIONS (These are duplicated in ajaxEmployee.php, but required for JS calls) ---
+// --- OTHER AJAX FUNCTIONS (These are duplicated in hrHandler.php, but required for JS calls) ---
 // --- We will keep them here to ensure JS calls to this file don't break ---
 
 elseif ($ajaxType == 'unassign_asset') {
@@ -4135,7 +4240,7 @@ elseif ($ajaxType == 'unassign_asset') {
             $fileName = "return_" . $_POST['asset_record_id'] . "_" . time() . '.' . $fileExtension;
             $targetPath = $uploadDir . $fileName;
 
-            if (move_uploaded_file($_FILES['return_attachment']['tmp_name'], $targetPath)) {
+            if (store_uploaded_file_securely($_FILES['return_attachment']['tmp_name'], $targetPath)) {
                 $attachment_path = $targetPath;
             } else {
                 throw new Exception(__('server_could_not_save_the_uploaded_file'));
@@ -4204,22 +4309,20 @@ elseif ($ajaxType == 'unassign_asset') {
     }
     exit;
 } elseif ($ajaxType == 'avatar') {
-    $data = $_POST['image'];
+    $data = $_POST['image'] ?? '';
     $id = $_POST['id'];
     $emp_id = $_POST['emp_id'];
     $emptype = $_POST['emptype'];
     $emp_name = str_replace(' ', '', $_POST['emp_name']);
-    list($type, $data) = explode(';', $data);
-    list(, $data) = explode(',', $data);
-    $data = base64_decode($data);
+
     $imageName = time() . '.png';
     $filepath = "./../../assets/emp_pics/";
     $filepathup = "./assets/emp_pics/";
     $imagenameu = $emp_id . "" . $id . "" . $emp_name . "" . $imageName;
-    if (empty($data) || (isset($data['error']) && $data['error'] == UPLOAD_ERR_NO_FILE)) {
-        echo "No Picture upload";
+    if (!save_cropped_image($data, $filepath, $imagenameu)) {
+        send_json_response(__('error'), __('failed_to_save_image_file'), 'error');
+        exit;
     } else {
-        file_put_contents($filepath . $emp_id . "" . $id . "" . $emp_name . "" . $imageName, $data);
         if ($emptype == 'employee') {
             try {
                 $stmt = $pdo->prepare("INSERT INTO `employee_temp_contants` (`emp_id`, `type`, `path`) VALUES (:emp_id, 'Profile Picture', :filepath)");
@@ -4293,7 +4396,7 @@ elseif ($ajaxType == 'unassign_asset') {
         $file_extension = $file_ext[$cnt];
         $filename_po = $id . strtoupper($title_up) . $rand . "." . $file_extension;
         $uploadFilePath = $uploadDir . $filename_po;
-        move_uploaded_file($tmp_name, $uploadFilePath);
+        store_uploaded_file_securely($tmp_name, $uploadFilePath);
     }
     $sql = "INSERT INTO `portfolio` (`emp_id`, `title`, `description`, `attachment`, `created_at`) VALUES ('" . $emp_id . "', '" . $title_up . "', '" . $description_up . "', '" . $filename_po . "', '" . date('Y-m-d H:i:s') . "')";
     if (mysqli_query($conDB, $sql)) {
@@ -4303,11 +4406,6 @@ elseif ($ajaxType == 'unassign_asset') {
     }
 } elseif ($ajaxType == 'id_iqama_update') {
     try {
-        // BEFORE these lines can even run, or in the file you are including.
-        ini_set('display_errors', 1);
-        ini_set('display_startup_errors', 1);
-        error_reporting(E_ALL);
-        // --- END DEBUGGING BLOCK ---
         include("./../../includes/Hijri_GregorianConvert.php");
         $DateConv = new Hijri_GregorianConvert;
         $format = "YYYY-MM-DD";
@@ -4372,8 +4470,8 @@ elseif ($ajaxType == 'unassign_asset') {
         $uploadFilePath = $uploadDir . $filename_po;
 
         // Move uploaded file
-        if (!move_uploaded_file($tmp_name, $uploadFilePath)) {
-            throw new Exception(__('failed_to_move_uploaded_file'));
+        if (!store_uploaded_file_securely($tmp_name, $uploadFilePath)) {
+            throw new Exception(__('upload_failed'));
         }
         // Begin transaction for multiple database operations
         $pdo->beginTransaction();
@@ -4570,37 +4668,16 @@ elseif ($ajaxType == 'unassign_asset') {
         exit;
     }
 
-    // --- Handle base64 image upload from Croppie ---
-    if (isset($_POST['image_base64'])) {
-        $data = $_POST['image_base64'];
-        // Basic check for base64 string
-        if (preg_match('/^data:image\/(\w+);base64,/', $data, $type_match)) {
-            $data = substr($data, strpos($data, ',') + 1);
-            $image_type = strtolower($type_match[1]); // jpg, png, gif
-
-            $data = base64_decode($data);
-            if ($data === false) {
-                echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('base64_decode_failed')]);
-                exit;
-            }
-
-            $uploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
-            $fileName = 'avatar_' . time() . '.' . $image_type;
-            $targetPath = $uploadDir . $fileName;
-
-            if (file_put_contents($targetPath, $data)) {
-                $path = $targetPath;
-            } else {
-                echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('could_not_save_the_cropped_image')]);
-                exit;
-            }
-        } else {
-            echo json_encode(['type' => 'error', 'title' => __('invalid_image'), 'message' => __('the_provided_image_data_was_not_in_a_valid_format')]);
+    // --- Handle cropped profile picture upload from Croppie ---
+    if (isset($_POST['profile_img'])) {
+        $uploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
+        $fileName = 'avatar_' . time() . '_' . mt_rand(1000, 9999) . '.png';
+        $targetPath = $uploadDir . $fileName;
+        if (!save_cropped_image($_POST['profile_img'], $uploadDir, $fileName)) {
+            echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('invalid_or_corrupt_image_data')]);
             exit;
         }
+        $path = $targetPath;
     }
     // --- Handle standard file uploads (for other document types in the future) ---
     else if (isset($_FILES['file']) && $_FILES['file']['error'] == UPLOAD_ERR_OK) {
@@ -4612,7 +4689,7 @@ elseif ($ajaxType == 'unassign_asset') {
         $fileName = time() . '_' . uniqid() . '.' . $fileExtension;
         $targetPath = $uploadDir . $fileName;
 
-        if (move_uploaded_file($_FILES['file']['tmp_name'], $targetPath)) {
+        if (store_uploaded_file_securely($_FILES['file']['tmp_name'], $targetPath)) {
             $path = $targetPath;
         } else {
             echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('server_could_not_save_the_uploaded_file')]);
@@ -5086,7 +5163,7 @@ elseif ($ajaxType == 'addManualVacationHistory') {
         }
 
         // Log the manual vacation entry
-        ActivityLogger::logSubmit('Vacation-Manual', 'ajaxVacation.php', $vacation_id, 
+        ActivityLogger::logSubmit('Vacation-Manual', 'leaveHandler.php', $vacation_id, 
             "Manual vacation entry added: {$request_inv_no}, Type: {$vac_type}, Days: {$vacdays}, Period: {$start_date} to {$return_date}", 
             'emp_vacation');
 
@@ -5538,7 +5615,7 @@ elseif ($ajaxType == 'applyLeave') {
                     $file_name = 'leave_' . $empid . '_' . time() . '_' . ($i + 1) . '.' . $file_ext;
                     $file_path = $upload_dir . $file_name;
 
-                    if (move_uploaded_file($_FILES['attachments']['tmp_name'][$i], $file_path)) {
+                    if (store_uploaded_file_securely($_FILES['attachments']['tmp_name'][$i], $file_path)) {
                         $attachment_paths[] = 'assets/leave_attachments/' . $file_name;
                     }
                 }

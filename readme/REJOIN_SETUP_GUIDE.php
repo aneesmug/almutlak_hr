@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * QUICK SETUP GUIDE - EMPLOYEE REJOIN APPROVAL SYSTEM
  * 
@@ -50,7 +50,7 @@ echo "----------------------------\n";
 echo "Files that have been modified:\n";
 echo "✓ view_employee.php - Added rejoin approval functions\n";
 echo "✓ includes/emp_top_info.php - Updated rejoin button call\n";
-echo "✓ includes/ajaxFile/ajaxVacation.php - Added AJAX handlers\n\n";
+echo "✓ includes/ajaxFile/leaveHandler.php - Added AJAX handlers\n\n";
 
 echo "Files that have been created:\n";
 echo "✓ rejoin_approvals.php - Supervisor dashboard\n";

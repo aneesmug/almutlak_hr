@@ -3,10 +3,15 @@
     require_once __DIR__ . '/../../includes/db.php';
 
     $id = $_POST['id'];
-    $data = $_POST['image'];
+    $data = $_POST['image'] ?? '';
     $section = $_POST['section'];
     $postion = ($_POST['postion']=='in')?"in_img":"out_img";
     $section_name = str_replace(' ','',$section);
+    // Validate this is a legitimate image data URI before decoding
+    if (!preg_match('/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i', $data)) {
+        echo json_encode(['title' => 'Error!', 'message' => 'Invalid image format.', 'type' => 'error']);
+        exit;
+    }
     list($type, $data) = explode(';', $data);
     list(, $data) = explode(',', $data);
     $data = base64_decode($data);

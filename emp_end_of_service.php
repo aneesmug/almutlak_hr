@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /****************************************************************
  * MODIFICATION SUMMARY (011-emp_end_of_service.php):
  * - HOUSING IN FULL PACKAGE FOR EOS: When housing allowance is 0, the calculated housing
@@ -1551,7 +1551,7 @@
                     didOpen: function(modal) {
                         // Load available employees for supervisor selection
                         $.ajax({
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             type: 'POST',
                             dataType: 'JSON',
                             data: { ajaxType: 'emp_search' },
@@ -1628,7 +1628,7 @@
                         selectedSubordinates.forEach(function(sub) {
                             updatePromises.push(
                                 $.ajax({
-                                    url: './includes/ajaxFile/ajaxEmployee.php',
+                                    url: './includes/ajaxFile/hrHandler.php',
                                     type: 'POST',
                                     dataType: 'JSON',
                                     data: {

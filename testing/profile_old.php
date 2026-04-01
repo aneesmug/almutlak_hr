@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 /****************************************************************
  * MODIFICATION SUMMARY (002-profile.php):
@@ -1536,7 +1536,7 @@ $all_statuses = [
                             size: 'viewport'
                         }).then(function(resp) {
                             $.ajax({
-                                url: "./includes/ajaxFile/ajaxEmployee.php",
+                                url: "./includes/ajaxFile/hrHandler.php",
                                 type: "POST",
                                 dataType: "JSON",
                                 data: {

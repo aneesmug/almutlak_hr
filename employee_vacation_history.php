@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * Employee Vacation History Page
  * Displays all vacation requests for a specific employee
@@ -281,7 +281,7 @@ $status_badges = [
 
                     // Send AJAX request to cancel the vacation
                     $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: 'JSON',
                         data: {

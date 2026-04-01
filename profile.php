@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once("./includes/init.php");
 require_once("./includes/session_check.php");
 include('./includes/MainClass.php');
@@ -2846,7 +2846,7 @@ RTL Support
 
             // Get all active vacations
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 data: {
                     ajaxType: 'getAllActiveVacationsForRejoin',
@@ -3111,7 +3111,7 @@ RTL Support
             });
 
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 data: {
                     ajaxType: 'submitRejoinRequest',

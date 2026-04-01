@@ -17,6 +17,14 @@
 			"/^Get-Item \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\pwa-icon-192\\.png\", \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\pwa-icon-512\\.png\" \\| Select-Object Name, Length$/": {
 				"approve": true,
 				"matchCommandLine": true
+			},
+			"/^php -l includes/helper_functions\\.php; php -l fix_holiday_vacation_deductions\\.php$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^php fix_holiday_vacation_deductions\\.php --emp=4533,3627$/": {
+				"approve": true,
+				"matchCommandLine": true
 			}
 		}
 	}

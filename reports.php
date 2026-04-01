@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/evaluation_acknowledgment_handler.php';
 
@@ -1235,7 +1235,7 @@ if (mysqli_num_rows($query) == 1) {
                     $select.select2({
                         theme: 'bootstrap4',
                         ajax: {
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             type: 'POST',
                             dataType: 'json',
                             delay: 250,

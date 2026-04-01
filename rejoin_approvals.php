@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
 
@@ -752,7 +752,7 @@ $supervisor_emp_id = $_SESSION['empid'];
             });
 
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 data: {
                     ajaxType: 'processRejoinApproval',

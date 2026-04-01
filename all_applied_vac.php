@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
@@ -873,8 +873,8 @@ if ($can_see_all_depts) {
                                                         $show_payment_button = true;
                                                     }
 
-                                                    // 3. STEP 3: Show Adjustments button when adjustments are missing/pending
-                                                    // Adjustments are missing if ALL adjustment fields are empty/zero AND no_modifications is not set
+                                                    // 3. STEP 3: Show Adjustments button for HR Payroll/System Admin on eligible approved vacations
+                                                    // Keep tracking missing state for badges/reporting, but do not hide the button when values already exist.
                                                     $adjustments_missing = (empty($req['overtime_hours']) || (float)$req['overtime_hours'] <= 0) &&
                                                         (empty($req['deduction_hours']) || (float)$req['deduction_hours'] <= 0) &&
                                                         (empty($req['deduction_days']) || (float)$req['deduction_days'] <= 0) &&
@@ -882,13 +882,14 @@ if ($can_see_all_depts) {
                                                         (empty($req['other_deductions']) || (float)$req['other_deductions'] <= 0) &&
                                                         (empty($req['no_modifications']) || (int)$req['no_modifications'] !== 1);
 
-                                                    // Fly | Annual: show adjustments button
+                                                    $can_manage_adjustments = ($is_system_admin || $isHR_Payroll);
+
+                                                    // Fly | Annual: show adjustments button (add/edit)
                                                     if (
                                                         isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
                                                         isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
                                                         $req['current_status'] == 'approved' &&
-                                                        $adjustments_missing &&
-                                                        ($is_system_admin || $isHR_Payroll)
+                                                        $can_manage_adjustments
                                                     ) {
                                                         $show_adjustments_button = true;
                                                     }
@@ -898,8 +899,7 @@ if ($can_see_all_depts) {
                                                         isset($req['vac_type']) && $req['vac_type'] !== 'Fly' &&
                                                         isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
                                                         $req['current_status'] == 'approved' &&
-                                                        $adjustments_missing &&
-                                                        ($is_system_admin || $isHR_Payroll)
+                                                        $can_manage_adjustments
                                                     ) {
                                                         $show_adjustments_button = true;
                                                         // Explicitly ensure booking buttons are hidden
@@ -912,8 +912,7 @@ if ($can_see_all_depts) {
                                                         isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
                                                         isset($req['fly_type']) && strtolower($req['fly_type']) === 'emergency' &&
                                                         $req['current_status'] == 'approved' &&
-                                                        $adjustments_missing &&
-                                                        ($is_system_admin || $isHR_Payroll)
+                                                        $can_manage_adjustments
                                                     ) {
                                                         $show_adjustments_button = true;
                                                         $show_travel_email_button = false;
@@ -932,6 +931,12 @@ if ($can_see_all_depts) {
                                                                 <a class="dropdown-item" href="vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank">
                                                                     <i class="fa fa-history"></i> <?= __('history') ?>
                                                                 </a>
+                                                                <?php if ($is_system_admin): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="openVacationDateEditor(<?= (int)$req['id']; ?>, '<?= htmlspecialchars(addslashes(getDisplayName(parseName($req['employee_name']))), ENT_QUOTES); ?>')">
+                                                                        <i class="fa fa-edit text-primary"></i> <?= __('edit') ?> <?= __('start') ?> / <?= __('return') ?>
+                                                                    </a>
+                                                                <?php endif; ?>
                                                                 <?php if ($is_pending_with_me): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="approveRequest(<?= $req['id']; ?>, '<?= $employee_id_js; ?>', '<?= $employee_name_js; ?>', '<?= $vac_type_js; ?>', '<?= $fly_type_js; ?>', '<?= $start_date_js; ?>', '<?= $end_date_js; ?>', '<?= $days_js; ?>', <?= $current_level_js; ?>, '<?= $user_role_js; ?>', <?= $has_supervisor_js; ?>, <?= $is_simple_leave_js; ?>, <?= (int)($req['payer_emp_id'] ?? 0); ?>, <?= (int)$empid; ?>)">
@@ -1047,6 +1052,8 @@ if ($can_see_all_depts) {
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script>
+        const canEditVacationDates = <?= !empty($is_system_admin) ? 'true' : 'false' ?>;
+
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
             const limitElement = document.getElementById('limitFilter');
@@ -1055,6 +1062,210 @@ if ($can_see_all_depts) {
             const baseUrl = window.location.href.split('?')[0];
             window.location.href = `${baseUrl}?status=${status}&limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
         }
+
+        function openVacationDateEditor(vacationId, employeeName) {
+            if (!canEditVacationDates) {
+                return;
+            }
+
+            Swal.fire({
+                title: __('loading') || 'Loading...',
+                text: __('please_wait') || 'Please wait...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            $.ajax({
+                url: './includes/ajaxFile/leaveHandler.php',
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    ajaxType: 'getVacationDetails',
+                    vacation_id: vacationId
+                }
+            }).done(function(response) {
+                if (!response || response.status !== 200) {
+                    Swal.fire(__('error') || 'Error', response && response.message ? response.message : (__('failed_to_load_data') || 'Failed to load vacation details'), 'error');
+                    return;
+                }
+
+                showVacationDateEditorModal(vacationId, employeeName, response.start_date || '', response.return_date || '', response.no_of_days || response.vacdays || 0);
+            }).fail(function(xhr, textStatus) {
+                Swal.fire(__('error') || 'Error', `${__('request_failed') || 'Request failed'}: ${textStatus}`, 'error');
+            });
+        }
+
+        function showVacationDateEditorModal(vacationId, employeeName, currentStartDate, currentReturnDate, currentDays) {
+            const safeEmployeeName = employeeName || (__('employee') || 'Employee');
+            const originalDays = parseInt(currentDays, 10) || 0;
+
+            Swal.fire({
+                title: `${__('edit') || 'Edit'} ${__('start_date') || 'Start Date'} / ${__('return_date') || 'Return Date'}`,
+                html: `
+                    <div class="text-left" style="padding: 0.5rem 0;">
+                        <div class="alert alert-info mb-3">
+                            <strong>${safeEmployeeName}</strong><br>
+                            ${__('current_period') || 'Current period'}: ${currentStartDate || '-'} ${__('to') || 'to'} ${currentReturnDate || '-'}<br>
+                            ${__('days') || 'Days'}: <strong>${originalDays}</strong>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="admin_vacation_start_date" class="font-weight-bold d-block mb-2">${__('start_date') || 'Start Date'}</label>
+                            <input type="text" id="admin_vacation_start_date" class="form-control" value="${currentStartDate}" readonly style="background-color: white; cursor: pointer;">
+                        </div>
+                        <div class="form-group mb-3">
+                            <label for="admin_vacation_return_date" class="font-weight-bold d-block mb-2">${__('return_date') || 'Return Date'}</label>
+                            <input type="text" id="admin_vacation_return_date" class="form-control" value="${currentReturnDate}" readonly style="background-color: white; cursor: pointer;">
+                        </div>
+                        <div class="p-3 rounded" style="background:#f8f9fa; border:1px solid #e9ecef;">
+                            <div class="text-muted small mb-1">${__('difference_days') || 'Difference Days'}</div>
+                            <div id="admin_vacation_days_preview" style="font-weight:700; color:#0d6efd;">-</div>
+                            <div id="admin_vacation_days_message" class="small mt-2 text-muted"></div>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: __('update') || 'Update',
+                cancelButtonText: __('cancel') || 'Cancel',
+                confirmButtonColor: APP_COLORS.primary,
+                allowOutsideClick: false,
+                didOpen: () => {
+                    const startInput = document.getElementById('admin_vacation_start_date');
+                    const returnInput = document.getElementById('admin_vacation_return_date');
+                    const preview = document.getElementById('admin_vacation_days_preview');
+                    const message = document.getElementById('admin_vacation_days_message');
+                    const confirmBtn = Swal.getConfirmButton();
+                    const $startInput = $('#admin_vacation_start_date');
+                    const $returnInput = $('#admin_vacation_return_date');
+
+                    const updatePreview = () => {
+                        const startVal = startInput.value;
+                        const returnVal = returnInput.value;
+
+                        if (!startVal || !returnVal) {
+                            preview.textContent = '-';
+                            message.textContent = __('select_start_and_return_dates') || 'Select both dates to calculate the total days.';
+                            if (confirmBtn) {
+                                confirmBtn.disabled = true;
+                            }
+                            return;
+                        }
+
+                        const start = new Date(startVal + 'T00:00:00');
+                        const end = new Date(returnVal + 'T00:00:00');
+                        const timeDiff = end.getTime() - start.getTime();
+                        const calculatedDays = Math.floor(timeDiff / 86400000) + 1;
+
+                        if (calculatedDays <= 0) {
+                            preview.textContent = __('invalid_dates') || 'Invalid dates';
+                            preview.style.color = '#dc3545';
+                            message.textContent = __('return_date_must_be_after_start_date') || 'Return date must be the same as or after start date.';
+                            if (confirmBtn) {
+                                confirmBtn.disabled = true;
+                            }
+                            return;
+                        }
+
+                        preview.textContent = `${calculatedDays} ${__('days') || 'days'}`;
+                        preview.style.color = '#0d6efd';
+                        message.textContent = `${startVal} ${__('to') || 'to'} ${returnVal}`;
+                        if (confirmBtn) {
+                            confirmBtn.disabled = false;
+                        }
+                    };
+
+                    $startInput.datepicker({
+                        format: 'yyyy-mm-dd',
+                        todayHighlight: true,
+                        autoclose: true
+                    }).on('changeDate', function(e) {
+                        if (e.date) {
+                            $returnInput.datepicker('setStartDate', e.date);
+                        }
+                        updatePreview();
+                    });
+
+                    $returnInput.datepicker({
+                        format: 'yyyy-mm-dd',
+                        todayHighlight: true,
+                        autoclose: true
+                    }).on('changeDate', function(e) {
+                        if (e.date) {
+                            $startInput.datepicker('setEndDate', e.date);
+                        }
+                        updatePreview();
+                    });
+
+                    if (currentStartDate) {
+                        $startInput.datepicker('setDate', currentStartDate);
+                    }
+
+                    if (currentReturnDate) {
+                        $returnInput.datepicker('setDate', currentReturnDate);
+                        $startInput.datepicker('setEndDate', currentReturnDate);
+                    }
+
+                    if (currentStartDate) {
+                        $returnInput.datepicker('setStartDate', currentStartDate);
+                    }
+
+                    updatePreview();
+                },
+                preConfirm: () => {
+                    const startDate = document.getElementById('admin_vacation_start_date').value;
+                    const returnDate = document.getElementById('admin_vacation_return_date').value;
+
+                    if (!startDate || !returnDate) {
+                        Swal.showValidationMessage(__('start_and_return_date_required') || 'Start and return date are required.');
+                        return false;
+                    }
+
+                    const start = new Date(startDate + 'T00:00:00');
+                    const end = new Date(returnDate + 'T00:00:00');
+                    const calculatedDays = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+
+                    if (calculatedDays <= 0) {
+                        Swal.showValidationMessage(__('return_date_must_be_after_start_date') || 'Return date must be the same as or after start date.');
+                        return false;
+                    }
+
+                    return {
+                        start_date: startDate,
+                        return_date: returnDate,
+                        vacdays: calculatedDays
+                    };
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    return;
+                }
+
+                $.ajax({
+                    url: './includes/ajaxFile/leaveHandler.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        ajaxType: 'updateVacationDatesAdmin',
+                        vacation_id: vacationId,
+                        start_date: result.value.start_date,
+                        return_date: result.value.return_date
+                    }
+                }).done(function(response) {
+                    Swal.fire({
+                        title: response.title || (__('success') || 'Success'),
+                        text: response.message || (__('vacation_dates_updated') || 'Vacation dates updated successfully'),
+                        icon: response.type || 'success',
+                        allowOutsideClick: false
+                    }).then(function() {
+                        location.reload();
+                    });
+                }).fail(function(xhr, textStatus) {
+                    Swal.fire(__('error') || 'Error', `${__('request_failed') || 'Request failed'}: ${textStatus}`, 'error');
+                });
+            });
+        }
+
         document.getElementById('searchFilter').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 applyFilters();
@@ -1070,7 +1281,7 @@ if ($can_see_all_depts) {
         function showAssetClearanceModal(vacationId, employeeId, employeeName) {
             // First fetch vacation details and employee assets
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'json',
                 data: {
@@ -1080,7 +1291,7 @@ if ($can_see_all_depts) {
                 success: function(vacationDetails) {
                     // Fetch employee assets
                     $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: 'json',
                         data: {
@@ -1268,7 +1479,7 @@ if ($can_see_all_depts) {
             });
 
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'json',
                 data: {
@@ -1334,7 +1545,7 @@ if ($can_see_all_depts) {
             if (isPayer) {
                 // First, fetch vacation details to get the approved payment amount
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     dataType: 'json',
                     data: {
@@ -1477,7 +1688,7 @@ if ($can_see_all_depts) {
                                 }
 
                                 return $.ajax({
-                                        url: './includes/ajaxFile/ajaxVacation.php',
+                                        url: './includes/ajaxFile/leaveHandler.php',
                                         type: 'POST',
                                         data: formData,
                                         processData: false,
@@ -1520,7 +1731,7 @@ if ($can_see_all_depts) {
             if (isFinanceManager && vacType === 'Encashed') {
                 // First check if HR Payroll has already approved this request
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     dataType: 'json',
                     data: {
@@ -1691,7 +1902,7 @@ if ($can_see_all_depts) {
             // If yes, show clearance modal; if no but they're an asset manager, show assignment modal
             if (vacType !== 'Encashed') {
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     dataType: 'json',
                     data: {
@@ -1722,7 +1933,7 @@ if ($can_see_all_depts) {
                         if (assignedAssetChecker && assignedAssetChecker === currentUserIdInt && !isManagerRole) {
                             // FIRST CHECK: Does the employee have any assigned assets?
                             $.ajax({
-                                url: './includes/ajaxFile/ajaxVacation.php',
+                                url: './includes/ajaxFile/leaveHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
@@ -1756,7 +1967,7 @@ if ($can_see_all_depts) {
                             console.log('✓ Showing asset checker assignment modal for asset department staff (non-manager)');
 
                             $.ajax({
-                                url: './includes/ajaxFile/ajaxVacation.php',
+                                url: './includes/ajaxFile/leaveHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
@@ -1845,7 +2056,7 @@ if ($can_see_all_depts) {
                         
                         // Check if employee has any assigned assets
                         $.ajax({
-                            url: './includes/ajaxFile/ajaxVacation.php',
+                            url: './includes/ajaxFile/leaveHandler.php',
                             type: 'POST',
                             dataType: 'json',
                             data: {
@@ -1875,7 +2086,7 @@ if ($can_see_all_depts) {
                         if (assetDeptId) {
                             // Asset manager but can't verify if they're assigned checker - show assignment modal
                             $.ajax({
-                                url: './includes/ajaxFile/ajaxVacation.php',
+                                url: './includes/ajaxFile/leaveHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
@@ -2240,7 +2451,7 @@ if ($can_see_all_depts) {
                     if ((isHR_Assistant || isHR_Payroll || isGR_Officer) && isFlyVacation) {
                         // Fetch existing departure and arrival dates from database
                         $.ajax({
-                            url: './includes/ajaxFile/ajaxVacation.php',
+                            url: './includes/ajaxFile/leaveHandler.php',
                             type: 'POST',
                             dataType: 'json',
                             data: {
@@ -2320,7 +2531,7 @@ if ($can_see_all_depts) {
                         let $hrTeamCCSelect = $('#hr_team_cc_select');
 
                         $.ajax({
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             dataType: 'JSON',
                             type: 'POST',
                             data: {
@@ -2409,7 +2620,7 @@ if ($can_see_all_depts) {
 
                         // Fetch *all* potential approvers for the chain
                         $.ajax({
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             dataType: 'JSON',
                             type: 'POST',
                             data: {
@@ -2493,7 +2704,7 @@ if ($can_see_all_depts) {
 
                         // Fetch employee salary from backend
                         $.ajax({
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             type: 'POST',
                             dataType: 'json',
                             data: {
@@ -2724,7 +2935,7 @@ if ($can_see_all_depts) {
                         // Return a Promise to get HR Senior BP from backend
                         return new Promise(function(resolve, reject) {
                             $.ajax({
-                                url: './includes/ajaxFile/ajaxEmployee.php',
+                                url: './includes/ajaxFile/hrHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
@@ -2752,7 +2963,7 @@ if ($can_see_all_depts) {
                         // Build chain by calling backend helper; return a Promise to resolve approver_chain
                         return new Promise(function(resolve, reject) {
                             $.ajax({
-                                url: './includes/ajaxFile/ajaxEmployee.php',
+                                url: './includes/ajaxFile/hrHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
@@ -2861,7 +3072,7 @@ if ($can_see_all_depts) {
             console.log('sendApproval - arrival_date to send:', approveData.arrival_date);
 
             $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     dataType: 'JSON',
                     data: {
@@ -2933,7 +3144,7 @@ if ($can_see_all_depts) {
             });
 
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {
@@ -2998,7 +3209,7 @@ if ($can_see_all_depts) {
                 },
                 preConfirm: (reason) => {
                     $.ajax({
-                            url: './includes/ajaxFile/ajaxVacation.php',
+                            url: './includes/ajaxFile/leaveHandler.php',
                             type: 'POST',
                             dataType: 'JSON',
                             data: {
@@ -3031,7 +3242,7 @@ if ($can_see_all_depts) {
         function addVacationPayments(vacationId, employeeName, currentTicketPay, currentPermitFee) {
             // First fetch current vacation details including dates and applied days
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {
@@ -3473,7 +3684,7 @@ if ($can_see_all_depts) {
             }).then((result) => {
                 if (result.isConfirmed) {
                     $.ajax({
-                            url: './includes/ajaxFile/ajaxVacation.php',
+                            url: './includes/ajaxFile/leaveHandler.php',
                             type: 'POST',
                             dataType: 'JSON',
                             data: {
@@ -3522,7 +3733,7 @@ if ($can_see_all_depts) {
             });
 
             $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     dataType: 'JSON',
                     data: {
@@ -3750,7 +3961,7 @@ if ($can_see_all_depts) {
                                             fd.append('passport_file', f);
                                             Swal.showLoading();
                                             $.ajax({
-                                                url: './includes/ajaxFile/ajaxVacation.php',
+                                                url: './includes/ajaxFile/leaveHandler.php',
                                                 type: 'POST',
                                                 dataType: 'JSON',
                                                 data: fd,
@@ -3830,7 +4041,7 @@ if ($can_see_all_depts) {
                                 }
 
                                 $.ajax({
-                                        url: './includes/ajaxFile/ajaxVacation.php',
+                                        url: './includes/ajaxFile/leaveHandler.php',
                                         type: 'POST',
                                         dataType: 'JSON',
                                         data: formData,
@@ -3924,7 +4135,7 @@ if ($can_see_all_depts) {
 
                     // Send AJAX request
                     $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: 'JSON',
                         data: {
@@ -3969,7 +4180,7 @@ if ($can_see_all_depts) {
         function approveVacationPayment(vacationId, requestInvNo, employeeName) {
             // Get vacation details to determine if it's annual and get dates
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {
@@ -4012,7 +4223,7 @@ if ($can_see_all_depts) {
         function createSettlement(vacationId, requestInvNo, employeeId, employeeName, vacationDays) {
             // Fetch vacation details to calculate total payable
             $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /************************************************************************************************
  * MODIFICATION SUMMARY (007-import_vacation_balance.php)
  *
@@ -174,7 +174,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
                 allowClear: true,
                 minimumInputLength: 2,
                 ajax: {
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: 'json',
                     delay: 250,
@@ -197,7 +197,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
             $('#employee_search').on('select2:select', function(e) {
                 const empid = e.params.data.id;
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: 'json',
                     data: {
@@ -283,7 +283,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
                 const formData = $(this).serialize();
 
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     dataType: 'json',
                     data: formData,

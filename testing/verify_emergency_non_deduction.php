@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * VERIFICATION SCRIPT: Emergency Vacation Non-Deduction
  * 
@@ -78,7 +78,7 @@ echo "\n=================================================================\n";
 echo "CODE VERIFICATION\n";
 echo "=================================================================\n\n";
 
-$ajax_content = file_get_contents(__DIR__ . '/../includes/ajaxFile/ajaxVacation.php');
+$ajax_content = file_get_contents(__DIR__ . '/../includes/ajaxFile/leaveHandler.php');
 $helper_content = file_get_contents(__DIR__ . '/../includes/helper_functions.php');
 
 // Check 1: Rule 3 should NOT call update_vacation_balance_on_approval for emergency

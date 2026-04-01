@@ -2,12 +2,16 @@
 require_once __DIR__ . '/db.php';
 
 //$allowed = array('gif', 'jpeg', 'jpg','pjpeg','x-png','png');
-$data = $_POST['image'];
+$data = $_POST['image'] ?? '';
 $id = $_POST['id'];
 // $emp_id = $_POST['emp_id'];
 $section_name = str_replace(' ','',$_POST['section_name_get']);
 
-//$ext = pathinfo($data, PATHINFO_EXTENSION);
+// Validate this is a legitimate image data URI before decoding
+if (!preg_match('/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i', $data)) {
+    echo json_encode(['title' => 'Error!', 'message' => 'Invalid image format.', 'type' => 'error']);
+    exit;
+}
 
 list($type, $data) = explode(';', $data);
 list(, $data) = explode(',', $data);

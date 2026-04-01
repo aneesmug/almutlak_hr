@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * Test File for Manual Vacation History Feature
  * Employee ID: 3928
@@ -390,7 +390,7 @@ function addManualVacationHistory(empid, empname) {
 
             // Submit to backend
             return $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {

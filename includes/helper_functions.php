@@ -133,7 +133,7 @@ if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
             return ['success' => true, 'skipped' => true, 'message' => 'Employee role is not assignable for temporary coverage.'];
         }
 
-        $stmtVac = mysqli_prepare($conDB, "SELECT replacement_person FROM emp_vacation WHERE id = ? LIMIT 1");
+        $stmtVac = mysqli_prepare($conDB, "SELECT replacement_person, vac_type FROM emp_vacation WHERE id = ? LIMIT 1");
         if (!$stmtVac) {
             return ['success' => false, 'message' => 'Failed to load vacation replacement.'];
         }
@@ -143,6 +143,13 @@ if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
         $vacRow = $vacRes ? mysqli_fetch_assoc($vacRes) : null;
         if ($vacRes) mysqli_free_result($vacRes);
         mysqli_stmt_close($stmtVac);
+
+        // Excuse leave types should NOT trigger a temporary role swap
+        $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
+        $vac_type_lower = strtolower(trim((string)($vacRow['vac_type'] ?? '')));
+        if (in_array($vac_type_lower, $excuse_leave_types)) {
+            return ['success' => true, 'skipped' => true, 'message' => 'Excuse leave types do not require a temporary role assignment.'];
+        }
 
         $replacement_emp_id = trim((string)($vacRow['replacement_person'] ?? ''));
         if ($replacement_emp_id === '') {
@@ -177,18 +184,25 @@ if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
 
         $replacement_original_user_type = trim((string)$repRoleRow['user_type']);
 
+        // Only perform the temporary role swap if the replacement employee already holds
+        // a special (non-employee) permission. Plain employees are not elevated.
+        $can_swap_role = (strtolower($replacement_original_user_type) !== 'employee' && $replacement_original_user_type !== '');
+
         mysqli_begin_transaction($conDB);
         try {
-            $stmtUpdateRep = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
-            if (!$stmtUpdateRep) {
-                throw new Exception('Failed to prepare replacement role update.');
+            // Apply the vacating employee's role to the replacement, but ONLY when the
+            // replacement already has elevated permissions (not a plain employee).
+            if ($can_swap_role) {
+                $stmtUpdateRep = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
+                if (!$stmtUpdateRep) {
+                    throw new Exception('Failed to prepare replacement role update.');
+                }
+                mysqli_stmt_bind_param($stmtUpdateRep, "ss", $employee_user_type, $replacement_emp_id);
+                if (!mysqli_stmt_execute($stmtUpdateRep)) {
+                    throw new Exception('Failed to apply temporary role to replacement.');
+                }
+                mysqli_stmt_close($stmtUpdateRep);
             }
-            mysqli_stmt_bind_param($stmtUpdateRep, "ss", $employee_user_type, $replacement_emp_id);
-            if (!mysqli_stmt_execute($stmtUpdateRep)) {
-                throw new Exception('Failed to apply temporary role to replacement.');
-            }
-            mysqli_stmt_close($stmtUpdateRep);
-
             $stmtInsert = mysqli_prepare($conDB, "INSERT INTO temp_vacation_role_assignments (
                     vacation_id, request_inv_no, employee_emp_id, replacement_emp_id,
                     employee_user_type, replacement_original_user_type, status,
@@ -246,18 +260,23 @@ if (!function_exists('restoreTemporaryVacationRoleAssignment')) {
         $replacement_emp_id = trim((string)$activeRow['replacement_emp_id']);
         $replacement_original_user_type = trim((string)$activeRow['replacement_original_user_type']);
 
+        // NOTE: admin_login.user_type is restored to the replacement's original role only if
+        // the role was actually swapped (i.e., the record has a non-empty replacement_original_user_type
+        // that differs from the current user_type, meaning the swap ran).
         mysqli_begin_transaction($conDB);
         try {
-            $stmtRestore = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
-            if (!$stmtRestore) {
-                throw new Exception('Failed to prepare replacement role restore.');
+            // Restore the replacement employee's original role when the main employee rejoins.
+            if (!empty($replacement_original_user_type)) {
+                $stmtRestore = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
+                if (!$stmtRestore) {
+                    throw new Exception('Failed to prepare replacement role restore.');
+                }
+                mysqli_stmt_bind_param($stmtRestore, "ss", $replacement_original_user_type, $replacement_emp_id);
+                if (!mysqli_stmt_execute($stmtRestore)) {
+                    throw new Exception('Failed to restore replacement original role.');
+                }
+                mysqli_stmt_close($stmtRestore);
             }
-            mysqli_stmt_bind_param($stmtRestore, "ss", $replacement_original_user_type, $replacement_emp_id);
-            if (!mysqli_stmt_execute($stmtRestore)) {
-                throw new Exception('Failed to restore replacement original role.');
-            }
-            mysqli_stmt_close($stmtRestore);
-
             $restored_by_emp_id = ($restored_by_emp_id !== null) ? (string)$restored_by_emp_id : null;
             $stmtUpdate = mysqli_prepare($conDB, "UPDATE temp_vacation_role_assignments SET status = 'restored', restored_by_emp_id = ?, restored_at = NOW() WHERE id = ?");
             if (!$stmtUpdate) {
@@ -1255,6 +1274,74 @@ if (!function_exists('get_hr_assistants')) {
     }
 }
 
+/**
+ * Saves a validated image upload from a data URI to disk.
+ * Verifies MIME type whitelist and actual image content before writing.
+ *
+ * @param string $rawData   Full data URI string
+ * @param string $uploadDir Server-side directory path (with trailing slash)
+ * @param string $filename  Filename to save inside $uploadDir
+ * @return bool             True on success, false on any validation or write failure
+ */
+if (!function_exists('save_cropped_image')) {
+    function save_cropped_image($rawData, $uploadDir, $filename)
+    {
+        // Strict MIME type whitelist — must be a recognised safe image type
+        if (!preg_match('/^data:image\/(png|jpeg|jpg|gif|webp);base64,/i', $rawData)) {
+            return false;
+        }
+
+        // Extract and decode the base64 payload
+        $base64Payload = substr($rawData, strpos($rawData, ',') + 1);
+        $binaryData = base64_decode($base64Payload, true);
+        if ($binaryData === false || $binaryData === '') {
+            return false;
+        }
+
+        // Verify the decoded bytes are actually a valid image (catches disguised payloads)
+        $imageInfo = @getimagesizefromstring($binaryData);
+        if ($imageInfo === false) {
+            return false;
+        }
+
+        // Ensure the upload directory exists
+        if (!is_dir($uploadDir)) {
+            @mkdir($uploadDir, 0755, true);
+        }
+
+        // Write validated binary data to disk
+        $written = @file_put_contents($uploadDir . $filename, $binaryData);
+        return ($written !== false && $written > 0);
+    }
+}
+
+/**
+ * Safely stores an uploaded file to the target path.
+ * Keeps upload handling centralized for validation and future hardening.
+ *
+ * @param string $tmpPath  Temporary uploaded file path
+ * @param string $destPath Destination absolute/relative file path
+ * @return bool            True when the file is stored, false otherwise
+ */
+if (!function_exists('store_uploaded_file_securely')) {
+    function store_uploaded_file_securely($tmpPath, $destPath)
+    {
+        if (!is_string($tmpPath) || $tmpPath === '' || !is_string($destPath) || $destPath === '') {
+            return false;
+        }
+
+        $destDir = dirname($destPath);
+        if (!is_dir($destDir)) {
+            @mkdir($destDir, 0755, true);
+        }
+
+        if (!is_uploaded_file($tmpPath)) {
+            return false;
+        }
+
+        return @move_uploaded_file($tmpPath, $destPath);
+    }
+}
 
 /**
  * Saves the chosen approval chain for a new request.
@@ -3544,10 +3631,14 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         $excluded_days = 0;
         
         if (!empty($vacation_start) && !empty($vacation_end)) {
-            // Get employee's company and department for weekend rules
-            $emp_company_id = 1;
+            // Get employee's company and department for weekend rules.
+            // employees.comp_no stores companies.comp_id in this codebase, so map it to companies.id.
+            $emp_company_id = 0;
             $emp_dept_id = 0;
-            $emp_company_sql = "SELECT e.company_id, e.dept_id FROM employees e WHERE e.emp_id = ?";
+            $emp_company_sql = "SELECT COALESCE(c.id, e.comp_no) AS company_id, e.dept AS dept_id
+                                FROM employees e
+                                LEFT JOIN companies c ON c.comp_id = e.comp_no
+                                WHERE e.emp_id = ?";
             $emp_company_stmt = mysqli_prepare($conDB, $emp_company_sql);
             if ($emp_company_stmt) {
                 mysqli_stmt_bind_param($emp_company_stmt, "i", $emp_id);
@@ -3557,7 +3648,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
                     if ($emp_company_res) mysqli_free_result($emp_company_res);
                     mysqli_stmt_close($emp_company_stmt);
                     
-                    $emp_company_id = (int)($emp_company['company_id'] ?? 1);
+                    $emp_company_id = (int)($emp_company['company_id'] ?? 0);
                     $emp_dept_id = (int)($emp_company['dept_id'] ?? 0);
                 } else {
                     mysqli_stmt_close($emp_company_stmt);
@@ -3565,7 +3656,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             }
             
             // Get all active holidays that fall within the vacation period (filtered by company)
-            $active_holidays = get_active_holidays_in_range($conDB, $vacation_start, $vacation_end, $emp_company_id);
+            $active_holidays = get_active_holidays_in_range($conDB, $vacation_start, $vacation_end, $emp_company_id > 0 ? $emp_company_id : null);
             
             // Single-pass day classification to avoid double-counting
             // A day that is BOTH a weekend AND a holiday should only be excluded once
@@ -3595,7 +3686,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
                 }
             }
             
-            // Count excluded days (weekend OR holiday) without double-counting
+            // Count informational weekend days, but exclude ONLY official holiday days from deduction.
             $weekend_day_numbers = get_weekend_days($emp_company_id, $emp_dept_id);
             $excluded_days = 0;
             $weekend_days = 0;
@@ -3608,10 +3699,12 @@ if (!function_exists('update_vacation_balance_on_approval')) {
                     $date_str = $day_cur->format('Y-m-d');
                     $is_weekend = in_array($dow, $weekend_day_numbers, true);
                     $is_holiday = isset($holiday_date_set[$date_str]);
-                    if ($is_weekend || $is_holiday) {
+                    if ($is_weekend) {
+                        $weekend_days++;
+                    }
+                    if ($is_holiday) {
+                        $holiday_days++;
                         $excluded_days++;
-                        if ($is_weekend) $weekend_days++;
-                        if ($is_holiday && !$is_weekend) $holiday_days++;
                     }
                     $day_cur->modify('+1 day');
                 }
@@ -3623,7 +3716,7 @@ if (!function_exists('update_vacation_balance_on_approval')) {
             if ($excluded_days > 0) {
                 $original_days = $days_to_deduct;
                 $days_to_deduct = max(0, $days_to_deduct - $excluded_days);
-                error_log("DEBUG: Vacation ID {$vac_id_safe} - Weekends: {$weekend_days}, Holidays (non-weekend): {$holiday_days}, Total excluded: {$excluded_days}. Adjusted deduction from {$original_days} to {$days_to_deduct} days.");
+                error_log("DEBUG: Vacation ID {$vac_id_safe} - Weekends in range: {$weekend_days}, Holidays excluded: {$holiday_days}. Adjusted deduction from {$original_days} to {$days_to_deduct} days.");
             }
         }
         // ===== END HOLIDAY CALCULATION =====
@@ -5141,13 +5234,18 @@ if (!function_exists('get_active_holidays_in_range')) {
         
         try {
             if ($company_id !== null) {
-                // Filter by company: only return holidays assigned to this company
-                $sql = "SELECT h.* FROM emp_holidays h
-                        INNER JOIN holiday_companies hc ON h.id = hc.holiday_id
+                // Filter by company, but include globally-applicable holidays that have no assignment rows.
+                $sql = "SELECT DISTINCT h.* FROM emp_holidays h
+                        LEFT JOIN holiday_companies hc ON h.id = hc.holiday_id
                         WHERE h.is_active = 1 
                         AND h.start_date <= ? 
                         AND h.end_date >= ? 
-                        AND hc.company_id = ?
+                        AND (
+                            hc.company_id = ?
+                            OR NOT EXISTS (
+                                SELECT 1 FROM holiday_companies hc2 WHERE hc2.holiday_id = h.id
+                            )
+                        )
                         ORDER BY h.start_date ASC";
                 
                 $stmt = mysqli_prepare($conDB, $sql);

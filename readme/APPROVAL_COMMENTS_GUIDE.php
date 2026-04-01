@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * ============================================================================
  * APPROVAL COMMENTS - IMPLEMENTATION GUIDE
@@ -73,7 +73,7 @@ function saveApprovalCommentAndApprove(formData) {
             if (response.success) {
                 // Comment saved, now proceed with actual approval
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     data: {
                         action: 'approve_vacation',
@@ -121,7 +121,7 @@ function saveApprovalCommentAndReject(formData) {
             if (response.success) {
                 // Comment saved, now reject
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxVacation.php',
+                    url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
                     data: {
                         action: 'reject_vacation',

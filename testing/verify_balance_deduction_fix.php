@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * VERIFICATION SCRIPT: Balance Deduction Fix for Vacation ID 725
  * 
@@ -145,7 +145,7 @@ echo "\n=================================================================\n\n";
 echo "TEST CASE 3: Code Verification - Checking Fixed Endpoints\n";
 echo "-----------------------------------------------------------------\n";
 
-$ajax_file = __DIR__ . '/../includes/ajaxFile/ajaxVacation.php';
+$ajax_file = __DIR__ . '/../includes/ajaxFile/leaveHandler.php';
 $ajax_content = file_get_contents($ajax_file);
 
 $checks = [

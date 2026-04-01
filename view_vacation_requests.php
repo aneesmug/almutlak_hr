@@ -1,4 +1,4 @@
-<?php
+﻿<?php
     require_once __DIR__ . '/includes/db.php';
     require_once __DIR__ . '/includes/session_check.php';
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
@@ -604,7 +604,7 @@ function approveRequest(vacationId, role) {
 // AJAX call for sending the approval
 function sendApproval(vacationId, role, ticketPay = null, permitFee = null) {
     $.ajax({
-        url: './includes/ajaxFile/ajaxVacation.php',
+        url: './includes/ajaxFile/leaveHandler.php',
         type: 'POST',
         dataType: 'JSON',
         data: {
@@ -627,7 +627,7 @@ function sendApproval(vacationId, role, ticketPay = null, permitFee = null) {
 // AJAX call for sending approval with payer selection (Finance Manager)
 function sendApprovalWithPayer(vacationId, role, payerId, approvalComment = '') {
     $.ajax({
-        url: './includes/ajaxFile/ajaxVacation.php',
+        url: './includes/ajaxFile/leaveHandler.php',
         type: 'POST',
         dataType: 'JSON',
         data: {
@@ -671,7 +671,7 @@ function rejectVacationRequest(vacationId, role) {
         allowOutsideClick: () => !Swal.isLoading(),
         preConfirm: (reason) => {
             return $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {

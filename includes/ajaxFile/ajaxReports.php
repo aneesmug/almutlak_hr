@@ -643,14 +643,10 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
-
-    // Employee filter - restrict by accessible employees (applied only once)
-    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-    if (!empty($employee_filter)) {
-        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
     
-    // Department filter - restrict by accessible departments (applied only once)
+    // Department filter - restrict by accessible departments
+    // NOTE: For reports, we use company and department filters, not individual employee ID filter
+    // This allows employees to see all colleagues in their department/company
     $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
@@ -848,22 +844,11 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
     }
     
     // Department filter - restrict by accessible departments
+    // NOTE: For reports, we use company and department filters, not individual employee ID filter
+    // This allows employees to see all colleagues in their department/company
     $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
-
-    // Employee filter - restrict by accessible employees
-    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-    if (!empty($employee_filter)) {
-        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
-
-
-    
-    // Date filter
-    if (!empty($dateFrom)) {
-        $where[] = "v.start_date >= '" . mysqli_real_escape_string($conDB, $dateFrom) . "'";
     }
     if (!empty($dateTo)) {
         $where[] = "v.start_date <= '" . mysqli_real_escape_string($conDB, $dateTo) . "'";
@@ -975,10 +960,14 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
     // Build WHERE clause - only active employees
     $where = ['e.status = 1'];
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -990,16 +979,11 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
     }
 
     // Department filter - restrict by accessible departments
+    // NOTE: For reports, we use company and department filters, not individual employee ID filter
+    // This allows employees to see all colleagues in their department/company
     $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
-
-
-    // Employee filter - restrict by accessible employees
-    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-    if (!empty($employee_filter)) {
-        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Date filter
@@ -1095,10 +1079,14 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
     // Build WHERE clause
     $where = ['e.status = 1']; // Only active employees
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -1109,22 +1097,12 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
 
-    // Employee filter - restrict by accessible employees
-    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-    if (!empty($employee_filter)) {
-        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
-    
     // Department filter - restrict by accessible departments
+    // NOTE: For reports, we use company and department filters, not individual employee ID filter
+    // This allows employees to see all colleagues in their department/company
     $department_filter = getDepartmentFilterSQL('e.dept', true);
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
-    }
-
-    // Employee filter - restrict by accessible employees
-    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-    if (!empty($employee_filter)) {
-        $where[] = substr($employee_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
     
     // Status filter
@@ -1246,12 +1224,28 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
         $where[] = "p.status = '" . mysqli_real_escape_string($conDB, $status) . "'";
     }
     
-    // Department filter support
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    }
+
+    // Company filter - restrict by accessible companies
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $where[] = substr($company_filter, 5);
+    }
+
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
     }
 
     // Employee filter
@@ -1263,7 +1257,7 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
 
     $sql = "SELECT $selectClause 
             FROM payrolls p
-            LEFT JOIN employees e ON p.emp_id = e.id
+            LEFT JOIN employees e ON p.emp_id = e.emp_id
             WHERE $whereClause
             ORDER BY p.month_year DESC, p.id DESC";
 
@@ -1328,10 +1322,14 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
     // Build WHERE clause
     $where = ['e.status = 1']; // Only active employees
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -1348,6 +1346,12 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
     }
 
     // Employee filter
@@ -1424,10 +1428,14 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
     // Build WHERE clause
     $where = ['e.status = 1']; // Only active employees
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -1451,7 +1459,7 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
 
     // Employee filter
     if (!empty($employeeId)) {
-        $where[] = "ed.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+        $where[] = "d.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
     $whereClause = implode(' AND ', $where);
@@ -1554,10 +1562,14 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
     // Build WHERE clause
     $where = ['e.status = 1']; // Only active employees
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -1589,6 +1601,12 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     if (!empty($company_filter)) {
         $where[] = substr($company_filter, 5); // Remove " AND " prefix for use in WHERE array
+    }
+
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
     }
 
     // Employee filter
@@ -1686,10 +1704,14 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
     // Build WHERE clause - only active employees
     $where = ['e.status = 1'];
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -1780,10 +1802,14 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
     // Build WHERE clause for employee selection
     $where = ['e.status = 1']; // Only active employees
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -2019,10 +2045,14 @@ function generateExitSettlementReport($conDB, $columns, $departments, $dateFrom,
     // Build WHERE clause
     $where = ['e.status = 0']; // Only terminated employees
     
-    // Department filter
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
         $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
@@ -2249,12 +2279,16 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
         $headers[] = getColumnLabel($col);
     }
     
-    // Build department filter
+    // Build department fallback filter (only when no explicit scope restrictions are configured)
     $whereClause = '';
-    if (!$hasFullAccess) {
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         // Non-admin users can only see their own department
         $whereClause = "WHERE d.id = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         // Filter by selected departments
         $deptList = array_map(function($d) use ($conDB) {
             return "'" . mysqli_real_escape_string($conDB, $d) . "'";
@@ -2273,12 +2307,11 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
     if (!empty($department_filter)) {
         $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($department_filter, 5) : "WHERE " . substr($department_filter, 5);
     }
-
-    // Add employee filter
-    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-    if (!empty($employee_filter)) {
-        $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($employee_filter, 5) : "WHERE " . substr($employee_filter, 5);
-    }
+    
+    // NOTE: For reports, we use company and department filters, not individual employee ID filter
+    // This allows employees to see all colleagues in their department/company
+    $subCompanyScopeSql = getCompanyFilterSQL('e.comp_no', true);
+    $subDepartmentScopeSql = getDepartmentFilterSQL('e.dept', true);
     
     // Get department statistics
     $sql = "SELECT 
@@ -2335,7 +2368,7 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
                     // Get pending vacation count
                     $vacQuery = mysqli_query($conDB, "SELECT COUNT(*) as cnt FROM emp_vacation v 
                                                       INNER JOIN employees e ON v.emp_id = e.emp_id 
-                                                      WHERE e.dept = '$deptId' AND v.current_status = 'pending'");
+                                                      WHERE e.dept = '$deptId' AND v.current_status = 'pending' {$subCompanyScopeSql} {$subDepartmentScopeSql}");
                     $vacRow = mysqli_fetch_assoc($vacQuery);
                     $deptRow[$col] = $vacRow['cnt'];
                     break;
@@ -2345,7 +2378,7 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
                                                       INNER JOIN employees e ON v.emp_id = e.emp_id 
                                                       WHERE e.dept = '$deptId' 
                                                       AND v.current_status = 'approved' 
-                                                      AND YEAR(v.start_date) = YEAR(CURDATE())");
+                                                      AND YEAR(v.start_date) = YEAR(CURDATE()) {$subCompanyScopeSql} {$subDepartmentScopeSql}");
                     $vacRow = mysqli_fetch_assoc($vacQuery);
                     $deptRow[$col] = $vacRow['cnt'];
                     break;
@@ -2353,7 +2386,7 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
                     // Get active loan count
                     $loanQuery = mysqli_query($conDB, "SELECT COUNT(*) as cnt FROM emp_loan l 
                                                        INNER JOIN employees e ON l.emp_id = e.emp_id 
-                                                       WHERE e.dept = '$deptId' AND l.status = 'active'");
+                                                       WHERE e.dept = '$deptId' AND l.status = 'active' {$subCompanyScopeSql} {$subDepartmentScopeSql}");
                     $loanRow = mysqli_fetch_assoc($loanQuery);
                     $deptRow[$col] = $loanRow['cnt'];
                     break;
@@ -2362,7 +2395,7 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
                     $loanQuery = mysqli_query($conDB, "SELECT COALESCE(SUM(CAST(l.final_approved_amount AS DECIMAL(10,2))), 0) as total 
                                                        FROM emp_loan l 
                                                        INNER JOIN employees e ON l.emp_id = e.emp_id 
-                                                       WHERE e.dept = '$deptId' AND l.status = 'active'");
+                                                       WHERE e.dept = '$deptId' AND l.status = 'active' {$subCompanyScopeSql} {$subDepartmentScopeSql}");
                     $loanRow = mysqli_fetch_assoc($loanQuery);
                     $deptRow[$col] = number_format($loanRow['total'], 2);
                     break;
@@ -2678,6 +2711,12 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
         // Add company filter if employees table is involved
         $whereClauses[] = substr($company_filter, 5); // Remove " AND " prefix
     }
+
+    // Add allowed department filter for custom reports
+    $department_filter = getDepartmentFilterSQL('employees.dept', true);
+    if (!empty($department_filter) && $hasEmployees) {
+        $whereClauses[] = substr($department_filter, 5); // Remove " AND " prefix
+    }
     
     $whereClause = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
     
@@ -2840,12 +2879,26 @@ function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo
     // Build WHERE clause - only active employees
     $where = ['e.status = 1'];
     
-    // Department filter (from assigned employee's department)
-    if (!$hasFullAccess) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $dept_list = "'" . implode("','", array_map(function($d) use ($conDB) { return mysqli_real_escape_string($conDB, $d); }, $departments)) . "'";
         $where[] = "e.dept IN ($dept_list)";
+    }
+
+    // Company and department scoped filters
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $where[] = substr($company_filter, 5);
+    }
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
     }
     
     // Date filters - check assigned or return date
@@ -3005,12 +3058,26 @@ function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $da
     // Build WHERE clause - only active employees
     $where = ['e.status = 1'];
 
-    // Department filter (by asset's clearance department)
-    if (!$hasFullAccess && !empty($userDept)) {
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         $where[] = "a.clearance_dept_id = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!empty($departments)) {
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
         $dept_list = "'" . implode("','", array_map(function($d) use ($conDB) { return mysqli_real_escape_string($conDB, $d); }, $departments)) . "'";
         $where[] = "a.clearance_dept_id IN ($dept_list)";
+    }
+
+    // Company and department scoped filters from assigned employee
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $where[] = substr($company_filter, 5);
+    }
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
     }
 
     // Date filters (use asset creation date)

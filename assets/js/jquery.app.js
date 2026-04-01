@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Theme: Highdmin - Responsive Bootstrap 4 Admin Dashboard
  * Author: Coderthemes
  * Module/App: Main Js
@@ -1172,7 +1172,7 @@ $(document).on('click', '.addMaintAttr', function (e) {
             $("#car_user").select2();
             // $('#addTypeAtter').attr('data-id', cid);
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data:{ajaxType:"emp_search"},
@@ -1306,7 +1306,7 @@ $(document).on('click', '.addMaintAttr', function (e) {
                 endDate: '+0d',
             });
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data:{ajaxType:"emp_search"},
@@ -3771,7 +3771,7 @@ $(document).on('click', '.empAvatarShow', function (e) {
                 size: 'viewport'
             }).then(function (resp) {
                 return $.ajax({
-                    url: "./includes/ajaxFile/ajaxEmployee.php",
+                    url: "./includes/ajaxFile/hrHandler.php",
                     type: "POST",
                     dataType: "JSON",
                     data: {"image": resp, "id": id, "emp_id": emp_id, "emp_name": emp_name, "emptype": emptype, ajaxType: 'avatar'}
@@ -3841,7 +3841,7 @@ $(document).on('click', '.addSocial', function (e) {
         willOpen: function(){
             $('input[name="emp_id"]').val(emp_id);
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data: {'emp_id': emp_id, ajaxType: 'social_links'},
@@ -3872,7 +3872,7 @@ $(document).on('click', '.addSocial', function (e) {
                     return false;
                 }
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: "JSON",
                     data: $("#submitCustomerCardAddForm").serialize()+'&'+$.param({ajaxType: "add_social_links"}),
@@ -3942,7 +3942,7 @@ $(document).on('click', '.addPortfolio', function (e) {
                     return false;
                 }
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: "JSON",
                     cache: false,
@@ -3990,7 +3990,7 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
             $('input[name="emp_id"]').val(emp_id);
             $('input[name="id"]').val(id);
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data: {ajaxType: 'emp_doc_type'},
@@ -4049,7 +4049,7 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
                     return false;
                 }
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: "JSON",
                     cache: false,
@@ -4163,7 +4163,7 @@ $(document).on('click', '.contantChk', function (e) {
             return new Promise(function(resolve, reject) {
                 $.ajax({
                     // IMPORTANT: Update this URL to your actual PHP file location
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: "JSON",
                     // Serialize the form and add the ajaxType parameter
@@ -4241,7 +4241,7 @@ function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passp
             
             // Check if there's a pending request for THIS specific field type
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: { ajaxType: 'check_pending_update', empid: empid, type: field },
@@ -4360,11 +4360,11 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             format: 'png'
                         }).then(function (resp) {
                             return $.ajax({
-                                url: "./includes/ajaxFile/ajaxEmployee.php",
+                                url: "./includes/ajaxFile/hrHandler.php",
                                 type: "POST",
                                 dataType: "JSON",
                                 data: {
-                                    "image_base64": resp,
+                                    "profile_img": resp,
                                     "emp_id": empData.emp_id,
                                     "type": "Profile Picture",
                                     ajaxType: 'create_update_request'
@@ -4420,7 +4420,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                         const formData = new FormData(form);
                         formData.append('ajaxType', 'create_update_request');
                         return $.ajax({
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             type: 'POST',
                             data: formData,
                             processData: false,
@@ -4521,7 +4521,7 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                     return false;
                 }
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: "JSON",
                     data: $("#submitEmployeeTempContantForm").serialize()+'&'+$.param({ajaxType: "emp_edit_contannt"}),
@@ -4570,7 +4570,7 @@ function loadDateForEOS(){
                     return false;
                 }
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: "JSON",
                     data: {eos_date: eos_date, ajaxType : 'eos_date_get'},
@@ -4598,7 +4598,7 @@ function assignAsset(empId) {
     // First, fetch the list of available assets from the server
     $.ajax({
         type: 'POST',
-        url: './includes/ajaxFile/ajaxEmployee.php',
+        url: './includes/ajaxFile/hrHandler.php',
         data: { ajaxType: 'get_asset_types' },
         dataType: 'json',
         success: function(response) {
@@ -4681,7 +4681,7 @@ function assignAsset(empId) {
                         // The `preConfirm` function returned data, now send it
                         $.ajax({
                             type: 'POST',
-                            url: './includes/ajaxFile/ajaxEmployee.php',
+                            url: './includes/ajaxFile/hrHandler.php',
                             data: result.value, // The data from preConfirm
                             dataType: 'json',
                             success: function(ajaxResponse) {
@@ -4754,7 +4754,7 @@ function registerAssetModal() {
         if (result.isConfirmed) {
             $.ajax({
                 type: 'POST',
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 data: result.value,
                 dataType: 'json',
                 success: function(ajaxResponse) {
@@ -4843,7 +4843,7 @@ function unassignAsset(assetRecordId) {
         if (result.isConfirmed) {
             $.ajax({
                 type: 'POST',
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 data: result.value,
                 dataType: 'json',
                 contentType: false, // Important for file uploads
@@ -4885,7 +4885,7 @@ function addVoucherFunc(empid){
             $('input[name="empid"]').val(empid);
             $("#emp_v_user").select2();
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data: {ajaxType: 'emp_search'},
@@ -5320,7 +5320,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 
     // First, fetch employee data to get gender
     $.ajax({
-        url: './includes/ajaxFile/ajaxEmployee.php',
+        url: './includes/ajaxFile/hrHandler.php',
         type: 'POST',
         dataType: 'json',
         async: false,
@@ -5352,7 +5352,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 
             // Fetch employee data to get the name
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 type: 'POST',
                 dataType: 'json',
                 data: {
@@ -5557,7 +5557,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 
             // --- AJAX Submission ---
             return $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 data: formData,
                 processData: false,
@@ -5679,7 +5679,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 //             $("#replacement_per").select2();
 //             // Load replacement persons
 //             $.ajax({
-//                 url: './includes/ajaxFile/ajaxEmployee.php',
+//                 url: './includes/ajaxFile/hrHandler.php',
 //                 dataType: 'JSON',
 //                 type: 'POST',
 //                 data: {ajaxType: "emp_department", dept: deptId},
@@ -5698,7 +5698,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 //             });
 //             // Load employee data
 //             $.ajax({
-//                 url: './includes/ajaxFile/ajaxEmployee.php',
+//                 url: './includes/ajaxFile/hrHandler.php',
 //                 dataType: 'JSON',
 //                 type: 'POST',
 //                 data: {ajaxType: "emp_data", empid: empid},
@@ -5784,7 +5784,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 //             // No extra validation needed for "Encashed"
 //             return new Promise(function (resolve, reject) {
 //                 $.ajax({
-//                     url: './includes/ajaxFile/ajaxVacation.php',
+//                     url: './includes/ajaxFile/leaveHandler.php',
 //                     type: 'POST',
 //                     dataType: "JSON",
 //                     cache: false,
@@ -5822,7 +5822,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
     // Note: We'll allow emergency vacation even with pending requests
     try {
         $.ajax({
-            url: './includes/ajaxFile/ajaxVacation.php',
+            url: './includes/ajaxFile/leaveHandler.php',
             type: 'POST',
             dataType: 'json',
             data: { ajaxType: 'canApplyVacation', emp_id: empid, is_emergency: 0 },
@@ -6120,7 +6120,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 dropdownParent: $(swalModal) // Attach to modal
             });
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid, for_replacement: 1},
@@ -6174,7 +6174,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
 
             // Original emp_data loader
             $.ajax({
-                url: './includes/ajaxFile/ajaxEmployee.php',
+                url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
                 data: {ajaxType: "emp_data", empid: empid},
@@ -6212,7 +6212,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     
                     // Fetch current balance from server
                     $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: 'JSON',
                         data: {ajaxType: "getCurrentVacationBalance", empid: empid},
@@ -6247,7 +6247,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         if (days > 0) {
                             // Fetch salary from backend
                             $.ajax({
-                                url: './includes/ajaxFile/ajaxEmployee.php',
+                                url: './includes/ajaxFile/hrHandler.php',
                                 type: 'POST',
                                 dataType: 'JSON',
                                 data: {ajaxType: "calculate_encash_salary", empid: empid, days: days},
@@ -6445,7 +6445,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             // NEW: Automatically set direct supervisor as first approver
             return new Promise(function (resolve, reject) {
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     dataType: 'JSON',
                     data: { ajaxType: 'get_direct_supervisor', emp_id: empid },
@@ -6465,7 +6465,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     // console.log('========================');
                     
                     $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: "JSON",
                         cache: false,
@@ -6578,7 +6578,7 @@ function add_noties() {
 
             return new Promise((resolve, reject) => {
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxEmployee.php',
+                    url: './includes/ajaxFile/hrHandler.php',
                     type: 'POST',
                     data: formData,
                     processData: false,
@@ -6770,7 +6770,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                     
                     // Extract employee ID from vacation ID by fetching vacation details
                     $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: 'json',
                         data: {
@@ -6781,7 +6781,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                             if (res.status === 200 && res.emp_id) {
                                 // Now fetch salary for this employee
                                 $.ajax({
-                                    url: './includes/ajaxFile/ajaxEmployee.php',
+                                    url: './includes/ajaxFile/hrHandler.php',
                                     type: 'POST',
                                     dataType: 'json',
                                     data: {
@@ -6870,7 +6870,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                             
                             // Fetch current vacation details to get payment values and employee name
                             $.ajax({
-                                url: './includes/ajaxFile/ajaxVacation.php',
+                                url: './includes/ajaxFile/leaveHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
@@ -6939,7 +6939,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
             }).then((result) => {
                 if (result.isConfirmed) {
                     $.ajax({
-                        url: './includes/ajaxFile/ajaxVacation.php',
+                        url: './includes/ajaxFile/leaveHandler.php',
                         type: 'POST',
                         dataType: 'JSON',
                         data: {
@@ -10100,7 +10100,7 @@ function updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered = false)
             }
             
             return $.ajax({
-                url: "./includes/ajaxFile/ajaxEmployee.php",
+                url: "./includes/ajaxFile/hrHandler.php",
                 type: "POST",
                 dataType: "JSON",
                 data: {
@@ -10182,7 +10182,7 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
             }
             
             return $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {
@@ -12425,7 +12425,7 @@ function addManualVacationHistory(empid, empname, country) {
 
             // Submit to backend
             return $.ajax({
-                url: './includes/ajaxFile/ajaxVacation.php',
+                url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
                 dataType: 'JSON',
                 data: {
