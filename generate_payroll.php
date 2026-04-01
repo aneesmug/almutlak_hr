@@ -50,6 +50,62 @@
             .swal2-html-container{
                 overflow: hidden !important;
             }
+            .payroll-nav-footer {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: center;
+                gap: 10px;
+                width: 100%;
+            }
+            .payroll-nav-actions {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 8px;
+                background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+                border: 1px solid #d9e3e9;
+                border-radius: 18px;
+                box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+                width: 100%;
+            }
+            .payroll-nav-btn {
+                min-width: 140px;
+                border: 0 !important;
+                border-radius: 999px !important;
+                padding: 10px 18px !important;
+                font-weight: 600 !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 8px;
+                transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+            }
+            .payroll-nav-btn:hover:not(:disabled) {
+                transform: translateY(-1px);
+            }
+            .payroll-nav-btn:disabled {
+                opacity: 0.45;
+                box-shadow: none !important;
+                cursor: not-allowed;
+            }
+            .payroll-nav-btn-prev {
+                background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%) !important;
+                color: #1e293b !important;
+                box-shadow: 0 10px 18px rgba(100, 116, 139, 0.22);
+            }
+            .payroll-nav-btn-next {
+                background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+                color: #ffffff !important;
+                box-shadow: 0 10px 20px rgba(37, 99, 235, 0.28);
+            }
+            .payroll-nav-counter {
+                font-size: 12px;
+                font-weight: 600;
+                color: #64748b;
+                letter-spacing: 0.04em;
+            }
             .rounded-left-0{
                 border-radius: 0 0.25rem 0.25rem 0 !important; 
             }
@@ -316,6 +372,147 @@ let allEmployeesData = []; // Store raw employee data fetched from API
 let allBenefitTypesData = []; // Store raw benefit types data
 let currentEventListeners = []; // Array to store cleanup functions for event listeners
 let payroll; // Globally available payroll object for modal calculations
+
+function getFilteredEditableEmployees() {
+    if (!employeeTable) {
+        return [];
+    }
+
+    return employeeTable
+        .rows({ search: 'applied', order: 'applied' })
+        .data()
+        .toArray()
+        .filter(emp => emp && emp.payroll_status !== 'paid');
+}
+
+function getEmployeeNavigationState(empId) {
+    const employees = getFilteredEditableEmployees();
+    const currentIndex = employees.findIndex(emp => String(emp.emp_id) === String(empId));
+
+    return {
+        employees,
+        currentIndex,
+        previousEmployee: currentIndex > 0 ? employees[currentIndex - 1] : null,
+        nextEmployee: currentIndex >= 0 && currentIndex < employees.length - 1 ? employees[currentIndex + 1] : null
+    };
+}
+
+function collectPayrollModalData(employee) {
+    const benefitsRoot = document.querySelector('#benefits-list');
+    const deductionsRoot = document.querySelector('#deductions-list');
+
+    if (!benefitsRoot || !deductionsRoot) {
+        return null;
+    }
+
+    const updatedBenefits = Array.from(document.querySelectorAll('#benefits-list .benefit-row')).map(row => {
+        const benefitTypeSelect = row.querySelector('.benefit-type');
+        const benefitNameInput = row.querySelector('.benefit-name');
+        const hoursInput = row.querySelector('.benefit-hours');
+        const amountInput = row.querySelector('.benefit-amount');
+        const noteInput = row.querySelector('.benefit-note');
+        const benefitId = benefitTypeSelect?.dataset.benefitId || benefitNameInput?.dataset.benefitId || null;
+        const benefitTypeId = benefitTypeSelect ? benefitTypeSelect.value : null;
+        let benefitName = '';
+
+        if (benefitTypeSelect) {
+            benefitName = benefitTypeSelect.options[benefitTypeSelect.selectedIndex]?.text || '';
+        } else if (benefitNameInput) {
+            benefitName = benefitNameInput.value.trim();
+        }
+
+        return {
+            id: benefitId,
+            type_id: benefitTypeId,
+            benefit: benefitName,
+            note: noteInput ? noteInput.value.trim() : '',
+            amount: parseFloat(amountInput?.value || 0),
+            hours: hoursInput ? parseFloat(hoursInput.value || 0) : null
+        };
+    }).filter(b => b.benefit !== '' || b.amount > 0);
+
+    const updatedDeductions = [];
+    document.querySelectorAll('#deductions-list .deduction-row').forEach(row => {
+        const deductionId = row.dataset.deductionId || null;
+        const typeSelect = row.querySelector('.deduction-type');
+        const gosiNameInput = row.querySelector('.gosi-deduction-name');
+
+        if (gosiNameInput) {
+            updatedDeductions.push({
+                id: deductionId,
+                calculation_type: 'fixed',
+                deduction: 'GOSI',
+                note: parseFloat(row.querySelector('.deduction-amount')?.value) || 0,
+                hours: 0,
+                days: 0,
+            });
+            return;
+        }
+
+        const calcType = typeSelect ? typeSelect.value : 'fixed';
+        const nameInput = row.querySelector('.deduction-name');
+        const amountVal = parseFloat(row.querySelector('.deduction-amount')?.value) || 0;
+        let hours = 0;
+        let days = 0;
+        let name = '';
+
+        if (calcType === 'hourly_deduction') {
+            hours = parseFloat(row.querySelector('.deduction-hours')?.value) || 0;
+            name = nameInput ? nameInput.value.trim() : __('hourly_deduction_default_name');
+        } else if (calcType === 'daily_deduction') {
+            days = parseFloat(row.querySelector('.deduction-days')?.value) || 0;
+            name = nameInput ? nameInput.value.trim() : __('daily_deduction_default_name');
+        } else {
+            name = nameInput ? nameInput.value.trim() : '';
+        }
+
+        if (name || amountVal > 0) {
+            updatedDeductions.push({
+                id: deductionId,
+                calculation_type: calcType,
+                deduction: name || (calcType === 'hourly_deduction' ? __('hourly_deduction_default_name') : (calcType === 'daily_deduction' ? __('daily_deduction_default_name') : '')),
+                note: amountVal,
+                hours: hours,
+                days: days,
+            });
+        }
+    });
+
+    const activePayBtn = document.querySelector('#payment-type-tabs .btn.active');
+    const paymentType = activePayBtn ? parseInt(activePayBtn.dataset.paytype, 10) : Number(employee?.payment_type || 1);
+
+    return { updatedBenefits, updatedDeductions, paymentType };
+}
+
+async function navigatePayrollEmployee(targetEmployee, currentEmployee, month, initialModalState) {
+    if (!targetEmployee) {
+        return;
+    }
+
+    const currentModalState = collectPayrollModalData(currentEmployee);
+    const hasUnsavedChanges = currentModalState && initialModalState && JSON.stringify(currentModalState) !== JSON.stringify(initialModalState);
+
+    if (hasUnsavedChanges) {
+        const confirmation = await Swal.fire({
+            icon: 'warning',
+            title: __('unsaved_changes_title') || 'Unsaved changes',
+            text: __('unsaved_changes_navigation_warning') || 'You have unsaved changes. Move to another employee without saving?',
+            showCancelButton: true,
+            confirmButtonColor: '#f59e0b',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: __('continue_button') || 'Continue',
+            cancelButtonText: __('cancel') || 'Cancel',
+            allowOutsideClick: false
+        });
+
+        if (!confirmation.isConfirmed) {
+            return;
+        }
+    }
+
+    Swal.close();
+    showPayrollDetails(targetEmployee.emp_id, targetEmployee.name, month);
+}
 
 // This function is correct as is, but ensure you are using the latest version from previous replies.
 const buildDeductionsHtml = (deductions, payrollData) => {
@@ -1385,6 +1582,8 @@ async function showPayrollDetails(empId, empName, month) {
             const benefits = data.benefits;
             let deductions = data.deductions;
             const gosiAmnt = (employee.gosi || 0) / 100;
+            const navigationState = getEmployeeNavigationState(empId);
+            const currentPosition = navigationState.currentIndex >= 0 ? navigationState.currentIndex + 1 : null;
 
             const benefitTypes = Array.isArray(data.benefit_types) ? data.benefit_types : [];
             // Your warning for missing benefit types remains
@@ -1649,8 +1848,25 @@ async function showPayrollDetails(empId, empName, month) {
                 </div>
             `;
 
+            const modalFooterHtml = `
+                <div class="payroll-nav-footer text-center">
+                    <div class="payroll-nav-actions">
+                        <button type="button" id="prevEmployeeBtn" class="btn btn-sm payroll-nav-btn payroll-nav-btn-prev" ${navigationState.previousEmployee ? '' : 'disabled'}>
+                            <i class="fas fa-arrow-left"></i>
+                            <span>${__('previous') || 'Previous'}</span>
+                        </button>
+                        ${currentPosition ? `<small class="payroll-nav-counter mb-0">${currentPosition} / ${navigationState.employees.length}</small>` : '<span></span>'}
+                        <button type="button" id="nextEmployeeBtn" class="btn btn-sm payroll-nav-btn payroll-nav-btn-next" ${navigationState.nextEmployee ? '' : 'disabled'}>
+                            <span>${__('next') || 'Next'}</span>
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+
             Swal.fire({
                 html: modalHtml,
+                footer: modalFooterHtml,
                 width: '900px',
                 showCancelButton: true,
                 confirmButtonText: __('save_changes_button'),
@@ -1660,6 +1876,7 @@ async function showPayrollDetails(empId, empName, month) {
                 didOpen: () => {
                     const originalGrossSalary = parseFloat(payroll.total_gross_salary);
                     const updateDynamicNetSalary = () => updateNetSalaryDisplay(originalGrossSalary);
+                    const initialModalState = collectPayrollModalData(employee);
 
                     // Section navigation buttons
                     document.querySelectorAll('[data-section]').forEach(btn => {
@@ -1681,9 +1898,20 @@ async function showPayrollDetails(empId, empName, month) {
 
                     // Helper to attach event listeners
                     const addDynamicEventListener = (element, event, handler) => {
+                        if (!element) {
+                            return;
+                        }
                         element.addEventListener(event, handler);
                         currentEventListeners.push(() => element.removeEventListener(event, handler));
                     };
+
+                    addDynamicEventListener(document.getElementById('prevEmployeeBtn'), 'click', () => {
+                        navigatePayrollEmployee(navigationState.previousEmployee, employee, month, initialModalState);
+                    });
+
+                    addDynamicEventListener(document.getElementById('nextEmployeeBtn'), 'click', () => {
+                        navigatePayrollEmployee(navigationState.nextEmployee, employee, month, initialModalState);
+                    });
 
                     // Payment Type tabs behavior
                     document.querySelectorAll('#payment-type-tabs .btn').forEach(btn => {
@@ -1703,7 +1931,7 @@ async function showPayrollDetails(empId, empName, month) {
                         const noteInput = row.find('.benefit-note');
                         
                         // Show/hide hours input
-                        if (['overtime_basic', 'overtime_total'].includes(calculationType)) {
+                        if (['overtime_basic', 'overtime_total'].includes(calculationType)) {t
                             if (hoursContainer.find('.benefit-hours').length === 0) {
                                 hoursContainer.html(`
                                     <div class="input-group input-group-sm">
@@ -1991,91 +2219,7 @@ async function showPayrollDetails(empId, empName, month) {
                     updateNetSalaryDisplay(payroll.total_gross_salary);
                 },
                 preConfirm: () => {
-                    const updatedBenefits = Array.from(document.querySelectorAll('#benefits-list .benefit-row')).map(row => {
-                        const benefitTypeSelect = row.querySelector('.benefit-type');
-                        const benefitNameInput = row.querySelector('.benefit-name'); // this is the input field
-                        const hoursInput = row.querySelector('.benefit-hours');
-                        const amountInput = row.querySelector('.benefit-amount');
-                        const noteInput = row.querySelector('.benefit-note');
-                        const benefitId = benefitTypeSelect?.dataset.benefitId || benefitNameInput?.dataset.benefitId || null;
-                        const benefitTypeId = benefitTypeSelect ? benefitTypeSelect.value : null;
-                        // Get benefit name depending on available input type
-                        let benefitName = '';
-                        if (benefitTypeSelect) {
-                            benefitName = benefitTypeSelect.options[benefitTypeSelect.selectedIndex].text;
-                        } else if (benefitNameInput) {
-                            benefitName = benefitNameInput.value.trim();
-                        }
-                        return {
-                            id: benefitId,
-                            type_id: benefitTypeId,
-                            benefit: benefitName,
-                            note: noteInput ? noteInput.value.trim() : '',
-                            amount: parseFloat(amountInput.value || 0),
-                            hours: hoursInput ? parseFloat(hoursInput.value || 0) : null
-                        };
-                    }).filter(b => b.benefit !== '' || b.amount > 0);
-                    // --- REVISED LOGIC TO GATHER DEDUCTIONS ---
-                    const updatedDeductions = [];
-                    document.querySelectorAll('#deductions-list .deduction-row').forEach(row => {
-                        const deductionId = row.dataset.deductionId || null;
-                        const typeSelect = row.querySelector('.deduction-type');
-                        // This will handle both existing GOSI and newly added GOSI
-                        const gosiNameInput = row.querySelector('.gosi-deduction-name');
-
-                        if (gosiNameInput) {
-                            // This is the GOSI row
-                            updatedDeductions.push({
-                                id: deductionId,
-                                calculation_type: 'fixed',
-                                deduction: 'GOSI',
-                                note: parseFloat(row.querySelector('.deduction-amount').value) || 0,
-                                hours: 0,
-                                days: 0,
-                            });
-                        } else {
-                            // This is a regular or new deduction row
-                            const calcType = typeSelect ? typeSelect.value : 'fixed';
-                            const nameInput = row.querySelector('.deduction-name');
-                            let hours = 0;
-                            let days = 0;
-                            let name = '';
-
-                            if (calcType === 'hourly_deduction') {
-                                hours = parseFloat(row.querySelector('.deduction-hours').value) || 0;
-                                days = 0;
-                                name = nameInput ? nameInput.value.trim() : __('hourly_deduction_default_name');
-                            } else if (calcType === 'daily_deduction') {
-                                days = parseFloat(row.querySelector('.deduction-days').value) || 0;
-                                hours = 0;
-                                name = nameInput ? nameInput.value.trim() : __('daily_deduction_default_name');
-                            } else {
-                                // This is a "Fixed Amount" deduction, so we get its name
-                                hours = 0;
-                                days = 0;
-                                name = nameInput ? nameInput.value.trim() : '';
-                            }
-                            
-                            const amountVal = parseFloat(row.querySelector('.deduction-amount').value) || 0;
-                            // Save if we have a name OR a non-zero amount (covers hourly/daily entries where name is blank)
-                            if (name || amountVal > 0) {
-                                updatedDeductions.push({
-                                    id: deductionId,
-                                    calculation_type: calcType,
-                                    deduction: name || (calcType === 'hourly_deduction' ? __('hourly_deduction_default_name') : (calcType === 'daily_deduction' ? __('daily_deduction_default_name') : '')),
-                                    note: amountVal,
-                                    hours: hours,
-                                    days: days,
-                                });
-                            }
-                        }
-                    });
-
-                    // Payment type selected from tabs
-                    const activePayBtn = document.querySelector('#payment-type-tabs .btn.active');
-                    const paymentType = activePayBtn ? parseInt(activePayBtn.dataset.paytype, 10) : (Number(employee.payment_type||1));
-
-                    return { updatedBenefits, updatedDeductions, paymentType };
+                    return collectPayrollModalData(employee);
                 }
             }).then((result) => {
                 addEventListeners();
