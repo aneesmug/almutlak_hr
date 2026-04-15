@@ -441,7 +441,6 @@ elseif ($ajaxType == 'applyVacation') {
         $notes = escape_string($_POST['remarks'] ?? ''); // Changed from 'notes' to 'remarks' to match form field
         $vacation_salary_type = escape_string($_POST['vacation_salary_type'] ?? '');
         $encash_days = isset($_POST['encash_days']) ? (float)$_POST['encash_days'] : 0;
-        $encashment_salary = isset($_POST['encashment_salary']) ? (float)str_replace(',', '', $_POST['encashment_salary']) : 0;
 
         // Build approval chain from configured settings
         $approver_chain = [];
@@ -1131,11 +1130,47 @@ elseif ($ajaxType == 'applyVacation') {
             }
         }
 
-        // [NEW] Use encashment amount calculated on frontend
+        // Calculate encashment amount on server side from salary benefits.
+        // Formula: ((basic + all benefits) / 30) * encash_days
         $encashment_amount = null;
         if ($is_encashment_request) {
-            // Use the encashment_salary already calculated by frontend
-            $encashment_amount = $encashment_salary;
+            $salary_sql = "SELECT basic, housing, transport, food, misc, cashier, fuel, tel, other, guard
+                           FROM emp_salary
+                           WHERE emp_id = ?
+                           ORDER BY id DESC
+                           LIMIT 1";
+            $stmt_salary = mysqli_prepare($conDB, $salary_sql);
+            if (!$stmt_salary) {
+                throw new Exception(__('database_prepare_error') . ': ' . mysqli_error($conDB));
+            }
+
+            mysqli_stmt_bind_param($stmt_salary, 's', $emp_id);
+            mysqli_stmt_execute($stmt_salary);
+            $salary_res = mysqli_stmt_get_result($stmt_salary);
+            $salary_row = $salary_res ? mysqli_fetch_assoc($salary_res) : null;
+            if ($salary_res) {
+                mysqli_free_result($salary_res);
+            }
+            mysqli_stmt_close($stmt_salary);
+
+            if (!$salary_row) {
+                throw new Exception(__('salary_data_not_found_for_encashment_calculation', 'Unable to calculate encashment amount because salary data is missing.'));
+            }
+
+            $total_monthly_salary =
+                (float)($salary_row['basic'] ?? 0) +
+                (float)($salary_row['housing'] ?? 0) +
+                (float)($salary_row['transport'] ?? 0) +
+                (float)($salary_row['food'] ?? 0) +
+                (float)($salary_row['misc'] ?? 0) +
+                (float)($salary_row['cashier'] ?? 0) +
+                (float)($salary_row['fuel'] ?? 0) +
+                (float)($salary_row['tel'] ?? 0) +
+                (float)($salary_row['other'] ?? 0) +
+                (float)($salary_row['guard'] ?? 0);
+
+            $encashment_daily_rate = ($total_monthly_salary > 0) ? ($total_monthly_salary / 30) : 0;
+            $encashment_amount = round($encashment_daily_rate * (float)$vacdays, 2);
         }
 
         // 8. Insert the main vacation request
@@ -3641,13 +3676,10 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
         // Handle Encashment separately
         if ($is_encashment) {
             $encashment_amount = (float)($vacation_data['encashment_amount'] ?? 0);
-            
-            // Calculate GOSI on encashment (if Saudi Arabia - country_id = 191)
-            if ($vacation_data['country'] == 191 && isset($vacation_data['gosi'])) {
-                $gosi_percentage = (float)$vacation_data['gosi'];
-                $encash_gosi = round(($encashment_amount * $gosi_percentage) / 100, 2);
-            }
-            
+
+            // Business rule: no GOSI deduction is applied for encashment requests.
+            $encash_gosi = 0;
+
             $net_encashment = round($encashment_amount - $encash_gosi, 2);
             $total_payable = $net_encashment;
         }
@@ -5691,7 +5723,7 @@ elseif ($ajaxType == 'applyLeave') {
             'excuse_leave',
             $request_inv_no,
             $empid,
-            $employee['dept']
+            $emp_dept
         );
         
         if (!$chainResult['success']) {

@@ -14,6 +14,9 @@
 header('Content-Type: application/json');
 // Include the database connection file
 require_once("./../../includes/db.php");
+require_once("./../../includes/session_check.php");
+require_once("./../../includes/ApprovalChainManager.php");
+require_once("./../../includes/payroll_approval_helpers.php");
 
 /**
  * Helper function to get the previous month in 'Y-m' format.
@@ -27,12 +30,58 @@ function getPreviousMonth($monthYear) {
     return $date->format('Y-m');
 }
 
+/**
+ * Helper function to format a payroll month for user-facing messages.
+ *
+ * @param string $monthYear The month in 'Y-m' format.
+ * @return string The formatted month label.
+ */
+function formatPayrollMonthLabel($monthYear) {
+    $date = DateTime::createFromFormat('Y-m-d', $monthYear . '-01');
+    return $date ? $date->format('F Y') : $monthYear;
+}
+
+/**
+ * Normalizes common date formats to payroll month format ('Y-m').
+ *
+ * @param string|null $dateValue
+ * @return string|null
+ */
+function normalizeDateToPayrollMonth($dateValue) {
+    if (empty($dateValue)) {
+        return null;
+    }
+
+    $dateValue = trim((string)$dateValue);
+    if ($dateValue === '' || $dateValue === '0000-00-00') {
+        return null;
+    }
+
+    $formats = ['Y-m-d', 'd/m/Y', 'm/d/Y', 'd-m-Y', 'Y/m/d'];
+    foreach ($formats as $format) {
+        $date = DateTime::createFromFormat($format, $dateValue);
+        if ($date instanceof DateTime) {
+            return $date->format('Y-m');
+        }
+    }
+
+    $timestamp = strtotime($dateValue);
+    if ($timestamp === false) {
+        return null;
+    }
+
+    return date('Y-m', $timestamp);
+}
+
 // Decode the incoming JSON payload from the request body
 $input = json_decode(file_get_contents('php://input'), true);
 
 // Extract data from the input, providing default empty values if not set
 $employeeIds = $input['employee_ids'] ?? [];
 $monthYear = $input['month'] ?? '';
+$isGenerate = !empty($input['is_generate']);
+$isRegenerate = !empty($input['is_regenerate']);
+$skipApprovalChecks = $isGenerate || $isRegenerate;
 
 // Validate that the employee IDs and month/year are provided
 if (empty($employeeIds) || empty($monthYear)) {
@@ -40,10 +89,90 @@ if (empty($employeeIds) || empty($monthYear)) {
     exit();
 }
 
+if (!preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+    echo json_encode(['status' => 'error', 'message' => 'Invalid month format. Expected YYYY-MM.']);
+    exit();
+}
+
 // Get the database connection object
 $pdo = getDbConnection();
 
 try {
+    $requestedBy = $_SESSION['empid'] ?? ($empid ?? null);
+    $requestInvNo = null;
+
+    if (!$skipApprovalChecks) {
+        ensurePayrollApprovalTable($pdo);
+        ensurePayrollApprovalRequestType($pdo);
+
+        if (empty($requestedBy)) {
+            throw new Exception('Unauthorized payroll approval request.');
+        }
+
+        $requestStmt = $pdo->prepare("SELECT * FROM payroll_approval_requests WHERE payroll_month = :payroll_month LIMIT 1");
+        $requestStmt->execute([':payroll_month' => $monthYear]);
+        $payrollApprovalRequest = $requestStmt->fetch(PDO::FETCH_ASSOC);
+
+        $chainManager = new ApprovalChainManager($conDB, $pdo);
+
+        if (!$payrollApprovalRequest) {
+            echo json_encode([
+                'status' => 'approval_required',
+                'message' => __('payroll_start_approval_first', 'Please start payroll approval first for this month.'),
+                'payroll_month' => $monthYear,
+                'approval_status' => 'not_started'
+            ]);
+            exit();
+        }
+
+        $requestInvNo = $payrollApprovalRequest['request_inv_no'];
+        $approvalStatus = $chainManager->getApprovalStatus($requestInvNo);
+
+        if ($approvalStatus['status'] === 'not_found') {
+            echo json_encode([
+                'status' => 'approval_required',
+                'message' => __('payroll_start_approval_first', 'Please start payroll approval first for this month.'),
+                'request_inv_no' => $requestInvNo,
+                'payroll_month' => $monthYear,
+                'approval_status' => 'not_started'
+            ]);
+            exit();
+        }
+
+        if ($approvalStatus['status'] !== 'approved') {
+            $pendingApproverStmt = $pdo->prepare("SELECT ra.approver_id, ra.approval_level, e.name AS approver_name
+                FROM request_approvers ra
+                LEFT JOIN employees e ON e.emp_id = ra.approver_id
+                WHERE ra.request_inv_no = :inv_no
+                  AND ra.status = 'pending'
+                ORDER BY ra.approval_level ASC
+                LIMIT 1");
+            $pendingApproverStmt->execute([':inv_no' => $requestInvNo]);
+            $pendingApprover = $pendingApproverStmt->fetch(PDO::FETCH_ASSOC);
+
+            $pendingWith = !empty($pendingApprover['approver_name'])
+                ? $pendingApprover['approver_name']
+                : (!empty($pendingApprover['approver_id']) ? $pendingApprover['approver_id'] : __('next_approver'));
+
+            $blockedMessage = __('payroll_approval_required', 'Payroll generation requires chain approval first.');
+            if ($approvalStatus['status'] === 'rejected') {
+                $blockedMessage = __('payroll_approval_rejected', 'Payroll approval request is rejected. Please create/update approval and try again.');
+            } else {
+                $blockedMessage .= ' ' . __('pending_with') . ' ' . $pendingWith . '.';
+            }
+
+            echo json_encode([
+                'status' => 'approval_required',
+                'message' => $blockedMessage,
+                'request_inv_no' => $requestInvNo,
+                'payroll_month' => $monthYear,
+                'approval_status' => $approvalStatus['status'],
+                'pending_approver' => $pendingApprover
+            ]);
+            exit();
+        }
+    }
+
     // Begin a database transaction for bulk processing
     $pdo->beginTransaction();
     $processedCount = 0;
@@ -78,7 +207,9 @@ try {
         if ($previousPayroll && $previousPayroll['status'] === 'generated') {
             $skippedEmployees[] = [
                 'emp_id' => $empId,
-                'reason' => __('previous_month_payroll_still_pending')
+                'reason' => __('previous_month_payroll_still_pending'),
+                'blocked_month' => $previousMonthYear,
+                'blocked_month_label' => formatPayrollMonthLabel($previousMonthYear)
             ];
             continue; // Skip to the next employee
         }
@@ -86,7 +217,7 @@ try {
         
         // --- NEW CHECK: Employee status must be paid (not on hold) ---
         $stmtCheckStatus = $pdo->prepare(
-            "SELECT status FROM employees WHERE emp_id = :emp_id"
+            "SELECT status, joining_date FROM employees WHERE emp_id = :emp_id"
         );
         $stmtCheckStatus->execute([':emp_id' => $empId]);
         $employeeStatus = $stmtCheckStatus->fetch(PDO::FETCH_ASSOC);
@@ -96,6 +227,51 @@ try {
             $skippedEmployees[] = [
                 'emp_id' => $empId,
                 'reason' => __('employee_status_is_not_active')
+            ];
+            continue;
+        }
+
+        $joiningMonthYear = normalizeDateToPayrollMonth($employeeStatus['joining_date'] ?? null);
+        if ($joiningMonthYear !== null && $monthYear < $joiningMonthYear) {
+            $skippedEmployees[] = [
+                'emp_id' => $empId,
+                'reason' => 'Payroll month is before employee joining month',
+                'blocked_month' => $joiningMonthYear,
+                'blocked_month_label' => formatPayrollMonthLabel($joiningMonthYear)
+            ];
+            continue;
+        }
+
+        // Skip employees on Fly annual vacation for the selected payroll month.
+        // Local annual/emergency vacations remain eligible and stay visible in payroll.
+        $payrollMonthStart = $monthYear . '-01';
+        $payrollMonthEnd = date('Y-m-t', strtotime($payrollMonthStart));
+
+        $stmtActiveFlyVacation = $pdo->prepare(
+            "SELECT id
+             FROM emp_vacation
+             WHERE emp_id = :emp_id
+               AND review = 'A'
+               AND current_status IN ('approved', 'completed')
+               AND start_date <= :month_end
+               AND return_date >= :month_start
+               AND (
+                    LOWER(COALESCE(vac_type, '')) = 'fly'
+                    OR LOWER(COALESCE(note, '')) = 'fly'
+               )
+             LIMIT 1"
+        );
+        $stmtActiveFlyVacation->execute([
+            ':emp_id' => $empId,
+            ':month_start' => $payrollMonthStart,
+            ':month_end' => $payrollMonthEnd
+        ]);
+        $activeFlyVacation = $stmtActiveFlyVacation->fetch(PDO::FETCH_ASSOC);
+
+        if ($activeFlyVacation) {
+            $skippedEmployees[] = [
+                'emp_id' => $empId,
+                'reason' => 'Employee is on Fly annual vacation for this payroll month'
             ];
             continue;
         }
@@ -127,22 +303,47 @@ try {
             'guard_allowance' => $employeeData['guard_allowance']
         ];
         
-        // --- PRORATED SALARY LOGIC FOR RETURNING EMPLOYEES ---
+        // --- PRORATED SALARY LOGIC FOR MID-MONTH JOINERS / RETURNING EMPLOYEES ---
         $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND current_status = 'approved' AND is_deductible = 1");
         $stmtVacationReturn->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
         $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
 
-        $daysInMonth = date('t', strtotime($monthYear . '-01'));
+        $monthStartDate = new DateTime($monthYear . '-01');
+        $monthEndDate = new DateTime($monthYear . '-01');
+        $monthEndDate->modify('last day of this month');
+        $daysInMonth = (int)$monthEndDate->format('d');
         $prorationFactor = 1.0;
+        $payableStartDate = clone $monthStartDate;
+
+        $joiningDateValue = $employeeStatus['joining_date'] ?? null;
+        if (!empty($joiningDateValue) && $joiningMonthYear === $monthYear) {
+            $joiningDate = DateTime::createFromFormat('Y-m-d', $joiningDateValue);
+            if (!$joiningDate instanceof DateTime) {
+                $joiningTimestamp = strtotime((string)$joiningDateValue);
+                if ($joiningTimestamp !== false) {
+                    $joiningDate = new DateTime(date('Y-m-d', $joiningTimestamp));
+                }
+            }
+
+            if ($joiningDate instanceof DateTime && $joiningDate > $payableStartDate) {
+                $payableStartDate = clone $joiningDate;
+            }
+        }
 
         if ($vacationReturn) {
             $returnDate = new DateTime($vacationReturn['return_date']);
-            $daysWorked = $daysInMonth - ($returnDate->format('d') - 1);
-            if ($daysWorked > 0) {
-                $prorationFactor = $daysWorked / $daysInMonth;
-            } else {
-                continue; // Skip payroll if they returned at the end or after the month
+            if ($returnDate > $payableStartDate) {
+                $payableStartDate = clone $returnDate;
             }
+        }
+
+        if ($payableStartDate > $monthEndDate) {
+            continue; // Nothing payable in this month
+        }
+
+        $daysWorked = ((int)$monthEndDate->diff($payableStartDate)->format('%a')) + 1;
+        if ($daysWorked > 0 && $daysWorked < $daysInMonth) {
+            $prorationFactor = $daysWorked / $daysInMonth;
         }
         
         foreach ($salaryComponents as $key => $value) {
@@ -378,16 +579,34 @@ try {
     if (!empty($skippedEmployees)) {
         // Build a readable list of skipped employees with their reasons
         $skippedList = array_map(function($item) {
-            return __('emp_id') . ": " . $item['emp_id'] . " (" . $item['reason'] . ")";
+            $reason = $item['reason'];
+            if (!empty($item['blocked_month_label'])) {
+                $reason .= ' - ' . $item['blocked_month_label'];
+            }
+            return __('emp_id') . ": " . $item['emp_id'] . " (" . $reason . ")";
         }, $skippedEmployees);
         $message .= " \n\n".__('skipped') ." " . count($skippedEmployees) . " " . __('employees') . ":\n" . implode("\n", $skippedList);
     }
+    if (!$skipApprovalChecks && !empty($requestInvNo)) {
+        $completeStmt = $pdo->prepare("UPDATE payroll_approval_requests
+            SET status = CASE WHEN :processed_count > 0 THEN 'completed' ELSE status END,
+                processed_at = CASE WHEN :processed_count > 0 THEN NOW() ELSE processed_at END,
+                processed_by = CASE WHEN :processed_count > 0 THEN :processed_by ELSE processed_by END
+            WHERE request_inv_no = :request_inv_no");
+        $completeStmt->execute([
+            ':processed_count' => (int)$processedCount,
+            ':processed_by' => (string)$requestedBy,
+            ':request_inv_no' => $requestInvNo
+        ]);
+    }
+
     echo json_encode([
         'status' => $responseStatus,
         'message' => $message,
         'processed_count' => $processedCount,
         'skipped_count' => count($skippedEmployees),
-        'skipped_employees' => $skippedEmployees
+        'skipped_employees' => $skippedEmployees,
+        'request_inv_no' => $requestInvNo
     ]);
 } catch (Exception $e) {
     // If any error occurs, roll back the transaction

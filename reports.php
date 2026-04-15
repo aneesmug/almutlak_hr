@@ -1566,24 +1566,54 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
+                            id: 'current_annual_balance',
+                            label: (typeof __ === 'function') ? __('current_annual_balance') : 'Current Annual Leave Balance',
+                            default: true
+                        },
+                        {
+                            id: 'leave_type',
+                            label: (typeof __ === 'function') ? __('leave_type') : 'Leave Type',
+                            default: false
+                        },
+                        {
+                            id: 'transaction_date',
+                            label: (typeof __ === 'function') ? __('transaction_date') : 'Transaction Date',
+                            default: false
+                        },
+                        {
+                            id: 'transaction_days',
+                            label: (typeof __ === 'function') ? __('transaction_days') : 'Transaction Days',
+                            default: false
+                        },
+                        {
+                            id: 'running_balance',
+                            label: (typeof __ === 'function') ? __('running_balance') : 'Running Balance',
+                            default: false
+                        },
+                        {
+                            id: 'request_inv_no',
+                            label: (typeof __ === 'function') ? __('request_inv_no') : 'Request No',
+                            default: false
+                        },
+                        {
                             id: 'vac_type',
                             label: (typeof __ === 'function') ? __('vac_type') : 'Vacation Type',
-                            default: true
+                            default: false
                         },
                         {
                             id: 'start_date',
                             label: (typeof __ === 'function') ? __('start_date') : 'Start Date',
-                            default: true
+                            default: false
                         },
                         {
                             id: 'return_date',
                             label: (typeof __ === 'function') ? __('return_date') : 'Return Date',
-                            default: true
+                            default: false
                         },
                         {
                             id: 'vacdays',
                             label: (typeof __ === 'function') ? __('vacdays') : 'Days',
-                            default: true
+                            default: false
                         },
                         {
                             id: 'fly_type',
@@ -3303,8 +3333,8 @@ if (mysqli_num_rows($query) == 1) {
                                     width: '40px'
                                 });
 
-                                // Hide columns beyond the first 5 (visible ones are in the expanded detail view)
-                                // Column indices: 0 = control, 1-5 = visible columns, 6+ = hidden
+                                // Show only the first five summary columns in the main table.
+                                // The rest remain searchable and visible inside the expandable detail panel.
                                 const hiddenColumnIndices = [];
                                 for (let i = 6; i <= headers.length; i++) {
                                     hiddenColumnIndices.push(i);

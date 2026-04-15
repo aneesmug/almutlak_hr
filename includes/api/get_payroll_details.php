@@ -6,6 +6,7 @@
 // get_payroll_details.php
 header('Content-Type: application/json');
 require_once("./../../includes/db.php"); // Include your database connection file
+require_once("./../../includes/payroll_approval_helpers.php");
 
 $empId = $_GET['emp_id'] ?? '';
 $monthYear = $_GET['month'] ?? ''; // Expected format: YYYY-MM
@@ -18,6 +19,8 @@ if (empty($empId) || empty($monthYear)) {
 $pdo = getDbConnection();
 
 try {
+    ensurePayrollChecklistFeedbackTable($pdo);
+
     // 1. Fetch employee details
     $stmtEmployee = $pdo->prepare("SELECT id, name, emp_id, salary, dept, country, gosi, payment_type
         FROM employees
@@ -77,7 +80,7 @@ try {
     }
 
     // 3. Fetch specific benefits for the month
-    $stmtBenefits = $pdo->prepare("SELECT id, benefit, note FROM payroll_benefits
+    $stmtBenefits = $pdo->prepare("SELECT id, benefit, note, hours, type_id FROM payroll_benefits
         WHERE emp_id = :emp_id AND month = :month_year
     ");
     $stmtBenefits->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
@@ -95,6 +98,26 @@ try {
     $stmtBenefitTypes = $pdo->prepare("SELECT id, name, calculation_type FROM benefit_types WHERE status = 1");
     $stmtBenefitTypes->execute();
     $benefitTypes = $stmtBenefitTypes->fetchAll(PDO::FETCH_ASSOC);
+
+    $stmtFeedback = $pdo->prepare("SELECT
+            f.id,
+            f.payroll_month,
+            f.feedback_note,
+            f.created_at,
+            f.status,
+            f.resolved_at,
+            COALESCE(e.name, al.fullname, al.username, f.approver_id) AS approver_name,
+            COALESCE(re.name, ral.fullname, ral.username, f.resolved_by) AS resolved_by_name
+        FROM payroll_checklist_feedback f
+        LEFT JOIN employees e ON e.emp_id = f.approver_id
+        LEFT JOIN admin_login al ON al.emp_id = f.approver_id
+        LEFT JOIN employees re ON re.emp_id = f.resolved_by
+        LEFT JOIN admin_login ral ON ral.emp_id = f.resolved_by
+        WHERE f.emp_id = :emp_id
+          AND (f.payroll_month = :month_year OR f.status = 'open')
+        ORDER BY f.created_at DESC");
+    $stmtFeedback->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    $feedbacks = $stmtFeedback->fetchAll(PDO::FETCH_ASSOC);
     
 
     echo json_encode([
@@ -104,6 +127,7 @@ try {
         'benefits' => $benefits,
         'deductions' => $deductions,
         'benefit_types' => $benefitTypes,
+        'feedbacks' => $feedbacks,
     ]);
 
 } catch (PDOException $e) {

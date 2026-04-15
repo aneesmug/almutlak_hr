@@ -8,21 +8,46 @@ Options -Indexes
 # Custom error messages
 ErrorDocument 403 /error403.php
 ErrorDocument 404 /error404.php
-ErrorDocument 500 /error500.php
+ErrorDocument 408 /error500.html
+ErrorDocument 500 /error500.html
+ErrorDocument 502 /error500.html
+ErrorDocument 503 /error500.html
+ErrorDocument 504 /error500.html
 
 # PHP upload limits for settlement proofs and similar attachments
 php_value upload_max_filesize 20M
 php_value post_max_size 24M
 php_value memory_limit 256M
 php_value max_file_uploads 20
+php_value max_execution_time 25
+php_value max_input_time 25
+php_value default_socket_timeout 15
 
 # ============================================================================
-# MAINTENANCE MODE REDIRECT
+# MAINTENANCE MODE REDIRECT (Handled by .htaccess)
 # ============================================================================
 
-# Redirect root index.php to maintenance mode
-#RewriteEngine On
-#RewriteCond %{REQUEST_URI} ^/index\.php$ [OR]
-#RewriteCond %{REQUEST_URI} ^/$
-#RewriteRule ^(.*)$ /maintenance/index.php [L,R=302]
+# TO ENABLE MAINTENANCE:  Ensure /maintenance/MAINTENANCE_ON file EXISTS
+# TO DISABLE MAINTENANCE: DELETE /maintenance/MAINTENANCE_ON file
+#
+# When MAINTENANCE_ON file EXISTS:
+#   - ALL page requests are redirected to /maintenance/index.php
+#
+# When MAINTENANCE_ON file DOES NOT EXIST:
+#   - All pages load normally
 
+RewriteEngine On
+
+# Exclude certain paths from maintenance redirect
+RewriteCond %{REQUEST_URI} !^/maintenance/ [NC]
+RewriteCond %{REQUEST_URI} !^/error/ [NC]
+RewriteCond %{REQUEST_URI} !^/db_check_admin/ [NC]
+RewriteCond %{REQUEST_URI} !^/assets/ [NC]
+RewriteCond %{REQUEST_URI} !^/includes/ [NC]
+RewriteCond %{REQUEST_URI} !\.(?:jpg|jpeg|gif|png|ico|css|js|svg|woff|woff2|ttf|eot|map)$ [NC]
+
+# Check if maintenance flag file EXISTS (file existence = maintenance ON)
+RewriteCond %{DOCUMENT_ROOT}/maintenance/MAINTENANCE_ON -f
+
+# Redirect ALL other requests to maintenance page
+RewriteRule ^(.*)$ /maintenance/index.php [L,R=302]

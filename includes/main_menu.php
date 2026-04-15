@@ -15,6 +15,7 @@ $appliedVacationsLink = 'all_applied_vac.php';
 $appliedBusinessTripLink = 'all_applied_business_trip.php';
 $appliedLoanLink = 'all_applied_loan.php';
 $settlementsLink = 'all_settlements.php';
+$payrollApprovalsLink = 'all_payroll_approvals.php';
 $rejoinApprovalsLink = 'rejoin_approvals.php';
 $allResignationsLink = 'all_resignations.php';
 $carsLink = 'all_cars.php';
@@ -29,6 +30,7 @@ $allCustomersLink = 'all_customers.php';
 $customerSurveyLink = 'customers_survey.php';
 $smartRequestsLink = 'all_requests.php';
 $generalRequestsLink = 'all_general_requests.php';
+$announcementLink = 'send_announcement.php';
 $vouchersLink = 'vouchers.php';
 $invoicesLink = 'all_user_invoices.php';
 $usersLink = 'all_users.php';
@@ -47,9 +49,11 @@ $activityLoggerLink = 'view_activity_logs.php';
 $manageEmployeeSupervisorsLink = 'manage_employee_supervisors.php';
 $manageHolidaysLink = 'manage_holidays.php?status=1';
 $vacationBalanceHistoryLink = 'vacation_balance_history.php';
+$vacationDatesEditorLink = 'vacation_dates_by_inv.php';
 $diagnoseDoubleDeductionLink = 'diagnose_double_deduction.php';
 $fixDoubleDeductionLink = 'fix_double_deduction.php';
 $appSettingsLink = 'app_settings.php';
+$tableJsonApiLink = 'table_json_api.php';
 $loanRejectionReport = 'loan_rejection_report.php';
 
 
@@ -60,16 +64,17 @@ $loanRejectionReport = 'loan_rejection_report.php';
 $page_roles = [
     'dashboard.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Executive_Team', 'Executive_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'dashboardgm.php' => ['GM'],
-    'add_new_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'add_new_employee.php' => ['Administrator', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll'],
     'reg_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'emp_temp_contant.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'employee_audit_gen.php' => ['Administrator'],
     'employee_salary_report.php' => ['Administrator'],
-    'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll'],
     'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_applied_business_trip.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
     'all_settlements.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
+    'all_payroll_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'rejoin_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_resignations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'add_manual_loan.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
@@ -81,6 +86,7 @@ $page_roles = [
     'all_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     // 'all_general_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_general_requests.php' => ['Administrator'],
+    'send_announcement.php' => ['Administrator'],
     'vouchers.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'all_user_invoices.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'all_users.php' => ['Administrator'],
@@ -90,12 +96,13 @@ $page_roles = [
     'log_activity.php' => ['Administrator'],
     'view_activity_logs.php' => ['Administrator'],
     'manual_vacation.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'import_iqama_exp.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'import_iqama_exp.php' => ['Administrator', 'HR_Operations', 'HR_Payroll'],
     'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager', 'IT_Team_Manager'],
     'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager','HR_Recruitment','IT_Team_Manager'],
     'manage_employee_supervisors.php' => ['Administrator'],
     'manage_holidays.php' => ['Administrator', 'HR_Senior_BP', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
+    'vacation_dates_by_inv.php' => ['Administrator'],
     'vacation_balance_history.php' => ['Administrator'],
     'diagnose_double_deduction.php' => ['Administrator'],
     'fix_double_deduction.php' => ['Administrator'],
@@ -103,8 +110,13 @@ $page_roles = [
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
 
+$is_employee_user_type = (strtolower((string)$user_type) === 'employee');
+
 if ($user_type != 'administrator') { 
-    if (isset($page_roles[$current_page_name])) {
+    // Allow reports page for all non-employee user types.
+    if ($current_page_name === 'reports.php' && !$is_employee_user_type) {
+        // intentionally bypass role-based restriction
+    } elseif (isset($page_roles[$current_page_name])) {
         if (!in_array($user_role, $page_roles[$current_page_name])) {
             header("Location: dashboard.php");
             exit();
@@ -132,6 +144,18 @@ $can_see_employees_bank_page = [
     'Finance_Officer', 'Auditor',
     'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
     'HR_Manager', 'Finance_Manager'
+];
+
+$can_see_new_employee_page = [
+    'Administrator', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll'
+];
+
+$can_see_employees_payroll_page = [
+    'Administrator', 'HR_Senior_BP', 'HR_Payroll'
+];
+
+$can_see_import_iqama_page = [
+    'Administrator', 'HR_Operations', 'HR_Payroll'
 ];
 
 $can_see_applied_vac_page = [
@@ -169,6 +193,13 @@ $can_see_settlements_page = [
     'HR_Manager', 'Finance_Manager'
 ];
 
+$can_see_payroll_approvals_page = [
+    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
+    'Finance_Officer', 'Auditor', 'DPT_Manager',
+    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
+    'HR_Manager', 'Finance_Manager'
+];
+
 $can_see_resignations_page = [
     'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll','HR_Recruitment',
     'DPT_Manager', 'IT_Team_Manager',
@@ -190,6 +221,7 @@ $can_see_smart_requests_page = [
 ];
 
 $can_see_general_requests_page = ['Administrator'];
+$can_see_announcement_page = ['Administrator'];
 // $can_see_general_requests_page = [
 //     'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
 //     'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
@@ -237,6 +269,13 @@ $can_see_cars_management_page = [
 $is_admin = $is_system_admin; 
 $is_gm = ($user_role == 'GM' || $isGM);
 
+// GM should see queue counts assigned directly to GM, not department-aggregated counts.
+$use_dept_scoped_pending_counts = (
+    $isDeptManager
+    || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])
+    || (($user_type === 'hr') && $emp_type === 'Manager')
+) && !$is_gm;
+
 $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see_employees_group_main)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_all_employees_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_employees_bank_page));
@@ -245,9 +284,12 @@ $show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty(array_intersect([$user_role, $user_type], $can_see_business_trip_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_loan_approvals_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_settlements_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_payroll_approvals_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_content_approvals_page));
+
+$can_see_reports_menu = !$is_employee_user_type;
 
 
 // =================================================================================
@@ -274,7 +316,7 @@ if ($loan_type_id > 0) {
         if ($res_loan_admin && ($rla = mysqli_fetch_assoc($res_loan_admin))) {
             $loan_pending_count = (int)$rla['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+    } elseif ($use_dept_scoped_pending_counts) {
         // Department Manager: count all loan requests from their department employees
         // Also applies to GM and HR Managers
                 $loan_pending_query_dept = "SELECT COUNT(DISTINCT l.inv_no) AS count
@@ -312,7 +354,7 @@ if ($is_system_admin || $user_role == 'Administrator') {
     if ($row_admin = mysqli_fetch_assoc($result_admin)) {
        $smart_request_count = $row_admin['count'];
    }
-} elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+} elseif ($use_dept_scoped_pending_counts) {
     // Department Manager: count requests from their department employees
     $smart_request_query_dept = "SELECT COUNT(*) as count 
                                                           FROM smart_request sr
@@ -357,7 +399,7 @@ if ($is_system_admin || $user_role == 'Administrator') {
     if ($row_admin = mysqli_fetch_assoc($result_admin)) {
         $general_request_count = $row_admin['count'];
     }
-} elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager'])) {
+} elseif ($use_dept_scoped_pending_counts) {
     // Department Manager: count requests from their department employees
     $general_request_query_dept = "SELECT COUNT(*) as count 
                                                             FROM general_requests gr
@@ -413,7 +455,7 @@ if ($vacation_type_id > 0) {
         if ($res_vac_admin && ($rva = mysqli_fetch_assoc($res_vac_admin))) {
             $vacation_pending_count = (int)$rva['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+    } elseif ($use_dept_scoped_pending_counts) {
         // Department Manager: count all vacation requests from their department employees
         // Also applies to GM and HR Managers
                 $vacation_pending_query_dept = "SELECT COUNT(DISTINCT v.request_inv_no) AS count
@@ -462,7 +504,7 @@ if ($rejoin_type_id > 0) {
         if ($res_rejoin_admin && ($rra = mysqli_fetch_assoc($res_rejoin_admin))) {
             $rejoin_pending_count = (int)$rra['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+    } elseif ($use_dept_scoped_pending_counts) {
         // Department Manager: count all rejoin requests from their department employees
         // Also applies to GM and HR Managers
                 $rejoin_pending_query_dept = "SELECT COUNT(DISTINCT rr.id) AS count
@@ -513,7 +555,7 @@ if ($resignation_type_id > 0) {
         if ($res_resig_admin && ($rra = mysqli_fetch_assoc($res_resig_admin))) {
             $resignation_pending_count = (int)$rra['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+    } elseif ($use_dept_scoped_pending_counts) {
         // Department Manager: count all resignation requests from their department employees
         // Also applies to GM and HR Managers
                 $resignation_pending_query_dept = "SELECT COUNT(DISTINCT r.request_inv_no) AS count
@@ -557,7 +599,7 @@ if ($settlement_type_id > 0) {
         if ($res_settlement_admin && ($rsa = mysqli_fetch_assoc($res_settlement_admin))) {
             $settlement_pending_count = (int)$rsa['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+    } elseif ($use_dept_scoped_pending_counts) {
         // Department Manager: count all settlement requests from their department employees
         $settlement_pending_query_dept = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count FROM request_approvers ra 
                                          JOIN settlement_records s ON s.request_inv_no = ra.request_inv_no 
@@ -579,6 +621,59 @@ if ($settlement_type_id > 0) {
 }
 // --- END NEW SETTLEMENT PENDING COUNT ---
 
+// --- Fetch Payroll Pending Approval Count (NEW) ---
+$payroll_pending_count = 0;
+$payroll_type_id = 0;
+$payroll_table_exists = false;
+
+$payroll_tbl_res = mysqli_query($conDB, "SHOW TABLES LIKE 'payroll_approval_requests'");
+if ($payroll_tbl_res && mysqli_num_rows($payroll_tbl_res) > 0) {
+    $payroll_table_exists = true;
+}
+
+$payroll_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'payroll_request' LIMIT 1");
+if ($row = mysqli_fetch_assoc($payroll_type_query)) {
+    $payroll_type_id = (int)$row['id'];
+}
+
+if ($payroll_table_exists && $payroll_type_id > 0) {
+    if ($is_system_admin || $user_role == 'Administrator') {
+        $payroll_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+            FROM request_approvers ra
+            JOIN payroll_approval_requests pr ON pr.request_inv_no = ra.request_inv_no
+            WHERE ra.request_type_id = $payroll_type_id
+              AND ra.status = 'pending'
+              AND pr.status = 'pending_approval'";
+        $res_payroll_admin = mysqli_query($conDB, $payroll_pending_query_admin);
+        if ($res_payroll_admin && ($rpa = mysqli_fetch_assoc($res_payroll_admin))) {
+            $payroll_pending_count = (int)$rpa['count'];
+        }
+    } elseif ($use_dept_scoped_pending_counts) {
+        $payroll_pending_query_dept = "SELECT COUNT(DISTINCT pr.request_inv_no) AS count
+            FROM payroll_approval_requests pr
+            LEFT JOIN employees e ON e.emp_id = pr.requested_by
+            WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+              AND pr.status = 'pending_approval'";
+        $res_payroll_dept = mysqli_query($conDB, $payroll_pending_query_dept);
+        if ($res_payroll_dept && ($rpd = mysqli_fetch_assoc($res_payroll_dept))) {
+            $payroll_pending_count = (int)$rpd['count'];
+        }
+    } else {
+        $payroll_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+            FROM request_approvers ra
+            JOIN payroll_approval_requests pr ON pr.request_inv_no = ra.request_inv_no
+            WHERE ra.request_type_id = $payroll_type_id
+              AND ra.approver_id = '" . mysqli_real_escape_string($conDB, (string)$empid) . "'
+              AND ra.status = 'pending'
+              AND pr.status = 'pending_approval'";
+        $res_payroll = mysqli_query($conDB, $payroll_pending_query);
+        if ($res_payroll && ($rp = mysqli_fetch_assoc($res_payroll))) {
+            $payroll_pending_count = (int)$rp['count'];
+        }
+    }
+}
+// --- END NEW PAYROLL PENDING COUNT ---
+
 // --- Fetch Business Trip Pending Approval Count (NEW) ---
 $business_trip_pending_count = 0;
 $business_trip_type_id = 0;
@@ -599,7 +694,7 @@ if ($business_trip_type_id > 0) {
         if ($res_bt_admin && ($rbta = mysqli_fetch_assoc($res_bt_admin))) {
             $business_trip_pending_count = (int)$rbta['count'];
         }
-    } elseif ($isDeptManager || in_array($user_role, ['DPT_Manager', 'IT_Team_Manager', 'HR_Team_Manager', 'Finance_Team_Manager']) || (($user_type === 'gm' || $user_type === 'hr') && $emp_type === 'Manager')) {
+    } elseif ($use_dept_scoped_pending_counts) {
         // Department Manager: count all business trip requests from their department employees
         // Also applies to GM and HR Managers
         $business_trip_pending_query_dept = "SELECT COUNT(DISTINCT bt.request_inv_no) AS count
@@ -660,7 +755,7 @@ if ($rec = mysqli_fetch_assoc($sql_count_aprl)) {
 
 // --- CALCULATE TOTAL COUNTS FOR PARENT MENUS ---
 // Total count for Approvals menu
-$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $business_trip_pending_count + $status_cont_contaprl;
+$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $business_trip_pending_count + $payroll_pending_count + $status_cont_contaprl;
 
 // Total count for Requests menu
 $requests_total_count = $smart_request_count + $general_request_count;
@@ -696,7 +791,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <li class="<?=(strpos($current_page_name, 'employee') !== false ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa fa-users-gear"></i><span><?=__("employee's") ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'employee') !== false ? 'true' : 'false') ?>">
-                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                <?php if (in_array($user_role, $can_see_new_employee_page) || in_array($user_type, $can_see_new_employee_page)): ?>
                     <li><a href="<?= $addNewEmployeeLink ?>"><i class="fa fa-user-plus"></i><span><?=__('new_employee') ?></span></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_all_employees_page) || in_array($user_type, $can_see_all_employees_page)): ?>
@@ -708,7 +803,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if ($isHR || $is_system_admin || $isDeptHr): ?>
                     <li><a href="<?= $employeeSalaryReportLink ?>"><i class="fa fa-money-bill"></i><span>Salary Report</span></a></li>
                 <?php endif; */?>
-                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                <?php if (in_array($user_role, $can_see_employees_payroll_page) || in_array($user_type, $can_see_employees_payroll_page)): ?>
                     <li><a href="<?= $payrollLink ?>"><i class="fa fa-money-bill-transfer"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
                 <?php /* ?>
@@ -724,8 +819,12 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     </ul>
                 </li>
                 <?php */ ?>
-                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                <?php if (in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
                     <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
+                <?php endif; ?>
+
+                <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page) || $isDeptManager): ?>
+                    <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php if ($is_system_admin): ?>
@@ -769,6 +868,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (in_array($user_role, $can_see_settlements_page) || in_array($user_type, $can_see_settlements_page)): ?>
                     <li><a href="<?= $settlementsLink ?>"><i class="fa fa-file-invoice-dollar"></i><span><?=__('settlements', 'Settlements') ?></span><?= ($settlement_pending_count > 0) ? "<span class='badgez badge-danger'>$settlement_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_payroll_approvals_page) || in_array($user_type, $can_see_payroll_approvals_page)): ?>
+                    <li><a href="<?= $payrollApprovalsLink ?>"><i class="fa fa-money-check-dollar"></i><span><?=__('payroll_approvals', 'Payroll Approvals') ?></span><?= ($payroll_pending_count > 0) ? "<span class='badgez badge-danger'>$payroll_pending_count</span>" : "" ?></a></li>
+                <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_resignations_page) || in_array($user_type, $can_see_resignations_page)): ?>
                     <li><a href="<?= $allResignationsLink ?>"><i class="fa fa-user-times"></i><span><?=__('resignations') ?></span><?= ($resignation_pending_count > 0) ? "<span class='badgez badge-danger'>$resignation_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
@@ -778,32 +880,23 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             </ul>
         </li>
         <?php endif; ?>
-        
-        
 
         <!-- Requests Menu (Smart Request + General Request) -->
-        <?php if ((in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)) || (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page))): ?>
-        <li class="<?=(strpos($current_page_name, 'request') !== false ? 'mm-active' : '')?>">
+        <?php if ((in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)) || (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page)) || (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page))): ?>
+        <li class="<?=((strpos($current_page_name, 'request') !== false || $current_page_name === 'vouchers.php') ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa fa-ticket"></i><span><?=__('requests', 'Requests')?></span><?= ($requests_total_count > 0) ? "<span class='badgez badge-danger'>$requests_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
-            <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'request') !== false ? 'true' : 'false') ?>">
+            <ul class="nav-second-level" aria-expanded="<?= ((strpos($current_page_name, 'request') !== false || $current_page_name === 'vouchers.php') ? 'true' : 'false') ?>">
                 <?php if (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)): ?>
                 <li><a href="<?= $smartRequestsLink ?>"><i class="fa fa-layer-group"></i> <span> <?=__('smart_requests', 'Smart Request') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page)): ?>
                 <li><a href="<?= $generalRequestsLink ?>"><i class="fa fa-file-alt"></i> <span><?=__('general_request', 'General Request')?></span> <?= ($general_request_count > 0) ? "<span class='badgez badge-danger'>$general_request_count</span>" : "" ?></a></li>
                 <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page)): ?>
+                <li><a href="<?= $vouchersLink ?>"><i class="fa fa-box-archive"></i> <span> <?=__('vouchers') ?> </span></a></li>
+                <?php endif; ?>
             </ul>
         </li>
-        <?php endif; ?>
-
-        <!-- Employee Evaluation -->
-        <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page) || $isDeptManager): ?>
-            <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
-        <?php endif; ?>
-
-        <!-- Vouchers -->
-        <?php if (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page)): ?>
-            <li><a href="<?= $vouchersLink ?>"><i class="fa fa-box-archive"></i> <span> <?=__('vouchers') ?> </span></a></li>
         <?php endif; ?>
 
         <!-- Admin Section -->
@@ -814,10 +907,22 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php if ($is_admin || $is_system_admin || in_array($user_role, $can_see_asstet_inventory_page)): ?>
             <li><a href="<?= $assetInventoryLink ?>"><i class="fa fa-box"></i><span><?=__('asset_inventory', 'Asset Inventory') ?></span></a></li>
         <?php endif; ?>
-        <!-- Reports -->
-        <?php if (in_array($user_role, $can_see_reports_page) || in_array($user_type, $can_see_reports_page)): ?>
-            <li><a href="reports.php"><i class="fa fa-chart-simple"></i> <span> <?=__('reports') ?> </span></a></li>
+
+        <?php if ($is_system_admin): ?>
+        <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'mm-active' : '') ?>">
+            <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+            <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'true' : 'false') ?>">
+                <li><a href="<?= $announcementLink ?>"><i class="fa fa-bullhorn"></i><span><?=__('announcement', 'Announcement')?></span></a></li>
+                <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>
+                <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa fa-clock-rotate-left"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
+                <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa fa-solid fa-square-shekel"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
+                <li><a href="<?= $tableJsonApiLink ?>" target="_blank"><i class="fa fa-database"></i><span><?=__('table_json_api', 'Table JSON API') ?></span></a></li>
+                <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa fa-stethoscope"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
+                <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa fa-screwdriver-wrench"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+            </ul>
+        </li>
         <?php endif; ?>
+
         <?php if ($is_system_admin): ?>
         <li>
             <a href="javascript:void(0);"><i class="fa fa-gear-complex"></i><span><?=__('settings') ?></span><span class="float-right fa fa-arrow-right"></span></a>
@@ -830,28 +935,30 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                         <li><a href="<?= $userActivityLink ?>"><i class="fa fa-history"></i><span><?=__('user_activity') ?></span></a></li>
                     </ul>
                 </li>
-                <!-- System Logs -->
-                <li>
-                    <a href="javascript:void(0);"><i class="fa fa-list-check"></i><span><?=__('system_logs', 'System Logs') ?></span><span class="float-right fa fa-arrow-right"></span></a>
-                    <ul class="nav-third-level" aria-expanded="false">
-                        <li><a href="<?= $activityLoggerLink ?>"><i class="fa fa-list-check"></i><span><?=__('activity_logger') ?></span></a></li>
-                        <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa fa-clock-rotate-left"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
-                        <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa fa-solid fa-square-shekel"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
-                    </ul>
-                </li>
                 <!-- System Tools -->
                 <li>
                     <a href="javascript:void(0);"><i class="fa fa-screwdriver-wrench"></i><span><?=__('system_tools', 'System Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
                         <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa fa-gear"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
-                        <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa fa-stethoscope"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
-                        <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa fa-screwdriver-wrench"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+                        
                     </ul>
                 </li>
+                <!-- System Logs -->
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-list-check"></i><span><?=__('system_logs', 'System Logs') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-third-level" aria-expanded="false">
+                        <li><a href="<?= $activityLoggerLink ?>"><i class="fa fa-list-check"></i><span><?=__('activity_logger') ?></span></a></li>
+                    </ul>
+                </li>
+                
                 <!-- Language Settings -->
                 <li><a href="<?= $languageLink ?>"><i class="fa fa-language"></i><span><?=__('language') ?></span></a></li>
             </ul>
         </li>
+        <?php endif; ?>
+        <!-- Reports -->
+        <?php if ($can_see_reports_menu): ?>
+            <li><a href="reports.php"><i class="fa fa-chart-simple"></i> <span> <?=__('reports') ?> </span></a></li>
         <?php endif; ?>
         <li><a href="./system_guide.php" target="_blank"><i class="fa fa-book-open-lines"></i><span><?=__('system_guide') ?></span></a></li>
     </ul>

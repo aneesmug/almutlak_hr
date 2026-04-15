@@ -2296,13 +2296,13 @@ if ($can_see_all_depts) {
                             </label>
                             <input type="number" id="swal_permit_fee" class="form-control" placeholder="0.00" step="0.01" required min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
                             <small class="form-text text-muted">
-                                <i class="fa fa-info-circle"></i> ${__('permit_fee_description') || 'Enter the total amount for exit and re-entry visa permit fees (in SAR)'}
+                                <i class="fa fa-info-circle"></i> ${__('permit_fee_description') || 'Enter the total amount for exit and re-entry visa permit fees (in SAR). Use 0.00 if no fee applies.'}
                             </small>
                         </div>
                     </div>
                 `;
             }
-
+    
             // Payroll adjustments moved to post-approval action only
             // Only for HR Senior BP approving (to notify HR team members)
             if (isHR_SeniorBP) {
@@ -2920,11 +2920,14 @@ if ($can_see_all_depts) {
                     // NOTE: Start Date and Return Date are now validated in Add/Edit Adjustments modal
                     // HR Payroll will set these dates through the adjustments modal, not the approval modal
 
-                    // [UPDATED] Validate GR Officer required fields if GR Officer is approving Fly | Annual
+                    // [UPDATED] Validate GR Officer permit fee input if GR Officer is approving Fly | Annual
                     if ((isGR_Officer && isFlyVacation)) {
                         const permitFee = $(swalModal).find('#swal_permit_fee').val();
-                        if (!permitFee || parseFloat(permitFee) <= 0) {
-                            Swal.showValidationMessage(__('permit_fee_required') || 'Permit & Visa Fees are required');
+                        const parsedPermitFee = parseFloat(permitFee);
+
+                        // Allow 0.00 when no exit/re-entry fee is needed, but prevent blank or negative values
+                        if (permitFee === '' || Number.isNaN(parsedPermitFee) || parsedPermitFee < 0) {
+                            Swal.showValidationMessage(__('permit_fee_required') || 'Permit & Visa Fees must be 0 or more');
                             return false;
                         }
                     }

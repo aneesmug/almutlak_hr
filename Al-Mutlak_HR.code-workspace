@@ -25,6 +25,50 @@
 			"/^php fix_holiday_vacation_deductions\\.php --emp=4533,3627$/": {
 				"approve": true,
 				"matchCommandLine": true
+			},
+			"/^php -l \\.\\\\includes\\\\api\\\\process_payroll\\.php$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^php -l \\.\\\\generate_payroll\\.php$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^& \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\helper_functions\\.php\"; & \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\api\\\\get_employees\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^& \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\helper_functions\\.php\"; & \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\vacation_processor\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^& \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\ajaxFile\\\\ajaxReports\\.php\"; & \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\reports\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^& \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\ajaxFile\\\\ajaxReports\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^& \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\reports\\.php\"; & \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\ajaxFile\\\\ajaxReports\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^& \"d:\\\\xampp\\\\php\\\\php\\.exe\" -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\reports\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^php -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\all_applied_vac\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^php -l \"d:\\\\xampp\\\\htdocs\\\\almutlak\\\\system\\\\includes\\\\main_menu\\.php\"$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^php -l \\.\\\\payroll_checklist_report\\.php; php -l \\.\\\\includes\\\\ajaxFile\\\\payroll_approval_handler\\.php$/": {
+				"approve": true,
+				"matchCommandLine": true
 			}
 		}
 	}

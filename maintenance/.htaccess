@@ -1,0 +1,11 @@
+# ============================================================================
+# MAINTENANCE MODE - CONDITIONAL REDIRECT
+# ============================================================================
+
+# If MAINTENANCE_MODE is OFF, redirect to main index.php
+RewriteEngine On
+RewriteCond %{ENV:MAINTENANCE_MODE} =OFF
+RewriteRule ^(.*)$ /index.php [L,R=302]
+
+# If MAINTENANCE_MODE is ON, serve maintenance page normally
+DirectoryIndex index.php

@@ -7,8 +7,10 @@
 header('Content-Type: application/json');
 require_once("./../../includes/db.php"); // Adjust this path as needed
 require_once("./../../includes/session_check.php"); // Include session for user permissions
+require_once("./../../includes/payroll_approval_helpers.php");
 
 $pdo = getDbConnection();
+ensurePayrollChecklistFeedbackTable($pdo);
 
 $monthYear = $_GET['month'] ?? null; // Get the month from the GET request
 
@@ -28,9 +30,18 @@ $can_see_all_employees = (
 
 // Build department filter condition
 $dept_filter = "";
+$monthStart = null;
+$monthEnd = null;
+if (!empty($monthYear) && preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+    $monthStart = $monthYear . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+}
+
 $params = [
     ':month_year_param' => $monthYear,
-    ':month_year_param2' => $monthYear
+    ':month_start_param' => $monthStart,
+    ':month_end_param' => $monthEnd,
+    ':feedback_month_param' => $monthYear
 ];
 
 if (!$can_see_all_employees && isset($user_dept)) {
@@ -39,29 +50,47 @@ if (!$can_see_all_employees && isset($user_dept)) {
 }
 
 try {
-    // Modified to include employees on vacation (fly=1) if they have a vacation starting this month
-    // This allows us to generate payroll for their working days before vacation
-    // ALSO include employees with is_deductible=0 (Fly+Annual) who remain in full payroll
+    // Include only non-Fly active vacations overlapping the payroll month.
+    // This keeps Local Annual / Emergency requests visible in payroll until rejoining closes them,
+    // while excluding employees on Fly annual vacation from payroll generation.
     $sql = "SELECT DISTINCT
             e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept, e.payment_type,
+            e.joining_date,
             es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard,
             gp.basic_salary, gp.housing_allowance, gp.transport_allowance, gp.food_allowance, gp.miscellaneous_allowance, gp.cashier_allowance, gp.fuel_allowance, gp.telephone_allowance, gp.other_allowance, gp.guard_allowance,
             gp.status AS payroll_status,
+            COALESCE(pcf.open_feedback_count, 0) AS open_feedback_count,
+            CASE WHEN COALESCE(pcf.open_feedback_count, 0) > 0 THEN 1 ELSE 0 END AS has_open_feedback,
             d.dep_nme as department_name,
             e.country,
             s.sponsor,
             c.comp_name,
             e.fly,
+            v.start_date AS vacation_start_date,
+            v.return_date AS vacation_return_date,
+            v.vac_type AS vacation_type,
+            v.current_status AS vacation_status,
             v.is_deductible as vacation_is_deductible
         FROM employees e
         LEFT JOIN emp_salary es ON e.emp_id = es.emp_id AND es.status = 1
         LEFT JOIN payrolls gp ON e.emp_id = gp.emp_id AND gp.month_year = :month_year_param
+        LEFT JOIN (
+            SELECT emp_id, COUNT(*) AS open_feedback_count
+            FROM payroll_checklist_feedback
+            WHERE payroll_month = :feedback_month_param
+              AND status = 'open'
+            GROUP BY emp_id
+        ) pcf ON e.emp_id = pcf.emp_id
         LEFT JOIN department d ON e.dept = d.id
         LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
         LEFT JOIN companies c ON e.comp_no = c.comp_id
         LEFT JOIN emp_vacation v ON e.emp_id = v.emp_id 
-            AND v.current_status = 'approved'
-            AND DATE_FORMAT(v.start_date, '%Y-%m') = :month_year_param2
+            AND v.review = 'A'
+            AND v.current_status IN ('approved', 'completed')
+            AND v.start_date <= :month_end_param
+            AND v.return_date >= :month_start_param
+            AND LOWER(COALESCE(v.vac_type, '')) <> 'fly'
+            AND LOWER(COALESCE(v.note, '')) <> 'fly'
         WHERE e.status = 1 
         AND (
             e.fly = 0 
@@ -81,9 +110,10 @@ try {
     $stmt->execute();
     $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Apply getDisplayName() to employee names
+    // Apply display helpers used by payroll screens.
     foreach ($employees as &$employee) {
         if (isset($employee['name'])) {
+            $employee['parsed_name'] = getDisplayName(parseName($employee['name']));
             $employee['name'] = getDisplayName($employee['name']);
         }
     }

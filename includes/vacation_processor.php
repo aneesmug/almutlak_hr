@@ -192,7 +192,7 @@ class VacationProcessor
             $query = "UPDATE emp_vacation SET 
                         approval_status = 'rejected',
                         note = ?,
-                        review = 'R'
+                        review = 'C'
                       WHERE id = ?";
             $stmt = $this->conDB->prepare($query);
             $full_note = "Rejected by $approver_role: " . $rejection_note;

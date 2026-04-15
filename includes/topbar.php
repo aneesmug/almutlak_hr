@@ -132,29 +132,29 @@ include(__DIR__ . '/session_config_js.php');
 
                     <!-- item-->
                     <a href="profile.php" class="dropdown-item notify-item">
-                        <i class="fi-head"></i> <span><?=__('my_account'); ?></span>
+                        <i class="fa fa-user"></i> <span><?=__('my_account'); ?></span>
                     </a>
 
                     <!-- item-->
                      <?php if($is_system_admin ?? false){ // Added check if variable exists ?>
                     <a href="app_settings.php" target="_blank" id="editAllBtnX" class="dropdown-item notify-item">
-                        <i class="fi-cog"></i> <span><?=__('settings'); ?></span>
+                        <i class="fa fa-gear"></i> <span><?=__('settings'); ?></span>
                     </a>
                     <?php } ?>
 
                     <!-- NEW Enable Notifications Link -->
                     <a href="javascript:void(0);" class="dropdown-item notify-item" id="enable-notifications-link" style="display: none;">
-                        <i class="fi-bell"></i> <span><?=__('enable_notifications'); ?></span>
+                        <i class="fa fa-bell"></i> <span><?=__('enable_notifications'); ?></span>
                     </a>
 
                     <!-- item-->
                     <a href="javascript:void(0);" class="dropdown-item notify-item">
-                        <i class="fi-help"></i> <span><?=__('supporter_option'); ?></span>
+                        <i class="fa fa-headset"></i> <span><?=__('supporter_option'); ?></span>
                     </a>
 
                     <!-- item-->
                     <a href="javascript:void(0);" class="dropdown-item notify-item signout" data-action="signout">
-                        <i class="fi-power"></i> <span><?=__('logout_button'); ?></span>
+                        <i class="fa fa-right-from-bracket"></i> <span><?=__('logout_button'); ?></span>
                     </a>
 
                 </div>

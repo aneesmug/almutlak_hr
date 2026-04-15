@@ -541,6 +541,13 @@ function getColumnLabel($column) {
         'assignment_status' => 'Assignment Status',
         'return_notes' => 'Return Notes',
         'employee_dept' => 'Department'
+        ,
+        'current_annual_balance' => 'Current Annual Leave Balance',
+        'leave_type' => 'Leave Type',
+        'transaction_date' => 'Transaction Date',
+        'transaction_days' => 'Transaction Days',
+        'running_balance' => 'Running Balance',
+        'request_inv_no' => 'Request No'
     ];
     return isset($labels[$column]) ? $labels[$column] : ucwords(str_replace('_', ' ', $column));
 }
@@ -607,6 +614,8 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         } elseif ($col === 'emp_sup_type') {
             $selectCols[] = 'sponsorship.sponsor AS emp_sup_type';
             $selectCols[] = 'sponsorship.sponsor_ar AS emp_sup_type_ar';
+        } elseif ($col === 'c_email') {
+            $selectCols[] = 'COALESCE(al.email, e.c_email) AS c_email';
         } elseif (isset($columnMap[$col])) {
             $selectCols[] = $columnMap[$col] . ' AS ' . $col;
         } else {
@@ -615,8 +624,8 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
     }
     $selectClause = implode(', ', $selectCols);
     
-    // Build WHERE clause - only active employees
-    $where = ['e.status = 1'];
+    // Build WHERE clause - include all employees for complete leave transaction reporting
+    $where = ['1=1'];
     
     // NOTE: Department and company filtering is handled by getEmployeeFilterSQL, getDepartmentFilterSQL, getCompanyFilterSQL
     // Do NOT add hard-coded department restrictions here as it conflicts with allowed_employees access control
@@ -684,6 +693,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
             LEFT JOIN companies c2 ON e.comp_no = c2.comp_id
             LEFT JOIN sponsorship ON e.emp_sup_type = sponsorship.id
             LEFT JOIN contract_period ON e.vac_period = contract_period.id
+            LEFT JOIN admin_login al ON e.emp_id = al.emp_id
             WHERE $whereClause
             ORDER BY e.name";
     
@@ -784,38 +794,28 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
 function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType = '', $employeeId = '') {
     global $is_rtl;
     
-    // Build SELECT clause
-    $selectCols = ['v.id'];
-    $needsEmpName = in_array('emp_name', $columns);
-    $needsDept = in_array('dept', $columns);
-    $needsCompany = in_array('comp_no', $columns);
-    
-    $columnMapping = []; // Track which column names map to which display names
-    
-    foreach ($columns as $col) {
-        if ($col == 'emp_name') {
-            $selectCols[] = 'e.name AS emp_name';
-            $columnMapping[$col] = 'emp_name';
-        } elseif ($col == 'emp_id') {
-            $selectCols[] = 'v.emp_id';
-            $columnMapping[$col] = 'emp_id';
-        } elseif ($col == 'dept') {
-            $selectCols[] = 'd.dep_nme AS dept';
-            $columnMapping[$col] = 'dept';
-        } elseif ($col == 'comp_no') {
-            // Select both language variants so we can choose in PHP based on $is_rtl
-            $selectCols[] = 'c2.comp_name AS comp_name';
-            $selectCols[] = 'c2.comp_name_ar AS comp_name_ar';
-            $columnMapping[$col] = 'comp_no';  // Maps to comp_no in result
-        } else {
-            $selectCols[] = 'v.' . $col;
-            $columnMapping[$col] = $col;
-        }
-    }
+    // Build SELECT clause for transaction-level leave balance reporting
+    $selectCols = [
+        'v.id',
+        'v.emp_id',
+        'v.request_inv_no',
+        'v.vac_type',
+        'v.fly_type',
+        'v.start_date',
+        'v.return_date',
+        'v.vacdays',
+        'v.current_status',
+        'v.review',
+        'v.created_at',
+        'e.name AS emp_name',
+        'd.dep_nme AS dept',
+        'c2.comp_name AS comp_name',
+        'c2.comp_name_ar AS comp_name_ar'
+    ];
     $selectClause = implode(', ', $selectCols);
     
-    // Build WHERE clause - only active employees
-    $where = ['e.status = 1'];
+    // Build WHERE clause - include all employees, but hide legacy-imported rows from the generated report.
+    $where = ["COALESCE(v.request_inv_no, '') NOT LIKE 'LEGACY-%'"];
     
     // NOTE: Department and company filtering is handled by getEmployeeFilterSQL, getDepartmentFilterSQL, getCompanyFilterSQL
     // Do NOT add hard-coded department restrictions here as it conflicts with allowed_employees access control
@@ -850,8 +850,13 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
     if (!empty($department_filter)) {
         $where[] = substr($department_filter, 5); // Remove " AND " prefix for use in WHERE array
     }
+    if (!empty($dateFrom)) {
+        $dateFromEsc = mysqli_real_escape_string($conDB, $dateFrom);
+        $where[] = "COALESCE(v.start_date, DATE(v.created_at)) >= '" . $dateFromEsc . "'";
+    }
     if (!empty($dateTo)) {
-        $where[] = "v.start_date <= '" . mysqli_real_escape_string($conDB, $dateTo) . "'";
+        $dateToEsc = mysqli_real_escape_string($conDB, $dateTo);
+        $where[] = "COALESCE(v.start_date, DATE(v.created_at)) <= '" . $dateToEsc . "'";
     }
     
     // Status filter
@@ -872,57 +877,192 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
-    $sql = "SELECT $selectClause 
+        $sql = "SELECT $selectClause 
             FROM emp_vacation v
             INNER JOIN employees e ON v.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN companies c2 ON e.comp_no = c2.comp_id
             WHERE $whereClause
-            ORDER BY v.start_date DESC";
+            ORDER BY v.emp_id ASC, COALESCE(v.start_date, DATE(v.created_at)) ASC, v.id ASC";
     
     $query = mysqli_query($conDB, $sql);
     if (!$query) {
         throw new Exception('Vacation query error: ' . mysqli_error($conDB));
     }
     
-    $data = [];
     $headers = [];
-    
-    // Get headers - use the mapped names
     foreach ($columns as $col) {
-        $headerKey = isset($columnMapping[$col]) ? $columnMapping[$col] : $col;
-        $headers[] = getColumnLabel($headerKey);
+        $headers[] = getColumnLabel($col);
     }
-    
-    // Get data
+
+    // Group transactions by employee for running balance calculation
+    $rowsByEmployee = [];
+    $employeeIds = [];
     while ($row = mysqli_fetch_assoc($query)) {
-        unset($row['id']);
-        
-        // Process language-specific fields
-        if (isset($row['comp_name']) || isset($row['comp_name_ar'])) {
-            $row['comp_no'] = ($is_rtl ?? false) ? $row['comp_name_ar'] : $row['comp_name'];
-            unset($row['comp_name']);
-            unset($row['comp_name_ar']);   
+        $empId = $row['emp_id'];
+        if (!isset($rowsByEmployee[$empId])) {
+            $rowsByEmployee[$empId] = [];
+            $employeeIds[] = $empId;
         }
-        if (isset($row['emp_name'])) {
-            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
-        }
-        if (isset($row['dept'])) {
-            $row['dept'] = getDisplayName($row['dept']);
-        }
-        if (isset($row['fly_type'])) {
-            $row['fly_type'] = getDisplayName($row['fly_type']);
-        }
-        if (isset($row['vac_type'])) {
-            $row['vac_type'] = getDisplayName($row['vac_type']);
-        }
-        if (isset($row['current_status'])) {
-            $row['current_status'] = getDisplayName($row['current_status']);
-        }
-        
-        $data[] = $row;
+        $rowsByEmployee[$empId][] = $row;
     }
-    
+
+    // Fetch current annual leave balance per employee
+    $currentBalanceMap = [];
+    if (!empty($employeeIds)) {
+        $empIdsEsc = array_map(function($id) use ($conDB) {
+            return "'" . mysqli_real_escape_string($conDB, (string)$id) . "'";
+        }, $employeeIds);
+
+        $balanceSql = "SELECT b.emp_id, b.available_balance
+                       FROM emp_vacation_balance b
+                       INNER JOIN (
+                           SELECT emp_id, MAX(id) AS max_id
+                           FROM emp_vacation_balance
+                           WHERE emp_id IN (" . implode(',', $empIdsEsc) . ")
+                           GROUP BY emp_id
+                       ) latest ON latest.max_id = b.id";
+        $balanceQuery = mysqli_query($conDB, $balanceSql);
+        if ($balanceQuery) {
+            while ($balanceRow = mysqli_fetch_assoc($balanceQuery)) {
+                $currentBalanceMap[$balanceRow['emp_id']] = (float)($balanceRow['available_balance'] ?? 0);
+            }
+            mysqli_free_result($balanceQuery);
+        }
+    }
+
+    $data = [];
+
+    // Helper to build user-facing leave type
+    $toLeaveType = function($vacTypeRaw, $flyTypeRaw) {
+        $vacType = strtolower(trim((string)$vacTypeRaw));
+        $flyType = strtolower(trim((string)$flyTypeRaw));
+
+        if ($vacType === 'fly' && $flyType === 'annual') {
+            return 'Annual';
+        }
+        if ($vacType === 'fly' && $flyType === 'emergency') {
+            return 'Emergency';
+        }
+        if ($vacType === 'local vacation' && $flyType === 'annual') {
+            return 'Local Annual';
+        }
+        if ($vacType === 'local vacation' && $flyType === 'emergency') {
+            return 'Local Emergency';
+        }
+        if ($vacType === 'encashed') {
+            return 'Encashed';
+        }
+        return ucfirst((string)$vacTypeRaw);
+    };
+
+    // Helper: days that reduce annual leave balance for running-balance math
+    $getDeductedDays = function($txRow) {
+        $status = strtolower(trim((string)($txRow['current_status'] ?? '')));
+        if (!in_array($status, ['approved', 'completed'], true)) {
+            return 0.0;
+        }
+
+        $vacType = strtolower(trim((string)($txRow['vac_type'] ?? '')));
+        $flyType = strtolower(trim((string)($txRow['fly_type'] ?? '')));
+        $days = (float)($txRow['vacdays'] ?? 0);
+
+        if ($days <= 0) {
+            return 0.0;
+        }
+
+        // Annual leave-impacting transactions
+        if ($vacType === 'encashed') {
+            return $days;
+        }
+        if ($vacType === 'local vacation') {
+            return $days;
+        }
+        if ($vacType === 'fly' && $flyType === 'annual') {
+            return $days;
+        }
+
+        // Emergency and other leave types are displayed but do not reduce annual balance.
+        return 0.0;
+    };
+
+    foreach ($rowsByEmployee as $empId => $empTransactions) {
+        $currentBalance = isset($currentBalanceMap[$empId]) ? (float)$currentBalanceMap[$empId] : 0.0;
+
+        $totalDeducted = 0.0;
+        foreach ($empTransactions as $tx) {
+            $totalDeducted += $getDeductedDays($tx);
+        }
+
+        // Opening balance before the first listed transaction.
+        $runningBalance = $currentBalance + $totalDeducted;
+
+        foreach ($empTransactions as $txIndex => $row) {
+            $deductedDays = $getDeductedDays($row);
+            $runningBalance -= $deductedDays;
+            $showSummaryColumns = ($txIndex === 0);
+
+            $rowData = [];
+            foreach ($columns as $col) {
+                switch ($col) {
+                    case 'emp_id':
+                        $rowData[$col] = $showSummaryColumns ? $row['emp_id'] : '';
+                        break;
+                    case 'emp_name':
+                        $rowData[$col] = $showSummaryColumns ? getDisplayName(parseName((string)($row['emp_name'] ?? ''))) : '';
+                        break;
+                    case 'dept':
+                        $rowData[$col] = $showSummaryColumns ? getDisplayName((string)($row['dept'] ?? '')) : '';
+                        break;
+                    case 'comp_no':
+                        $rowData[$col] = $showSummaryColumns ? (($is_rtl ?? false) ? ($row['comp_name_ar'] ?? '') : ($row['comp_name'] ?? '')) : '';
+                        break;
+                    case 'current_annual_balance':
+                        $rowData[$col] = $showSummaryColumns ? number_format($currentBalance, 2) : '';
+                        break;
+                    case 'leave_type':
+                        $rowData[$col] = getDisplayName($toLeaveType($row['vac_type'] ?? '', $row['fly_type'] ?? ''));
+                        break;
+                    case 'transaction_date':
+                        $rowData[$col] = !empty($row['start_date']) ? $row['start_date'] : substr((string)($row['created_at'] ?? ''), 0, 10);
+                        break;
+                    case 'transaction_days':
+                        $rowData[$col] = number_format((float)($row['vacdays'] ?? 0), 2);
+                        break;
+                    case 'running_balance':
+                        $rowData[$col] = number_format($runningBalance, 2);
+                        break;
+                    case 'request_inv_no':
+                        $rowData[$col] = $row['request_inv_no'] ?? '';
+                        break;
+                    case 'vac_type':
+                        $rowData[$col] = getDisplayName((string)($row['vac_type'] ?? ''));
+                        break;
+                    case 'fly_type':
+                        $rowData[$col] = getDisplayName((string)($row['fly_type'] ?? ''));
+                        break;
+                    case 'current_status':
+                        $rowData[$col] = getDisplayName((string)($row['current_status'] ?? ''));
+                        break;
+                    case 'start_date':
+                    case 'return_date':
+                    case 'permit_no':
+                    case 'created_at':
+                        $rowData[$col] = $row[$col] ?? '';
+                        break;
+                    case 'vacdays':
+                        $rowData[$col] = number_format((float)($row['vacdays'] ?? 0), 2);
+                        break;
+                    default:
+                        $rowData[$col] = isset($row[$col]) ? $row[$col] : '';
+                        break;
+                }
+            }
+
+            $data[] = $rowData;
+        }
+    }
+
     return ['data' => $data, 'headers' => $headers];
 }
 
@@ -2519,6 +2659,97 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
     $extraJoins = [];
     $addedCustomJoins = [];
     $useArabic = isset($is_rtl) ? (bool)$is_rtl : (isset($GLOBALS['is_rtl']) ? (bool)$GLOBALS['is_rtl'] : false);
+
+    $addEmployeeReadableColumn = function($col_name, $aliasName) use (&$extraJoins, &$addedCustomJoins, &$safeColumns, &$columnAliases, $useArabic) {
+        switch ($col_name) {
+            case 'dept':
+                if (empty($addedCustomJoins['department'])) {
+                    $extraJoins[] = "LEFT JOIN `department` d ON `employees`.`dept` = d.`id`";
+                    $addedCustomJoins['department'] = true;
+                }
+                $deptField = $useArabic ? 'dep_nme_ar' : 'dep_nme';
+                $safeColumns[] = "d.`$deptField` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'sectin_nme':
+                if (empty($addedCustomJoins['section'])) {
+                    $extraJoins[] = "LEFT JOIN `section` s ON `employees`.`sectin_nme` = s.`id`";
+                    $addedCustomJoins['section'] = true;
+                }
+                $safeColumns[] = "s.`section_name` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'country':
+                if (empty($addedCustomJoins['countries'])) {
+                    $extraJoins[] = "LEFT JOIN `countries` c ON `employees`.`country` = c.`id`";
+                    $addedCustomJoins['countries'] = true;
+                }
+                $countryField = $useArabic ? 'name_ar' : 'name';
+                $safeColumns[] = "c.`$countryField` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'bank_name':
+                if (empty($addedCustomJoins['bank_list'])) {
+                    $extraJoins[] = "LEFT JOIN `bank_list` b ON `employees`.`bank_name` = b.`id`";
+                    $addedCustomJoins['bank_list'] = true;
+                }
+                $bankField = $useArabic ? 'bank_name_ar' : 'name';
+                $safeColumns[] = "b.`$bankField` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'vac_period':
+                if (empty($addedCustomJoins['contract_period'])) {
+                    $extraJoins[] = "LEFT JOIN `contract_period` cp ON `employees`.`vac_period` = cp.`id`";
+                    $addedCustomJoins['contract_period'] = true;
+                }
+                $safeColumns[] = "cp.`period` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'actual_job':
+                if (empty($addedCustomJoins['ac_jobs'])) {
+                    $extraJoins[] = "LEFT JOIN `ac_jobs` j ON `employees`.`actual_job` = j.`id`";
+                    $addedCustomJoins['ac_jobs'] = true;
+                }
+                $jobField = $useArabic ? 'job_ar' : 'job';
+                $safeColumns[] = "j.`$jobField` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'emp_sup_type':
+                if (empty($addedCustomJoins['sponsorship'])) {
+                    $extraJoins[] = "LEFT JOIN `sponsorship` sp ON `employees`.`emp_sup_type` = sp.`id`";
+                    $addedCustomJoins['sponsorship'] = true;
+                }
+                $safeColumns[] = "sp.`sponsor` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'comp_no':
+                if (empty($addedCustomJoins['companies'])) {
+                    $extraJoins[] = "LEFT JOIN `companies` co ON `employees`.`comp_no` = co.`comp_id`";
+                    $addedCustomJoins['companies'] = true;
+                }
+                $compField = $useArabic ? 'comp_name_ar' : 'comp_name';
+                $safeColumns[] = "co.`$compField` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'c_email':
+                if (empty($addedCustomJoins['admin_login'])) {
+                    $extraJoins[] = "LEFT JOIN `admin_login` al ON `employees`.`emp_id` = al.`emp_id`";
+                    $addedCustomJoins['admin_login'] = true;
+                }
+                $safeColumns[] = "COALESCE(al.`email`, `employees`.`c_email`) AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            case 'sex':
+                $safeColumns[] = "CASE WHEN `employees`.`sex` = '1' THEN 'Male' WHEN `employees`.`sex` = '2' THEN 'Female' ELSE `employees`.`sex` END AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+            default:
+                $safeColumns[] = "`employees`.`{$col_name}` AS `{$aliasName}`";
+                $columnAliases[] = $aliasName;
+                break;
+        }
+    };
+
     foreach ($columns as $col) {
         // Skip ID columns
         if ($col === 'id' || strtolower($col) === 'id' || preg_match('/\.id$/i', $col)) {
@@ -2539,88 +2770,7 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
                 // Special mapping for employees lookup fields to show readable names
                 if ($tbl === 'employees') {
                     $aliasName = str_replace('.', '_', $col); // e.g., employees_dept
-                    switch ($col_name) {
-                        case 'dept':
-                            // Department name (EN/AR)
-                            if (empty($addedCustomJoins['department'])) {
-                                $extraJoins[] = "LEFT JOIN `department` d ON `employees`.`dept` = d.`id`";
-                                $addedCustomJoins['department'] = true;
-                            }
-                            $deptField = $useArabic ? 'dep_nme_ar' : 'dep_nme';
-                            $safeColumns[] = "d.`$deptField` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'sectin_nme':
-                            if (empty($addedCustomJoins['section'])) {
-                                $extraJoins[] = "LEFT JOIN `section` s ON `employees`.`sectin_nme` = s.`id`";
-                                $addedCustomJoins['section'] = true;
-                            }
-                            $safeColumns[] = "s.`section_name` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'country':
-                            if (empty($addedCustomJoins['countries'])) {
-                                $extraJoins[] = "LEFT JOIN `countries` c ON `employees`.`country` = c.`id`";
-                                $addedCustomJoins['countries'] = true;
-                            }
-                            $countryField = $useArabic ? 'name_ar' : 'name';
-                            $safeColumns[] = "c.`$countryField` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'bank_name':
-                            if (empty($addedCustomJoins['bank_list'])) {
-                                $extraJoins[] = "LEFT JOIN `bank_list` b ON `employees`.`bank_name` = b.`id`";
-                                $addedCustomJoins['bank_list'] = true;
-                            }
-                            $bankField = $useArabic ? 'bank_name_ar' : 'name';
-                            $safeColumns[] = "b.`$bankField` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'vac_period':
-                            if (empty($addedCustomJoins['contract_period'])) {
-                                $extraJoins[] = "LEFT JOIN `contract_period` cp ON `employees`.`vac_period` = cp.`id`";
-                                $addedCustomJoins['contract_period'] = true;
-                            }
-                            $safeColumns[] = "cp.`period` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'actual_job':
-                            if (empty($addedCustomJoins['ac_jobs'])) {
-                                $extraJoins[] = "LEFT JOIN `ac_jobs` j ON `employees`.`actual_job` = j.`id`";
-                                $addedCustomJoins['ac_jobs'] = true;
-                            }
-                            $jobField = $useArabic ? 'job_ar' : 'job';
-                            $safeColumns[] = "j.`$jobField` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'emp_sup_type':
-                            if (empty($addedCustomJoins['sponsorship'])) {
-                                $extraJoins[] = "LEFT JOIN `sponsorship` sp ON `employees`.`emp_sup_type` = sp.`id`";
-                                $addedCustomJoins['sponsorship'] = true;
-                            }
-                            $safeColumns[] = "sp.`sponsor` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'comp_no':
-                            if (empty($addedCustomJoins['companies'])) {
-                                $extraJoins[] = "LEFT JOIN `companies` co ON `employees`.`comp_no` = co.`comp_id`";
-                                $addedCustomJoins['companies'] = true;
-                            }
-                            $compField = $useArabic ? 'comp_name_ar' : 'comp_name';
-                            $safeColumns[] = "co.`$compField` AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        case 'sex':
-                            $safeColumns[] = "CASE WHEN `employees`.`sex` = '1' THEN 'Male' WHEN `employees`.`sex` = '2' THEN 'Female' ELSE `employees`.`sex` END AS `{$aliasName}`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                        default:
-                            // Default raw employees column
-                            $safeColumn = "`" . mysqli_real_escape_string($conDB, $tbl) . "`.`" . mysqli_real_escape_string($conDB, $col_name) . "`";
-                            $safeColumns[] = $safeColumn . " AS `" . $aliasName . "`";
-                            $columnAliases[] = $aliasName;
-                            break;
-                    }
+                    $addEmployeeReadableColumn($col_name, $aliasName);
                 } else {
                     // Default behavior for non-employees tables
                     $safeColumn = "`" . mysqli_real_escape_string($conDB, $tbl) . "`.`" . mysqli_real_escape_string($conDB, $col_name) . "`";
@@ -2631,9 +2781,14 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
         } else {
             // Non-prefixed column - check in primary table
             if (in_array($col, $tableColumns[$primaryTable])) {
-                $safeColumn = "`" . mysqli_real_escape_string($conDB, $primaryTable) . "`.`" . mysqli_real_escape_string($conDB, $col) . "`";
-                $safeColumns[] = $safeColumn;
-                $columnAliases[] = $col;
+                if ($primaryTable === 'employees') {
+                    // When Employees is selected alone in Custom Report, show readable labels instead of raw IDs.
+                    $addEmployeeReadableColumn($col, $col);
+                } else {
+                    $safeColumn = "`" . mysqli_real_escape_string($conDB, $primaryTable) . "`.`" . mysqli_real_escape_string($conDB, $col) . "`";
+                    $safeColumns[] = $safeColumn;
+                    $columnAliases[] = $col;
+                }
             }
         }
     }

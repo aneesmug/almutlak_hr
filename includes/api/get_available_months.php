@@ -12,8 +12,8 @@ require_once("./../../includes/db.php");
 $pdo = getDbConnection();
 
 try {
-    // Select distinct month_year values from the payrolls table
-    $stmt = $pdo->query("SELECT DISTINCT month_year FROM payrolls ORDER BY month_year DESC");
+    // Select distinct months that already have generated/paid payroll.
+    $stmt = $pdo->query("SELECT DISTINCT month_year FROM payrolls WHERE status IN ('generated', 'paid') ORDER BY month_year DESC");
     $months = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $formattedMonths = [];

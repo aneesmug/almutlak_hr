@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>500 - Server Error</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .error-container {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            max-width: 720px;
+            width: 100%;
+            padding: 42px 32px;
+            text-align: center;
+        }
+        .error-code {
+            font-size: 88px;
+            line-height: 1;
+            font-weight: 700;
+            color: #dc3545;
+            margin-bottom: 12px;
+        }
+        .error-title {
+            font-size: 28px;
+            color: #1f2937;
+            margin-bottom: 14px;
+        }
+        .error-message {
+            color: #4b5563;
+            font-size: 16px;
+            line-height: 1.7;
+            margin-bottom: 18px;
+        }
+        .info-box {
+            background: #eff6ff;
+            border-left: 4px solid #2563eb;
+            color: #1e40af;
+            text-align: left;
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin: 22px 0;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .actions {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-block;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #111827;
+        }
+        .footer {
+            margin-top: 24px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">500</div>
+        <h1 class="error-title">Server Temporarily Unavailable</h1>
+        <p class="error-message">
+            Sorry, the system could not complete your request right now.<br>
+            The server may be busy, the database may be unavailable, or the request may have timed out.
+        </p>
+
+        <div class="info-box">
+            <strong>What you can do:</strong><br>
+            • Refresh the page after a few seconds<br>
+            • Try again in a few minutes<br>
+            • If the issue continues, contact the system administrator or IT support
+        </div>
+
+        <div class="actions">
+            <a href="/" class="btn btn-primary">Back to Home</a>
+            <a href="javascript:location.reload();" class="btn btn-secondary">Try Again</a>
+        </div>
+
+        <div class="footer">
+            Al-Mutlak System &mdash; Internal Server Error
+        </div>
+    </div>
+</body>
+</html>

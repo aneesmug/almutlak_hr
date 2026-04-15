@@ -628,12 +628,12 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     return false;
                 }
                 const encashDays = parseFloat($('#encash_days').val()) || 0;
-                const balance = parseFloat($('#vacation_balance_display').text()) || 0;
+                const currentDisplayedBalance = parseFloat($('#vacation_balance_display').text()) || 0;
                 if (!encashDays || encashDays < 0.01) {
                     Swal.showValidationMessage(__('enter_days_to_encash_validation') || 'Please enter number of days to encash');
                     return false;
                 }
-                if (encashDays > balance) {
+                if (encashDays > currentDisplayedBalance) {
                     Swal.showValidationMessage(__('encash_days_exceeds_balance') || 'You cannot encash more than your balance');
                     return false;
                 }
@@ -794,6 +794,17 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
     const empid = $(this).data('empid');
     let employeeGender = null;
 
+    function resetLeaveDropzone() {
+        if (window.leaveDropzoneInstance) {
+            try {
+                window.leaveDropzoneInstance.destroy();
+            } catch (error) {
+                console.error('Error destroying leave Dropzone:', error);
+            }
+            window.leaveDropzoneInstance = null;
+        }
+    }
+
     // First, fetch employee data to get gender
     $.ajax({
         url: './includes/ajaxFile/hrHandler.php',
@@ -822,6 +833,9 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
         cancelButtonText: __('cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
+        didClose: () => {
+            resetLeaveDropzone();
+        },
         willOpen: () => {
             // Show a loading state while fetching employee data
             Swal.showLoading();
@@ -906,8 +920,10 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 
                 // Check if already initialized
                 if (window.leaveDropzoneInstance) {
-                    console.log('Dropzone already initialized');
-                    return;
+                    if (window.leaveDropzoneInstance.element === dropzoneElement) {
+                        return;
+                    }
+                    resetLeaveDropzone();
                 }
 
                 try {
@@ -1032,18 +1048,22 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
 
             // Validate Dropzone attachments
             const dropzone = window.leaveDropzoneInstance;
-            if (!dropzone || dropzone.files.length === 0) {
+            const selectedFiles = dropzone && typeof dropzone.getAcceptedFiles === 'function'
+                ? dropzone.getAcceptedFiles()
+                : (dropzone ? dropzone.files.filter(file => file.status !== Dropzone.CANCELED && file.status !== Dropzone.ERROR) : []);
+
+            if (!dropzone || selectedFiles.length === 0) {
                 Swal.showValidationMessage(__('at_least_one_file_required') || 'At least one file is required');
                 return false;
             }
 
-            if (dropzone.files.length > 10) {
+            if (selectedFiles.length > 10) {
                 Swal.showValidationMessage(__('max_10_files_allowed') || 'Maximum 10 files allowed');
                 return false;
             }
 
             // Add Dropzone files to FormData
-            dropzone.files.forEach((file, index) => {
+            selectedFiles.forEach((file) => {
                 formData.append('attachments[]', file);
             });
 

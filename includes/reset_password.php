@@ -22,7 +22,7 @@ $response = ['status' => 'error', 'message' => 'Invalid request.'];
 
 if (isset($_POST['action'])) {
     $action = $_POST['action'];
-    $id_iqama = isset($_POST['id_iqama']) ? mysqli_real_escape_string($conDB, $_POST['id_iqama']) : '';
+    $id_iqama = preg_replace('/\s+/', '', (string) ($_POST['id_iqama'] ?? ''));
 
     if (empty($id_iqama)) {
         $response['message'] = 'ID/Iqama is required.';
@@ -32,22 +32,29 @@ if (isset($_POST['action'])) {
 
     // ACTION 1: Verify Employee Details
     if ($action === 'verify_employee') {
-        $dob = $_POST['dob'] ?? '';
-        $mobile = $_POST['mobile'] ?? '';
+        $dob = trim((string) ($_POST['dob'] ?? ''));
+        $mobile = preg_replace('/\s+/', '', (string) ($_POST['mobile'] ?? ''));
 
         if (empty($dob) || empty($mobile)) {
             $response['message'] = 'Date of Birth and Mobile Number are required.';
         } else {
-            $query = "SELECT `id` FROM `employees` WHERE `iqama` = ? AND `dob` = ? AND `mobile` = ? LIMIT 1";
+            $query = "SELECT `id` FROM `employees` WHERE BINARY TRIM(`iqama`) = BINARY TRIM(?) AND DATE(`dob`) = ? AND BINARY TRIM(`mobile`) = BINARY TRIM(?) LIMIT 1";
             $stmt = mysqli_prepare($conDB, $query);
-            mysqli_stmt_bind_param($stmt, "sss", $id_iqama, $dob, $mobile);
-            mysqli_stmt_execute($stmt);
-            $result = mysqli_stmt_get_result($stmt);
 
-            if (mysqli_num_rows($result) > 0) {
-                $response = ['status' => 'success', 'message' => 'Verification successful. You can now set a new password.'];
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, "sss", $id_iqama, $dob, $mobile);
+                mysqli_stmt_execute($stmt);
+                $result = mysqli_stmt_get_result($stmt);
+
+                if ($result && mysqli_num_rows($result) > 0) {
+                    $response = ['status' => 'success', 'message' => 'Verification successful. You can now set a new password.'];
+                } else {
+                    $response['message'] = 'The details provided do not match our records. Please try again.';
+                }
+
+                mysqli_stmt_close($stmt);
             } else {
-                $response['message'] = 'The details provided do not match our records. Please try again.';
+                $response['message'] = 'Unable to verify your details right now. Please try again later.';
             }
         }
     }
@@ -64,14 +71,21 @@ if (isset($_POST['action'])) {
             $response['message'] = 'Password must be at least 5 characters long.';
         } else {
             $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-            $update_query = "UPDATE `admin_login` SET `password` = ? WHERE `id_iqama` = ?";
+            $update_query = "UPDATE `admin_login` SET `password` = ? WHERE BINARY TRIM(`id_iqama`) = BINARY TRIM(?)";
             $stmt = mysqli_prepare($conDB, $update_query);
-            mysqli_stmt_bind_param($stmt, "ss", $hashed_password, $id_iqama);
-            
-            if (mysqli_stmt_execute($stmt)) {
-                $response = ['status' => 'success', 'message' => 'Your password has been reset successfully. You can now log in.'];
+
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, "ss", $hashed_password, $id_iqama);
+
+                if (mysqli_stmt_execute($stmt)) {
+                    $response = ['status' => 'success', 'message' => 'Your password has been reset successfully. You can now log in.'];
+                } else {
+                    $response['message'] = 'An error occurred while updating your password.';
+                }
+
+                mysqli_stmt_close($stmt);
             } else {
-                $response['message'] = 'An error occurred while updating your password.';
+                $response['message'] = 'Unable to update the password right now. Please try again later.';
             }
         }
     }

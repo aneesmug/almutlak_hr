@@ -1,0 +1,7 @@
+# Security: Ignore access logs and user-specific configs
+access_log.txt
+*.log
+
+# Don't commit the config if token is customized
+# Uncomment below if you customize the token
+# config.php

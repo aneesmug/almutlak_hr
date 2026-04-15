@@ -1,0 +1,38 @@
+# Database Health Check - Admin Only Folder
+# This .htaccess bypasses the main maintenance mode redirect
+# allowing admin to access the health check even during maintenance
+
+# Disable maintenance mode redirect for this folder
+RewriteEngine Off
+
+# Set index file for directory access
+DirectoryIndex index.php
+
+# Security headers
+Header set X-Frame-Options "SAMEORIGIN"
+Header set X-Content-Type-Options "nosniff"
+Header set X-XSS-Protection "1; mode=block"
+
+# Allow only POST and GET requests
+<LimitExcept GET POST>
+    Order Allow,Deny
+    Deny from all
+</LimitExcept>
+
+# Prevent directory listing
+Options -Indexes
+
+# Block access to files except PHP
+<FilesMatch "\.(html|txt|json|xml|sql)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Protect this folder with additional restrictions
+# Only allow from localhost or specific IPs (adjust as needed)
+# Uncomment the lines below if you want to restrict by IP
+# SetEnvIf Request_URI "^/db_check_admin/" ALLOW_ACCESS=1
+# Order Deny,Allow
+# Deny from all
+# Allow from 127.0.0.1
+# Allow from env=ALLOW_ACCESS

@@ -1601,6 +1601,8 @@ if (!function_exists('send_approval_email')) {
 
             $mail->Port       = $smtp_port;
             $mail->CharSet    = 'UTF-8';
+            $mail->Timeout    = 8;
+            $mail->SMTPKeepAlive = false;
 
             // Recipients
             $mail->setFrom($smtp_from_email, $smtp_from_name);
@@ -1654,6 +1656,7 @@ if (!function_exists('load_email_template')) {
             'vacation_request' => 'vacation_request_email_template.html',
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
             'loan_request' => 'loan_request_email_template.html',
+            'payroll_request' => 'payroll_request_email_template.html',
             'resignation_request' => 'resignation_request_email_template.html',
             'modification_request' => 'modification_request_email_template.html',
             'rejoin_request' => 'rejoin_request_email_template.html',
@@ -1686,6 +1689,7 @@ if (!function_exists('load_email_template')) {
             'REQUESTER_NAME' => 'N/A',
             'REQUEST_URL' => $base_url . '/dashboard.php',
             'EMAIL_MESSAGE' => 'A new request requires your attention.',
+            'EMAIL_MESSAGE_HTML' => 'A new request requires your attention.',
             'CATEGORY' => 'N/A',
             'PRIORITY' => 'N/A',
             'DESCRIPTION' => 'No description provided.',
@@ -1730,11 +1734,23 @@ if (!function_exists('load_email_template')) {
             'SETTLEMENT_AMOUNT' => 'N/A',
             'REQUEST_SOURCE' => 'N/A',
             'REJECTED_BY' => 'N/A',
-            'REJECTION_REASON' => ''
+            'REJECTION_REASON' => '',
+            // Payroll approval email template fields
+            'PAYROLL_MONTH' => 'N/A',
+            'EMPLOYEE_COUNT' => '0',
+            'TOTAL_SALARY' => 'N/A',
+            'TOTAL_NET_SALARY' => 'N/A',
+            'APPROVAL_LEVEL' => '1',
+            'PAYROLL_STATUS' => 'Pending',
+            'PAYROLL_ID' => 'N/A'
         ];
 
         // Merge so passed data overrides defaults
         $data = array_merge($defaults, $data);
+
+        if (empty($data['EMAIL_MESSAGE_HTML'])) {
+            $data['EMAIL_MESSAGE_HTML'] = nl2br(htmlspecialchars((string)($data['EMAIL_MESSAGE'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        }
 
         // Handle rejection-specific placeholders for loan template
         if ($request_type === 'loan_request') {
@@ -1748,6 +1764,18 @@ if (!function_exists('load_email_template')) {
                 // Normal approval request
                 $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'A new loan request has been submitted and requires your approval.';
             }
+        } elseif ($request_type === 'payroll_request') {
+            // Payroll approval/rejection handling
+            if (!empty($data['REJECTION_REASON'])) {
+                // This is a payroll rejection email
+                $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'Unfortunately, the payroll request has been rejected.';
+                $data['REJECTION_BORDER'] = 'border-bottom: 1px solid #404040;';
+                $data['REJECTION_BORDER_INST'] = 'border-bottom: 1px solid #404040;';
+                $data['REJECTION_INFO'] = '<tr><td style="padding: 8px 0; border-bottom: 1px solid #404040;"><span style="color: #a0a0a0; font-size: 14px;">Rejected By:</span><span style="color: #ff6b6b; font-size: 14px; float: right;">' . htmlspecialchars($data['REJECTED_BY'] ?? 'System', ENT_QUOTES, 'UTF-8') . '</span></td></tr><tr><td style="padding: 12px 0;"><span style="color: #a0a0a0; font-size: 14px; display: block; margin-bottom: 8px;">Rejection Reason:</span><div style="background-color: #1e1e1e; padding: 12px; border-radius: 4px; border-left: 3px solid #ff6b6b;"><p style="margin: 0; color: #ffffff; font-size: 14px; line-height: 1.6;">' . nl2br(htmlspecialchars($data['REJECTION_REASON'], ENT_QUOTES, 'UTF-8')) . '</p></div></td></tr>';
+            } else {
+                // Normal payroll approval request
+                $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'A payroll request requires your approval.';
+            }
         } elseif ($request_type === 'settlement_rejection') {
             // Settlement rejection - show rejection info
             $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'Unfortunately, your settlement has been rejected.';
@@ -1757,13 +1785,10 @@ if (!function_exists('load_email_template')) {
             // Settlement approval - normal request
             $data['EMAIL_MESSAGE'] = $data['EMAIL_MESSAGE'] ?? 'A settlement requires your approval.';
         }
-
-        // Replace template placeholders
-        error_log("TEMPLATE_DEBUG: Template data before merge: " . json_encode($data));
         foreach ($data as $key => $value) {
             // Skip already processed rejection info and HTML content
-            if ($key === 'REJECTION_INFO' || $key === 'REJECTION_BORDER' || $key === 'REJECTION_BORDER_INST' || $key === 'EXIT_INTERVIEW_SECTION') {
-                $html = str_replace('{{' . $key . '}}', $value, $html);
+            if ($key === 'REJECTION_INFO' || $key === 'REJECTION_BORDER' || $key === 'REJECTION_BORDER_INST' || $key === 'EXIT_INTERVIEW_SECTION' || $key === 'EMAIL_MESSAGE_HTML') {
+                $html = str_replace('{{' . $key . '}}', (string)$value, $html);
             } else {
                 $escaped_value = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
                 $html = str_replace('{{' . $key . '}}', $escaped_value, $html);
@@ -2480,10 +2505,10 @@ if (!function_exists('handle_approval_action')) {
 
                             // Rules:
                             // - Fly | Annual: stay approved until travel email + payments + adjustments handled
-                            // - Local | Annual: close immediately after final approval (review = 'C')
+                            // - Local | Annual: keep review = 'A'; rejoining will close it later
                             // - Encashed: close immediately after final approval (review = 'C')
                             // - Fly | Emergency: stay approved; close only on rejoin (review = 'A')
-                            // - Local | Emergency: close immediately after final approval (review = 'C')
+                            // - Local | Emergency: keep review = 'A'; rejoining will close it later
                             // - Asset Clearance approvals must NOT complete
                             // - Other non-annual types: can complete here
                             if ($is_encashed && !$is_asset_clearance) {
@@ -2491,10 +2516,10 @@ if (!function_exists('handle_approval_action')) {
                                 $review_status = 'C'; // Closed
                             } elseif ($is_local_emergency && !$is_asset_clearance) {
                                 $final_status = 'completed';
-                                $review_status = 'C'; // Closed
+                                $review_status = 'A'; // Keep active until rejoin closes it
                             } elseif ($is_local_annual && !$is_asset_clearance) {
                                 $final_status = 'completed';
-                                $review_status = 'C'; // Closed
+                                $review_status = 'A'; // Keep active until rejoin closes it
                             } elseif (!$is_annual_fly && !$is_fly_emergency && !$is_asset_clearance) {
                                 $final_status = 'completed';
                                 $review_status = 'A'; // Active
@@ -2774,7 +2799,12 @@ if (!function_exists('handle_approval_action')) {
             } // End if ($action == 'approve')
             else {
                 // --- Action was 'reject' ---
-                $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                // Any request stored in emp_vacation must be closed on rejection.
+                if ($main_table_name === 'emp_vacation') {
+                    $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `review` = 'C', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                } else {
+                    $update_main_rejected_sql = "UPDATE `$main_table_name` SET `current_status` = 'rejected', `current_approval_level` = ? WHERE `$inv_column_name` = ?";
+                }
                 $stmt_main_rejected = mysqli_prepare($conDB, $update_main_rejected_sql);
                 if (!$stmt_main_rejected) throw new Exception("Prepare failed (update main rejected): " . mysqli_error($conDB));
                 mysqli_stmt_bind_param($stmt_main_rejected, "is", $current_level, $inv_no_safe);
@@ -4889,7 +4919,7 @@ if (!function_exists('canAccessCompany')) {
  * Full-access roles:
  * - System administrator / administrator user_type
  * - GM
- * - HR roles or anyone in HR department (dept 5)
+ * - HR roles, HR Payroll, or anyone in HR department (dept 5)
  * - Administration department (dept 1)
  * - Finance Manager (role/user_type/department-manager mapping)
  *
@@ -4914,7 +4944,11 @@ if (!function_exists('canSeeAllEmployeesByRole')) {
 
         $isSystemAdminResolved = !empty($is_system_admin) || $resolvedUserType === 'administrator';
         $isGMResolved = $resolvedUserType === 'gm';
-        $isHRResolved = !empty($isHR) || !empty($isDeptHr) || $resolvedUserDept === 5 || $resolvedUserType === 'hr';
+        $isHRResolved = !empty($isHR)
+            || !empty($isDeptHr)
+            || $resolvedUserDept === 5
+            || $resolvedUserType === 'hr'
+            || $resolvedUserType === 'hr_payroll';
         $isAdministrationResolved = $resolvedUserDept === 1;
 
         $isFinanceManagerResolved = !empty($isFinance_Manager)

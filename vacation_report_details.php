@@ -635,12 +635,27 @@ if (mysqli_num_rows($query) == 1) {
                                         // Get encashment details from database
                                         $encashment_amount = round((float)($request['encashment_amount'] ?? 0));
                                         $days_encashed = (float)($request['vacdays'] ?? 0);
-                                        $daily_rate_display = ($days_encashed > 0) ? round($encashment_amount / $days_encashed, 2) : 0;
-                                        $encash_gosi = 0;
-                                        if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
-                                            $gosi_percentage = (float)$request['gosi'];
-                                            $encash_gosi = round(($encashment_amount * $gosi_percentage) / 100);
+                                        $days_encashed_raw = isset($request['vacdays']) ? (string)$request['vacdays'] : '0';
+                                        // Match backend rule: daily rate is based on total salary benefits / 30.
+                                        $salary_benefits_total = 0;
+                                        if (!empty($salary)) {
+                                            $salary_benefits_total =
+                                                (float)($salary['basic'] ?? 0) +
+                                                (float)($salary['housing'] ?? 0) +
+                                                (float)($salary['transport'] ?? 0) +
+                                                (float)($salary['food'] ?? 0) +
+                                                (float)($salary['misc'] ?? 0) +
+                                                (float)($salary['cashier'] ?? 0) +
+                                                (float)($salary['fuel'] ?? 0) +
+                                                (float)($salary['tel'] ?? 0) +
+                                                (float)($salary['other'] ?? 0) +
+                                                (float)($salary['guard'] ?? 0);
                                         }
+
+                                        $daily_rate_display = ($salary_benefits_total > 0)
+                                            ? round($salary_benefits_total / 30, 2)
+                                            : (($days_encashed > 0) ? round($encashment_amount / $days_encashed, 2) : 0);
+                                        $encash_gosi = 0;
                                         $net_encashment = round($encashment_amount - $encash_gosi);
                                     ?>
                                     <div class="report-section">
@@ -656,7 +671,10 @@ if (mysqli_num_rows($query) == 1) {
                                                         <span class="label"><?= __('encashed_vacation_days') ?? 'Encashed Vacation Days' ?></span>
                                                         <small class="text-muted d-block"><?= __('days_converted_to_cash') ?? 'Days converted to cash payment' ?></small>
                                                     </div>
-                                                    <span class="value"><?= number_format($days_encashed, 2); ?> <?= __('day_s') ?? 'Days' ?></span>
+                                                    <span class="value">
+                                                        <?= number_format($days_encashed, 2); ?> <?= __('day_s') ?? 'Days' ?>
+                                                        <small class="text-muted d-block"><?= __('exact_days') ?? 'Exact days' ?>: <?= htmlspecialchars($days_encashed_raw); ?></small>
+                                                    </span>
                                                 </li>
                                                 <li>
                                                     <div>
