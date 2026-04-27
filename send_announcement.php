@@ -332,7 +332,6 @@ function send_announcement_email(mysqli $conDB, string $toEmail, string $toName,
     $smtp_host = (string)get_setting($conDB, 'smtp_host');
     $smtp_port = (int)get_setting($conDB, 'smtp_port');
     $smtp_user = 'internal.Communication@almutlak.com';
-    $smtp_pass = '@DmiN56539306#';
     $smtp_from_email = 'internal.Communication@almutlak.com';
     $smtp_from_name = 'Internal Communication';
     $smtp_secure = (string)get_setting($conDB, 'smtp_encryption');
