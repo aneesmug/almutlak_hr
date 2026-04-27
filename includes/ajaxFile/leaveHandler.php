@@ -1080,6 +1080,20 @@ elseif ($ajaxType == 'applyVacation') {
             }
         }
 
+        // Local Vacation | Annual business rule:
+        // - If days <= 5: hide salary option on UI and force default payroll.
+        // - If days > 5: employee must explicitly choose payroll or end_of_service.
+        $is_local_annual_vacation = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
+        if ($is_local_annual_vacation) {
+            if ((float)$vacdays <= 5) {
+                $vacation_salary_type = 'payroll';
+            } else {
+                if (empty($vacation_salary_type)) {
+                    throw new Exception(__('vacation_salary_type_required') ?: 'Please select vacation salary payment option.');
+                }
+            }
+        }
+
         if ($vacdays > $effective_remaining) {
             // Emergency vacation is unpaid and does NOT deduct from balance - skip this check
             if ($is_emergency_vacation) {
@@ -2819,7 +2833,7 @@ elseif ($ajaxType == 'returnVacation') {
         mysqli_stmt_close($stmt_fly);
 
         // Mark vacation as completed so employee can apply for new vacation
-        $sql_complete_vac = "UPDATE `emp_vacation` SET `current_status` = 'completed', `arrived_date` = ? WHERE `id` = ?";
+        $sql_complete_vac = "UPDATE `emp_vacation` SET `current_status` = 'completed', `arrived_date` = ?, `review` = CASE WHEN LOWER(`vac_type`) = 'encashed' THEN 'C' ELSE `review` END WHERE `id` = ?";
         $stmt_complete_vac = mysqli_prepare($conDB, $sql_complete_vac);
         if (!$stmt_complete_vac) {
             throw new Exception(__("failed_to_mark_vacation_as_completed") . ": " . mysqli_error($conDB));
@@ -3089,7 +3103,7 @@ elseif ($ajaxType == 'updateVacationPayments') {
                     
                     if ($has_payment && $has_adjustment) {
                         // All required fields are filled - mark as completed
-                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed' WHERE id = ?";
+                        $complete_sql = "UPDATE emp_vacation SET current_status = 'completed', review = CASE WHEN LOWER(vac_type) = 'encashed' THEN 'C' ELSE review END WHERE id = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -3288,7 +3302,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     // Rule 1: Local | Annual vacation -> Booking button hidden; complete on adjustments update
                     // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
                     if (!$is_fly && $is_annual && $has_adjustment) {
-                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed' WHERE `id` = ?";
+                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed', `review` = CASE WHEN LOWER(`vac_type`) = 'encashed' THEN 'C' ELSE `review` END WHERE `id` = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -3301,7 +3315,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     // Rule 2: Fly | Annual vacation -> complete when booking (payment) AND adjustments are updated
                     // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
                     if ($is_fly && $is_annual && $has_payment && $has_adjustment) {
-                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed' WHERE `id` = ?";
+                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed', `review` = CASE WHEN LOWER(`vac_type`) = 'encashed' THEN 'C' ELSE `review` END WHERE `id` = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -3320,7 +3334,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     // CRITICAL: Emergency vacations are NON-DEDUCTIBLE - NO balance deduction
                     if ($is_fly && $is_emergency && $has_adjustment) {
                         // Mark completed
-                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed' WHERE `id` = ?";
+                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed', `review` = CASE WHEN LOWER(`vac_type`) = 'encashed' THEN 'C' ELSE `review` END WHERE `id` = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -5994,8 +6008,8 @@ elseif ($ajaxType == 'getAllActiveVacationsForRejoin') {
             exit;
         }
         
-        // Get ALL active vacations ordered by return date (LAST active vacation first)
-        // This ensures we prioritize the most recent vacation when multiple are active
+        // Get ALL active Fly vacations ordered by return date (LAST active vacation first)
+        // Rejoin is allowed only for Fly (annual/emergency), never local vacations.
         // Include rejoin request status if it exists
         $query = "SELECT 
             v.id,
@@ -6017,6 +6031,8 @@ elseif ($ajaxType == 'getAllActiveVacationsForRejoin') {
         WHERE v.emp_id = ? 
         AND v.current_status IN ('approved', 'completed')
         AND v.review = 'A'
+        AND LOWER(v.vac_type) = 'fly'
+        AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
         ORDER BY v.return_date DESC, v.id DESC";
         
         $stmt = $conDB->prepare($query);
@@ -6052,12 +6068,14 @@ elseif ($ajaxType == 'submitRejoinRequest') {
         $rejoin_reason = escape_string($_POST['rejoin_reason'] ?? '');
         $emp_id = (int)($_POST['emp_id'] ?? $current_user_id);
         
-        // If vacation_id is not provided or is 0, fetch the LAST active vacation for the employee
+        // If vacation_id is not provided or is 0, fetch the LAST active Fly vacation for the employee
         if (empty($vacation_id) && !empty($emp_id)) {
             $last_vacation_query = "SELECT id FROM emp_vacation 
                                    WHERE emp_id = ? 
                                    AND current_status IN ('approved', 'completed')
                                    AND review = 'A'
+                                   AND LOWER(vac_type) = 'fly'
+                                   AND LOWER(COALESCE(fly_type, '')) IN ('annual', 'emergency')
                                    ORDER BY return_date DESC, id DESC
                                    LIMIT 1";
             $last_vac_stmt = $conDB->prepare($last_vacation_query);
@@ -6158,7 +6176,7 @@ elseif ($ajaxType == 'submitRejoinRequest') {
         $vacation = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$vacation) {
-            // If vacation not found, try to get the LAST active vacation for this employee
+            // If vacation not found, try to get the LAST active Fly vacation for this employee
             $stmt_last = $pdo->prepare("
                 SELECT v.*, e.emp_id, e.supervisor_id, e.name 
                 FROM emp_vacation v
@@ -6166,6 +6184,8 @@ elseif ($ajaxType == 'submitRejoinRequest') {
                 WHERE v.emp_id = :emp_id
                 AND v.current_status IN ('approved', 'completed')
                 AND v.review = 'A'
+                AND LOWER(v.vac_type) = 'fly'
+                AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
                 ORDER BY v.return_date DESC, v.id DESC
                 LIMIT 1
             ");
@@ -6179,6 +6199,13 @@ elseif ($ajaxType == 'submitRejoinRequest') {
             } else {
                 throw new Exception(__("vacation_record_not_found"));
             }
+        }
+
+        // Rejoin is only valid for Fly annual/emergency vacations.
+        $vac_type_lower = strtolower(trim((string)($vacation['vac_type'] ?? '')));
+        $fly_type_lower = strtolower(trim((string)($vacation['fly_type'] ?? '')));
+        if ($vac_type_lower !== 'fly' || !in_array($fly_type_lower, ['annual', 'emergency'], true)) {
+            throw new Exception('Rejoin is only allowed for Fly annual/emergency vacations.');
         }
 
         // Use vacation return_date if rejoin_date not provided

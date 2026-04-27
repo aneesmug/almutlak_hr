@@ -232,32 +232,25 @@ try {
         $reportData[$key]['deductions_list'] = $stmtDeductions->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // Bank file is considered ready only after finance officer sends review completion notification.
+    // Bank file is considered ready immediately after final payroll approval (GM final step).
     $bankFileReady = false;
     $bankFileRequestInvNo = '';
     $bankFileReadyAt = null;
 
-    $latestRequestStmt = $pdo->prepare("SELECT request_inv_no
+    $latestRequestStmt = $pdo->prepare("SELECT request_inv_no, status, approved_at
         FROM payroll_approval_requests
         WHERE payroll_month = :month_year
         ORDER BY id DESC
         LIMIT 1");
     $latestRequestStmt->execute([':month_year' => $monthYear]);
-    $bankFileRequestInvNo = (string)($latestRequestStmt->fetchColumn() ?: '');
+    $latestRequestRow = $latestRequestStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $bankFileRequestInvNo = (string)($latestRequestRow['request_inv_no'] ?? '');
 
-    if ($bankFileRequestInvNo !== '') {
-        $readyStmt = $pdo->prepare("SELECT created_at
-            FROM smt_request_status
-            WHERE inv_no = :inv_no
-              AND status = 'finance_review_complete'
-            ORDER BY id DESC
-            LIMIT 1");
-        $readyStmt->execute([':inv_no' => $bankFileRequestInvNo]);
-        $readyRow = $readyStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        if (!empty($readyRow['created_at'])) {
-            $bankFileReady = true;
-            $bankFileReadyAt = (string)$readyRow['created_at'];
-        }
+    if ($bankFileRequestInvNo !== '' && strtolower(trim((string)($latestRequestRow['status'] ?? ''))) === 'approved') {
+        $bankFileReady = true;
+        $bankFileReadyAt = !empty($latestRequestRow['approved_at'])
+            ? (string)$latestRequestRow['approved_at']
+            : null;
     }
 
     echo json_encode([

@@ -44,10 +44,6 @@ switch ($action) {
         notifyPayrollFeedbackFollowup($pdo, $conDB, $currentUserId, $requestTypeId);
         break;
 
-    case 'notify_finance_review_complete':
-        notifyFinanceReviewComplete($pdo, $conDB, $currentUserId, $requestTypeId);
-        break;
-
     case 'get_company_manager_options':
         getCompanyManagerOptionsForPayroll($pdo, $currentUserId);
         break;
@@ -56,8 +52,20 @@ switch ($action) {
         sendCompanyManagerPayrollReport($pdo, $conDB, $currentUserId);
         break;
 
+    case 'get_finance_verification_setup':
+        getFinanceVerificationSetup($pdo, $currentUserId, $requestTypeId);
+        break;
+
+    case 'submit_finance_verification_setup':
+        submitFinanceVerificationSetup($pdo, $conDB, $currentUserId, $requestTypeId);
+        break;
+
     case 'toggle_employee_check':
         togglePayrollEmployeeCheck($pdo, $currentUserId, $requestTypeId);
+        break;
+
+    case 'confirm_finance_officer_verification':
+        confirmFinanceOfficerVerification($pdo, $currentUserId);
         break;
 
     default:
@@ -96,8 +104,358 @@ function sendJsonResponseAndContinue(array $payload): void
     }
 }
 
+function payrollApprovalTableHasColumn(PDO $pdo, string $tableName, string $columnName): bool
+{
+    $stmt = $pdo->prepare("SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND COLUMN_NAME = :column_name");
+    $stmt->execute([
+        ':table_name' => $tableName,
+        ':column_name' => $columnName
+    ]);
+    return ((int)$stmt->fetchColumn() > 0);
+}
+
+function getPayrollChecklistModifiedEmployeeMap(PDO $pdo, string $requestInvNo, string $monthValue): array
+{
+    if ($requestInvNo === '' || $monthValue === '') {
+        return [];
+    }
+
+    $requestStmt = $pdo->prepare("SELECT created_at FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1");
+    $requestStmt->execute([':inv_no' => $requestInvNo]);
+    $requestCreatedAt = trim((string)$requestStmt->fetchColumn());
+    if ($requestCreatedAt === '') {
+        return [];
+    }
+
+    $modifiedEmployees = [];
+
+    $benefitHasUpdatedAt = payrollApprovalTableHasColumn($pdo, 'payroll_benefits', 'updated_at');
+    $benefitHasCreatedAt = payrollApprovalTableHasColumn($pdo, 'payroll_benefits', 'created_at');
+    if ($benefitHasUpdatedAt || $benefitHasCreatedAt) {
+        $benefitTimeExpr = $benefitHasUpdatedAt && $benefitHasCreatedAt
+            ? 'GREATEST(COALESCE(pb.updated_at, pb.created_at), COALESCE(pb.created_at, pb.updated_at))'
+            : ($benefitHasUpdatedAt ? 'pb.updated_at' : 'pb.created_at');
+
+        $benefitStmt = $pdo->prepare("SELECT DISTINCT pb.emp_id
+            FROM payroll_benefits pb
+            WHERE pb.month = :month_year
+              AND pb.status = 1
+              AND {$benefitTimeExpr} > :request_created_at");
+        $benefitStmt->execute([
+            ':month_year' => $monthValue,
+            ':request_created_at' => $requestCreatedAt,
+        ]);
+
+        foreach ($benefitStmt->fetchAll(PDO::FETCH_COLUMN) as $empId) {
+            $empId = trim((string)$empId);
+            if ($empId !== '') {
+                $modifiedEmployees[$empId] = true;
+            }
+        }
+    }
+
+    $deductionHasUpdatedAt = payrollApprovalTableHasColumn($pdo, 'payroll_deductions', 'updated_at');
+    $deductionHasCreatedAt = payrollApprovalTableHasColumn($pdo, 'payroll_deductions', 'created_at');
+    if ($deductionHasUpdatedAt || $deductionHasCreatedAt) {
+        $deductionTimeExpr = $deductionHasUpdatedAt && $deductionHasCreatedAt
+            ? 'GREATEST(COALESCE(pd.updated_at, pd.created_at), COALESCE(pd.created_at, pd.updated_at))'
+            : ($deductionHasUpdatedAt ? 'pd.updated_at' : 'pd.created_at');
+
+        $deductionStmt = $pdo->prepare("SELECT DISTINCT pd.emp_id
+            FROM payroll_deductions pd
+            WHERE pd.month = :month_year
+              AND pd.status = 1
+              AND {$deductionTimeExpr} > :request_created_at");
+        $deductionStmt->execute([
+            ':month_year' => $monthValue,
+            ':request_created_at' => $requestCreatedAt,
+        ]);
+
+        foreach ($deductionStmt->fetchAll(PDO::FETCH_COLUMN) as $empId) {
+            $empId = trim((string)$empId);
+            if ($empId !== '') {
+                $modifiedEmployees[$empId] = true;
+            }
+        }
+    }
+
+    return $modifiedEmployees;
+}
+
+function isHeadOfficeFinanceManagerRole(): bool
+{
+    $userType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+    $empType = strtolower(trim((string)($GLOBALS['emp_type'] ?? '')));
+    $userDept = (int)($GLOBALS['user_dept'] ?? 0);
+
+    return $userType === 'finance' && $empType === 'manager' && $userDept === 2;
+}
+
+function getFinanceOfficerOptions(PDO $pdo): array
+{
+    $stmt = $pdo->prepare("SELECT al.emp_id, e.name
+        FROM admin_login al
+        INNER JOIN employees e ON e.emp_id = al.emp_id
+        WHERE (LOWER(TRIM(COALESCE(al.user_type, ''))) = 'finance_officer'
+               OR (LOWER(TRIM(COALESCE(al.user_type, ''))) = 'finance' AND LOWER(TRIM(COALESCE(al.emp_type, ''))) = 'manager'))
+          AND (COALESCE(al.dept, 0) = 2)
+        ORDER BY e.name ASC");
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function getFinanceOfficerCompanyDefaults(PDO $pdo, string $financeManagerEmpId, array $officerEmpIds): array
+{
+    if ($financeManagerEmpId === '' || empty($officerEmpIds)) {
+        return [];
+    }
+
+    $officerEmpIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $officerEmpIds), static function ($value) {
+        return $value !== '';
+    })));
+
+    if (empty($officerEmpIds)) {
+        return [];
+    }
+
+    $params = [':finance_manager' => $financeManagerEmpId];
+    $placeholders = [];
+    foreach ($officerEmpIds as $index => $officerEmpId) {
+        $key = ':officer_' . $index;
+        $placeholders[] = $key;
+        $params[$key] = $officerEmpId;
+    }
+
+    $stmt = $pdo->prepare("SELECT finance_officer_emp_id, selected_company_ids
+        FROM payroll_finance_officer_company_defaults
+        WHERE finance_manager_emp_id = :finance_manager
+          AND finance_officer_emp_id IN (" . implode(', ', $placeholders) . ")");
+    $stmt->execute($params);
+
+    $defaults = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $officerEmpId = trim((string)($row['finance_officer_emp_id'] ?? ''));
+        if ($officerEmpId === '') {
+            continue;
+        }
+
+        $companyIds = json_decode((string)($row['selected_company_ids'] ?? '[]'), true);
+        if (!is_array($companyIds)) {
+            $companyIds = [];
+        }
+
+        $companyIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+            return trim((string)$value);
+        }, $companyIds), static function ($value) {
+            return $value !== '';
+        })));
+
+        $defaults[$officerEmpId] = $companyIds;
+    }
+
+    return $defaults;
+}
+
+function getAssignedFinanceVerificationCompanyIds(PDO $pdo, string $requestInvNo, string $monthValue, string $financeOfficerEmpId): array
+{
+    if ($requestInvNo === '' || $monthValue === '' || $financeOfficerEmpId === '') {
+        return [];
+    }
+
+    $stmt = $pdo->prepare("SELECT selected_company_ids
+        FROM payroll_finance_verification
+        WHERE request_inv_no = :inv_no
+          AND payroll_month = :month_year
+          AND finance_officer_emp_id = :finance_officer
+          AND is_confirmed = 1
+        ORDER BY id DESC
+        LIMIT 1");
+    $stmt->execute([
+        ':inv_no' => $requestInvNo,
+        ':month_year' => $monthValue,
+        ':finance_officer' => $financeOfficerEmpId
+    ]);
+
+    $raw = $stmt->fetchColumn();
+    $companyIds = json_decode((string)($raw ?: '[]'), true);
+    if (!is_array($companyIds)) {
+        return [];
+    }
+
+    return array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $companyIds), static function ($value) {
+        return $value !== '';
+    })));
+}
+
+function getAssignedFinanceVerificationCompanyIdsForVerifier(PDO $pdo, string $requestInvNo, string $monthValue, string $verifierEmpId): array
+{
+    if ($requestInvNo === '' || $monthValue === '' || $verifierEmpId === '') {
+        return [];
+    }
+
+    $scope = getAssignedFinanceVerificationCompanyIds($pdo, $requestInvNo, $monthValue, $verifierEmpId);
+    if (!empty($scope)) {
+        return $scope;
+    }
+
+    $stmt = $pdo->prepare("SELECT selected_company_ids
+        FROM payroll_finance_verification
+        WHERE request_inv_no = :inv_no
+          AND payroll_month = :month_year
+          AND finance_manager_emp_id = :finance_manager
+          AND is_confirmed = 1
+        ORDER BY id DESC
+        LIMIT 1");
+    $stmt->execute([
+        ':inv_no' => $requestInvNo,
+        ':month_year' => $monthValue,
+        ':finance_manager' => $verifierEmpId
+    ]);
+
+    $raw = $stmt->fetchColumn();
+    $companyIds = json_decode((string)($raw ?: '[]'), true);
+    if (!is_array($companyIds)) {
+        return [];
+    }
+
+    return array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $companyIds), static function ($value) {
+        return $value !== '';
+    })));
+}
+
+function getLatestFinanceVerificationRow(PDO $pdo, string $requestInvNo, string $monthValue, string $financeManagerEmpId): array
+{
+    if ($requestInvNo === '' || $monthValue === '' || $financeManagerEmpId === '') {
+        return [];
+    }
+
+        $stmt = $pdo->prepare("SELECT finance_officer_emp_id, is_confirmed, officer_approved, officer_approved_at
+        FROM payroll_finance_verification
+        WHERE request_inv_no = :inv_no
+          AND payroll_month = :month_year
+          AND finance_manager_emp_id = :manager_id
+        ORDER BY id DESC
+        LIMIT 1");
+    $stmt->execute([
+        ':inv_no' => $requestInvNo,
+        ':month_year' => $monthValue,
+        ':manager_id' => $financeManagerEmpId
+    ]);
+
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return [];
+    }
+
+    return [
+        'finance_officer_emp_id' => trim((string)($row['finance_officer_emp_id'] ?? '')),
+        'is_confirmed' => !empty($row['is_confirmed']),
+        'officer_approved' => !empty($row['officer_approved']),
+        'officer_approved_at' => trim((string)($row['officer_approved_at'] ?? ''))
+    ];
+}
+
+function confirmFinanceOfficerVerification(PDO $pdo, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+
+    try {
+        ensurePayrollFinanceVerificationTable($pdo);
+
+        if ($requestInvNo === '' || $monthYear === '') {
+            throw new Exception('Missing request number or month.');
+        }
+
+        $verificationStmt = $pdo->prepare("SELECT id, selected_company_ids
+            FROM payroll_finance_verification
+            WHERE request_inv_no = :inv_no
+              AND payroll_month = :month_year
+              AND finance_officer_emp_id = :finance_officer
+              AND is_confirmed = 1
+            ORDER BY id DESC
+            LIMIT 1");
+        $verificationStmt->execute([
+            ':inv_no' => $requestInvNo,
+            ':month_year' => $monthYear,
+            ':finance_officer' => $currentUserId
+        ]);
+        $verificationRow = $verificationStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$verificationRow) {
+            throw new Exception('You are not assigned to approve this finance verification.');
+        }
+
+        $companyIds = json_decode((string)($verificationRow['selected_company_ids'] ?? '[]'), true);
+        if (!is_array($companyIds)) {
+            $companyIds = [];
+        }
+        $companyIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+            return trim((string)$value);
+        }, $companyIds), static function ($value) {
+            return $value !== '';
+        })));
+
+        if (empty($companyIds)) {
+            throw new Exception('No assigned company scope found for this verification request.');
+        }
+
+        $scopeParams = [':payroll_month' => $monthYear];
+        $companyPlaceholders = [];
+        foreach ($companyIds as $index => $companyId) {
+            $paramKey = ':assigned_company_' . $index;
+            $companyPlaceholders[] = $paramKey;
+            $scopeParams[$paramKey] = $companyId;
+        }
+
+        // Finance verifier approval is no longer tied to per-employee Mark Checked actions.
+        // Only HR Payroll / HR Senior BP maintain checklist marks.
+
+        $approveStmt = $pdo->prepare("UPDATE payroll_finance_verification
+            SET officer_approved = 1,
+                officer_approved_at = NOW()
+            WHERE id = :id
+            LIMIT 1");
+        $approveStmt->execute([':id' => (int)$verificationRow['id']]);
+
+        $historyStmt = $pdo->prepare("INSERT INTO payroll_finance_verification_history
+            (request_inv_no, payroll_month, finance_manager_emp_id, finance_officer_emp_id, action_type, action_note, selected_company_ids, created_by)
+            SELECT request_inv_no, payroll_month, finance_manager_emp_id, finance_officer_emp_id,
+                   'officer_approved',
+                   :action_note,
+                   selected_company_ids,
+                   :created_by
+            FROM payroll_finance_verification
+            WHERE id = :verification_id
+            LIMIT 1");
+        $historyStmt->execute([
+            ':action_note' => 'Finance officer approved assigned verification scope.',
+            ':created_by' => $currentUserId,
+            ':verification_id' => (int)$verificationRow['id']
+        ]);
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Finance officer approval submitted successfully.'
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
 function getPayrollChecklistReviewSummary(PDO $pdo, string $requestInvNo, string $monthValue, string $approverId): array
 {
+    $assignedCompanyIds = getAssignedFinanceVerificationCompanyIdsForVerifier($pdo, $requestInvNo, $monthValue, $approverId);
+
     $canSeeAllEmployees = function_exists('canSeeAllPayrollEmployees')
         ? canSeeAllPayrollEmployees(true)
         : (
@@ -109,34 +467,82 @@ function getPayrollChecklistReviewSummary(PDO $pdo, string $requestInvNo, string
         );
 
     $deptSql = '';
-    $params = [
-        ':request_inv_no_check' => $requestInvNo,
-        ':payroll_month_check' => $monthValue,
-        ':approver_id_check' => $approverId,
-        ':payroll_month_main' => $monthValue
-    ];
+    $scopeParams = [':payroll_month_main' => $monthValue];
 
     if (!$canSeeAllEmployees && isset($GLOBALS['user_dept'])) {
         $deptSql = ' AND e.dept = :user_dept';
-        $params[':user_dept'] = $GLOBALS['user_dept'];
+        $scopeParams[':user_dept'] = $GLOBALS['user_dept'];
     }
 
-    $summaryStmt = $pdo->prepare("SELECT
-            COUNT(DISTINCT p.emp_id) AS total_employees,
-            COUNT(DISTINCT CASE WHEN pec.is_checked = 1 THEN p.emp_id END) AS checked_employees
+    if (!empty($assignedCompanyIds)) {
+        $companyPlaceholders = [];
+        foreach ($assignedCompanyIds as $index => $companyId) {
+            $paramKey = ':assigned_company_' . $index;
+            $companyPlaceholders[] = $paramKey;
+            $scopeParams[$paramKey] = $companyId;
+        }
+        $deptSql .= " AND CAST(e.comp_no AS CHAR) IN (" . implode(', ', $companyPlaceholders) . ")";
+    }
+
+    $scopeStmt = $pdo->prepare("SELECT DISTINCT p.emp_id
         FROM payrolls p
         INNER JOIN employees e ON e.emp_id = p.emp_id
-        LEFT JOIN payroll_checklist_employee_checks pec
-            ON pec.emp_id = p.emp_id
-           AND pec.request_inv_no = :request_inv_no_check
-           AND pec.payroll_month = :payroll_month_check
-           AND pec.approver_id = :approver_id_check
         WHERE p.month_year = :payroll_month_main" . $deptSql);
-    $summaryStmt->execute($params);
-    $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $scopeStmt->execute($scopeParams);
 
-    $totalEmployees = (int)($summary['total_employees'] ?? 0);
-    $checkedEmployees = (int)($summary['checked_employees'] ?? 0);
+    $scopeEmpIds = array_values(array_filter(array_map('trim', array_map('strval', $scopeStmt->fetchAll(PDO::FETCH_COLUMN))), static function ($empId) {
+        return $empId !== '';
+    }));
+
+    $totalEmployees = count($scopeEmpIds);
+    if ($totalEmployees <= 0) {
+        return [
+            'total_employees' => 0,
+            'checked_employees' => 0,
+            'remaining_employees' => 0
+        ];
+    }
+
+    $modifiedByEmp = getPayrollChecklistModifiedEmployeeMap($pdo, $requestInvNo, $monthValue);
+    $requiredEmpIds = [];
+    foreach ($scopeEmpIds as $scopeEmpId) {
+        if (!empty($modifiedByEmp[$scopeEmpId])) {
+            $requiredEmpIds[] = $scopeEmpId;
+        }
+    }
+
+    $requiredCount = count($requiredEmpIds);
+    if ($requiredCount <= 0) {
+        return [
+            'total_employees' => $totalEmployees,
+            'checked_employees' => $totalEmployees,
+            'remaining_employees' => 0
+        ];
+    }
+
+    $inPlaceholders = [];
+    $checkedParams = [
+        ':request_inv_no_check' => $requestInvNo,
+        ':payroll_month_check' => $monthValue,
+        ':approver_id_check' => $approverId,
+    ];
+    foreach ($requiredEmpIds as $idx => $requiredEmpId) {
+        $key = ':req_emp_' . $idx;
+        $inPlaceholders[] = $key;
+        $checkedParams[$key] = $requiredEmpId;
+    }
+
+    $checkedStmt = $pdo->prepare("SELECT COUNT(DISTINCT pec.emp_id)
+        FROM payroll_checklist_employee_checks pec
+        WHERE pec.request_inv_no = :request_inv_no_check
+          AND pec.payroll_month = :payroll_month_check
+          AND pec.approver_id = :approver_id_check
+          AND pec.is_checked = 1
+          AND pec.emp_id IN (" . implode(', ', $inPlaceholders) . ")");
+    $checkedStmt->execute($checkedParams);
+
+    $checkedRequiredEmployees = (int)$checkedStmt->fetchColumn();
+    $checkedEmployees = max(0, ($totalEmployees - $requiredCount) + $checkedRequiredEmployees);
 
     return [
         'total_employees' => $totalEmployees,
@@ -419,11 +825,7 @@ function notifyPayrollFeedbackFollowup(PDO $pdo, $conDB, string $currentUserId, 
         ensurePayrollChecklistFeedbackTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        $isHeadOfficeFinanceOfficerUser = function_exists('isHeadOfficeFinanceOfficer')
-            ? isHeadOfficeFinanceOfficer(true)
-            : ($currentUserRole === 'finance_officer' && (int)($GLOBALS['user_dept'] ?? 0) === 2);
-        $canManageFeedbackActions = ($currentUserRole === 'hr_payroll') || $isHeadOfficeFinanceOfficerUser;
-        if (!$canManageFeedbackActions) {
+        if ($currentUserRole !== 'hr_payroll') {
             throw new Exception('You are not allowed to send this payroll feedback follow-up.');
         }
 
@@ -432,6 +834,10 @@ function notifyPayrollFeedbackFollowup(PDO $pdo, $conDB, string $currentUserId, 
         $requestRow = $requestStmt->fetch(PDO::FETCH_ASSOC);
         if (!$requestRow) {
             throw new Exception('Payroll request not found');
+        }
+
+        if (function_exists('removePayrollFinanceOfficerStep')) {
+            removePayrollFinanceOfficerStep($pdo, $requestInvNo);
         }
 
         $monthValue = $monthYear !== '' ? $monthYear : (string)($requestRow['payroll_month'] ?? '');
@@ -503,9 +909,8 @@ function togglePayrollEmployeeCheck(PDO $pdo, string $currentUserId, int $reques
     try {
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
         $isHrPayrollApprover = $currentUserRole === 'hr_payroll';
-        if (!$isHrPayrollApprover) {
-            throw new Exception('Only HR Payroll can update employee checklist checks for this payroll request.');
-        }
+        $isHrSeniorBpApprover = $currentUserRole === 'hr_senior_bp';
+        $isHrChecklistApprover = $isHrPayrollApprover || $isHrSeniorBpApprover;
 
         ensurePayrollChecklistReviewTable($pdo);
 
@@ -516,10 +921,21 @@ function togglePayrollEmployeeCheck(PDO $pdo, string $currentUserId, int $reques
             throw new Exception('Payroll request not found');
         }
 
+        $monthValue = $monthYear !== '' ? $monthYear : (string)($requestRow['payroll_month'] ?? '');
+        if ($monthValue === '') {
+            throw new Exception('Payroll month is missing for this request.');
+        }
+
+        if (!$isHrChecklistApprover) {
+            throw new Exception('You are not allowed to update employee checklist checks for this payroll request.');
+        }
+
+        $assignedCompanyIds = [];
+
         $requestIsApproved = strtolower(trim((string)($requestRow['status'] ?? ''))) === 'approved';
 
         if (!$requestIsApproved) {
-            // During approval phase: verify the user has an active pending slot.
+            // During approval phase: verify the HR checklist user has an active pending slot.
             $permissionStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers
                 WHERE request_inv_no = :inv_no AND request_type_id = :type_id AND approver_id = :approver_id AND status = 'pending'");
             $permissionStmt->execute([
@@ -532,12 +948,7 @@ function togglePayrollEmployeeCheck(PDO $pdo, string $currentUserId, int $reques
                 throw new Exception('You are not allowed to update employee checklist checks for this payroll request.');
             }
         }
-        // If request is already approved, hr_payroll may freely re-mark checks after finance feedback.
-
-        $monthValue = $monthYear !== '' ? $monthYear : (string)($requestRow['payroll_month'] ?? '');
-        if ($monthValue === '') {
-            throw new Exception('Payroll month is missing for this request.');
-        }
+        // If request is already approved, authorized users may re-mark checks after feedback.
 
         $canSeeAllEmployees = function_exists('canSeeAllPayrollEmployees')
             ? canSeeAllPayrollEmployees(true)
@@ -564,10 +975,25 @@ function togglePayrollEmployeeCheck(PDO $pdo, string $currentUserId, int $reques
             $employeeParams[':user_dept'] = $GLOBALS['user_dept'];
         }
 
+        if (!empty($assignedCompanyIds)) {
+            $companyPlaceholders = [];
+            foreach ($assignedCompanyIds as $index => $companyId) {
+                $paramKey = ':assigned_company_' . $index;
+                $companyPlaceholders[] = $paramKey;
+                $employeeParams[$paramKey] = $companyId;
+            }
+            $employeeSql .= " AND CAST(e.comp_no AS CHAR) IN (" . implode(', ', $companyPlaceholders) . ")";
+        }
+
         $employeeStmt = $pdo->prepare($employeeSql);
         $employeeStmt->execute($employeeParams);
         if ((int)$employeeStmt->fetchColumn() <= 0) {
             throw new Exception('This employee is not available in your payroll checklist scope.');
+        }
+
+        $modifiedByEmp = getPayrollChecklistModifiedEmployeeMap($pdo, $requestInvNo, $monthValue);
+        if (empty($modifiedByEmp[$empId])) {
+            throw new Exception('This employee is auto-checked by default because payroll values were not modified.');
         }
 
         $checkedAt = $isChecked ? date('Y-m-d H:i:s') : null;
@@ -601,196 +1027,453 @@ function togglePayrollEmployeeCheck(PDO $pdo, string $currentUserId, int $reques
     }
 }
 
-function notifyFinanceReviewComplete(PDO $pdo, $conDB, string $currentUserId, int $requestTypeId): void
+function getFinanceVerificationSetup(PDO $pdo, string $currentUserId, int $requestTypeId): void
 {
     $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
     $monthYear = trim((string)($_POST['month'] ?? ''));
 
-    if ($requestInvNo === '') {
-        echo json_encode(['status' => 'error', 'message' => 'Missing request number']);
-        return;
-    }
-
     try {
-        $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        $isHeadOfficeFinanceOfficerUser = function_exists('isHeadOfficeFinanceOfficer')
-            ? isHeadOfficeFinanceOfficer(true)
-            : ($currentUserRole === 'finance_officer' && (int)($GLOBALS['user_dept'] ?? 0) === 2);
-        if (!$isHeadOfficeFinanceOfficerUser) {
-            throw new Exception('Only Finance Officer can send this notification.');
+        ensurePayrollFinanceVerificationTable($pdo);
+
+        if (!isHeadOfficeFinanceManagerRole()) {
+            throw new Exception('Only Head Office Finance Manager can access this action.');
         }
 
-        ensurePayrollChecklistReviewTable($pdo);
+        if ($requestInvNo === '' || $monthYear === '') {
+            throw new Exception('Missing request number or month.');
+        }
 
         $requestStmt = $pdo->prepare("SELECT payroll_month, status FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1");
         $requestStmt->execute([':inv_no' => $requestInvNo]);
         $requestRow = $requestStmt->fetch(PDO::FETCH_ASSOC);
         if (!$requestRow) {
-            throw new Exception('Payroll request not found');
+            throw new Exception('Payroll request not found.');
         }
 
+        $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
         $requestStatus = strtolower(trim((string)($requestRow['status'] ?? '')));
-        if ($requestStatus !== 'approved') {
-            throw new Exception('Finance review notification is allowed only after final payroll approval.');
+        if ($requestStatus !== 'pending_approval') {
+            throw new Exception('This setup can be done only while request is pending approval.');
         }
 
-        $monthValue = $monthYear !== '' ? $monthYear : (string)($requestRow['payroll_month'] ?? '');
-        $reviewSummary = getPayrollChecklistReviewSummary($pdo, $requestInvNo, $monthValue, $currentUserId);
-
-        // Only check whether employees with OPEN feedback have been re-checked by HR Payroll.
-        // All other employees were already verified during the original approval — HR must only
-        // re-verify the specific employees that Finance flagged with feedback.
-        $uncheckedFeedbackStmt = $pdo->prepare("SELECT DISTINCT f.emp_id, e.name AS employee_name, e.iqama
-            FROM payroll_checklist_feedback f
-            INNER JOIN employees e ON e.emp_id = f.emp_id
-            WHERE f.request_inv_no = :request_inv_no
-              AND f.payroll_month = :payroll_month
-              AND f.status = 'open'
-              AND f.emp_id NOT IN (
-                  SELECT pec.emp_id FROM payroll_checklist_employee_checks pec
-                  INNER JOIN admin_login al ON al.emp_id = pec.approver_id
-                  WHERE pec.request_inv_no = :request_inv_no2
-                    AND pec.payroll_month = :payroll_month2
-                    AND pec.is_checked = 1
-                    AND LOWER(TRIM(al.user_type)) = 'hr_payroll'
-              )
-            ORDER BY e.name ASC");
-        $uncheckedFeedbackStmt->execute([
-            ':request_inv_no'  => $requestInvNo,
-            ':payroll_month'   => $monthValue,
-            ':request_inv_no2' => $requestInvNo,
-            ':payroll_month2'  => $monthValue
-        ]);
-        $uncheckedFeedbackEmployees = $uncheckedFeedbackStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        if (!empty($uncheckedFeedbackEmployees)) {
-            $remaining = count($uncheckedFeedbackEmployees);
-            echo json_encode([
-                'status'              => 'error',
-                'message'             => 'HR Payroll must mark all ' . $remaining . ' feedback employee record(s) as checked before you can send the notification.',
-                'unchecked_employees' => $uncheckedFeedbackEmployees,
-                'remaining'           => $remaining,
-                'total'               => $remaining
-            ]);
-            return;
-        }
-
-        $existingCompletionStmt = $pdo->prepare("SELECT COUNT(*) FROM smt_request_status WHERE inv_no = :inv_no AND status = 'finance_review_complete'");
-        $existingCompletionStmt->execute([':inv_no' => $requestInvNo]);
-        if ((int)$existingCompletionStmt->fetchColumn() > 0) {
-            echo json_encode([
-                'status' => 'success',
-                'message' => 'Finance review completion was already notified to HR Payroll.',
-                'notification_sent' => false,
-                'email_sent' => false,
-                'recipient_count' => 0,
-                'review_summary' => $reviewSummary,
-                'already_completed' => true
-            ]);
-            return;
-        }
-
-        $hrStmt = $pdo->prepare("SELECT al.emp_id, al.email, e.name
-            FROM admin_login al
-            INNER JOIN employees e ON e.emp_id = al.emp_id
-            WHERE LOWER(TRIM(al.user_type)) = :user_type");
-        $hrStmt->execute([':user_type' => 'hr_payroll']);
-        $hrUsers = $hrStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        if (empty($hrUsers)) {
-            throw new Exception('No HR Payroll user found to notify.');
-        }
-
-        $notificationSent = false;
-        $emailSent = false;
-        $recipientCount = 0;
-        $requestUrl = 'payroll_checklist_report.php?month=' . urlencode($monthValue) . '&request_inv_no=' . urlencode($requestInvNo);
-        $fullRequestUrl = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com') . '/' . $requestUrl;
-
-        $payrollSummaryStmt = $pdo->prepare("SELECT COUNT(DISTINCT emp_id) AS employee_count, COALESCE(SUM(net_salary), 0) AS total_net_salary
-            FROM payrolls
-            WHERE month_year = :month_year");
-        $payrollSummaryStmt->execute([':month_year' => $monthValue]);
-        $payrollSummary = $payrollSummaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-        $payrollEmployeeCount = (int)($payrollSummary['employee_count'] ?? $reviewSummary['total_employees']);
-        $payrollTotalNetSalary = (float)($payrollSummary['total_net_salary'] ?? 0);
-
-        $financeReviewMessage = 'Finance Officer completed checklist review for payroll ' . $monthValue . '. Please continue with bank file download and transfer upload process.';
-        $financeReviewMessageHtml = '<div style="margin:0; color:#e0e0e0; line-height:1.7;">'
-            . htmlspecialchars($financeReviewMessage, ENT_QUOTES, 'UTF-8')
-            . '</div>';
-
-        foreach ($hrUsers as $hrUser) {
-            $hrEmpId = (string)($hrUser['emp_id'] ?? '');
-            if ($hrEmpId === '') {
-                continue;
-            }
-
-            if (function_exists('create_and_show_notification')) {
-                create_and_show_notification(
-                    $conDB,
-                    $hrEmpId,
-                    'Finance Review Completed',
-                    'Finance Officer completed checklist review for payroll ' . $monthValue . '. You can now proceed with bank file process.',
-                    $requestUrl,
-                    'info'
-                );
-                $notificationSent = true;
-            } elseif (function_exists('create_browser_notification')) {
-                create_browser_notification(
-                    $conDB,
-                    (int)$hrEmpId,
-                    'Finance Review Completed',
-                    'Finance Officer completed checklist review for payroll ' . $monthValue . '. You can now proceed with bank file process.',
-                    $requestUrl
-                );
-                $notificationSent = true;
-            }
-
-            if (!empty($hrUser['email']) && function_exists('send_approval_email')) {
-                $templateData = [
-                    'APPROVER_NAME' => !empty($hrUser['name']) ? htmlspecialchars($hrUser['name']) : 'HR Payroll',
-                    'REQUEST_ID' => $requestInvNo,
-                    'REQUEST_TYPE' => 'Finance Payroll Review Completion',
-                    'EMAIL_MESSAGE' => $financeReviewMessage,
-                    'EMAIL_MESSAGE_HTML' => $financeReviewMessageHtml,
-                    'PAYROLL_MONTH' => $monthValue,
-                    'EMPLOYEE_COUNT' => (string)$payrollEmployeeCount,
-                    'TOTAL_NET_SALARY' => number_format($payrollTotalNetSalary, 2),
-                    'PAYROLL_STATUS' => 'Completed',
-                    'REQUEST_URL' => $fullRequestUrl
-                ];
-
-                $sent = (bool)send_approval_email(
-                    $conDB,
-                    $hrUser['email'],
-                    $hrUser['name'] ?? 'HR Payroll',
-                    'Finance Review Completed - Payroll ' . $monthValue . ' (' . $requestInvNo . ')',
-                    'payroll_request',
-                    $templateData
-                );
-                $emailSent = $emailSent || $sent;
-            }
-
-            $recipientCount++;
-        }
-
-        $history = $pdo->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status)
-            VALUES (:inv_no, :emp_id, :emp_name, :note, 'finance_review_complete')");
-        $history->execute([
+        $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers
+            WHERE request_inv_no = :inv_no
+              AND request_type_id = :type_id
+              AND approver_id = :approver_id
+              AND status = 'pending'");
+        $pendingStmt->execute([
             ':inv_no' => $requestInvNo,
-            ':emp_id' => $currentUserId,
-            ':emp_name' => 'System',
-            ':note' => 'Finance Officer completed payroll checklist review for ' . $monthValue . ' and notified HR Payroll.'
+            ':type_id' => $requestTypeId,
+            ':approver_id' => $currentUserId
         ]);
+        if ((int)$pendingStmt->fetchColumn() <= 0) {
+            throw new Exception('This payroll request is not pending with you.');
+        }
+
+        ensurePayrollFinanceOfficerCompanyDefaultsTable($pdo);
+
+        $officers = getFinanceOfficerOptions($pdo);
+        if (empty($officers)) {
+            throw new Exception('No finance officer found for department 2.');
+        }
+
+        $officerEmpIds = array_values(array_unique(array_filter(array_map(static function ($row) {
+            return trim((string)($row['emp_id'] ?? ''));
+        }, $officers), static function ($value) {
+            return $value !== '';
+        })));
+        $officerCompanyDefaults = getFinanceOfficerCompanyDefaults($pdo, $currentUserId, $officerEmpIds);
+
+        $companiesStmt = $pdo->prepare("SELECT
+                c.comp_id AS comp_id,
+                c.comp_name AS comp_name,
+                COUNT(DISTINCT p.emp_id) AS employee_count,
+                COALESCE(SUM(p.net_salary), 0) AS total_net_salary
+            FROM payrolls p
+            INNER JOIN employees e ON e.emp_id = p.emp_id
+            INNER JOIN companies c ON c.comp_id = e.comp_no
+            WHERE p.month_year = :month_year
+            GROUP BY c.comp_id, c.comp_name
+            ORDER BY c.comp_name ASC");
+        $companiesStmt->execute([':month_year' => $monthValue]);
+        $companies = $companiesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $existingStmt = $pdo->prepare("SELECT
+                                v.finance_officer_emp_id,
+                                v.selected_company_ids,
+                                v.selected_employee_ids,
+                                v.is_confirmed,
+                                v.confirmed_at,
+                                v.officer_approved,
+                                v.officer_approved_at,
+                                e.name AS finance_officer_name
+                        FROM payroll_finance_verification v
+                        LEFT JOIN employees e ON e.emp_id = v.finance_officer_emp_id
+                        WHERE v.request_inv_no = :inv_no
+                            AND v.payroll_month = :month_year
+                            AND v.finance_manager_emp_id = :manager_id
+                    ORDER BY v.id DESC
+                        LIMIT 1");
+        $existingStmt->execute([
+            ':inv_no' => $requestInvNo,
+            ':month_year' => $monthValue,
+            ':manager_id' => $currentUserId
+        ]);
+        $existing = $existingStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $existingCompanyIds = json_decode((string)($existing['selected_company_ids'] ?? '[]'), true);
+
+        $historyStmt = $pdo->prepare("SELECT
+                h.id,
+                h.action_type,
+                h.action_note,
+                h.selected_company_ids,
+            h.finance_officer_emp_id,
+                h.created_by,
+                h.created_at,
+                COALESCE(e.name, h.created_by) AS created_by_name,
+                COALESCE(fo.name, h.finance_officer_emp_id) AS finance_officer_name
+            FROM payroll_finance_verification_history h
+            LEFT JOIN employees e ON e.emp_id = h.created_by
+            LEFT JOIN employees fo ON fo.emp_id = h.finance_officer_emp_id
+            WHERE h.request_inv_no = :inv_no
+              AND h.payroll_month = :month_year
+            ORDER BY h.id DESC
+            LIMIT 25");
+        $historyStmt->execute([
+            ':inv_no' => $requestInvNo,
+            ':month_year' => $monthValue
+        ]);
+        $historyRows = $historyStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $assignedOfficerEmpIds = array_values(array_unique(array_filter(array_map(static function ($row) {
+            return trim((string)($row['finance_officer_emp_id'] ?? ''));
+        }, $historyRows), static function ($value) {
+            return $value !== '';
+        })));
 
         echo json_encode([
             'status' => 'success',
-            'message' => 'HR Payroll notified successfully. Finance review completion is now recorded.',
-            'notification_sent' => $notificationSent,
-            'email_sent' => $emailSent,
-            'recipient_count' => $recipientCount,
-            'review_summary' => $reviewSummary
+            'officers' => array_map(static function ($row) {
+                return [
+                    'emp_id' => (string)($row['emp_id'] ?? ''),
+                    'name' => (string)($row['name'] ?? '')
+                ];
+            }, $officers),
+            'officer_company_defaults' => $officerCompanyDefaults,
+            'companies' => array_map(static function ($row) {
+                return [
+                    'comp_id' => (string)($row['comp_id'] ?? ''),
+                    'comp_name' => (string)($row['comp_name'] ?? 'N/A'),
+                    'employee_count' => (int)($row['employee_count'] ?? 0),
+                    'total_net_salary' => (float)($row['total_net_salary'] ?? 0)
+                ];
+            }, $companies),
+            'existing' => [
+                'finance_officer_emp_id' => (string)($existing['finance_officer_emp_id'] ?? ''),
+                'finance_officer_name' => (string)($existing['finance_officer_name'] ?? ''),
+                'selected_company_ids' => is_array($existingCompanyIds) ? $existingCompanyIds : [],
+                'is_confirmed' => !empty($existing['is_confirmed']),
+                'confirmed_at' => (string)($existing['confirmed_at'] ?? ''),
+                'officer_approved' => !empty($existing['officer_approved']),
+                'officer_approved_at' => (string)($existing['officer_approved_at'] ?? '')
+            ],
+            'assigned_officer_emp_ids' => $assignedOfficerEmpIds,
+            'history' => array_map(static function ($row) {
+                $companyIds = json_decode((string)($row['selected_company_ids'] ?? '[]'), true);
+                if (!is_array($companyIds)) {
+                    $companyIds = [];
+                }
+
+                $companyIds = array_values(array_filter(array_map(static function ($value) {
+                    return trim((string)$value);
+                }, $companyIds), static function ($value) {
+                    return $value !== '';
+                }));
+
+                return [
+                    'id' => (int)($row['id'] ?? 0),
+                    'action_type' => (string)($row['action_type'] ?? ''),
+                    'action_note' => (string)($row['action_note'] ?? ''),
+                    'company_count' => count($companyIds),
+                    'selected_company_ids' => $companyIds,
+                    'finance_officer_emp_id' => (string)($row['finance_officer_emp_id'] ?? ''),
+                    'created_by' => (string)($row['created_by'] ?? ''),
+                    'created_by_name' => (string)($row['created_by_name'] ?? ''),
+                    'finance_officer_name' => (string)($row['finance_officer_name'] ?? ''),
+                    'created_at' => (string)($row['created_at'] ?? '')
+                ];
+            }, $historyRows)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function submitFinanceVerificationSetup(PDO $pdo, $conDB, string $currentUserId, int $requestTypeId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+    $financeOfficerEmpId = trim((string)($_POST['finance_officer_emp_id'] ?? ''));
+    $companyIdsRaw = $_POST['company_ids'] ?? '[]';
+
+    try {
+        ensurePayrollFinanceVerificationTable($pdo);
+        ensurePayrollFinanceOfficerCompanyDefaultsTable($pdo);
+
+        if (!isHeadOfficeFinanceManagerRole()) {
+            throw new Exception('Only Head Office Finance Manager can submit this setup.');
+        }
+
+        if ($requestInvNo === '' || $monthYear === '' || $financeOfficerEmpId === '') {
+            throw new Exception('Missing required verification setup data.');
+        }
+
+        $companyIds = json_decode((string)$companyIdsRaw, true);
+        if (!is_array($companyIds)) {
+            $companyIds = [];
+        }
+
+        $companyIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+            return trim((string)$value);
+        }, $companyIds), static function ($value) {
+            return $value !== '';
+        })));
+
+        if (empty($companyIds)) {
+            throw new Exception('Please select finance officer and companies to confirm verification setup.');
+        }
+
+        $requestStmt = $pdo->prepare("SELECT payroll_month, status FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1");
+        $requestStmt->execute([':inv_no' => $requestInvNo]);
+        $requestRow = $requestStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$requestRow) {
+            throw new Exception('Payroll request not found.');
+        }
+
+        $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
+        $requestStatus = strtolower(trim((string)($requestRow['status'] ?? '')));
+        if ($requestStatus !== 'pending_approval') {
+            throw new Exception('This setup can be done only while request is pending approval.');
+        }
+
+        $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers
+            WHERE request_inv_no = :inv_no
+              AND request_type_id = :type_id
+              AND approver_id = :approver_id
+              AND status = 'pending'");
+        $pendingStmt->execute([
+            ':inv_no' => $requestInvNo,
+            ':type_id' => $requestTypeId,
+            ':approver_id' => $currentUserId
+        ]);
+        if ((int)$pendingStmt->fetchColumn() <= 0) {
+            throw new Exception('This payroll request is not pending with you.');
+        }
+
+        $officerStmt = $pdo->prepare("SELECT al.emp_id, e.name, al.email
+            FROM admin_login al
+            INNER JOIN employees e ON e.emp_id = al.emp_id
+            WHERE al.emp_id = :emp_id
+              AND (LOWER(TRIM(COALESCE(al.user_type, ''))) = 'finance_officer'
+                                     OR (LOWER(TRIM(COALESCE(al.user_type, ''))) = 'finance' AND LOWER(TRIM(COALESCE(al.emp_type, ''))) = 'manager'))
+              AND COALESCE(al.dept, 0) = 2
+            LIMIT 1");
+        $officerStmt->execute([':emp_id' => $financeOfficerEmpId]);
+        $officerRow = $officerStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$officerRow) {
+            throw new Exception('Selected finance officer is invalid.');
+        }
+
+        $validCompanyStmt = $pdo->prepare("SELECT DISTINCT CAST(e.comp_no AS CHAR)
+            FROM payrolls p
+            INNER JOIN employees e ON e.emp_id = p.emp_id
+            WHERE p.month_year = :month_year");
+        $validCompanyStmt->execute([':month_year' => $monthValue]);
+        $validCompanyIds = array_values(array_filter(array_map('strval', $validCompanyStmt->fetchAll(PDO::FETCH_COLUMN))));
+        $validCompanyMap = array_fill_keys($validCompanyIds, true);
+        foreach ($companyIds as $companyId) {
+            if (!isset($validCompanyMap[$companyId])) {
+                throw new Exception('One selected company is invalid for this payroll month.');
+            }
+        }
+
+        // Update existing assignment row and append newly selected companies.
+        $existingVerificationStmt = $pdo->prepare("SELECT id, selected_company_ids, selected_employee_ids
+            FROM payroll_finance_verification
+            WHERE request_inv_no = :inv_no
+              AND payroll_month = :month_year
+              AND finance_manager_emp_id = :manager_id
+            ORDER BY id DESC
+            LIMIT 1");
+        $existingVerificationStmt->execute([
+            ':inv_no' => $requestInvNo,
+            ':month_year' => $monthValue,
+            ':manager_id' => $currentUserId
+        ]);
+        $existingVerificationRow = $existingVerificationStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        $existingCompanyIds = json_decode((string)($existingVerificationRow['selected_company_ids'] ?? '[]'), true);
+        if (!is_array($existingCompanyIds)) {
+            $existingCompanyIds = [];
+        }
+        $existingCompanyIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+            return trim((string)$value);
+        }, $existingCompanyIds), static function ($value) {
+            return $value !== '';
+        })));
+
+        $existingEmployeeIds = json_decode((string)($existingVerificationRow['selected_employee_ids'] ?? '[]'), true);
+        if (!is_array($existingEmployeeIds)) {
+            $existingEmployeeIds = [];
+        }
+        $existingEmployeeIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+            return trim((string)$value);
+        }, $existingEmployeeIds), static function ($value) {
+            return $value !== '';
+        })));
+
+        // Cumulative scope for main verification table.
+        $assignedCompanyIds = array_values(array_unique(array_merge($existingCompanyIds, $companyIds)));
+        $assignedCompanyIdsJson = json_encode($assignedCompanyIds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        // Backfill assigned officers from history so selected_employee_ids remains complete.
+        $historyOfficerStmt = $pdo->prepare("SELECT DISTINCT finance_officer_emp_id
+            FROM payroll_finance_verification_history
+            WHERE request_inv_no = :inv_no
+              AND payroll_month = :month_year
+              AND finance_manager_emp_id = :manager_id
+              AND finance_officer_emp_id IS NOT NULL
+              AND TRIM(finance_officer_emp_id) <> ''");
+        $historyOfficerStmt->execute([
+            ':inv_no' => $requestInvNo,
+            ':month_year' => $monthValue,
+            ':manager_id' => $currentUserId
+        ]);
+        $historyOfficerIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+            return trim((string)$value);
+        }, $historyOfficerStmt->fetchAll(PDO::FETCH_COLUMN)), static function ($value) {
+            return $value !== '';
+        })));
+
+        // Keep cumulative assigned officers in selected_employee_ids on main verification table.
+        $assignedVerifierIds = array_values(array_unique(array_merge($existingEmployeeIds, $historyOfficerIds, [$financeOfficerEmpId])));
+        $selectedEmployeeIdsJson = json_encode($assignedVerifierIds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        // Per-officer scope for defaults/history tables (do NOT merge with previous officers).
+        $currentOfficerCompanyIdsJson = json_encode($companyIds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $existingVerificationId = (int)($existingVerificationRow['id'] ?? 0);
+        if ($existingVerificationId > 0) {
+            $updateAssignmentStmt = $pdo->prepare("UPDATE payroll_finance_verification
+                SET finance_officer_emp_id = :finance_officer_emp_id,
+                    selected_company_ids = :selected_company_ids,
+                    selected_employee_ids = :selected_employee_ids,
+                    is_confirmed = 1,
+                    confirmed_at = NOW(),
+                    officer_approved = 0,
+                    officer_approved_at = NULL
+                WHERE id = :id");
+            $updateAssignmentStmt->execute([
+                ':finance_officer_emp_id' => $financeOfficerEmpId,
+                ':selected_company_ids' => $assignedCompanyIdsJson,
+                ':selected_employee_ids' => $selectedEmployeeIdsJson,
+                ':id' => $existingVerificationId
+            ]);
+        } else {
+            $insertAssignmentStmt = $pdo->prepare("INSERT INTO payroll_finance_verification
+                (request_inv_no, payroll_month, finance_manager_emp_id, finance_officer_emp_id, selected_company_ids, selected_employee_ids, is_confirmed, confirmed_at, officer_approved, officer_approved_at)
+                VALUES
+                (:request_inv_no, :payroll_month, :finance_manager_emp_id, :finance_officer_emp_id, :selected_company_ids, :selected_employee_ids, 1, NOW(), 0, NULL)");
+            $insertAssignmentStmt->execute([
+                ':request_inv_no' => $requestInvNo,
+                ':payroll_month' => $monthValue,
+                ':finance_manager_emp_id' => $currentUserId,
+                ':finance_officer_emp_id' => $financeOfficerEmpId,
+                ':selected_company_ids' => $assignedCompanyIdsJson,
+                ':selected_employee_ids' => $selectedEmployeeIdsJson
+            ]);
+        }
+
+        $defaultsUpsertStmt = $pdo->prepare("INSERT INTO payroll_finance_officer_company_defaults
+            (finance_manager_emp_id, finance_officer_emp_id, selected_company_ids)
+            VALUES
+            (:finance_manager_emp_id, :finance_officer_emp_id, :selected_company_ids)
+            ON DUPLICATE KEY UPDATE
+                selected_company_ids = VALUES(selected_company_ids),
+                updated_at = CURRENT_TIMESTAMP");
+        $defaultsUpsertStmt->execute([
+            ':finance_manager_emp_id' => $currentUserId,
+            ':finance_officer_emp_id' => $financeOfficerEmpId,
+            ':selected_company_ids' => $currentOfficerCompanyIdsJson
+        ]);
+
+        // Determine action type: check if this officer already has any history in this request.
+        $historyCheckStmt = $pdo->prepare("SELECT COUNT(*) FROM payroll_finance_verification_history
+            WHERE request_inv_no = :inv_no
+              AND payroll_month = :month_year
+              AND finance_manager_emp_id = :manager_id
+              AND finance_officer_emp_id = :officer_id");
+        $historyCheckStmt->execute([
+            ':inv_no' => $requestInvNo,
+            ':month_year' => $monthValue,
+            ':manager_id' => $currentUserId,
+            ':officer_id' => $financeOfficerEmpId
+        ]);
+        $hasExistingHistory = (int)$historyCheckStmt->fetchColumn() > 0;
+        $historyActionType = $hasExistingHistory ? 'setup_updated' : 'setup_assigned';
+        $historyNote = $hasExistingHistory
+            ? 'Finance verification assignment updated.'
+            : 'Finance verification assignment created and sent to finance officer.';
+
+        $historyInsertStmt = $pdo->prepare("INSERT INTO payroll_finance_verification_history
+            (request_inv_no, payroll_month, finance_manager_emp_id, finance_officer_emp_id, action_type, action_note, selected_company_ids, created_by)
+            VALUES
+            (:request_inv_no, :payroll_month, :finance_manager_emp_id, :finance_officer_emp_id, :action_type, :action_note, :selected_company_ids, :created_by)");
+        $historyInsertStmt->execute([
+            ':request_inv_no' => $requestInvNo,
+            ':payroll_month' => $monthValue,
+            ':finance_manager_emp_id' => $currentUserId,
+            ':finance_officer_emp_id' => $financeOfficerEmpId,
+            ':action_type' => $historyActionType,
+            ':action_note' => $historyNote,
+            ':selected_company_ids' => $currentOfficerCompanyIdsJson,
+            ':created_by' => $currentUserId
+        ]);
+
+        if (function_exists('create_and_show_notification')) {
+            create_and_show_notification(
+                $conDB,
+                (string)$financeOfficerEmpId,
+                'Payroll Verification Assignment',
+                'You have been assigned payroll verification for selected companies for ' . $monthValue . '.',
+                'payroll_checklist_report.php?month=' . urlencode($monthValue) . '&request_inv_no=' . urlencode($requestInvNo),
+                'info'
+            );
+        }
+
+        if (!empty($officerRow['email']) && function_exists('send_approval_email')) {
+            $emailSubject = 'Payroll Verification Assignment - ' . $monthValue . ' (' . $requestInvNo . ')';
+            $templateData = [
+                'APPROVER_NAME' => !empty($officerRow['name']) ? htmlspecialchars((string)$officerRow['name']) : 'Finance Officer',
+                'REQUEST_ID' => $requestInvNo,
+                'REQUEST_TYPE' => 'Payroll Verification Assignment',
+                'EMAIL_MESSAGE' => 'You have been assigned to verify payroll for selected companies. Open Payroll Checklist Report to verify only your assigned companies employees.',
+                'PAYROLL_MONTH' => $monthValue,
+                'REQUEST_URL' => (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com') . '/payroll_checklist_report.php?month=' . urlencode($monthValue) . '&request_inv_no=' . urlencode($requestInvNo)
+            ];
+            send_approval_email(
+                $conDB,
+                (string)$officerRow['email'],
+                (string)($officerRow['name'] ?? 'Finance Officer'),
+                $emailSubject,
+                'payroll_request',
+                $templateData
+            );
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Finance verification setup confirmed successfully. Head Office Finance Manager approval will be enabled after assigned finance officer completes checklist verification.'
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
@@ -1495,11 +2178,7 @@ function sendBackPayrollIssues(PDO $pdo, $conDB, string $currentUserId, int $req
 
     try {
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        $isHeadOfficeFinanceOfficerUser = function_exists('isHeadOfficeFinanceOfficer')
-            ? isHeadOfficeFinanceOfficer(true)
-            : ($currentUserRole === 'finance_officer' && (int)($GLOBALS['user_dept'] ?? 0) === 2);
-        $canManageFeedbackActions = ($currentUserRole === 'hr_payroll') || $isHeadOfficeFinanceOfficerUser;
-        if (!$canManageFeedbackActions) {
+        if ($currentUserRole !== 'hr_payroll') {
             throw new Exception('You are not allowed to submit payroll feedback for this request.');
         }
 
@@ -1529,12 +2208,6 @@ function sendBackPayrollIssues(PDO $pdo, $conDB, string $currentUserId, int $req
                 array_merge([$requestInvNo, $monthValue], $employeeIds)
             );
         }
-
-        // Clear the finance-review-complete marker so the Notify button reappears.
-        $clearFinanceCompletionStmt = $pdo->prepare("DELETE FROM smt_request_status
-            WHERE inv_no = :inv_no
-              AND status = 'finance_review_complete'");
-        $clearFinanceCompletionStmt->execute([':inv_no' => $requestInvNo]);
 
         $insertFeedback = $pdo->prepare("INSERT INTO payroll_checklist_feedback (request_inv_no, payroll_month, emp_id, approver_id, feedback_note, status)
             VALUES (:request_inv_no, :payroll_month, :emp_id, :approver_id, :feedback_note, 'open')");
@@ -1592,11 +2265,16 @@ function approvePayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $req
 
     try {
         $chainManager = new ApprovalChainManager($conDB, $pdo);
-        $requiresChecklistReview = strtolower(trim((string)($GLOBALS['user_type'] ?? ''))) === 'hr_payroll';
+        $currentChecklistRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        $requiresChecklistReview = in_array($currentChecklistRole, ['hr_payroll', 'hr_senior_bp'], true);
+        $requiresFinanceVerification = isHeadOfficeFinanceManagerRole();
 
         // Run DDL before opening the transaction to avoid implicit commits in MySQL.
         if ($requiresChecklistReview) {
             ensurePayrollChecklistReviewTable($pdo);
+        }
+        if ($requiresFinanceVerification) {
+            ensurePayrollFinanceVerificationTable($pdo);
         }
 
         $pdo->beginTransaction();
@@ -1624,6 +2302,23 @@ function approvePayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $req
                     . $reviewSummary['total_employees']
                     . '.'
                 );
+            }
+        }
+
+        if ($requiresFinanceVerification) {
+            $monthValue = (string)($requestRow['payroll_month'] ?? '');
+            $verificationRow = getLatestFinanceVerificationRow($pdo, $requestInvNo, $monthValue, $currentUserId);
+            if (empty($verificationRow) || empty($verificationRow['is_confirmed'])) {
+                throw new Exception('Please complete Finance Verification setup (finance officer and companies confirmation) before approving.');
+            }
+
+            $assignedFinanceOfficerId = trim((string)($verificationRow['finance_officer_emp_id'] ?? ''));
+            if ($assignedFinanceOfficerId === '') {
+                throw new Exception('Assigned finance officer was not found for this verification setup.');
+            }
+
+            if (empty($verificationRow['officer_approved'])) {
+                throw new Exception('Finance officer approval is still pending. Please ask finance officer to approve from Payroll Checklist page.');
             }
         }
 
@@ -1714,15 +2409,8 @@ function approvePayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $req
             }
         }
 
-        $financeOfficerNotify = ['notification_sent' => false, 'email_sent' => false, 'recipient_count' => 0];
         if (!empty($result['is_final'])) {
-            if (function_exists('notifyPayrollFinanceOfficer')) {
-                $financeOfficerNotify = notifyPayrollFinanceOfficer($conDB, $pdo, $requestInvNo, (string)$requestRow['payroll_month']);
-                $notificationSent = $notificationSent || !empty($financeOfficerNotify['notification_sent']);
-                $emailSent = $emailSent || !empty($financeOfficerNotify['email_sent']);
-            }
-
-            // --- NOTIFY REQUESTER ON FINAL APPROVAL ---
+            // --- NOTIFY REQUESTER (PAYROLL GENERATOR) ON FINAL APPROVAL ---
             $requesterId = (string)($requestRow['requested_by'] ?? '');
             if ($requesterId !== '') {
                 $requesterQuery = "SELECT e.name, e.emp_id, al.email FROM employees e 
@@ -1743,7 +2431,7 @@ function approvePayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $req
                                 $conDB,
                                 (int)$requesterId,
                                 'Payroll Fully Approved',
-                                'Payroll ' . htmlspecialchars($requestRow['payroll_month']) . ' has been fully approved and sent to Finance for processing.',
+                                'Payroll ' . htmlspecialchars($requestRow['payroll_month']) . ' has been fully approved. Bank file is now ready to download and upload for transfer.',
                                 'all_payroll_approvals.php'
                             );
                             $notificationSent = true;
@@ -1755,7 +2443,7 @@ function approvePayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $req
                                 'APPROVER_NAME' => !empty($requester['name']) ? htmlspecialchars($requester['name']) : 'Requester',
                                 'REQUEST_ID' => $requestInvNo,
                                 'REQUEST_TYPE' => 'Payroll Approval',
-                                'EMAIL_MESSAGE' => 'Your payroll request has been fully approved by all approvers and has been forwarded to Finance for payment processing.',
+                                'EMAIL_MESSAGE' => 'Your payroll request has been fully approved by all approvers. You can now download the bank file and upload it to the bank for final transfer.',
                                 'PAYROLL_MONTH' => $requestRow['payroll_month'],
                                 'EMPLOYEE_COUNT' => (string)$employeeCount,
                                 'TOTAL_NET_SALARY' => number_format($totalNetSalary, 2),
@@ -1770,7 +2458,7 @@ function approvePayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $req
         }
 
         $responseMessage = !empty($result['is_final'])
-            ? 'Payroll approval is fully completed and sent to Finance Officer for payment processing.'
+            ? 'Payroll approval is fully completed. Payroll generator has been notified and bank file is now available for download.'
             : 'Payroll approval recorded and forwarded to next approver.';
 
         if ($emailSent) {

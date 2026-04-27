@@ -57,10 +57,15 @@
        $date           = '2023-05-09T15:49:54+03:00';
        $totalAmnt      = '740';*/
 
-       $company_name   = 'New Taef Information Techonology';
+    //    $company_name   = 'New Taef Information Techonology';
+    //    $vat_no         = '310171430800003';
+    //    $date           = '2025-08-16T17:49:14+03:00';
+    //    $totalAmnt      = '2036';
+       
+       $company_name   = 'مؤسسة حكاية جزيره للتجاره';
        $vat_no         = '310171430800003';
-       $date           = '2025-08-16T17:49:14+03:00';
-       $totalAmnt      = '2036';
+       $date           = '2026-04-26T18:36:14+03:00';
+       $totalAmnt      = '1580';
         
         $totalvat      = $totalAmnt / 100 * 15;
         $dataToEncode  = [

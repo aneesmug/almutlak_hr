@@ -5852,6 +5852,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                 return;
             }
             if (res.can_apply === false) {
+                const shouldForceEmergency = (parseFloat(currentBalance) || 0) < 1;
                 // Build a richer status message if details are available, plus the full approval chain
                 const esc = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
                 let lines = [];
@@ -5891,11 +5892,14 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 
                 const textMsg = res.message || lines.join('\n');
                 
-                // Add option to apply for emergency vacation with different dates
+                // Add option text based on balance: emergency only when balance is below 1
                 const htmlTop = esc(textMsg).replace(/\n/g, '<br/>');
+                const nextApplyNote = shouldForceEmergency
+                    ? (__('you_can_apply_for_emergency_vacation_with_different_dates') || 'You can apply for emergency vacation with different dates.')
+                    : (__('you_can_apply_for_another_vacation_with_different_date') || 'You can apply for another vacation with different dates.');
                 const fullHtml = chainHtml 
-                    ? `${htmlTop}${chainHtml}<hr/><p style="margin-top:15px;"><strong>${__('note') || 'Note'}:</strong> ${__('you_can_apply_for_emergency_vacation_with_different_dates') || 'You can apply for emergency vacation with different dates.'}</p>`
-                    : `${htmlTop}<br/><br/><strong>${__('note') || 'Note'}:</strong> ${__('you_can_apply_for_emergency_vacation_with_different_dates') || 'You can apply for emergency vacation with different dates.'}`;
+                    ? `${htmlTop}${chainHtml}<hr/><p style="margin-top:15px;"><strong>${__('note') || 'Note'}:</strong> ${nextApplyNote}</p>`
+                    : `${htmlTop}<br/><br/><strong>${__('note') || 'Note'}:</strong> ${nextApplyNote}`;
                 
                 Swal.fire({ 
                     title: __('cannot_apply_now') || 'Cannot Apply', 
@@ -5909,8 +5913,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     cancelButtonColor: APP_COLORS.secondary,
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        // Open the modal for emergency vacation, passing the active return date
-                        openVacationApplyModal(empid, deptId, country, currentBalance, true, res.active_return_date);
+                        openVacationApplyModal(empid, deptId, country, currentBalance, shouldForceEmergency, res.active_return_date, !shouldForceEmergency);
                     }
                 });
                 return;
@@ -5929,13 +5932,18 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 });
 
 // Extracted function to open the Apply Vacation modal after eligibility check
-function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate) {
+function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate, preferAnotherTitle) {
     currentBalance = currentBalance || 0;
     forceEmergency = forceEmergency || false;
     activeReturnDate = activeReturnDate || null;
+    preferAnotherTitle = preferAnotherTitle || false;
+
+    const modalTitleText = forceEmergency
+        ? __('apply_emergency_vacation')
+        : (preferAnotherTitle ? (__('apply_another_vacation') || 'Apply Another Vacation') : __('apply_vacation_info_title'));
 
     Swal.fire({
-        title: '<i class="fa fa-umbrella-beach"></i> ' + (forceEmergency ? __('apply_emergency_vacation') : __('apply_vacation_info_title')),
+        title: '<i class="fa fa-umbrella-beach"></i> ' + modalTitleText,
         html: vacationApply_HTML(country),
         showCancelButton: true,
         confirmButtonColor: APP_COLORS.primary,
@@ -6112,6 +6120,33 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 } else {
                     $('#vacation_days_display').addClass('d-none');
                 }
+
+                updateLocalVacationSalaryVisibility();
+            }
+
+            function updateLocalVacationSalaryVisibility() {
+                const selectedVac = $('input[name="vac_type"]:checked').val();
+                const selectedFly = $('input[name="fly_type"]:checked').val();
+
+                if (!(selectedVac === 'Local Vacation' && selectedFly === 'annual')) {
+                    return;
+                }
+
+                const startDate = $('#start_date').datepicker('getDate') || ($('#start_date').val() ? new Date($('#start_date').val()) : null);
+                const endDate = $('#end_date').datepicker('getDate') || ($('#end_date').val() ? new Date($('#end_date').val()) : null);
+
+                let localVacationDays = 0;
+                if (startDate instanceof Date && !isNaN(startDate) && endDate instanceof Date && !isNaN(endDate)) {
+                    localVacationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+                }
+
+                if (localVacationDays > 5) {
+                    $('#salaryTypeSection').removeClass('d-none');
+                } else {
+                    $('#salaryTypeSection').addClass('d-none');
+                    $('#salary_with_payroll').prop('checked', true);
+                    $('#salary_with_eos').prop('checked', false);
+                }
             }
 
             // Initialize departure and arrival date pickers
@@ -6226,6 +6261,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 if (vacValue === 'Encashed') {
                     // Show encashment section
                     $('#encashSection').removeClass('d-none');
+
+                    const parseEncashWholeDays = (value) => {
+                        const match = String(value || '').trim().match(/^(\d+)/);
+                        return match ? (parseInt(match[1], 10) || 0) : 0;
+                    };
                     
                     // Show loading state
                     $('#vacation_balance_display').text('Loading...');
@@ -6240,28 +6280,42 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             // console.log('Balance Response:', res);
                             if (res && res.status == 200) {
                                 var balance = parseFloat(res.balance) || 0;
+                                var maxWholeDays = Math.max(0, Math.floor(balance));
                                 $('#vacation_balance_display').text(balance.toFixed(2));
-                                $('#encash_days').attr('max', balance.toFixed(2));
+                                $('#encash_days').attr('max', maxWholeDays);
                             } else {
                                 console.error('Failed to fetch balance:', res);
                                 $('#vacation_balance_display').text('0.00');
+                                $('#encash_days').attr('max', 0);
                             }
                         },
                         error: function(xhr, status, error) {
                             console.error('Balance AJAX Error:', error);
                             console.error('Response Text:', xhr.responseText);
                             $('#vacation_balance_display').text('0.00');
+                            $('#encash_days').attr('max', 0);
                         }
                     });
                     
-                    // Calculate salary on input - using 'off' first to prevent duplicate bindings
-                    $('#encash_days').off('input').on('input', function() {
-                        var days = parseFloat($(this).val()) || 0;
-                        var balance = parseFloat($('#vacation_balance_display').text()) || 0;
+                    // Enforce whole-number days only and keep display as X.00
+                    $('#encash_days')
+                    .off('focus input blur')
+                    .on('focus', function() {
+                        const days = parseEncashWholeDays($(this).val());
+                        if (days > 0) {
+                            $(this).val(days);
+                        }
+                    })
+                    .on('input', function() {
+                        const digitsOnly = String($(this).val() || '').replace(/\D/g, '');
+                        $(this).val(digitsOnly);
+
+                        var days = parseInt(digitsOnly, 10) || 0;
+                        var maxDays = parseInt($(this).attr('max'), 10) || 0;
                         
-                        if (days > balance) {
-                            $(this).val(balance.toFixed(2));
-                            days = balance;
+                        if (maxDays > 0 && days > maxDays) {
+                            days = maxDays;
+                            $(this).val(days);
                         }
                         
                         if (days > 0) {
@@ -6287,6 +6341,20 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         } else {
                             $('#encashment_salary_display').text('0');
                         }
+                    })
+                    .on('blur', function() {
+                        var days = parseEncashWholeDays($(this).val());
+                        var maxDays = parseInt($(this).attr('max'), 10) || 0;
+
+                        if (maxDays > 0 && days > maxDays) {
+                            days = maxDays;
+                        }
+
+                        if (days > 0) {
+                            $(this).val(days + '.00');
+                        } else {
+                            $(this).val('');
+                        }
                     });
                 } else if (vacValue === 'Local Vacation' || vacValue === 'Fly') {
                     $('#flyTypeSection').removeClass('d-none');
@@ -6297,7 +6365,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             $('#replacementSection, #date_select').removeClass('d-none');
                             // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                             if (flyVal === 'annual') {
-                                $('#salaryTypeSection').removeClass('d-none');
+                                if (vacValue === 'Local Vacation') {
+                                    updateLocalVacationSalaryVisibility();
+                                } else {
+                                    $('#salaryTypeSection').removeClass('d-none');
+                                }
                                 // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation) and NOT for country 191 (Saudi Arabia)
                                 if (vacValue === 'Fly' && country !== '191') {
                                     $('#flightDatesSection, #notesSection').removeClass('d-none');
@@ -6318,7 +6390,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                 $('#replacementSection, #date_select').removeClass('d-none');
                                 // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                                 if (flyVal === 'annual') {
-                                    $('#salaryTypeSection').removeClass('d-none');
+                                    if (currentVacValue === 'Local Vacation') {
+                                        updateLocalVacationSalaryVisibility();
+                                    } else {
+                                        $('#salaryTypeSection').removeClass('d-none');
+                                    }
                                     // Show flight dates AND remarks ONLY for Fly + Annual and NOT for country 191
                                     if (currentVacValue === 'Fly' && country !== '191') {
                                         $('#flightDatesSection, #notesSection').removeClass('d-none');
@@ -6378,18 +6454,19 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     Swal.showValidationMessage(__('only_emergency_allowed_when_balance_below_one') || 'Your available balance is below 1 day. Please apply for Emergency Vacation only.');
                     return false;
                 }
-                const encashDays = parseFloat($('#encash_days').val()) || 0;
-                const balance = parseFloat($('#vacation_balance_display').text()) || 0;
-                if (!encashDays || encashDays < 0.01) {
+                const encashDays = parseInt(String($('#encash_days').val() || '').match(/^(\d+)/)?.[1] || '0', 10) || 0;
+                const currentDisplayedBalance = parseFloat($('#vacation_balance_display').text()) || 0;
+                const maxEncashDays = Math.max(0, Math.floor(currentDisplayedBalance));
+                if (!encashDays || encashDays < 1) {
                     Swal.showValidationMessage(__('enter_days_to_encash_validation') || 'Please enter number of days to encash');
                     return false;
                 }
-                if (encashDays > balance) {
+                if (encashDays > maxEncashDays) {
                     Swal.showValidationMessage(__('encash_days_exceeds_balance') || 'You cannot encash more than your balance');
                     return false;
                 }
                 // Attach encashment info to formData
-                formData.append('encash_days', encashDays);
+                formData.append('encash_days', encashDays.toFixed(2));
                 formData.append('encashment_salary', $('#encashment_salary_display').text());
             } else if (selectedRadio === 'Local Vacation' || selectedRadio === 'Fly') {
                 const flyType = $('input[name="fly_type"]:checked').val();
@@ -6444,10 +6521,26 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     }
                     // NEW: Validate vacation salary type selection for annual vacations ONLY (Emergency vacation is unpaid)
                     if (flyType === 'annual') {
-                        const salaryType = $('input[name="vacation_salary_type"]:checked').val();
-                        if (!salaryType) {
-                            Swal.showValidationMessage(__('vacation_salary_type_required') || 'Please select vacation salary payment option');
-                            return false;
+                        const localVacationDays = (function () {
+                            if (selectedRadio !== 'Local Vacation') {
+                                return null;
+                            }
+                            const start = new Date(startDate);
+                            const end = new Date(endDate);
+                            if (isNaN(start) || isNaN(end)) {
+                                return null;
+                            }
+                            return Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
+                        })();
+
+                        if (selectedRadio === 'Local Vacation' && localVacationDays !== null && localVacationDays <= 5) {
+                            formData.set('vacation_salary_type', 'payroll');
+                        } else {
+                            const salaryType = $('input[name="vacation_salary_type"]:checked').val();
+                            if (!salaryType) {
+                                Swal.showValidationMessage(__('vacation_salary_type_required') || 'Please select vacation salary payment option');
+                                return false;
+                            }
                         }
                     }
                     
@@ -8562,7 +8655,7 @@ function vacationApply_HTML(country) {
                 </div>
                 <div class="form-group">
                     <label for="encash_days">${__('enter_days_to_encash') || 'Enter number of days to encash'}<span class="text-danger">*</span></label>
-                    <input type="number" min="1" max="999" class="form-control" id="encash_days" name="encash_days" placeholder="${__('enter_days_to_encash_placeholder') || 'Days'}">
+                    <input type="text" inputmode="numeric" min="1" max="999" class="form-control" id="encash_days" name="encash_days" placeholder="${__('enter_days_to_encash_placeholder') || 'Days'}">
                 </div>
                 <div class="form-group">
                     <label>${__('encashment_salary_label') || 'Encashment Salary'}:</label>

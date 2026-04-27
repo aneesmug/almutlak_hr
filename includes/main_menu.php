@@ -64,7 +64,7 @@ $loanRejectionReport = 'loan_rejection_report.php';
 $page_roles = [
     'dashboard.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Executive_Team', 'Executive_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
     'dashboardgm.php' => ['GM'],
-    'add_new_employee.php' => ['Administrator', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll'],
+    'add_new_employee.php' => ['Administrator', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll', 'HR_Senior_BP'],
     'reg_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
     'emp_temp_contant.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
     'employee_audit_gen.php' => ['Administrator'],
@@ -147,7 +147,7 @@ $can_see_employees_bank_page = [
 ];
 
 $can_see_new_employee_page = [
-    'Administrator', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll'
+    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll'
 ];
 
 $can_see_employees_payroll_page = [

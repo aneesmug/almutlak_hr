@@ -626,6 +626,19 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
     
     // Build WHERE clause - include all employees for complete leave transaction reporting
     $where = ['1=1'];
+
+    // Normalize explicitly selected department filters from UI.
+    $selectedDepartments = [];
+    if (is_array($departments)) {
+        foreach ($departments as $dept) {
+            $dept = trim((string)$dept);
+            if ($dept === '' || strtolower($dept) === 'all' || strtolower($dept) === 'none') {
+                continue;
+            }
+            $selectedDepartments[] = $dept;
+        }
+        $selectedDepartments = array_values(array_unique($selectedDepartments));
+    }
     
     // NOTE: Department and company filtering is handled by getEmployeeFilterSQL, getDepartmentFilterSQL, getCompanyFilterSQL
     // Do NOT add hard-coded department restrictions here as it conflicts with allowed_employees access control
@@ -638,13 +651,14 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
                             !empty($_SESSION['allowed_departments_array']) || 
                             !empty($_SESSION['allowed_companies_array']);
     
-    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
+    if (!empty($selectedDepartments)) {
+        $deptList = array_map(function($d) use ($conDB) {
+            return "'" . mysqli_real_escape_string($conDB, $d) . "'";
+        }, $selectedDepartments);
+        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
         // Only apply hard-coded department filter if no access controls are configured
         $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
-        // Or if departments were explicitly requested
-        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
-        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
     }
     
     // Company filter - restrict by accessible companies

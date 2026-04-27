@@ -673,7 +673,6 @@ if (mysqli_num_rows($query) == 1) {
                                                     </div>
                                                     <span class="value">
                                                         <?= number_format($days_encashed, 2); ?> <?= __('day_s') ?? 'Days' ?>
-                                                        <small class="text-muted d-block"><?= __('exact_days') ?? 'Exact days' ?>: <?= htmlspecialchars($days_encashed_raw); ?></small>
                                                     </span>
                                                 </li>
                                                 <li>

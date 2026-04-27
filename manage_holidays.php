@@ -439,6 +439,30 @@ if (mysqli_num_rows($query) == 1) {
                 border-radius: 0.25rem;
                 font-size: 0.875rem;
             }
+
+            /* Keep date-range calendars side-by-side inside SweetAlert modals */
+            .swal2-container .daterangepicker {
+                z-index: 2200 !important;
+                min-width: 650px;
+            }
+
+            .swal2-container .daterangepicker .drp-calendar {
+                max-width: none;
+            }
+
+            .swal2-container .daterangepicker.show-calendar .drp-calendar.left,
+            .swal2-container .daterangepicker.show-calendar .drp-calendar.right {
+                display: inline-block;
+                float: none;
+                vertical-align: top;
+            }
+
+            @media (max-width: 767px) {
+                .swal2-container .daterangepicker {
+                    min-width: 0;
+                    width: 100%;
+                }
+            }
         </style>
     </head>
 
@@ -680,10 +704,17 @@ if (mysqli_num_rows($query) == 1) {
         <script>
             // Helper function to calculate and update days count
             function updateDaysCount(countElementId, dateInputId) {
-                const dateRangeValue = document.getElementById(dateInputId).value.trim();
+                const dateInput = document.getElementById(dateInputId);
+                const countElement = document.getElementById(countElementId);
+
+                if (!dateInput || !countElement) {
+                    return;
+                }
+
+                const dateRangeValue = String(dateInput.value || '').trim();
                 
                 if (!dateRangeValue) {
-                    document.getElementById(countElementId).textContent = '0';
+                    countElement.textContent = '0';
                     return;
                 }
                 
@@ -694,50 +725,103 @@ if (mysqli_num_rows($query) == 1) {
                     
                     if (startDate.isValid() && endDate.isValid()) {
                         const daysCount = endDate.diff(startDate, 'days') + 1; // +1 to include both start and end dates
-                        document.getElementById(countElementId).textContent = daysCount;
+                        countElement.textContent = daysCount;
                     }
                 }
             }
+
+            function initDateRangePicker(inputSelector, countElementId, startDate = null, endDate = null) {
+                const $input = $(inputSelector);
+                if (!$input.length) {
+                    return;
+                }
+
+                if (!$.fn || typeof $.fn.daterangepicker !== 'function' || typeof moment === 'undefined') {
+                    console.error('Date range picker dependencies are missing.');
+                    return;
+                }
+
+                if ($input.data('daterangepicker')) {
+                    $input.data('daterangepicker').remove();
+                }
+
+                const options = {
+                    locale: { format: 'MM/DD/YYYY' },
+                    autoUpdateInput: true,
+                    parentEl: '.swal2-popup',
+                    sideBySide: true,
+                    opens: 'center',
+                    drops: 'down'
+                };
+
+                const defaultStart = moment().format(options.locale.format);
+                const parsedStart = startDate ? moment(startDate) : null;
+                const parsedEnd = endDate ? moment(endDate) : null;
+
+                options.startDate = parsedStart && parsedStart.isValid()
+                    ? parsedStart.format(options.locale.format)
+                    : defaultStart;
+                options.endDate = parsedEnd && parsedEnd.isValid()
+                    ? parsedEnd.format(options.locale.format)
+                    : options.startDate;
+
+                $input.daterangepicker(options);
+                updateDaysCount(countElementId, $input.attr('id'));
+
+                $input.off('apply.daterangepicker.holidays').on('apply.daterangepicker.holidays', function() {
+                    updateDaysCount(countElementId, $input.attr('id'));
+                });
+            }
             
             function loadCompaniesForSelect(selectElement, selectedIds = []) {
+                const $select = $(selectElement);
+                if (!$select.length) {
+                    return;
+                }
+
                 $.ajax({
                     url: 'manage_holidays.php',
                     type: 'GET',
                     data: { action: 'get_companies' },
                     dataType: 'json',
                     success: function(res) {
-                        if (res.status === 'success') {
-                            const $select = $(selectElement);
+                        if (res && res.status === 'success' && Array.isArray(res.data)) {
                             $select.empty();
                             
                             // Add default option
                             $select.append('<option></option>');
                             
                             res.data.forEach(function(company) {
+                                if (!company || typeof company.id === 'undefined') {
+                                    return;
+                                }
                                 $select.append(
                                     '<option value=\"' + company.id + '\">' + 
-                                    $('<div/>').text(company.comp_name).html() + 
+                                    $('<div/>').text(company.comp_name || '').html() + 
                                     '</option>'
                                 );
                             });
                             
-                            // Initialize or reinitialize Select2
-                            if ($select.hasClass('select2-hidden-accessible')) {
-                                $select.select2('destroy');
+                            if ($.fn && typeof $.fn.select2 === 'function') {
+                                // Initialize or reinitialize Select2
+                                if ($select.hasClass('select2-hidden-accessible')) {
+                                    $select.select2('destroy');
+                                }
+
+                                $select.select2({
+                                    allowClear: true,
+                                    placeholder: 'Select one or more companies',
+                                    width: '100%',
+                                    dropdownParent: $('.swal2-popup')
+                                });
                             }
-                            
-                            $select.select2({
-                                allowClear: true,
-                                placeholder: 'Select one or more companies',
-                                width: '100%'
-                            });
                             
                             // Pre-select values if provided
                             if (Array.isArray(selectedIds) && selectedIds.length > 0) {
                                 $select.val(selectedIds).trigger('change');
                             }
                         } else {
-                            console.error('Error loading companies:', res.message);
+                            console.error('Error loading companies:', (res && res.message) ? res.message : 'Invalid response format');
                             Swal.fire('Error', 'Failed to load companies', 'error');
                         }
                     },
@@ -825,6 +909,7 @@ if (mysqli_num_rows($query) == 1) {
             function openAddHolidayModal() {
                 Swal.fire({
                     title: 'Add Holiday',
+                    width: '760px',
                     html: `
                         <div class="text-left">
                             <div class="form-group">
@@ -862,25 +947,12 @@ if (mysqli_num_rows($query) == 1) {
                         </div>
                     `,
                     didOpen: function() {
-                        // Load companies
-                        loadCompaniesForSelect('#companies_select_add');
-                        
-                        // Initialize date range picker after modal is shown
-                        $('#daterangepicker_add').daterangepicker({
-                            locale: {
-                                format: 'MM/DD/YYYY'
-                            },
-                            startDate: moment(),
-                            endDate: moment()
-                        });
-
-                        // Calculate and display days on load
-                        updateDaysCount('days_count_add', 'daterangepicker_add');
-
-                        // Update days count when date range changes
-                        $('#daterangepicker_add').on('apply.daterangepicker', function() {
-                            updateDaysCount('days_count_add', 'daterangepicker_add');
-                        });
+                        try {
+                            loadCompaniesForSelect('#companies_select_add');
+                            initDateRangePicker('#daterangepicker_add', 'days_count_add');
+                        } catch (err) {
+                            console.error('Error opening Add Holiday modal:', err);
+                        }
                     },
                     showCancelButton: true,
                     confirmButtonText: 'Save Holiday',
@@ -931,12 +1003,17 @@ if (mysqli_num_rows($query) == 1) {
                     success: function(res) {
                         if (res.status === 'success') {
                             const data = res.data;
-                            const startDate = moment(data.start_date);
-                            const endDate = moment(data.end_date);
-                            const dateRangeString = startDate.format('MM/DD/YYYY') + ' - ' + endDate.format('MM/DD/YYYY');
+                            const startMoment = moment(data.start_date, ['YYYY-MM-DD', 'MM/DD/YYYY']);
+                            const endMoment = moment(data.end_date, ['YYYY-MM-DD', 'MM/DD/YYYY']);
+                            const startDateValue = startMoment.isValid() ? startMoment.format('MM/DD/YYYY') : '';
+                            const endDateValue = endMoment.isValid() ? endMoment.format('MM/DD/YYYY') : '';
+                            const dateRangeString = startDateValue && endDateValue
+                                ? (startDateValue + ' - ' + endDateValue)
+                                : '';
                             
                             Swal.fire({
                                 title: 'Edit Holiday',
+                                width: '760px',
                                 html: `
                                     <div class="text-left">
                                         <div class="form-group">
@@ -974,22 +1051,15 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 `,
                                 didOpen: function() {
-                                    // Load companies and pre-select assigned ones
-                                    loadCompaniesForSelect('#companies_select_edit', data.company_ids || []);
-                                    
-                                    // Initialize date range picker after modal is shown
-                                    $('#daterangepicker_edit').daterangepicker({
-                                        startDate: startDate,
-                                        endDate: endDate,
-                                        locale: {
-                                            format: 'MM/DD/YYYY'
-                                        }
-                                    });
+                                    try {
+                                        // Load companies and pre-select assigned ones
+                                        loadCompaniesForSelect('#companies_select_edit', data.company_ids || []);
 
-                                    // Update days count when date range changes
-                                    $('#daterangepicker_edit').on('apply.daterangepicker', function() {
-                                        updateDaysCount('days_count_edit', 'daterangepicker_edit');
-                                    });
+                                        // Initialize date range picker after modal is shown
+                                        initDateRangePicker('#daterangepicker_edit', 'days_count_edit', startDateValue, endDateValue);
+                                    } catch (err) {
+                                        console.error('Error opening Edit Holiday modal:', err);
+                                    }
                                 },
                                 showCancelButton: true,
                                 confirmButtonText: 'Update Holiday',

@@ -151,6 +151,12 @@ if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
             return ['success' => true, 'skipped' => true, 'message' => 'Excuse leave types do not require a temporary role assignment.'];
         }
 
+        // Only Fly vacations can temporarily assign replacement role.
+        // Local and other vacation types must not modify admin_login.user_type.
+        if ($vac_type_lower !== 'fly') {
+            return ['success' => true, 'skipped' => true, 'message' => 'Only Fly vacations can assign temporary replacement role.'];
+        }
+
         $replacement_emp_id = trim((string)($vacRow['replacement_person'] ?? ''));
         if ($replacement_emp_id === '') {
             return ['success' => false, 'message' => 'Replacement Person must be selected for non-employee vacation requests.'];
@@ -2579,20 +2585,8 @@ if (!function_exists('handle_approval_action')) {
                             }
 
                             if ($vacation_id > 0) {
-                                // Assign temporary replacement role on final vacation approval (non-encashed only)
-                                if (!$is_encashed && !empty($vacation_emp_id)) {
-                                    $roleAssignResult = assignTemporaryVacationRoleToReplacement(
-                                        $conDB,
-                                        $vacation_id,
-                                        $inv_no_safe,
-                                        $vacation_emp_id,
-                                        $current_user_id_safe
-                                    );
-                                    if (!$roleAssignResult['success']) {
-                                        $result_payload['role_assignment_warning'] = $roleAssignResult['message'];
-                                        error_log('Vacation ' . $inv_no_safe . ': temporary role assignment failed - ' . $roleAssignResult['message']);
-                                    }
-                                }
+                                // NOTE: Automatic temporary role assignment is disabled.
+                                // HR Payroll handles transfer/return manually from all_applied_vac.php.
 
                                 // CRITICAL: Only update balance if this is NOT an asset clearance approval
                                 // Balance should only be updated when HR_Payroll approves, not during asset clearance

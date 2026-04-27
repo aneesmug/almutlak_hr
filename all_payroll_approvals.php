@@ -9,9 +9,18 @@ if (isset($isEmployee) && $isEmployee === true) {
     exit();
 }
 
+$currentUserTypeForAccess = strtolower(trim((string)($user_type ?? '')));
+$currentEmpTypeForAccess = strtolower(trim((string)($emp_type ?? '')));
+$isFinanceOfficerUser = ($currentUserTypeForAccess === 'finance_officer')
+    || ($currentUserTypeForAccess === 'finance' && $currentEmpTypeForAccess !== 'manager' && (int)($user_dept ?? 0) === 2);
+if ($isFinanceOfficerUser) {
+    header('Location: ./dashboard.php');
+    exit();
+}
+
 $pdo = getDbConnection();
 ensurePayrollApprovalTable($pdo);
-ensurePayrollChecklistReviewTable($pdo);
+ensurePayrollChecklistSupportTables($pdo);
 $requestTypeId = ensurePayrollApprovalRequestType($pdo);
 
 $allStatuses = [
@@ -38,14 +47,9 @@ if ($currentPage < 1) {
     $currentPage = 1;
 }
 
-$isFinanceOfficerRole = function_exists('isHeadOfficeFinanceOfficer')
-    ? isHeadOfficeFinanceOfficer(true)
-    : (isset($user_type) && strtolower(trim((string)$user_type)) === 'finance_officer' && (int)($user_dept ?? 0) === 2);
 $currentFilter = $_GET['status'] ?? null;
 if ($currentFilter === null) {
     if ($is_system_admin) {
-        $currentFilter = 'all';
-    } elseif ($isFinanceOfficerRole) {
         $currentFilter = 'all';
     } else {
         $currentFilter = 'my_pending';
@@ -53,9 +57,6 @@ if ($currentFilter === null) {
 }
 
 $canSeeAllDepts = ($is_system_admin ?? false) || ($isHR ?? false);
-$resolvedUserType = strtolower(trim((string)($user_type ?? '')));
-$isFinanceRole = ($resolvedUserType !== 'finance_officer' && stripos($resolvedUserType, 'finance') !== false) || $isFinanceOfficerRole;
-$canSeeAllDepts = $canSeeAllDepts || $isFinanceRole;
 
 $where = [];
 $params = [];
@@ -76,6 +77,22 @@ $joins = " LEFT JOIN payroll_approval_requests pr ON pr.payroll_month = p_months
                WHERE ra_pick.request_type_id = ? AND ra_pick.status = 'pending'
            ) ra_pending ON ra_pending.request_inv_no = pr.request_inv_no
            LEFT JOIN employees approver_emp ON approver_emp.emp_id = ra_pending.approver_id
+           LEFT JOIN (
+               SELECT
+                   v.request_inv_no,
+                   v.payroll_month,
+                   CASE WHEN v.is_confirmed = 1 THEN 1 ELSE 0 END AS verification_confirmed,
+                   CASE WHEN v.officer_approved = 1 THEN 1 ELSE 0 END AS officer_approved,
+                   v.selected_company_ids,
+                   v.confirmed_at,
+                   v.finance_officer_emp_id
+               FROM payroll_finance_verification v
+               INNER JOIN (
+                   SELECT request_inv_no, payroll_month, MAX(id) AS max_id
+                   FROM payroll_finance_verification
+                   GROUP BY request_inv_no, payroll_month
+               ) fv_latest ON fv_latest.max_id = v.id
+           ) fin_verify ON fin_verify.request_inv_no = pr.request_inv_no AND fin_verify.payroll_month = p_months.month_year
            LEFT JOIN (
                SELECT
                    pec.request_inv_no,
@@ -163,17 +180,16 @@ if ($totalItems > 0) {
             pr.created_at AS approval_created_at,
             pr.approved_at,
             pr.processed_at,
-                        CASE WHEN EXISTS (
-                                SELECT 1
-                                FROM smt_request_status srs
-                                WHERE srs.inv_no = pr.request_inv_no
-                                    AND srs.status = 'finance_review_complete'
-                        ) THEN 1 ELSE 0 END AS finance_review_completed,
             req_emp.name AS requester_name,
             req_emp.dept AS requester_dept,
             ra_pending.approver_id AS current_approver_id,
             ra_pending.approval_level AS current_approval_level,
             approver_emp.name AS current_approver_name,
+            COALESCE(fin_verify.verification_confirmed, 0) AS finance_verification_confirmed,
+            COALESCE(fin_verify.officer_approved, 0) AS finance_officer_approved,
+            fin_verify.selected_company_ids AS finance_selected_company_ids,
+            fin_verify.confirmed_at AS finance_verification_confirmed_at,
+            fin_verify.finance_officer_emp_id AS finance_verification_officer,
             COALESCE(hr_checks.checked_employees, 0) AS hr_checked_count
         FROM (
             SELECT month_year, COUNT(emp_id) AS employee_count, SUM(net_salary) AS total_net_salary
@@ -221,6 +237,242 @@ if ($unfilteredRes && ($tmp = mysqli_fetch_assoc($unfilteredRes))) {
     $unfilteredTotalItems = (int)$tmp['total'];
 }
 $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll';
+$isHeadOfficeFinanceManager = strtolower(trim((string)($user_type ?? ''))) === 'finance'
+    && strtolower(trim((string)($emp_type ?? ''))) === 'manager'
+    && (int)($user_dept ?? 0) === 2;
+
+function getPayrollModifiedEmployeesForApprovalGate(PDO $pdo, string $requestInvNo, string $monthValue): array
+{
+    if ($requestInvNo === '' || $monthValue === '') {
+        return [];
+    }
+
+    $requestStmt = $pdo->prepare("SELECT created_at FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1");
+    $requestStmt->execute([':inv_no' => $requestInvNo]);
+    $requestCreatedAt = trim((string)$requestStmt->fetchColumn());
+    if ($requestCreatedAt === '') {
+        return [];
+    }
+
+    $modifiedEmployees = [];
+
+    $columnCheckStmt = $pdo->prepare("SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = :table_name
+          AND COLUMN_NAME = :column_name");
+
+    $tableHasColumn = static function (string $tableName, string $columnName) use ($columnCheckStmt): bool {
+        $columnCheckStmt->execute([
+            ':table_name' => $tableName,
+            ':column_name' => $columnName
+        ]);
+        return ((int)$columnCheckStmt->fetchColumn() > 0);
+    };
+
+    $benefitHasUpdatedAt = $tableHasColumn('payroll_benefits', 'updated_at');
+    $benefitHasCreatedAt = $tableHasColumn('payroll_benefits', 'created_at');
+    if ($benefitHasUpdatedAt || $benefitHasCreatedAt) {
+        $benefitTimeExpr = $benefitHasUpdatedAt && $benefitHasCreatedAt
+            ? 'GREATEST(COALESCE(pb.updated_at, pb.created_at), COALESCE(pb.created_at, pb.updated_at))'
+            : ($benefitHasUpdatedAt ? 'pb.updated_at' : 'pb.created_at');
+
+        $benefitStmt = $pdo->prepare("SELECT DISTINCT pb.emp_id
+            FROM payroll_benefits pb
+            WHERE pb.month = :month_year
+              AND pb.status = 1
+              AND {$benefitTimeExpr} > :request_created_at");
+        $benefitStmt->execute([
+            ':month_year' => $monthValue,
+            ':request_created_at' => $requestCreatedAt,
+        ]);
+        foreach ($benefitStmt->fetchAll(PDO::FETCH_COLUMN) as $empId) {
+            $empId = trim((string)$empId);
+            if ($empId !== '') {
+                $modifiedEmployees[$empId] = true;
+            }
+        }
+    }
+
+    $deductionHasUpdatedAt = $tableHasColumn('payroll_deductions', 'updated_at');
+    $deductionHasCreatedAt = $tableHasColumn('payroll_deductions', 'created_at');
+    if ($deductionHasUpdatedAt || $deductionHasCreatedAt) {
+        $deductionTimeExpr = $deductionHasUpdatedAt && $deductionHasCreatedAt
+            ? 'GREATEST(COALESCE(pd.updated_at, pd.created_at), COALESCE(pd.created_at, pd.updated_at))'
+            : ($deductionHasUpdatedAt ? 'pd.updated_at' : 'pd.created_at');
+
+        $deductionStmt = $pdo->prepare("SELECT DISTINCT pd.emp_id
+            FROM payroll_deductions pd
+            WHERE pd.month = :month_year
+              AND pd.status = 1
+              AND {$deductionTimeExpr} > :request_created_at");
+        $deductionStmt->execute([
+            ':month_year' => $monthValue,
+            ':request_created_at' => $requestCreatedAt,
+        ]);
+        foreach ($deductionStmt->fetchAll(PDO::FETCH_COLUMN) as $empId) {
+            $empId = trim((string)$empId);
+            if ($empId !== '') {
+                $modifiedEmployees[$empId] = true;
+            }
+        }
+    }
+
+    return $modifiedEmployees;
+}
+
+function getFinanceVerifierChecklistCompletion(PDO $pdo, string $requestInvNo, string $monthValue, string $verifierEmpId, bool $isManagerVerifier = false): array
+{
+    if ($requestInvNo === '' || $monthValue === '' || $verifierEmpId === '') {
+        return [
+            'total_employees' => 0,
+            'checked_employees' => 0,
+            'remaining_employees' => 0,
+            'is_completed' => false
+        ];
+    }
+
+    $scopeWhere = $isManagerVerifier ? 'finance_manager_emp_id = :verifier_id' : 'finance_officer_emp_id = :verifier_id';
+    $scopeStmt = $pdo->prepare("SELECT selected_company_ids
+        FROM payroll_finance_verification
+        WHERE request_inv_no = :inv_no
+          AND payroll_month = :month_year
+          AND " . $scopeWhere . "
+          AND is_confirmed = 1
+        ORDER BY id DESC
+        LIMIT 1");
+    $scopeStmt->execute([
+        ':inv_no' => $requestInvNo,
+        ':month_year' => $monthValue,
+        ':verifier_id' => $verifierEmpId
+    ]);
+    $scopeRaw = $scopeStmt->fetchColumn();
+    $scopeCompanies = json_decode((string)($scopeRaw ?: '[]'), true);
+    if (!is_array($scopeCompanies)) {
+        $scopeCompanies = [];
+    }
+
+    $scopeCompanies = array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $scopeCompanies), static function ($value) {
+        return $value !== '';
+    })));
+
+    if (empty($scopeCompanies)) {
+        return [
+            'total_employees' => 0,
+            'checked_employees' => 0,
+            'remaining_employees' => 0,
+            'is_completed' => false
+        ];
+    }
+
+    $scopeParams = [':month_year' => $monthValue];
+    $scopePlaceholders = [];
+    foreach ($scopeCompanies as $index => $companyId) {
+        $paramKey = ':scope_company_' . $index;
+        $scopePlaceholders[] = $paramKey;
+        $scopeParams[$paramKey] = $companyId;
+    }
+
+    $employeesStmt = $pdo->prepare("SELECT DISTINCT p.emp_id
+        FROM payrolls p
+        INNER JOIN employees e ON e.emp_id = p.emp_id
+        WHERE p.month_year = :month_year
+          AND CAST(e.comp_no AS CHAR) IN (" . implode(', ', $scopePlaceholders) . ")");
+    $employeesStmt->execute($scopeParams);
+    $scopeEmpIds = array_values(array_filter(array_map('trim', array_map('strval', $employeesStmt->fetchAll(PDO::FETCH_COLUMN))), static function ($empId) {
+        return $empId !== '';
+    }));
+
+    $totalEmployees = count($scopeEmpIds);
+    if ($totalEmployees <= 0) {
+        return [
+            'total_employees' => 0,
+            'checked_employees' => 0,
+            'remaining_employees' => 0,
+            'is_completed' => true
+        ];
+    }
+
+    $modifiedByEmp = getPayrollModifiedEmployeesForApprovalGate($pdo, $requestInvNo, $monthValue);
+    $requiredEmpIds = [];
+    foreach ($scopeEmpIds as $scopeEmpId) {
+        if (!empty($modifiedByEmp[$scopeEmpId])) {
+            $requiredEmpIds[] = $scopeEmpId;
+        }
+    }
+
+    $requiredCount = count($requiredEmpIds);
+    if ($requiredCount <= 0) {
+        return [
+            'total_employees' => $totalEmployees,
+            'checked_employees' => $totalEmployees,
+            'remaining_employees' => 0,
+            'is_completed' => true
+        ];
+    }
+
+    $checkedParams = [
+        ':request_inv_no' => $requestInvNo,
+        ':payroll_month' => $monthValue,
+        ':approver_id' => $verifierEmpId,
+    ];
+    $requiredPlaceholders = [];
+    foreach ($requiredEmpIds as $idx => $empId) {
+        $key = ':req_emp_' . $idx;
+        $requiredPlaceholders[] = $key;
+        $checkedParams[$key] = $empId;
+    }
+
+    $checkedStmt = $pdo->prepare("SELECT COUNT(DISTINCT pec.emp_id)
+        FROM payroll_checklist_employee_checks pec
+        WHERE pec.request_inv_no = :request_inv_no
+          AND pec.payroll_month = :payroll_month
+          AND pec.approver_id = :approver_id
+          AND pec.is_checked = 1
+          AND pec.emp_id IN (" . implode(', ', $requiredPlaceholders) . ")");
+    $checkedStmt->execute($checkedParams);
+    $checkedRequiredEmployees = (int)$checkedStmt->fetchColumn();
+
+    $checkedEmployees = max(0, ($totalEmployees - $requiredCount) + $checkedRequiredEmployees);
+    $remainingEmployees = max(0, $totalEmployees - $checkedEmployees);
+
+    return [
+        'total_employees' => $totalEmployees,
+        'checked_employees' => $checkedEmployees,
+        'remaining_employees' => $remainingEmployees,
+        'is_completed' => $remainingEmployees === 0
+    ];
+}
+
+function getPayrollMonthCompanyIds(PDO $pdo, string $monthValue): array
+{
+    static $cache = [];
+
+    if ($monthValue === '') {
+        return [];
+    }
+
+    if (isset($cache[$monthValue])) {
+        return $cache[$monthValue];
+    }
+
+    $stmt = $pdo->prepare("SELECT DISTINCT CAST(e.comp_no AS CHAR)
+        FROM payrolls p
+        INNER JOIN employees e ON e.emp_id = p.emp_id
+        WHERE p.month_year = :month_year");
+    $stmt->execute([':month_year' => $monthValue]);
+
+    $companyIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $stmt->fetchAll(PDO::FETCH_COLUMN)), static function ($value) {
+        return $value !== '';
+    })));
+
+    $cache[$monthValue] = $companyIds;
+    return $companyIds;
+}
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -384,8 +636,97 @@ $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll'
                                     <?php foreach ($requests as $request): ?>
                                         <?php
                                         $approvalStatus = $request['approval_status'] ?? null;
-                                        $isFinanceReviewCompleted = !empty($request['finance_review_completed']);
                                         $isPendingWithMe = ($approvalStatus === 'pending_approval' && !empty($request['current_approver_id']) && (string)$request['current_approver_id'] === (string)$empid);
+                                        $financeVerificationConfirmed = !empty($request['finance_verification_confirmed']);
+                                        $financeOfficerApproved = !empty($request['finance_officer_approved']);
+                                        $assignedCompanyIdsRaw = json_decode((string)($request['finance_selected_company_ids'] ?? '[]'), true);
+                                        $assignedCompanyIds = is_array($assignedCompanyIdsRaw)
+                                            ? array_values(array_unique(array_filter(array_map(static function ($value) {
+                                                return trim((string)$value);
+                                            }, $assignedCompanyIdsRaw), static function ($value) {
+                                                return $value !== '';
+                                            })))
+                                            : [];
+                                        $monthCompanyIds = getPayrollMonthCompanyIds($pdo, (string)($request['payroll_month'] ?? ''));
+                                        $unassignedCompanyIds = array_values(array_diff($monthCompanyIds, $assignedCompanyIds));
+                                        $allCompaniesAssigned = !empty($monthCompanyIds) && empty($unassignedCompanyIds);
+                                        $assignedCompaniesCount = count($assignedCompanyIds);
+                                        $monthCompaniesCount = count($monthCompanyIds);
+                                        $financeOfficerChecklistCompletion = [
+                                            'total_employees' => 0,
+                                            'checked_employees' => 0,
+                                            'remaining_employees' => 0,
+                                            'is_completed' => false
+                                        ];
+                                        if ($financeVerificationConfirmed && !empty($request['finance_verification_officer']) && !empty($request['request_inv_no'])) {
+                                            $financeOfficerChecklistCompletion = getFinanceVerifierChecklistCompletion(
+                                                $pdo,
+                                                (string)$request['request_inv_no'],
+                                                (string)$request['payroll_month'],
+                                                (string)$request['finance_verification_officer'],
+                                                false
+                                            );
+                                        }
+                                        $financeOfficerChecklistCompleted = $financeVerificationConfirmed
+                                            && !empty($financeOfficerChecklistCompletion['is_completed']);
+                                        $isHeadOfficeFinancePending = $isHeadOfficeFinanceManager && $isPendingWithMe;
+                                        $financeManagerChecklistCompletion = [
+                                            'total_employees' => 0,
+                                            'checked_employees' => 0,
+                                            'remaining_employees' => 0,
+                                            'is_completed' => false
+                                        ];
+                                        if ($isHeadOfficeFinancePending && $financeVerificationConfirmed && !empty($request['request_inv_no'])) {
+                                            $financeManagerChecklistCompletion = getFinanceVerifierChecklistCompletion(
+                                                $pdo,
+                                                (string)$request['request_inv_no'],
+                                                (string)$request['payroll_month'],
+                                                (string)$empid,
+                                                true
+                                            );
+                                        }
+                                        $financeManagerChecklistCompleted = $isHeadOfficeFinancePending
+                                            ? !empty($financeManagerChecklistCompletion['is_completed'])
+                                            : true;
+                                        
+                                        // Check if ALL companies in this payroll month have been approved by their respective officers
+                                        $allAssignedCompaniesApproved = true;
+                                        if ($isHeadOfficeFinancePending && !empty($monthCompanyIds) && !empty($request['request_inv_no'])) {
+                                            $companyApprovalsStmt = $pdo->prepare("SELECT DISTINCT selected_company_ids
+                                                FROM payroll_finance_verification
+                                                WHERE request_inv_no = :inv_no
+                                                  AND payroll_month = :month_year
+                                                  AND officer_approved = 1
+                                                  AND is_confirmed = 1");
+                                            $companyApprovalsStmt->execute([
+                                                ':inv_no' => $request['request_inv_no'],
+                                                ':month_year' => $request['payroll_month']
+                                            ]);
+                                            
+                                            $approvedCompanyRecords = $companyApprovalsStmt->fetchAll(PDO::FETCH_COLUMN);
+                                            $approvedCompanies = [];
+                                            foreach ($approvedCompanyRecords as $companiesJson) {
+                                                $decoded = json_decode((string)$companiesJson, true);
+                                                if (is_array($decoded)) {
+                                                    $approvedCompanies = array_merge($approvedCompanies, $decoded);
+                                                }
+                                            }
+                                            $approvedCompanies = array_unique(array_filter(array_map(static function ($v) {
+                                                return trim((string)$v);
+                                            }, $approvedCompanies)));
+                                            
+                                            // Check if ALL companies in the month are approved
+                                            foreach ($monthCompanyIds as $companyId) {
+                                                if (!in_array($companyId, $approvedCompanies, true)) {
+                                                    $allAssignedCompaniesApproved = false;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        
+                                        $financeOfficerFinalApproved = $financeOfficerChecklistCompleted && $financeOfficerApproved && $financeManagerChecklistCompleted && $allAssignedCompaniesApproved;
+                                        $canApproveNow = $isPendingWithMe && (!$isHeadOfficeFinancePending || $financeOfficerFinalApproved);
+                                        $showFinanceVerificationSetupAction = $isHeadOfficeFinancePending && !$allCompaniesAssigned;
                                         $hrCheckedCount = (int)($request['hr_checked_count'] ?? 0);
                                         $monthEmployeeCount = (int)($request['employee_count'] ?? 0);
                                         $canSendCompanyPayrollReport = $isHrPayrollUser
@@ -407,12 +748,8 @@ $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll'
                                             $statusText = __('pending_with') . ' ' . htmlspecialchars($nextApprover);
                                             $statusIcon = "<i class='fa fa-hourglass-half text-white'></i>";
                                         } elseif ($approvalStatus === 'approved') {
-                                            $statusClass = $isFinanceReviewCompleted ? 'info' : 'success';
-                                            $statusText = $isFinanceOfficerRole
-                                                ? ($isFinanceReviewCompleted
-                                                    ? __('finance_review_already', 'Finance Review Already')
-                                                    : __('ready_for_finance_review', 'Ready for Finance Review'))
-                                                : __('approved');
+                                            $statusClass = 'success';
+                                            $statusText = __('approved');
                                             $statusIcon = "<i class='fa fa-check text-white'></i>";
                                         } elseif ($approvalStatus === 'rejected') {
                                             $statusClass = 'danger';
@@ -428,7 +765,7 @@ $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll'
                                         if ($approvalStatus === 'pending_approval') {
                                             $checklistBtnClass = 'btn-warning';
                                         } elseif ($approvalStatus === 'approved') {
-                                            $checklistBtnClass = ($isFinanceOfficerRole && $isFinanceReviewCompleted) ? 'btn-secondary' : 'btn-success';
+                                            $checklistBtnClass = 'btn-success';
                                         } elseif ($approvalStatus === 'rejected') {
                                             $checklistBtnClass = 'btn-danger';
                                         } elseif ($approvalStatus === 'completed') {
@@ -453,6 +790,18 @@ $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll'
                                                         <?php if ($isHrPayrollUser): ?>
                                                         <div class="detail-item"><i class="fad fa-user-check"></i><strong><?= __('checked_by_me', 'Checked By Me') ?>:</strong> <?= $hrCheckedCount ?> / <?= $monthEmployeeCount ?></div>
                                                         <?php endif; ?>
+                                                        <?php if ($isHeadOfficeFinancePending && $financeVerificationConfirmed && !$financeOfficerChecklistCompleted): ?>
+                                                        <div class="detail-item"><i class="fad fa-user-clock"></i><strong><?= __('finance_verification_status', 'Finance Verification') ?>:</strong> <?= (int)($financeOfficerChecklistCompletion['checked_employees'] ?? 0) ?> / <?= (int)($financeOfficerChecklistCompletion['total_employees'] ?? 0) ?></div>
+                                                        <?php endif; ?>
+                                                        <?php if ($isHeadOfficeFinancePending && $monthCompaniesCount > 0): ?>
+                                                        <div class="detail-item"><i class="fad fa-building"></i><strong><?= __('assigned_companies', 'Assigned Companies') ?>:</strong> <?= $assignedCompaniesCount ?> / <?= $monthCompaniesCount ?></div>
+                                                        <?php endif; ?>
+                                                        <?php if ($isHeadOfficeFinancePending && $financeOfficerChecklistCompleted && !$financeOfficerApproved): ?>
+                                                        <div class="detail-item"><i class="fad fa-hourglass-half"></i><strong><?= __('finance_officer_approval', 'Finance Officer Approval') ?>:</strong> <?= __('pending', 'Pending') ?></div>
+                                                        <?php endif; ?>
+                                                        <?php if ($isHeadOfficeFinancePending && $financeVerificationConfirmed && !$financeManagerChecklistCompleted): ?>
+                                                        <div class="detail-item"><i class="fad fa-list-check"></i><strong><?= __('manager_verification_status', 'Manager Verification') ?>:</strong> <?= (int)($financeManagerChecklistCompletion['checked_employees'] ?? 0) ?> / <?= (int)($financeManagerChecklistCompletion['total_employees'] ?? 0) ?></div>
+                                                        <?php endif; ?>
                                                         <?php if (!empty($request['requester_name'])): ?>
                                                         <div class="detail-item"><i class="fad fa-user"></i><strong><?= __('requested_by', 'Requested By') ?>:</strong> <?= htmlspecialchars(getDisplayName($request['requester_name'])) ?></div>
                                                         <?php endif; ?>
@@ -468,7 +817,7 @@ $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll'
                                                 </div>
                                                 <div class="card-footer d-flex justify-content-between align-items-center" style="gap:0.5rem;">
                                                     <a class="btn <?= $checklistBtnClass ?> btn-block waves-effect" href="payroll_checklist_report.php?month=<?= urlencode($request['payroll_month']) ?><?php if (!empty($request['request_inv_no'])): ?>&request_inv_no=<?= urlencode($request['request_inv_no']) ?><?php endif; ?>" target="_blank">
-                                                        <i class="fa fa-clipboard-check"></i> <?= ($isFinanceOfficerRole && $approvalStatus === 'approved') ? ($isFinanceReviewCompleted ? __('finance_review_completed', 'Finance Officer Review Completed') : __('start_finance_review', 'Start Finance Review')) : __('payroll_checklist_report', 'Payroll Check List') ?>
+                                                        <i class="fa fa-clipboard-check"></i> <?= __('payroll_checklist_report', 'Payroll Check List') ?>
                                                     </a>
                                                     <div class="btn-group flex-fill">
                                                         <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -484,7 +833,13 @@ $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll'
                                                                     <i class="fa fa-paper-plane text-warning"></i> <?= __('start_approval', 'Start Approval') ?>
                                                                 </a>
                                                             <?php endif; ?>
-                                                            <?php if ($isPendingWithMe): ?>
+                                                            <?php if ($showFinanceVerificationSetupAction): ?>
+                                                                <div class="dropdown-divider"></div>
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="openFinanceVerificationSetupModal('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>')">
+                                                                    <i class="fa fa-tasks text-primary"></i> <?= __('finance_verification_setup', 'Finance Verification Setup') ?> (<?= $assignedCompaniesCount ?> / <?= $monthCompaniesCount ?>)
+                                                                </a>
+                                                            <?php endif; ?>
+                                                            <?php if ($canApproveNow): ?>
                                                                 <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['employee_count'] ?? 0) ?>, <?= (float)($request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>')">
                                                                     <i class="fa fa-check text-success"></i> <?= __('approve') ?>
@@ -701,6 +1056,466 @@ async function rejectPayrollRequest(requestInvNo, payrollMonth, employeeCount, t
     } catch (error) {
         Swal.close();
         Swal.fire('<?= __('error') ?>', error.message || 'Failed to reject request', 'error');
+    }
+}
+
+async function openFinanceVerificationSetupModal(requestInvNo, payrollMonth) {
+    try {
+        const loadPayload = new URLSearchParams();
+        loadPayload.append('action', 'get_finance_verification_setup');
+        loadPayload.append('request_inv_no', requestInvNo);
+        loadPayload.append('month', payrollMonth);
+
+        Swal.fire({
+            title: '<?= __('loading', 'Loading') ?>',
+            html: '<?= __('please_wait_fetching_data', 'Please wait while fetching data...') ?>',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const loadResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: loadPayload.toString()
+        });
+        const loadData = await loadResponse.json();
+        Swal.close();
+
+        if (!loadResponse.ok || loadData.status !== 'success') {
+            throw new Error(loadData.message || 'Failed to load finance verification setup data.');
+        }
+
+        const officers = Array.isArray(loadData.officers) ? loadData.officers : [];
+        const companies = Array.isArray(loadData.companies) ? loadData.companies : [];
+        const existing = loadData.existing || {};
+        const historyItems = Array.isArray(loadData.history) ? loadData.history : [];
+        const assignedOfficerEmpIds = new Set(Array.isArray(loadData.assigned_officer_emp_ids)
+            ? loadData.assigned_officer_emp_ids.map((value) => String(value || '').trim()).filter(Boolean)
+            : []);
+        const companyNameById = companies.reduce((acc, company) => {
+            const id = String(company.comp_id || '').trim();
+            if (id) {
+                acc[id] = String(company.comp_name || id);
+            }
+            return acc;
+        }, {});
+
+        if (officers.length === 0) {
+            throw new Error('No finance officer available for assignment.');
+        }
+        if (companies.length === 0) {
+            throw new Error('No payroll company data available for this month.');
+        }
+
+        const assignedOfficerEmpId = String(existing.finance_officer_emp_id || '').trim();
+        const officerApproved = !!existing.officer_approved;
+        const officerOptions = officers.map((officer) => {
+            const officerEmpId = String(officer.emp_id || '').trim();
+            const isAlreadyAssignedOfficer = assignedOfficerEmpIds.has(officerEmpId)
+                || (assignedOfficerEmpId !== '' && officerEmpId === assignedOfficerEmpId);
+            const disabledAttr = isAlreadyAssignedOfficer ? ' disabled' : '';
+            const statusSuffix = isAlreadyAssignedOfficer
+                ? (officerApproved
+                    ? ' - <?= __('already_assigned_approved', 'Already Assigned (Approved)') ?>'
+                    : ' - <?= __('already_assigned', 'Already Assigned') ?>')
+                : '';
+            return `<option value="${officerEmpId.replace(/"/g, '&quot;')}"${disabledAttr}>${String(officer.name || officer.emp_id || 'N/A')}${statusSuffix}</option>`;
+        }).join('');
+
+        const existingCompanyIds = new Set(Array.isArray(existing.selected_company_ids) ? existing.selected_company_ids.map(v => String(v || '')) : []);
+        const assignedCount = existingCompanyIds.size;
+        const totalCompanyCount = companies.length;
+        const sentOfficerName = String(existing.finance_officer_name || existing.finance_officer_emp_id || '').trim();
+        const sentAtRaw = String(existing.confirmed_at || '').trim();
+        const sentAtText = sentAtRaw ? sentAtRaw : '<?= __('not_available', 'N/A') ?>';
+        const officerApprovedAtRaw = String(existing.officer_approved_at || '').trim();
+        const officerApprovedAtText = officerApprovedAtRaw ? officerApprovedAtRaw : '<?= __('not_available', 'N/A') ?>';
+        const currentStatusHtml = assignedCount > 0
+            ? `
+                <div class="alert alert-light border mb-3" style="border-color:#dbe6ef !important;">
+                    <div><strong><?= __('sent_to_finance_officer', 'Already Sent To Finance Officer') ?>:</strong> ${sentOfficerName || '<?= __('not_available', 'N/A') ?>'}</div>
+                    <div><strong><?= __('sent_at', 'Sent At') ?>:</strong> ${sentAtText}</div>
+                    <div><strong><?= __('finance_officer_approval', 'Finance Officer Approval') ?>:</strong> ${officerApproved ? '<?= __('approved', 'Approved') ?>' : '<?= __('pending', 'Pending') ?>'}${officerApproved ? ` (${officerApprovedAtText})` : ''}</div>
+                    ${officerApproved ? `<div><strong><?= __('completed_by_finance_officer', 'Completed By Finance Officer') ?>:</strong> ${sentOfficerName || '<?= __('not_available', 'N/A') ?>'}</div>` : ''}
+                    <div><strong><?= __('assigned_companies', 'Assigned Companies') ?>:</strong> ${assignedCount} / ${totalCompanyCount}</div>
+                </div>
+            `
+            : '';
+        const statusToggleHtml = currentStatusHtml
+            ? `
+                <div class="mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="financeStatusToggleBtn">
+                        <?= __('show_current_status', 'Show Current Status') ?>
+                    </button>
+                </div>
+                <div id="financeStatusTogglePanel" class="d-none">
+                    ${currentStatusHtml}
+                </div>
+            `
+            : '';
+        const officerCompletionHtml = officerApproved
+            ? `
+                <div class="mb-3" style="border:1px solid #bde5c8;border-radius:8px;padding:10px 12px;background:#f4fff7;color:#1b5e20;">
+                    <div class="font-weight-bold"><?= __('finance_officer_completed', 'Finance Officer Completed') ?></div>
+                    <div style="font-size:13px;"><strong><?= __('finance_officer', 'Finance Officer') ?>:</strong> ${sentOfficerName || '<?= __('not_available', 'N/A') ?>'}</div>
+                    <div style="font-size:13px;"><strong><?= __('approved_at', 'Approved At') ?>:</strong> ${officerApprovedAtText}</div>
+                </div>
+            `
+            : '';
+        const assignedCompanyDetails = Array.from(existingCompanyIds)
+            .map((id) => ({
+                id,
+                name: companyNameById[id] || id
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        const actionTypeLabelMap = {
+            setup_assigned: '<?= __('setup_assigned', 'Setup Assigned') ?>',
+            setup_updated: '<?= __('setup_updated', 'Setup Updated') ?>',
+            officer_approved: '<?= __('officer_approved', 'Officer Approved') ?>'
+        };
+        const actionTypeClassMap = {
+            setup_assigned: 'badge-primary',
+            setup_updated: 'badge-warning',
+            officer_approved: 'badge-success'
+        };
+        const renderedHistoryItems = historyItems.length > 0
+            ? historyItems
+            : (assignedCompanyDetails.length > 0
+                ? [{
+                    action_type: 'setup_assigned',
+                    action_note: '<?= __('initial_assignment_available', 'Initial assignment is available from current setup.') ?>',
+                    created_by_name: sentOfficerName ? '<?= __('finance_manager', 'Finance Manager') ?>' : '<?= __('system', 'System') ?>',
+                    created_at: sentAtText,
+                    finance_officer_name: sentOfficerName,
+                    selected_company_ids: assignedCompanyDetails.map((item) => item.id)
+                }]
+                : []);
+        const getItemCompanyIds = (item) => {
+            const sourceIds = Array.isArray(item.display_company_ids)
+                ? item.display_company_ids
+                : (Array.isArray(item.selected_company_ids) ? item.selected_company_ids : []);
+            return sourceIds.map((value) => String(value || '').trim()).filter(Boolean);
+        };
+        const splitAssignedCompaniesByAssigner = (items) => {
+            if (!Array.isArray(items) || items.length === 0) {
+                return [];
+            }
+
+            const withIndex = items.map((item, index) => ({ item, index }));
+            const ordered = [...withIndex].sort((a, b) => {
+                const aTime = Date.parse(String(a.item.created_at || ''));
+                const bTime = Date.parse(String(b.item.created_at || ''));
+                const safeATime = Number.isNaN(aTime) ? 0 : aTime;
+                const safeBTime = Number.isNaN(bTime) ? 0 : bTime;
+
+                if (safeATime === safeBTime) {
+                    return a.index - b.index;
+                }
+                return safeATime - safeBTime;
+            });
+
+            const seenCompanyIds = new Set();
+            const displayIdsByOriginalIndex = new Map();
+
+            ordered.forEach(({ item, index }) => {
+                const rawIds = Array.isArray(item.selected_company_ids)
+                    ? item.selected_company_ids.map((value) => String(value || '').trim()).filter(Boolean)
+                    : [];
+                const uniqueRawIds = Array.from(new Set(rawIds));
+                const newCompanyIds = uniqueRawIds.filter((companyId) => !seenCompanyIds.has(companyId));
+
+                newCompanyIds.forEach((companyId) => seenCompanyIds.add(companyId));
+                displayIdsByOriginalIndex.set(index, newCompanyIds);
+            });
+
+            return withIndex.map(({ item, index }) => {
+                const displayCompanyIds = displayIdsByOriginalIndex.get(index) || [];
+                return {
+                    ...item,
+                    display_company_ids: displayCompanyIds,
+                    display_company_count: displayCompanyIds.length
+                };
+            });
+        };
+        const buildHistoryCards = (items, emptyText) => {
+            if (!Array.isArray(items) || items.length === 0) {
+                return `<div style="border:1px dashed #cbd5e1;background:#fff;border-radius:6px;padding:10px;color:#64748b;font-size:13px;">${emptyText}</div>`;
+            }
+
+            return items.map((item) => {
+                const actionType = String(item.action_type || '').trim();
+                const actionLabel = actionTypeLabelMap[actionType] || actionType || '<?= __('update', 'Update') ?>';
+                const actionClass = actionTypeClassMap[actionType] || 'badge-secondary';
+                const createdBy = String(item.created_by_name || item.created_by || '<?= __('system', 'System') ?>');
+                const createdAt = String(item.created_at || '');
+                const officerName = String(item.finance_officer_name || '').trim();
+                const itemCompanyIds = getItemCompanyIds(item);
+                const companyCount = Number(item.display_company_count || item.company_count || itemCompanyIds.length || 0);
+                const itemCompanyNames = itemCompanyIds.map((id) => companyNameById[id] || id);
+                const note = String(item.action_note || '').trim();
+                const companyBadgeHtml = itemCompanyNames.length > 0
+                    ? `
+                        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
+                            ${itemCompanyNames.map((companyName) => `
+                                <span style="display:inline-block;border:1px solid #d7e4f2;background:#f8fbff;color:#2f4156;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;">
+                                    ${companyName}
+                                </span>
+                            `).join('')}
+                        </div>
+                    `
+                    : '';
+
+                return `
+                    <div style="border:1px solid #e1ebf3;background:#fff;border-radius:6px;padding:8px 10px;margin-bottom:8px;">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="badge ${actionClass}">${actionLabel}</span>
+                            <small class="text-muted">${createdAt || '-'}</small>
+                        </div>
+                        <div style="font-size:13px;color:#2f4156;"><strong><?= __('by', 'By') ?>:</strong> ${createdBy}</div>
+                        ${officerName ? `<div style="font-size:13px;color:#2f4156;"><strong><?= __('finance_officer', 'Finance Officer') ?>:</strong> ${officerName}</div>` : ''}
+                        ${companyCount > 0 ? `<div style="font-size:13px;color:#2f4156;"><strong><?= __('companies', 'Companies') ?>:</strong> ${companyCount}</div>` : ''}
+                        ${itemCompanyNames.length > 0 ? `<div style="margin-top:4px;font-size:12px;color:#607080;"><strong><?= __('assigned_companies', 'Assigned Companies') ?>:</strong></div>` : ''}
+                        ${companyBadgeHtml}
+                        ${note ? `<div style="font-size:12px;color:#607080;margin-top:2px;">${note}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+        };
+
+        const assignedHistoryItems = renderedHistoryItems.filter((item) => {
+            const actionType = String(item.action_type || '').trim();
+            return actionType === 'setup_assigned' || actionType === 'setup_updated' || actionType === '';
+        });
+        const assignedHistoryItemsUnique = splitAssignedCompaniesByAssigner(assignedHistoryItems);
+        const approvedHistoryItemsRaw = renderedHistoryItems.filter((item) => String(item.action_type || '').trim() === 'officer_approved');
+        const approvedHistoryItems = approvedHistoryItemsRaw.length > 0
+            ? approvedHistoryItemsRaw
+            : (officerApproved
+                ? [{
+                    action_type: 'officer_approved',
+                    action_note: '<?= __('finance_officer_approved_assignment', 'Finance officer approved assignment.') ?>',
+                    created_by_name: sentOfficerName || '<?= __('not_available', 'N/A') ?>',
+                    created_at: officerApprovedAtText,
+                    finance_officer_name: sentOfficerName,
+                    selected_company_ids: assignedCompanyDetails.map((item) => item.id),
+                    company_count: assignedCompanyDetails.length
+                }]
+                : []);
+
+        const financeHistoryTabsHtml = `
+            <div class="mb-3" style="border:1px solid #dbe6ef;border-radius:8px;background:#f8fbff;overflow:hidden;">
+                <div style="display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid #dbe6ef;background:#eef5fb;">
+                    <button type="button" class="btn btn-sm btn-outline-secondary finance-history-tab-btn" data-target="assigned"><?= __('assigned', 'Assigned') ?> (${Math.max(assignedHistoryItems.length, assignedCompanyDetails.length)})</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary finance-history-tab-btn" data-target="approved"><?= __('approved', 'Approved') ?> (${approvedHistoryItems.length})</button>
+                </div>
+                <div id="financeHistoryTabHint" style="padding:10px 12px;color:#607080;font-size:13px;">
+                    <?= __('click_tab_to_view_data', 'Click Assigned or Approved tab to view data.') ?>
+                </div>
+                <div id="financeHistoryTabAssigned" class="finance-history-tab-panel d-none" style="padding:10px 12px;max-height:260px;overflow-y:auto;">
+                    ${buildHistoryCards(assignedHistoryItemsUnique, '<?= __('no_assignment_history_found', 'No assignment history found yet.') ?>')}
+                </div>
+                <div id="financeHistoryTabApproved" class="finance-history-tab-panel d-none" style="padding:10px 12px;max-height:260px;overflow-y:auto;">
+                    ${officerCompletionHtml}
+                    ${buildHistoryCards(approvedHistoryItems, '<?= __('no_approval_history_found', 'No approval history found yet.') ?>')}
+                </div>
+            </div>
+        `;
+        const companyOptions = companies.map((company) => {
+            const companyId = String(company.comp_id || '').trim();
+            const isAssigned = existingCompanyIds.has(companyId);
+            const disabledAttr = isAssigned ? ' disabled' : '';
+            const styleAttr = isAssigned ? ' style="color:#dc3545;font-weight:700;"' : '';
+            const suffix = isAssigned ? ' - <?= __('assigned', 'Assigned') ?>' : '';
+            return `<option value="${companyId.replace(/"/g, '&quot;')}"${disabledAttr}${styleAttr}>${String(company.comp_name || 'N/A')} (${Number(company.employee_count || 0)})${suffix}</option>`;
+        }).join('');
+
+        const hasSelectableOfficer = officers.some((officer) => {
+            const officerEmpId = String(officer.emp_id || '').trim();
+            return officerEmpId !== '' && !assignedOfficerEmpIds.has(officerEmpId) && officerEmpId !== assignedOfficerEmpId;
+        });
+        if (!hasSelectableOfficer) {
+            throw new Error('<?= __('no_available_finance_officer_to_assign', 'No available finance officer to assign. Already assigned officer is locked.') ?>');
+        }
+
+        const hasSelectableCompany = companies.some((company) => {
+            const companyId = String(company.comp_id || '').trim();
+            return companyId !== '' && !existingCompanyIds.has(companyId);
+        });
+        if (!hasSelectableCompany) {
+            throw new Error('<?= __('all_companies_assigned', 'All companies are already assigned for this payroll month.') ?>');
+        }
+
+        const modalResult = await Swal.fire({
+            title: '<?= __('finance_verification_setup', 'Finance Verification Setup') ?>',
+            width: '900px',
+            html: `
+                <div class="text-left">
+                    ${statusToggleHtml}
+                    ${financeHistoryTabsHtml}
+                    <label for="verificationFinanceOfficer" class="font-weight-bold"><?= __('finance_officer', 'Finance Officer') ?></label>
+                    <select id="verificationFinanceOfficer" class="form-control mb-3">
+                        <option value=""><?= __('select', 'Select') ?></option>
+                        ${officerOptions}
+                    </select>
+
+                    <label for="verificationCompanies" class="font-weight-bold"><?= __('company', 'Company') ?></label>
+                    <select id="verificationCompanies" class="form-control mb-3" multiple>
+                        ${companyOptions}
+                    </select>
+
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="verificationConfirmCheck">
+                        <label class="form-check-label" for="verificationConfirmCheck">
+                            <?= __('confirm_selected_companies_for_verification', 'I confirm selected companies for finance verification.') ?>
+                        </label>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            confirmButtonText: '<?= __('confirm', 'Confirm') ?>',
+            cancelButtonText: '<?= __('cancel', 'Cancel') ?>',
+            allowOutsideClick: false,
+            didOpen: () => {
+                const financeOfficerSelect = document.getElementById('verificationFinanceOfficer');
+                const companiesSelect = document.getElementById('verificationCompanies');
+                const tabButtons = document.querySelectorAll('.finance-history-tab-btn');
+                const statusToggleBtn = document.getElementById('financeStatusToggleBtn');
+                const statusTogglePanel = document.getElementById('financeStatusTogglePanel');
+
+                if (statusToggleBtn && statusTogglePanel) {
+                    statusToggleBtn.addEventListener('click', () => {
+                        const willShow = statusTogglePanel.classList.contains('d-none');
+                        statusTogglePanel.classList.toggle('d-none', !willShow);
+                        statusToggleBtn.textContent = willShow
+                            ? '<?= __('hide_current_status', 'Hide Current Status') ?>'
+                            : '<?= __('show_current_status', 'Show Current Status') ?>';
+                    });
+                }
+
+                tabButtons.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const target = String(button.getAttribute('data-target') || '').trim();
+                        const assignedPanel = document.getElementById('financeHistoryTabAssigned');
+                        const approvedPanel = document.getElementById('financeHistoryTabApproved');
+                        const hintPanel = document.getElementById('financeHistoryTabHint');
+                        const isActive = button.classList.contains('btn-primary');
+
+                        tabButtons.forEach((btn) => {
+                            btn.classList.remove('btn-primary');
+                            btn.classList.add('btn-outline-secondary');
+                        });
+
+                        if (assignedPanel && approvedPanel) {
+                            if (isActive) {
+                                assignedPanel.classList.add('d-none');
+                                approvedPanel.classList.add('d-none');
+                                if (hintPanel) {
+                                    hintPanel.classList.remove('d-none');
+                                }
+                                return;
+                            }
+
+                            button.classList.remove('btn-outline-secondary');
+                            button.classList.add('btn-primary');
+
+                            const showApproved = target === 'approved';
+                            assignedPanel.classList.toggle('d-none', showApproved);
+                            approvedPanel.classList.toggle('d-none', !showApproved);
+                            if (hintPanel) {
+                                hintPanel.classList.add('d-none');
+                            }
+                        }
+                    });
+                });
+
+                if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                    const $popup = jQuery('.swal2-popup');
+                    jQuery('#verificationFinanceOfficer').select2({ width: '100%', dropdownParent: $popup });
+                    jQuery('#verificationCompanies').select2({ width: '100%', dropdownParent: $popup, closeOnSelect: false });
+                }
+
+                if (financeOfficerSelect) {
+                    const firstEnabledOfficerOption = Array.from(financeOfficerSelect.options || []).find((option) => {
+                        return !!String(option.value || '').trim() && !option.disabled;
+                    });
+                    if (firstEnabledOfficerOption && String(financeOfficerSelect.value || '').trim() === '') {
+                        financeOfficerSelect.value = String(firstEnabledOfficerOption.value || '').trim();
+                    }
+
+                    if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                        jQuery('#verificationFinanceOfficer').trigger('change.select2');
+                    }
+                }
+            },
+            preConfirm: () => {
+                const financeOfficerEmpId = (document.getElementById('verificationFinanceOfficer') || {}).value || '';
+                const companiesSelect = document.getElementById('verificationCompanies');
+                const confirmCheck = document.getElementById('verificationConfirmCheck');
+
+                const companyIds = companiesSelect
+                    ? Array.from(companiesSelect.selectedOptions || [])
+                        .map(option => String(option.value || '').trim())
+                        .filter(Boolean)
+                    : [];
+                const uniqueCompanyIds = Array.from(new Set(companyIds));
+
+                if (!financeOfficerEmpId) {
+                    Swal.showValidationMessage('<?= __('finance_officer_required', 'Finance officer selection is required.') ?>');
+                    return false;
+                }
+                if (uniqueCompanyIds.length === 0) {
+                    Swal.showValidationMessage('<?= __('company_required', 'Company is required.') ?>');
+                    return false;
+                }
+                if (!confirmCheck || !confirmCheck.checked) {
+                    Swal.showValidationMessage('<?= __('confirmation_required', 'Please confirm selected companies to continue.') ?>');
+                    return false;
+                }
+
+                return { financeOfficerEmpId, companyIds: uniqueCompanyIds };
+            }
+        });
+
+        if (!modalResult.isConfirmed) {
+            return;
+        }
+
+        const submitPayload = new URLSearchParams();
+        submitPayload.append('action', 'submit_finance_verification_setup');
+        submitPayload.append('request_inv_no', requestInvNo);
+        submitPayload.append('month', payrollMonth);
+        submitPayload.append('finance_officer_emp_id', modalResult.value.financeOfficerEmpId);
+        submitPayload.append('company_ids', JSON.stringify(modalResult.value.companyIds || []));
+
+        Swal.fire({
+            title: '<?= __('processing', 'Processing') ?>',
+            html: '<?= __('please_wait_processing', 'Please wait while processing...') ?>',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const submitResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: submitPayload.toString()
+        });
+        const submitData = await submitResponse.json();
+        Swal.close();
+
+        if (!submitResponse.ok || submitData.status !== 'success') {
+            throw new Error(submitData.message || 'Failed to save finance verification setup.');
+        }
+
+        await Swal.fire('<?= __('success', 'Success') ?>', submitData.message || 'Finance verification setup confirmed successfully.', 'success');
+        location.reload();
+    } catch (error) {
+        Swal.close();
+        Swal.fire('<?= __('error', 'Error') ?>', error.message || 'Failed to complete finance verification setup.', 'error');
     }
 }
 

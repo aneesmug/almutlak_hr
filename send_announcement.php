@@ -120,6 +120,69 @@ function normalize_announcement_blocks(array $enBlocks, array $arBlocks): array
 }
 
 /**
+ * Allow a safe subset of inline HTML for announcement content rows.
+ */
+function sanitize_announcement_html_fragment(string $html): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '';
+    }
+
+    $html = str_replace(["\r\n", "\r"], "\n", $html);
+    $html = nl2br($html, false);
+
+    // Remove dangerous container tags completely.
+    $html = preg_replace('#<(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta)[^>]*>.*?</\1>#is', '', $html) ?? '';
+    $html = preg_replace('#</?(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta)[^>]*>#is', '', $html) ?? '';
+
+    // Keep only formatting-oriented tags.
+    $allowedTags = '<b><strong><i><em><u><br><p><ul><ol><li><span><div><h1><h2><h3><h4><a>';
+    $html = strip_tags($html, $allowedTags);
+
+    // Remove event-handler attributes like onclick.
+    $html = preg_replace('/\s+on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html) ?? '';
+
+    // Allow only a controlled href protocol and safe link attributes.
+    $html = preg_replace_callback(
+        '/<a\b([^>]*)>/i',
+        static function (array $matches): string {
+            $attr = (string)($matches[1] ?? '');
+            $href = '#';
+            $target = '';
+
+            if (preg_match('/href\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $attr, $hrefMatch)) {
+                $candidate = trim((string)($hrefMatch[2] ?? $hrefMatch[3] ?? $hrefMatch[4] ?? ''));
+                if (preg_match('#^(https?://|mailto:|#)#i', $candidate)) {
+                    $href = htmlspecialchars($candidate, ENT_QUOTES, 'UTF-8');
+                }
+            }
+
+            if (preg_match('/target\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $attr, $targetMatch)) {
+                $candidateTarget = strtolower(trim((string)($targetMatch[2] ?? $targetMatch[3] ?? $targetMatch[4] ?? '')));
+                if (in_array($candidateTarget, ['_blank', '_self'], true)) {
+                    $target = $candidateTarget;
+                }
+            }
+
+            $tag = '<a href="' . $href . '"';
+            if ($target !== '') {
+                $tag .= ' target="' . $target . '"';
+                if ($target === '_blank') {
+                    $tag .= ' rel="noopener noreferrer"';
+                }
+            }
+            $tag .= '>';
+
+            return $tag;
+        },
+        $html
+    ) ?? '';
+
+    return $html;
+}
+
+/**
  * Convert dynamic rows to HTML.
  */
 function render_announcement_blocks_html(array $blocks, string $lang): string
@@ -133,7 +196,7 @@ function render_announcement_blocks_html(array $blocks, string $lang): string
             continue;
         }
 
-        $html .= '<div class="paragraph">' . nl2br(htmlspecialchars($raw, ENT_QUOTES, 'UTF-8')) . '</div>';
+        $html .= '<div class="paragraph">' . sanitize_announcement_html_fragment($raw) . '</div>';
     }
 
     return $html;
@@ -625,6 +688,7 @@ if (!empty($formData['issue_date'])) {
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs4.min.css" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
 
     <style>
@@ -802,16 +866,17 @@ if (!empty($formData['issue_date'])) {
                                             <h5 class="mb-0">Dynamic Content Rows *</h5>
                                             <button type="button" id="addBlockBtn" class="btn btn-sm btn-outline-primary"><i class="fa fa-plus"></i> Add Row</button>
                                         </div>
+                                        <small class="text-muted d-block mb-2">HTML formatting is supported in rows (example: &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;br&gt;, &lt;ul&gt;&lt;li&gt;...&lt;/li&gt;&lt;/ul&gt;).</small>
                                         <div id="dynamicBlocksContainer">
                                             <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
                                                 <div class="dynamic-block-row">
                                                     <div class="form-group mb-2">
                                                         <label>English Row</label>
-                                                        <textarea name="block_en[]" rows="2" class="form-control js-block-en"><?= htmlspecialchars((string)($block['en'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                                                        <textarea name="block_en[]" rows="4" class="form-control js-block-en js-rich-editor"><?= htmlspecialchars((string)($block['en'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                                                     </div>
                                                     <div class="form-group mb-2">
                                                         <label>Arabic Row</label>
-                                                        <textarea name="block_ar[]" rows="2" class="form-control js-block-ar"><?= htmlspecialchars((string)($block['ar'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                                                        <textarea name="block_ar[]" rows="4" class="form-control js-block-ar js-rich-editor"><?= htmlspecialchars((string)($block['ar'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                                                     </div>
                                                     <button type="button" class="btn btn-sm btn-outline-danger js-remove-block"><i class="fa fa-trash"></i> Remove</button>
                                                 </div>
@@ -874,7 +939,7 @@ if (!empty($formData['issue_date'])) {
                                                         <div id="pvBlocksEn">
                                                             <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
                                                                 <?php if (trim((string)($block['en'] ?? '')) !== ''): ?>
-                                                                    <div class="announcement-block-item"><?= nl2br(htmlspecialchars((string)$block['en'], ENT_QUOTES, 'UTF-8')) ?></div>
+                                                                    <div class="announcement-block-item"><?= sanitize_announcement_html_fragment((string)$block['en']) ?></div>
                                                                 <?php endif; ?>
                                                             <?php endforeach; ?>
                                                         </div>
@@ -885,7 +950,7 @@ if (!empty($formData['issue_date'])) {
                                                         <div id="pvBlocksAr">
                                                             <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
                                                                 <?php if (trim((string)($block['ar'] ?? '')) !== ''): ?>
-                                                                    <div class="announcement-block-item"><?= nl2br(htmlspecialchars((string)$block['ar'], ENT_QUOTES, 'UTF-8')) ?></div>
+                                                                    <div class="announcement-block-item"><?= sanitize_announcement_html_fragment((string)$block['ar']) ?></div>
                                                                 <?php endif; ?>
                                                             <?php endforeach; ?>
                                                         </div>
@@ -998,17 +1063,110 @@ if (!empty($formData['issue_date'])) {
         return false;
     }
 
-    function escapeHtml(str) {
-        return String(str || '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
+    function sanitizeHtmlForPreview(rawHtml) {
+        var allowedTags = {
+            b: true,
+            strong: true,
+            i: true,
+            em: true,
+            u: true,
+            br: true,
+            p: true,
+            ul: true,
+            ol: true,
+            li: true,
+            span: true,
+            div: true,
+            h1: true,
+            h2: true,
+            h3: true,
+            h4: true,
+            a: true
+        };
+        var blockedTags = {
+            script: true,
+            style: true,
+            iframe: true,
+            object: true,
+            embed: true,
+            form: true,
+            input: true,
+            button: true,
+            textarea: true,
+            select: true,
+            link: true,
+            meta: true
+        };
 
-    function nl2brSafe(str) {
-        return escapeHtml(str).replace(/\n/g, '<br>');
+        var html = String(rawHtml || '').replace(/\r\n?/g, '\n').replace(/\n/g, '<br>');
+        var template = document.createElement('template');
+        template.innerHTML = html;
+
+        function sanitizeNode(node) {
+            if (!node || !node.childNodes) {
+                return;
+            }
+
+            var children = Array.prototype.slice.call(node.childNodes);
+            children.forEach(function(child) {
+                if (child.nodeType === 1) {
+                    var tagName = (child.tagName || '').toLowerCase();
+
+                    if (blockedTags[tagName]) {
+                        node.removeChild(child);
+                        return;
+                    }
+
+                    if (!allowedTags[tagName]) {
+                        var textNode = document.createTextNode(child.textContent || '');
+                        node.replaceChild(textNode, child);
+                        return;
+                    }
+
+                    var attrs = Array.prototype.slice.call(child.attributes || []);
+                    attrs.forEach(function(attr) {
+                        var attrName = (attr.name || '').toLowerCase();
+                        var attrValue = String(attr.value || '');
+
+                        if (attrName.indexOf('on') === 0) {
+                            child.removeAttribute(attr.name);
+                            return;
+                        }
+
+                        if (tagName === 'a' && attrName === 'href') {
+                            var safeHref = attrValue.trim();
+                            if (!/^(https?:\/\/|mailto:|#)/i.test(safeHref)) {
+                                child.setAttribute('href', '#');
+                            }
+                            return;
+                        }
+
+                        if (tagName === 'a' && attrName === 'target') {
+                            if (!/^(_blank|_self)$/i.test(attrValue.trim())) {
+                                child.removeAttribute(attr.name);
+                            }
+                            if (/^_blank$/i.test(attrValue.trim())) {
+                                child.setAttribute('rel', 'noopener noreferrer');
+                            }
+                            return;
+                        }
+
+                        if (tagName === 'a' && attrName === 'rel') {
+                            return;
+                        }
+
+                        child.removeAttribute(attr.name);
+                    });
+
+                    sanitizeNode(child);
+                } else if (child.nodeType === 8) {
+                    node.removeChild(child);
+                }
+            });
+        }
+
+        sanitizeNode(template.content);
+        return template.innerHTML;
     }
 
     function getYearFromIssueDate(value) {
@@ -1029,10 +1187,10 @@ if (!empty($formData['issue_date'])) {
             var arText = $(this).find('.js-block-ar').val() || '';
 
             if ($.trim(enText) !== '') {
-                enHtml += '<div class="announcement-block-item">' + nl2brSafe(enText) + '</div>';
+                enHtml += '<div class="announcement-block-item">' + sanitizeHtmlForPreview(enText) + '</div>';
             }
             if ($.trim(arText) !== '') {
-                arHtml += '<div class="announcement-block-item">' + nl2brSafe(arText) + '</div>';
+                arHtml += '<div class="announcement-block-item">' + sanitizeHtmlForPreview(arText) + '</div>';
             }
         });
 

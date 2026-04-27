@@ -242,7 +242,9 @@ try {
             continue;
         }
 
-        // Skip employees on Fly annual vacation for the selected payroll month.
+        // Skip employees only when they are already on Fly annual vacation
+        // at the START of the selected payroll month.
+        // If vacation starts later in the month, payroll should still be generated.
         // Local annual/emergency vacations remain eligible and stay visible in payroll.
         $payrollMonthStart = $monthYear . '-01';
         $payrollMonthEnd = date('Y-m-t', strtotime($payrollMonthStart));
@@ -253,8 +255,8 @@ try {
              WHERE emp_id = :emp_id
                AND review = 'A'
                AND current_status IN ('approved', 'completed')
-               AND start_date <= :month_end
-               AND return_date >= :month_start
+                             AND start_date <= :month_start_upper
+                             AND return_date >= :month_start_lower
                AND (
                     LOWER(COALESCE(vac_type, '')) = 'fly'
                     OR LOWER(COALESCE(note, '')) = 'fly'
@@ -263,15 +265,15 @@ try {
         );
         $stmtActiveFlyVacation->execute([
             ':emp_id' => $empId,
-            ':month_start' => $payrollMonthStart,
-            ':month_end' => $payrollMonthEnd
+            ':month_start_upper' => $payrollMonthStart,
+            ':month_start_lower' => $payrollMonthStart
         ]);
         $activeFlyVacation = $stmtActiveFlyVacation->fetch(PDO::FETCH_ASSOC);
 
         if ($activeFlyVacation) {
             $skippedEmployees[] = [
                 'emp_id' => $empId,
-                'reason' => 'Employee is on Fly annual vacation for this payroll month'
+                'reason' => 'Employee is on Fly annual vacation at the start of this payroll month'
             ];
             continue;
         }

@@ -64,6 +64,9 @@ try {
         ]);
 
         $chainManager->createApprovalChain('payroll_request', $requestInvNo, (string)$requestedBy, $departmentId);
+        if (function_exists('removePayrollFinanceOfficerStep')) {
+            removePayrollFinanceOfficerStep($pdo, $requestInvNo);
+        }
         $notificationSent = notifyPayrollApprovalApprover($conDB, $pdo, $requestInvNo, $monthYear);
 
         $historyStmt = $pdo->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status)
@@ -92,6 +95,9 @@ try {
     if (($approvalStatus['status'] ?? '') === 'not_found') {
         $departmentId = getEmployeeDepartmentId($pdo, $payrollApprovalRequest['requested_by'] ?? $requestedBy);
         $chainManager->createApprovalChain('payroll_request', $requestInvNo, (string)($payrollApprovalRequest['requested_by'] ?? $requestedBy), $departmentId);
+        if (function_exists('removePayrollFinanceOfficerStep')) {
+            removePayrollFinanceOfficerStep($pdo, $requestInvNo);
+        }
         $notificationSent = notifyPayrollApprovalApprover($conDB, $pdo, $requestInvNo, $monthYear);
 
         echo json_encode([

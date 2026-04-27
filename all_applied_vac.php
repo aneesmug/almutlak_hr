@@ -984,10 +984,17 @@ if ($can_see_all_depts) {
                                                                 $settlementInvNo = $settlementRow['request_inv_no'] ?? null;
                                                                 $settlementStatus = $settlementRow['settlement_status'] ?? null;
                                                                 
-                                                                // Settlement button only for Annual Fly vacations
-                                                                $isAnnualFly = (($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual') OR $req['vac_type'] === 'Encashed' );
+                                                                // Settlement button eligibility:
+                                                                // 1) Fly + Annual OR Encashed (existing behavior)
+                                                                // 2) Local Vacation + Annual only when days > 5 and salary type is payroll (YES)
+                                                                $isAnnualFlyOrEncashed = (($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual') || $req['vac_type'] === 'Encashed');
+                                                                $isLocalAnnual = ($req['vac_type'] === 'Local Vacation' && $req['fly_type'] === 'annual');
+                                                                $localVacationDays = (float)($req['vacdays'] ?? 0);
+                                                                $vacationSalaryType = strtolower(trim((string)($req['vacation_salary_type'] ?? 'payroll')));
+                                                                $isLocalAnnualSettlementEligible = ($isLocalAnnual && $localVacationDays > 5 && $vacationSalaryType === 'payroll');
+                                                                $canCreateSettlement = ($isAnnualFlyOrEncashed || $isLocalAnnualSettlementEligible);
                                                                 ?>
-                                                                <?php if (($req['current_status'] === 'approved' OR $req['current_status'] === 'completed') && $isAnnualFly && !$settlementExists): ?>
+                                                                <?php if (($req['current_status'] === 'approved' OR $req['current_status'] === 'completed') && $canCreateSettlement && !$settlementExists): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="createSettlement(<?= $req['id']; ?>, '<?= $req['request_inv_no']; ?>', '<?= $req['emp_id']; ?>', '<?= htmlspecialchars(addslashes(getDisplayName(parseName($req['employee_name']))), ENT_QUOTES); ?>', <?= $req['vacdays']; ?>)">
                                                                         <i class="fa fa-handshake text-success"></i> <?= __('create_settlement') ?: 'Create Settlement' ?>

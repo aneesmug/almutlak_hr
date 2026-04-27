@@ -6,10 +6,13 @@
 // get_payroll_details.php
 header('Content-Type: application/json');
 require_once("./../../includes/db.php"); // Include your database connection file
+require_once("./../../includes/session_check.php");
 require_once("./../../includes/payroll_approval_helpers.php");
 
 $empId = $_GET['emp_id'] ?? '';
 $monthYear = $_GET['month'] ?? ''; // Expected format: YYYY-MM
+$requestInvNo = trim((string)($_GET['request_inv_no'] ?? $_GET['inv_no'] ?? ''));
+$assignedScopeOnly = ((string)($_GET['assigned_scope'] ?? '0') === '1');
 
 if (empty($empId) || empty($monthYear)) {
     echo json_encode(['status' => 'error', 'message' => 'Missing employee ID or month for details.']);
@@ -21,8 +24,35 @@ $pdo = getDbConnection();
 try {
     ensurePayrollChecklistFeedbackTable($pdo);
 
+    $currentApproverId = trim((string)($empid ?? $_SESSION['empid'] ?? ''));
+    $currentUserType = strtolower(trim((string)($user_type ?? '')));
+    $currentEmpType = trim((string)($emp_type ?? ''));
+    $isFinanceOfficerChecklistUser = ($currentUserType === 'finance_officer')
+        || ($currentUserType === 'finance' && strcasecmp($currentEmpType, 'Manager') !== 0 && (int)($user_dept ?? 0) === 2);
+    $isFinanceManagerChecklistUser = ($currentUserType === 'finance'
+        && strcasecmp($currentEmpType, 'Manager') === 0
+        && (int)($user_dept ?? 0) === 2);
+
+    // Finance manager can use assigned_scope toggle if assigned to companies
+    // For now, assume valid until scope check fails
+    $isMainFinanceManager = $isFinanceManagerChecklistUser;
+    
+    if (!$isMainFinanceManager && $assignedScopeOnly) {
+        $assignedScopeOnly = false;
+    }
+
+    if (($isFinanceOfficerChecklistUser || $isFinanceManagerChecklistUser) && $requestInvNo === '' && $monthYear !== '') {
+        $latestRequestStmt = $pdo->prepare("SELECT request_inv_no
+            FROM payroll_approval_requests
+            WHERE payroll_month = :month_year
+            ORDER BY id DESC
+            LIMIT 1");
+        $latestRequestStmt->execute([':month_year' => $monthYear]);
+        $requestInvNo = trim((string)($latestRequestStmt->fetchColumn() ?: ''));
+    }
+
     // 1. Fetch employee details
-    $stmtEmployee = $pdo->prepare("SELECT id, name, emp_id, salary, dept, country, gosi, payment_type
+    $stmtEmployee = $pdo->prepare("SELECT id, name, emp_id, salary, dept, country, gosi, payment_type, comp_no
         FROM employees
         WHERE emp_id = :emp_id
     ");
@@ -32,6 +62,136 @@ try {
     if (!$employee) {
         echo json_encode(['status' => 'error', 'message' => 'Employee not found.']);
         exit();
+    }
+
+    if (($isFinanceOfficerChecklistUser || $isFinanceManagerChecklistUser) && $currentApproverId !== '' && $requestInvNo !== '') {
+        $assignedFinanceCompanyIds = [];
+        $assignedScopeRaw = null;
+
+        if ($isFinanceManagerChecklistUser && $assignedScopeOnly) {
+            $managerOwnScopeStmt = $pdo->prepare("SELECT selected_company_ids
+                FROM payroll_finance_officer_company_defaults
+                WHERE finance_manager_emp_id = :manager_id
+                  AND finance_officer_emp_id = :officer_id
+                ORDER BY id DESC
+                LIMIT 1");
+            $managerOwnScopeStmt->execute([
+                ':manager_id' => $currentApproverId,
+                ':officer_id' => $currentApproverId
+            ]);
+            $assignedScopeRaw = $managerOwnScopeStmt->fetchColumn();
+
+            if ($assignedScopeRaw === false || $assignedScopeRaw === null || trim((string)$assignedScopeRaw) === '') {
+                $managerOwnHistoryStmt = $pdo->prepare("SELECT selected_company_ids
+                    FROM payroll_finance_verification_history
+                    WHERE request_inv_no = :inv_no
+                      AND payroll_month = :month_year
+                      AND finance_manager_emp_id = :manager_id
+                      AND finance_officer_emp_id = :officer_id
+                      AND action_type IN ('setup_assigned', 'setup_updated')
+                    ORDER BY id DESC
+                    LIMIT 1");
+                $managerOwnHistoryStmt->execute([
+                    ':inv_no' => $requestInvNo,
+                    ':month_year' => $monthYear,
+                    ':manager_id' => $currentApproverId,
+                    ':officer_id' => $currentApproverId
+                ]);
+                $assignedScopeRaw = $managerOwnHistoryStmt->fetchColumn();
+            }
+        }
+
+        if ($assignedScopeRaw === false || $assignedScopeRaw === null || trim((string)$assignedScopeRaw) === '') {
+            $assignedScopeManagerStmt = $pdo->prepare("SELECT selected_company_ids
+                FROM payroll_finance_verification
+                WHERE request_inv_no = :inv_no
+                  AND payroll_month = :month_year
+                  AND finance_manager_emp_id = :finance_user
+                  AND is_confirmed = 1
+                ORDER BY id DESC
+                LIMIT 1");
+            $assignedScopeManagerStmt->execute([
+                ':inv_no' => $requestInvNo,
+                ':month_year' => $monthYear,
+                ':finance_user' => $currentApproverId
+            ]);
+            $assignedScopeRaw = $assignedScopeManagerStmt->fetchColumn();
+        }
+
+        if ($assignedScopeRaw === false || $assignedScopeRaw === null || trim((string)$assignedScopeRaw) === '') {
+            $assignedScopeManagerUnconfirmedStmt = $pdo->prepare("SELECT selected_company_ids
+                FROM payroll_finance_verification
+                WHERE request_inv_no = :inv_no
+                  AND payroll_month = :month_year
+                  AND finance_manager_emp_id = :finance_user
+                ORDER BY id DESC
+                LIMIT 1");
+            $assignedScopeManagerUnconfirmedStmt->execute([
+                ':inv_no' => $requestInvNo,
+                ':month_year' => $monthYear,
+                ':finance_user' => $currentApproverId
+            ]);
+            $unconfirmedManager = $assignedScopeManagerUnconfirmedStmt->fetchColumn();
+            if ($unconfirmedManager !== false && $unconfirmedManager !== null && trim((string)$unconfirmedManager) !== '') {
+                $assignedScopeRaw = $unconfirmedManager;
+            }
+        }
+
+        if ($assignedScopeRaw === false || $assignedScopeRaw === null || trim((string)$assignedScopeRaw) === '') {
+            $assignedScopeOfficerStmt = $pdo->prepare("SELECT selected_company_ids
+                FROM payroll_finance_verification
+                WHERE request_inv_no = :inv_no
+                  AND payroll_month = :month_year
+                  AND finance_officer_emp_id = :finance_user
+                  AND is_confirmed = 1
+                ORDER BY id DESC
+                LIMIT 1");
+            $assignedScopeOfficerStmt->execute([
+                ':inv_no' => $requestInvNo,
+                ':month_year' => $monthYear,
+                ':finance_user' => $currentApproverId
+            ]);
+            $assignedScopeRaw = $assignedScopeOfficerStmt->fetchColumn();
+        }
+
+        if ($assignedScopeRaw === false || $assignedScopeRaw === null || trim((string)$assignedScopeRaw) === '') {
+            $assignedScopeOfficerUnconfirmedStmt = $pdo->prepare("SELECT selected_company_ids
+                FROM payroll_finance_verification
+                WHERE request_inv_no = :inv_no
+                  AND payroll_month = :month_year
+                  AND finance_officer_emp_id = :finance_user
+                ORDER BY id DESC
+                LIMIT 1");
+            $assignedScopeOfficerUnconfirmedStmt->execute([
+                ':inv_no' => $requestInvNo,
+                ':month_year' => $monthYear,
+                ':finance_user' => $currentApproverId
+            ]);
+            $unconfirmedOfficer = $assignedScopeOfficerUnconfirmedStmt->fetchColumn();
+            if ($unconfirmedOfficer !== false && $unconfirmedOfficer !== null && trim((string)$unconfirmedOfficer) !== '') {
+                $assignedScopeRaw = $unconfirmedOfficer;
+            }
+        }
+
+        $assignedScopeDecoded = json_decode((string)($assignedScopeRaw ?: '[]'), true);
+        if (is_array($assignedScopeDecoded)) {
+            $assignedFinanceCompanyIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+                return trim((string)$value);
+            }, $assignedScopeDecoded), static function ($value) {
+                return $value !== '';
+            })));
+        }
+
+        if (empty($assignedFinanceCompanyIds)) {
+            echo json_encode(['status' => 'error', 'message' => 'You are not assigned to verify this payroll checklist request.']);
+            exit();
+        }
+
+        $employeeCompanyNo = trim((string)($employee['comp_no'] ?? ''));
+        if ($employeeCompanyNo === '' || !in_array($employeeCompanyNo, $assignedFinanceCompanyIds, true)) {
+            echo json_encode(['status' => 'error', 'message' => 'Access denied for this employee scope.']);
+            exit();
+        }
     }
 
     // 2. Fetch generated payroll details

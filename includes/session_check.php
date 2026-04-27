@@ -513,10 +513,9 @@ include(__DIR__ . "/menu_active_class.php");
  * Runs on EVERY page load to ensure immediate updates.
  * 
  * How it works:
- * 1. Sets fly=1 when vacation start_date arrives (NOT at approval time)
- * 2. Resets fly=0 when vacation return_date passes
+ * 1. Sets fly=1 when employee is currently on Fly vacation (active date window)
+ * 2. Only affects Fly vacations (annual/emergency), never local/encashed
  * 3. Only affects regular vacation (VAC-*), NOT leave requests (LV-*)
- * 4. Only sets fly=1 if is_deductible=1 (deductible vacations)
  * 
  * @param mysqli $conDB Database connection
  * @return void
@@ -525,9 +524,8 @@ function update_employee_fly_status_on_session($conDB) {
     try {
         $today = date('Y-m-d');
         
-        // STEP 1: Set fly=1 for employees with approved or complete vacation that has STARTED today
+        // STEP 1: Set fly=1 for active Fly vacations (annual/emergency)
         // (Only for regular vacation VAC-*, not leave requests LV-*)
-        // Find all employees who have approved/complete vacation within the date range
         $sql_find_employees = "
             SELECT DISTINCT v.emp_id
             FROM emp_vacation v
@@ -535,8 +533,8 @@ function update_employee_fly_status_on_session($conDB) {
                 AND v.start_date <= ?
                 AND v.return_date >= ?
                 AND v.request_inv_no LIKE 'VAC-%'
-                AND LOWER(v.vac_type) != 'Encashed'
-                AND (COALESCE(v.remarks, v.note, '') NOT LIKE '%Encashed%')
+                AND LOWER(v.vac_type) = 'fly'
+                AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
                 AND v.review = 'A'
         ";
         

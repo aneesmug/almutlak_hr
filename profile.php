@@ -53,6 +53,12 @@ if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
 $lastVac = lastVacIdGet($emprow['empid']);
 $allActiveVacations = getAllActiveVacations($emprow['empid']);
 $activeVacCount = count($allActiveVacations);
+$activeFlyVacations = array_values(array_filter($allActiveVacations, function ($vac) {
+    $vacType = strtolower(trim((string)($vac['vac_type'] ?? '')));
+    $flyType = strtolower(trim((string)($vac['fly_type'] ?? '')));
+    return $vacType === 'fly' && in_array($flyType, ['annual', 'emergency'], true);
+}));
+$activeFlyVacCount = count($activeFlyVacations);
 
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
@@ -64,9 +70,9 @@ if ($emprow['status'] == 1) {
     // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('{$emprow['empid']}', '{$emprow['dept']}', '{$emprow['country']}')\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
-    if (!empty($lastVac['vacid'])) {
-        $badgeText = $activeVacCount > 1 ? " ({$activeVacCount})" : '';
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
+    if ($activeFlyVacCount > 0) {
+        $badgeText = $activeFlyVacCount > 1 ? " ({$activeFlyVacCount})" : '';
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeFlyVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
     }
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
 } else {

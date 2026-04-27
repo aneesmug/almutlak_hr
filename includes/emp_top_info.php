@@ -72,8 +72,11 @@ if ($emprow['status'] == 1) {
 			if ($emprow["fly"] == 1) {
 				if ($isHR || $is_system_admin || $isDeptHr) {
 					$lastVac = lastVacIdGet($emprow['empid']);
+					$lastVacType = strtolower(trim((string)($lastVac['vac_type'] ?? '')));
+					$lastFlyType = strtolower(trim((string)($lastVac['fly_type'] ?? '')));
+					$isFlyRejoinEligible = ($lastVacType === 'fly' && in_array($lastFlyType, ['annual', 'emergency'], true));
 					// Updated rejoin function to use new approval system with emp_id and emp_name parameters
-					if ($lastVac && is_array($lastVac) && !empty($lastVac['vacid']) && !empty($lastVac['returndate'])) {
+					if ($lastVac && is_array($lastVac) && !empty($lastVac['vacid']) && !empty($lastVac['returndate']) && $isFlyRejoinEligible) {
 						$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"returnVacationRequest(" . htmlspecialchars($lastVac['vacid']) . ", '" . htmlspecialchars($lastVac['returndate']) . "', '" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['name']) . "')\" role=\"button\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoining') . "</span></div>";
 					}
 				}

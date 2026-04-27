@@ -97,12 +97,197 @@ if (!function_exists('ensurePayrollCompanyReportDispatchTable')) {
     }
 }
 
+if (!function_exists('ensurePayrollFinanceVerificationTable')) {
+    function ensurePayrollFinanceVerificationTable(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_finance_verification (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            request_inv_no VARCHAR(255) NOT NULL,
+            payroll_month VARCHAR(7) NOT NULL,
+            finance_manager_emp_id VARCHAR(50) NOT NULL,
+            finance_officer_emp_id VARCHAR(50) NOT NULL,
+            selected_company_ids LONGTEXT NOT NULL,
+            selected_employee_ids LONGTEXT NOT NULL,
+            is_confirmed TINYINT(1) NOT NULL DEFAULT 0,
+            confirmed_at DATETIME DEFAULT NULL,
+            officer_approved TINYINT(1) NOT NULL DEFAULT 0,
+            officer_approved_at DATETIME DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_finance_verification (request_inv_no, payroll_month, finance_manager_emp_id),
+            INDEX idx_finance_verification_request (request_inv_no, payroll_month),
+            INDEX idx_finance_verification_manager (finance_manager_emp_id),
+            INDEX idx_finance_verification_officer (finance_officer_emp_id),
+            INDEX idx_finance_verification_confirmed (is_confirmed)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        $approvedColumnStmt = $pdo->query("SHOW COLUMNS FROM payroll_finance_verification LIKE 'officer_approved'");
+        $hasApprovedColumn = $approvedColumnStmt && $approvedColumnStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$hasApprovedColumn) {
+            $pdo->exec("ALTER TABLE payroll_finance_verification
+                ADD COLUMN officer_approved TINYINT(1) NOT NULL DEFAULT 0 AFTER confirmed_at,
+                ADD COLUMN officer_approved_at DATETIME DEFAULT NULL AFTER officer_approved");
+        }
+
+        // Normalize any legacy duplicate rows to a single latest row per manager/request/month.
+        $duplicateGroupsStmt = $pdo->query("SELECT request_inv_no, payroll_month, finance_manager_emp_id, COUNT(*) AS row_count
+            FROM payroll_finance_verification
+            GROUP BY request_inv_no, payroll_month, finance_manager_emp_id
+            HAVING COUNT(*) > 1");
+        $duplicateGroups = $duplicateGroupsStmt ? $duplicateGroupsStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+        foreach ($duplicateGroups as $group) {
+            $requestInvNo = (string)($group['request_inv_no'] ?? '');
+            $payrollMonth = (string)($group['payroll_month'] ?? '');
+            $managerEmpId = (string)($group['finance_manager_emp_id'] ?? '');
+
+            if ($requestInvNo === '' || $payrollMonth === '' || $managerEmpId === '') {
+                continue;
+            }
+
+            $rowsStmt = $pdo->prepare("SELECT id, finance_officer_emp_id, selected_company_ids, selected_employee_ids
+                FROM payroll_finance_verification
+                WHERE request_inv_no = :inv_no
+                  AND payroll_month = :month_year
+                  AND finance_manager_emp_id = :manager_id
+                ORDER BY id ASC");
+            $rowsStmt->execute([
+                ':inv_no' => $requestInvNo,
+                ':month_year' => $payrollMonth,
+                ':manager_id' => $managerEmpId
+            ]);
+            $rows = $rowsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (count($rows) <= 1) {
+                continue;
+            }
+
+            $mergedCompanyIds = [];
+            $seenCompanyIds = [];
+            $mergedEmployeeIds = [];
+            $seenEmployeeIds = [];
+
+            foreach ($rows as $row) {
+                $companyIds = json_decode((string)($row['selected_company_ids'] ?? '[]'), true);
+                if (!is_array($companyIds)) {
+                    $companyIds = [];
+                }
+
+                foreach ($companyIds as $companyIdRaw) {
+                    $companyId = trim((string)$companyIdRaw);
+                    if ($companyId === '' || isset($seenCompanyIds[$companyId])) {
+                        continue;
+                    }
+                    $seenCompanyIds[$companyId] = true;
+                    $mergedCompanyIds[] = $companyId;
+                }
+
+                $employeeIds = json_decode((string)($row['selected_employee_ids'] ?? '[]'), true);
+                if (!is_array($employeeIds)) {
+                    $employeeIds = [];
+                }
+
+                foreach ($employeeIds as $employeeIdRaw) {
+                    $employeeId = trim((string)$employeeIdRaw);
+                    if ($employeeId === '' || isset($seenEmployeeIds[$employeeId])) {
+                        continue;
+                    }
+                    $seenEmployeeIds[$employeeId] = true;
+                    $mergedEmployeeIds[] = $employeeId;
+                }
+            }
+
+            $keeperRow = end($rows);
+            $keeperId = (int)($keeperRow['id'] ?? 0);
+            if ($keeperId <= 0) {
+                continue;
+            }
+
+            $updateKeeperStmt = $pdo->prepare("UPDATE payroll_finance_verification
+                SET selected_company_ids = :selected_company_ids,
+                    selected_employee_ids = :selected_employee_ids
+                WHERE id = :id");
+            $updateKeeperStmt->execute([
+                ':selected_company_ids' => json_encode($mergedCompanyIds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ':selected_employee_ids' => json_encode($mergedEmployeeIds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ':id' => $keeperId
+            ]);
+
+            $deleteDuplicateStmt = $pdo->prepare("DELETE FROM payroll_finance_verification
+                WHERE request_inv_no = :inv_no
+                  AND payroll_month = :month_year
+                  AND finance_manager_emp_id = :manager_id
+                  AND id <> :keeper_id");
+            $deleteDuplicateStmt->execute([
+                ':inv_no' => $requestInvNo,
+                ':month_year' => $payrollMonth,
+                ':manager_id' => $managerEmpId,
+                ':keeper_id' => $keeperId
+            ]);
+        }
+
+        // Ensure unique key is present for single-row assignment mode.
+        $uniqCheckStmt = $pdo->prepare("SELECT COUNT(*)
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'payroll_finance_verification'
+              AND INDEX_NAME = 'uniq_finance_verification'
+              AND NON_UNIQUE = 0");
+        $uniqCheckStmt->execute();
+        $hasUniqueConstraint = ((int)$uniqCheckStmt->fetchColumn() > 0);
+        if (!$hasUniqueConstraint) {
+            $pdo->exec("ALTER TABLE payroll_finance_verification
+                ADD UNIQUE KEY uniq_finance_verification (request_inv_no, payroll_month, finance_manager_emp_id)");
+        }
+    }
+}
+
+if (!function_exists('ensurePayrollFinanceVerificationHistoryTable')) {
+    function ensurePayrollFinanceVerificationHistoryTable(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_finance_verification_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            request_inv_no VARCHAR(255) NOT NULL,
+            payroll_month VARCHAR(7) NOT NULL,
+            finance_manager_emp_id VARCHAR(50) NOT NULL,
+            finance_officer_emp_id VARCHAR(50) DEFAULT NULL,
+            action_type VARCHAR(50) NOT NULL,
+            action_note TEXT DEFAULT NULL,
+            selected_company_ids LONGTEXT DEFAULT NULL,
+            created_by VARCHAR(50) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_fin_hist_request (request_inv_no, payroll_month),
+            INDEX idx_fin_hist_action (action_type),
+            INDEX idx_fin_hist_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+    }
+}
+
+if (!function_exists('ensurePayrollFinanceOfficerCompanyDefaultsTable')) {
+    function ensurePayrollFinanceOfficerCompanyDefaultsTable(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_finance_officer_company_defaults (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            finance_manager_emp_id VARCHAR(50) NOT NULL,
+            finance_officer_emp_id VARCHAR(50) NOT NULL,
+            selected_company_ids LONGTEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_fin_officer_company_defaults (finance_manager_emp_id, finance_officer_emp_id),
+            INDEX idx_fin_officer_defaults_manager (finance_manager_emp_id),
+            INDEX idx_fin_officer_defaults_officer (finance_officer_emp_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+    }
+}
+
 if (!function_exists('ensurePayrollChecklistSupportTables')) {
     function ensurePayrollChecklistSupportTables(PDO $pdo): void
     {
         ensurePayrollChecklistFeedbackTable($pdo);
         ensurePayrollChecklistReviewTable($pdo);
         ensurePayrollCompanyReportDispatchTable($pdo);
+        ensurePayrollFinanceVerificationTable($pdo);
+        ensurePayrollFinanceVerificationHistoryTable($pdo);
+        ensurePayrollFinanceOfficerCompanyDefaultsTable($pdo);
     }
 }
 
@@ -316,91 +501,22 @@ if (!function_exists('notifyPayrollApprovalApprover')) {
     }
 }
 
-if (!function_exists('notifyPayrollFinanceOfficer')) {
-    function notifyPayrollFinanceOfficer($conDB, PDO $pdo, string $requestInvNo, string $monthYear): array
+if (!function_exists('removePayrollFinanceOfficerStep')) {
+    function removePayrollFinanceOfficerStep(PDO $pdo, string $requestInvNo): int
     {
-        $result = [
-            'notification_sent' => false,
-            'email_sent' => false,
-            'recipient_count' => 0
-        ];
-
-        $financeStmt = $pdo->prepare("SELECT al.emp_id, al.email, e.name
-            FROM admin_login al
-            INNER JOIN employees e ON e.emp_id = al.emp_id
-            WHERE LOWER(TRIM(al.user_type)) = :user_type
-                            AND al.dept = :admin_dept
-                            AND e.sectin_nme = :employee_section");
-        $financeStmt->execute([
-            ':user_type' => 'finance_officer',
-                        ':admin_dept' => 2,
-                        ':employee_section' => 3
-        ]);
-        $financeUsers = $financeStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        if (empty($financeUsers)) {
-            return $result;
+        if ($requestInvNo === '') {
+            return 0;
         }
 
-        $summaryStmt = $pdo->prepare("SELECT COUNT(*) AS employee_count, COALESCE(SUM(net_salary), 0) AS total_net_salary
-            FROM payrolls
-            WHERE month_year = :month_year AND status IN ('generated', 'updated', 'paid')");
-        $summaryStmt->execute([':month_year' => $monthYear]);
-        $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $deleteStmt = $pdo->prepare("DELETE ra FROM request_approvers ra
+            INNER JOIN admin_login al ON al.emp_id = ra.approver_id
+            INNER JOIN approval_request_types art ON art.id = ra.request_type_id
+            WHERE ra.request_inv_no = :inv_no
+              AND art.type_name = 'payroll_request'
+              AND LOWER(TRIM(al.user_type)) = 'finance_officer'");
+        $deleteStmt->execute([':inv_no' => $requestInvNo]);
 
-        foreach ($financeUsers as $financeUser) {
-            $financeEmpId = (string)($financeUser['emp_id'] ?? '');
-            if ($financeEmpId === '') {
-                continue;
-            }
-
-            if (function_exists('create_and_show_notification')) {
-                create_and_show_notification(
-                    $conDB,
-                    $financeEmpId,
-                    'Payroll Ready for Payment',
-                    'Payroll ' . $monthYear . ' has completed GM approval and is ready for payment processing.',
-                    'all_payroll_approvals.php?status=approved',
-                    'info'
-                );
-                $result['notification_sent'] = true;
-            } elseif (function_exists('create_browser_notification')) {
-                create_browser_notification(
-                    $conDB,
-                    (int)$financeEmpId,
-                    'Payroll Ready for Payment',
-                    'Payroll ' . $monthYear . ' has completed GM approval and is ready for payment processing.',
-                    'all_payroll_approvals.php?status=approved'
-                );
-                $result['notification_sent'] = true;
-            }
-
-            if (!empty($financeUser['email']) && function_exists('send_approval_email')) {
-                $templateData = [
-                    'APPROVER_NAME' => !empty($financeUser['name']) ? htmlspecialchars($financeUser['name']) : 'Finance Officer',
-                    'REQUEST_ID' => $requestInvNo,
-                    'REQUEST_TYPE' => 'Payroll Payment Processing',
-                    'EMAIL_MESSAGE' => 'Payroll ' . $monthYear . ' has completed GM approval and is now ready for payment processing. No approval action is required from you; please start the payment process.',
-                    'PAYROLL_MONTH' => $monthYear,
-                    'EMPLOYEE_COUNT' => (string)($summary['employee_count'] ?? '0'),
-                    'TOTAL_NET_SALARY' => number_format((float)($summary['total_net_salary'] ?? 0), 2),
-                    'REQUEST_URL' => (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com') . '/all_payroll_approvals.php?status=approved'
-                ];
-
-                $sent = (bool)send_approval_email(
-                    $conDB,
-                    $financeUser['email'],
-                    $financeUser['name'] ?? 'Finance Officer',
-                    'Payroll Ready for Payment - ' . $monthYear . ' (' . $requestInvNo . ')',
-                    'payroll_request',
-                    $templateData
-                );
-                $result['email_sent'] = $result['email_sent'] || $sent;
-            }
-
-            $result['recipient_count']++;
-        }
-
-        return $result;
+        return (int)$deleteStmt->rowCount();
     }
 }
+

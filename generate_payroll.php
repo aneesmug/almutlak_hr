@@ -1705,7 +1705,7 @@ function initializeDataTable() {
         ],
         order: [[2, 'asc']], // Sort by Name by default
         pageLength: 10,
-        lengthMenu: [[-1, 5, 10, 25, 50, 100], ['All', 5, 10, 25, 50, 100]],
+        lengthMenu: [[-1, 10, 25, 50, 100], [__('all'), 10, 25, 50, 100]],
         language: {
             search: `<span>${__('search')}:</span> _INPUT_`,
             searchPlaceholder: `${__('search')}...`,
@@ -1961,7 +1961,7 @@ function updateMainSelectAllCheckbox() {
         selectAllMain.prop('checked', false).prop('indeterminate', false);
     }
 }
-        
+
 async function generatePayroll() {
     // Get all checked employee checkboxes and extract their IDs
     const selectedEmployees = employeeTable.rows().nodes().to$().find('.employee-checkbox:checked').map(function() {
@@ -2449,40 +2449,79 @@ function parsePayrollImportFile(file, defaultMonth) {
                     const benefitRows = parseSheetRows(workbook.Sheets[benefitsSheetName], mapBenefitSheetRow, 0);
                     const deductionRows = parseSheetRows(workbook.Sheets[deductionsSheetName], mapDeductionSheetRow, 0);
 
-                    const mergedMap = new Map();
-                    const mergeRow = (row, keyPrefix, index) => {
-                        const key = row.emp_id
-                            ? `${row.checkpoint_code}::${row.month}::${row.emp_id}`
-                            : `${keyPrefix}::${index}`;
-                        const existing = mergedMap.get(key) || {
-                            checkpoint_code: row.checkpoint_code,
-                            emp_id: row.emp_id,
-                            month: row.month,
-                            benefit_type: '',
-                            overtime_value: '',
-                            overtime_hours: '',
-                            overtime_reason: '',
-                            deduction_type: '',
-                            deduction_value: '',
-                            deduction_hours: '',
-                            deduction_days: '',
-                            deduction_reason: ''
-                        };
+                    const createEmptyImportRow = (row = {}) => ({
+                        checkpoint_code: String(row.checkpoint_code || '').trim(),
+                        emp_id: String(row.emp_id || '').trim(),
+                        month: String(row.month || '').trim(),
+                        benefit_type: '',
+                        overtime_value: '',
+                        overtime_hours: '',
+                        overtime_reason: '',
+                        deduction_type: '',
+                        deduction_value: '',
+                        deduction_hours: '',
+                        deduction_days: '',
+                        deduction_reason: ''
+                    });
 
-                        const merged = { ...existing };
-                        Object.keys(row).forEach((field) => {
-                            const value = String(row[field] == null ? '' : row[field]).trim();
+                    const applyNonEmptyFields = (target, source) => {
+                        Object.keys(source || {}).forEach((field) => {
+                            const value = String(source[field] == null ? '' : source[field]).trim();
                             if (value !== '') {
-                                merged[field] = value;
+                                target[field] = value;
                             }
                         });
-                        mergedMap.set(key, merged);
                     };
 
-                    benefitRows.forEach((row, index) => mergeRow(row, 'benefit', index));
-                    deductionRows.forEach((row, index) => mergeRow(row, 'deduction', index));
+                    const groupedRows = new Map();
+                    const getGroupKey = (row, keyPrefix, index) => {
+                        const empId = String(row.emp_id || '').trim();
+                        if (empId !== '') {
+                            return `${String(row.checkpoint_code || '').trim()}::${String(row.month || '').trim()}::${empId}`;
+                        }
+                        return `${keyPrefix}::${index}`;
+                    };
 
-                    return Array.from(mergedMap.values()).filter(rowHasPayrollImportData);
+                    benefitRows.forEach((row, index) => {
+                        const key = getGroupKey(row, 'benefit', index);
+                        const group = groupedRows.get(key) || {
+                            base: createEmptyImportRow(row),
+                            benefits: [],
+                            deductions: []
+                        };
+                        group.benefits.push(row);
+                        groupedRows.set(key, group);
+                    });
+
+                    deductionRows.forEach((row, index) => {
+                        const key = getGroupKey(row, 'deduction', index);
+                        const group = groupedRows.get(key) || {
+                            base: createEmptyImportRow(row),
+                            benefits: [],
+                            deductions: []
+                        };
+                        group.deductions.push(row);
+                        groupedRows.set(key, group);
+                    });
+
+                    const mergedRows = [];
+                    groupedRows.forEach((group) => {
+                        const pairCount = Math.max(group.benefits.length, group.deductions.length, 1);
+                        for (let i = 0; i < pairCount; i += 1) {
+                            const merged = createEmptyImportRow(group.base);
+                            if (group.benefits[i]) {
+                                applyNonEmptyFields(merged, group.benefits[i]);
+                            }
+                            if (group.deductions[i]) {
+                                applyNonEmptyFields(merged, group.deductions[i]);
+                            }
+                            if (rowHasPayrollImportData(merged)) {
+                                mergedRows.push(merged);
+                            }
+                        }
+                    });
+
+                    return mergedRows;
                 })();
 
                 if (parsedRows.length === 0) {
@@ -3345,7 +3384,7 @@ async function openPayrollImportReviewModal(rows, defaultMonth) {
 
                 payrollImportReviewTable = reviewTableElement.DataTable({
                     pageLength: 10,
-                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, __('all') || 'All']],
+                    lengthMenu: [[-1, 10, 25, 50, 100], [__('all'), 10, 25, 50, 100]],
                     order: [[1, 'asc']],
                     autoWidth: false,
                     responsive: false,
@@ -5285,11 +5324,6 @@ async function showPayrollDetails(empId, empName, month) {
 }
 // NOTE: All your other functions are preserved but omitted here for brevity.
         
-
-        
-
-        
-
         // --- New helper function to encapsulate report fetching and display ---
         async function fetchAndDisplayPayrollReport(selectedMonth, selectedCompany = '') {
             const companyText = selectedCompany ? ` - ${selectedCompany}` : '';
@@ -5329,7 +5363,7 @@ async function showPayrollDetails(empId, empName, month) {
                             <button id="exportExcelBtn" class="btn btn-success" style="display:${bankFileReady ? 'inline-block' : 'none'};"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
                             <button id="exportDetailedExcelBtn" class="btn btn-info"><i class="fas fa-file-excel"></i> Detailed Excel</button>
                             <div id="bankExcelPendingNote" class="mt-2 text-muted" style="display:${bankFileReady ? 'none' : 'block'}; font-size: 13px; font-weight: 600;">
-                                Finance review notification is pending. Bank EXCEL will be available after finance officer clicks "Notify HR Payroll Review Completed".
+                                Payroll approval is still pending. Bank EXCEL will be available immediately after final GM approval.
                             </div>
                         </div>
                         <table class="table table-bordered" id="payrollgentbl" style="width:100%;">
@@ -5378,7 +5412,7 @@ async function showPayrollDetails(empId, empName, month) {
                                 { data: 'net_salary', className: 'text-right', render: (d) => parseFloat(d || 0).toLocaleString('en-US', { style: 'currency', currency: 'SAR' }) }
                             ],
                             pageLength: 10,
-                            lengthMenu: [10, 25, 50, -1],
+                            lengthMenu: [[-1, 10, 25, 50, 100], [__('all'), 10, 25, 50, 100]],
                             order: [[1, 'asc']],
                             language: {
                                 search: `<span>${__('search')}:</span> _INPUT_`,
