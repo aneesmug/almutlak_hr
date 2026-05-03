@@ -1,0 +1,528 @@
+/*
+ * buttons.css — Al-Mutlak WMS Button System
+ * ─────────────────────────────────────────
+ * Standalone file. Drop one <link> on any page:
+ *
+ *   <link rel="stylesheet" href="assets/css/buttons.css">
+ *
+ * Works on top of Bootstrap 4 (or any theme) without overriding
+ * layout or typography. All changes are scoped to .btn and its
+ * modifier classes.
+ *
+ * TABLE OF CONTENTS
+ * 1. Base reset & shape
+ * 2. Size variants
+ * 3. Core variant colors + gradients (LTR)
+ * 4. RTL gradient direction utility  (.btn-gradient-rtl)
+ * 5. Slide shimmer hover effect       (::after pseudo-element)
+ * 6. Utility variants  (pill / soft / glass / ghost / neon / square)
+ * 7. Ripple disable
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * HTML USAGE EXAMPLES
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * ── STEP 1: Include the file ────────────────────────────────────
+ *
+ *   <link rel="stylesheet" href="assets/css/buttons.css">
+ *   (place after Bootstrap CSS, before your page styles)
+ *
+ *
+ * ── SECTION A: Core variants (gradient, LTR shimmer on hover) ──
+ *
+ *   <button class="btn btn-primary">Primary</button>
+ *   <button class="btn btn-success">Success</button>
+ *   <button class="btn btn-info">Info</button>
+ *   <button class="btn btn-warning">Warning</button>
+ *   <button class="btn btn-danger">Danger</button>
+ *   <button class="btn btn-dark">Dark</button>
+ *   <button class="btn btn-light">Light</button>
+ *   <button class="btn btn-custom">Custom</button>
+ *
+ *   Works on <a> tags too:
+ *   <a href="#" class="btn btn-primary">Go</a>
+ *
+ *
+ * ── SECTION B: RTL gradient (shimmer sweeps right → left) ───────
+ *
+ *   Add  btn-gradient-rtl  alongside any core variant:
+ *
+ *   <button class="btn btn-primary  btn-gradient-rtl">Primary RTL</button>
+ *   <button class="btn btn-danger   btn-gradient-rtl">Danger RTL</button>
+ *   <button class="btn btn-success  btn-gradient-rtl">Success RTL</button>
+ *
+ *
+ * ── SECTION C: Size variants ────────────────────────────────────
+ *
+ *   Five sizes available — combine with any variant:
+ *
+ *   <button class="btn btn-primary btn-xl">Extra Large</button>
+ *   <button class="btn btn-primary btn-lg">Large</button>
+ *   <button class="btn btn-primary">Default</button>
+ *   <button class="btn btn-primary btn-sm">Small</button>
+ *   <button class="btn btn-primary btn-xs">Extra Small</button>
+ *
+ *   Size comparison row:
+ *   <div class="d-flex align-items-center flex-wrap gap-2">
+ *     <button class="btn btn-primary btn-xl">XL</button>
+ *     <button class="btn btn-primary btn-lg">LG</button>
+ *     <button class="btn btn-primary">MD</button>
+ *     <button class="btn btn-primary btn-sm">SM</button>
+ *     <button class="btn btn-primary btn-xs">XS</button>
+ *   </div>
+ *
+ *   Sizes also work with btn-pill and btn-square:
+ *   <button class="btn btn-success btn-pill btn-xl">Approve</button>
+ *   <button class="btn btn-danger  btn-square btn-xs"><i class="fe-x"></i></button>
+ *
+ *
+ * ── SECTION D: Pill shape ────────────────────────────────────────
+ *
+ *   Combine btn-pill with any core or utility variant:
+ *
+ *   <button class="btn btn-primary btn-pill">Save</button>
+ *   <button class="btn btn-danger  btn-pill btn-sm">Delete</button>
+ *   <button class="btn btn-success btn-pill btn-lg">Approve</button>
+ *
+ *
+ * ── SECTION E: Utility variants ─────────────────────────────────
+ *
+ *   Soft  — muted translucent fill (good on dark cards):
+ *   <button class="btn btn-soft">Soft</button>
+ *
+ *   Glass — frosted glass look (dark backgrounds):
+ *   <button class="btn btn-glass">Glass</button>
+ *
+ *   Ghost — border-only, transparent background:
+ *   <button class="btn btn-ghost">Ghost</button>
+ *
+ *   Neon  — bright teal accent:
+ *   <button class="btn btn-neon">Neon</button>
+ *
+ *
+ * ── SECTION F: Square / icon buttons ────────────────────────────
+ *
+ *   Fixed square shape, centered icon. Works with any variant:
+ *
+ *   <button class="btn btn-primary btn-square">
+ *     <i class="fe-edit"></i>
+ *   </button>
+ *
+ *   <button class="btn btn-danger btn-square btn-sm">
+ *     <i class="fe-trash"></i>
+ *   </button>
+ *
+ *   <button class="btn btn-success btn-square btn-lg">
+ *     <i class="fe-check"></i>
+ *   </button>
+ *
+ *
+ * ── SECTION G: Combining modifiers ──────────────────────────────
+ *
+ *   Pill + RTL + size:
+ *   <button class="btn btn-warning btn-pill btn-gradient-rtl btn-sm">
+ *     Export
+ *   </button>
+ *
+ *   Inside a btn-group:
+ *   <div class="btn-group">
+ *     <button class="btn btn-primary">Left</button>
+ *     <button class="btn btn-primary">Middle</button>
+ *     <button class="btn btn-primary">Right</button>
+ *   </div>
+ *
+ *   Disabled state (shimmer is automatically suppressed):
+ *   <button class="btn btn-primary" disabled>Disabled</button>
+ *
+ *
+ * ── SECTION H: Full real-world row example ──────────────────────
+ *
+ *   <div class="d-flex flex-wrap gap-2">
+ *     <button class="btn btn-primary">Save</button>
+ *     <button class="btn btn-success btn-pill">Approve</button>
+ *     <button class="btn btn-warning btn-gradient-rtl">Review</button>
+ *     <button class="btn btn-danger  btn-sm">Reject</button>
+ *     <button class="btn btn-ghost">Cancel</button>
+ *     <button class="btn btn-primary btn-square">
+ *       <i class="fe-edit-2"></i>
+ *     </button>
+ *   </div>
+ *
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+
+/* ─────────────────────────────────────────────────────────────────
+   1. BASE RESET & SHAPE
+───────────────────────────────────────────────────────────────── */
+.btn {
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  outline: none !important;
+  padding: .375rem 1.1rem;
+  border-width: 1px;
+  box-shadow: none;
+  background-image: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn:hover:not(:disabled):not(.disabled) {
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.btn:active:not(:disabled):not(.disabled),
+.btn.active {
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:focus,
+.btn.focus,
+.btn:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(123, 166, 255, 0.3);
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   2. SIZE VARIANTS
+   xs  → 10px font, 4px radius
+   sm  →  8px radius
+   md  → 10px radius  (default — no class needed)
+   lg  → 12px radius
+   xl  → 14px radius
+───────────────────────────────────────────────────────────────── */
+
+/* Extra Small */
+.btn-xs {
+  padding: .1rem .5rem;
+  font-size: 11px;
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
+.btn-group-sm > .btn,
+.btn-sm {
+  padding: .2rem .8rem;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* Default (.btn) is 14px / 10px radius — defined in section 1 */
+
+.btn-group-lg > .btn,
+.btn-lg {
+  padding: .7rem 1.6rem;
+  font-size: 15px;
+  border-radius: 12px;
+}
+
+/* Extra Large */
+.btn-xl {
+  padding: .9rem 2rem;
+  font-size: 17px;
+  border-radius: 14px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   3. CORE VARIANT COLORS + GRADIENTS (LTR)
+   Each variant defines --btn-grad-start / --btn-grad-end so RTL
+   and shimmer rules can reuse the same palette automatically.
+───────────────────────────────────────────────────────────────── */
+.btn-primary {
+  --btn-grad-start: #256fdd;
+  --btn-grad-end:   #3a88ff;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-success {
+  --btn-grad-start: #07bc88;
+  --btn-grad-end:   #12dba2;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-info {
+  --btn-grad-start: #3ca9df;
+  --btn-grad-end:   #62c3f2;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-warning {
+  --btn-grad-start: #e3a706;
+  --btn-grad-end:   #ffc925;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-danger {
+  --btn-grad-start: #de4760;
+  --btn-grad-end:   #fb647c;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-dark {
+  --btn-grad-start: #272f3a;
+  --btn-grad-end:   #3a4655;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-light {
+  --btn-grad-start: #edf2f6;
+  --btn-grad-end:   #ffffff;
+  color: #313a46 !important;
+  background-color: var(--btn-grad-start);
+  border-color: #dfe6ec;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-custom {
+  --btn-grad-start: #00abb7;
+  --btn-grad-end:   #10cddd;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   4. RTL GRADIENT DIRECTION UTILITY
+   Add class="btn btn-primary btn-gradient-rtl" to flip direction.
+───────────────────────────────────────────────────────────────── */
+.btn-primary.btn-gradient-rtl,
+.btn-success.btn-gradient-rtl,
+.btn-info.btn-gradient-rtl,
+.btn-warning.btn-gradient-rtl,
+.btn-danger.btn-gradient-rtl,
+.btn-dark.btn-gradient-rtl,
+.btn-light.btn-gradient-rtl,
+.btn-custom.btn-gradient-rtl {
+  background-image: linear-gradient(to left, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   5. SLIDE SHIMMER HOVER EFFECT
+   A semi-transparent band sweeps LTR (or RTL with .btn-gradient-rtl)
+   across the button face on hover. Fully independent of background-
+   color so legacy Bootstrap hover rules cannot override it.
+───────────────────────────────────────────────────────────────── */
+.btn-primary,
+.btn-success,
+.btn-info,
+.btn-warning,
+.btn-danger,
+.btn-dark,
+.btn-light,
+.btn-custom {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shimmer band — parked off left edge at rest */
+.btn-primary::after,
+.btn-success::after,
+.btn-info::after,
+.btn-warning::after,
+.btn-danger::after,
+.btn-dark::after,
+.btn-light::after,
+.btn-custom::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transition: left 0.42s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Light button uses a subtle dark shimmer (white-on-white is invisible) */
+.btn-light::after {
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.07), transparent);
+}
+
+/* Hover: sweep shimmer to the right */
+.btn-primary:hover::after,
+.btn-success:hover::after,
+.btn-info:hover::after,
+.btn-warning:hover::after,
+.btn-danger:hover::after,
+.btn-dark:hover::after,
+.btn-light:hover::after,
+.btn-custom:hover::after {
+  left: 140%;
+}
+
+/* RTL variant: park shimmer off right edge, sweep to the left */
+.btn-primary.btn-gradient-rtl::after,
+.btn-success.btn-gradient-rtl::after,
+.btn-info.btn-gradient-rtl::after,
+.btn-warning.btn-gradient-rtl::after,
+.btn-danger.btn-gradient-rtl::after,
+.btn-dark.btn-gradient-rtl::after,
+.btn-light.btn-gradient-rtl::after,
+.btn-custom.btn-gradient-rtl::after {
+  left: auto;
+  right: -100%;
+  background: linear-gradient(to left, transparent, rgba(255, 255, 255, 0.22), transparent);
+}
+
+.btn-light.btn-gradient-rtl::after {
+  background: linear-gradient(to left, transparent, rgba(0, 0, 0, 0.07), transparent);
+}
+
+.btn-primary.btn-gradient-rtl:hover::after,
+.btn-success.btn-gradient-rtl:hover::after,
+.btn-info.btn-gradient-rtl:hover::after,
+.btn-warning.btn-gradient-rtl:hover::after,
+.btn-danger.btn-gradient-rtl:hover::after,
+.btn-dark.btn-gradient-rtl:hover::after,
+.btn-light.btn-gradient-rtl:hover::after,
+.btn-custom.btn-gradient-rtl:hover::after {
+  right: 140%;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   6. UTILITY VARIANTS
+───────────────────────────────────────────────────────────────── */
+
+/* --- Pill --- */
+.btn-pill {
+  border-radius: 999px;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+/* --- Soft (muted filled) --- */
+.btn-soft {
+  color: #d8e3f1 !important;
+  background: rgba(94, 119, 161, 0.18);
+  border-color: rgba(140, 167, 212, 0.36);
+  box-shadow: none;
+}
+
+.btn-soft:hover,
+.btn-soft:focus,
+.btn-soft:active {
+  color: #eef4ff !important;
+  background: rgba(104, 132, 182, 0.24);
+  border-color: rgba(156, 187, 241, 0.55);
+}
+
+/* --- Glass (translucent) --- */
+.btn-glass {
+  color: #e6f0ff !important;
+  background: rgba(125, 170, 255, 0.14);
+  border-color: rgba(164, 194, 255, 0.36);
+}
+
+.btn-glass:hover,
+.btn-glass:focus,
+.btn-glass:active {
+  color: #ffffff !important;
+  background: rgba(125, 170, 255, 0.22);
+  border-color: rgba(179, 207, 255, 0.56);
+}
+
+/* --- Ghost (transparent border-only) --- */
+.btn-ghost {
+  color: #cdd9ec !important;
+  background-color: transparent;
+  border-color: rgba(156, 177, 214, 0.45);
+  box-shadow: none;
+}
+
+.btn-ghost:hover,
+.btn-ghost:focus,
+.btn-ghost:active {
+  color: #ffffff !important;
+  background-color: rgba(156, 177, 214, 0.12);
+  border-color: rgba(176, 197, 232, 0.65);
+}
+
+/* --- Neon (bright teal accent) --- */
+.btn-neon {
+  color: #06111f !important;
+  background: #2fd4ea;
+  border-color: #1fc8db;
+  box-shadow: none;
+}
+
+.btn-neon:hover,
+.btn-neon:focus,
+.btn-neon:active {
+  color: #03101b !important;
+  background: #43dbf0;
+  border-color: #24d2e6;
+  box-shadow: none;
+}
+
+/* --- Square / icon button --- */
+.btn-square {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-square.btn-xs {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 11px;
+}
+
+.btn-square.btn-sm {
+  width: 2rem;
+  height: 2rem;
+}
+
+.btn-square.btn-lg {
+  width: 3rem;
+  height: 3rem;
+}
+
+.btn-square.btn-xl {
+  width: 3.5rem;
+  height: 3.5rem;
+  font-size: 18px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   7. RIPPLE DISABLE
+   Suppresses the legacy Waves.js ripple on all buttons so it does
+   not conflict with the shimmer ::after effect above.
+───────────────────────────────────────────────────────────────── */
+.btn.waves-effect .waves-ripple,
+.waves-effect .waves-ripple {
+  display: none !important;
+}
