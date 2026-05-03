@@ -1824,6 +1824,7 @@ code {
 
 .btn-custom,
 .btn-primary,
+.btn-secondary,
 .btn-success,
 .btn-info,
 .btn-warning,
@@ -2376,6 +2377,12 @@ code {
   background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
 }
 
+.btn-secondary {
+  --btn-grad-start: #8a94a3;
+  --btn-grad-end: #a7afbc;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
 .btn-success {
   --btn-grad-start: #07bc88;
   --btn-grad-end: #12dba2;
@@ -2419,8 +2426,70 @@ code {
   background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
 }
 
+/* Outline secondary with gradient fill + shimmer hover */
+.btn-outline-secondary {
+  --btn-grad-start: #8a94a3;
+  --btn-grad-end: #a7afbc;
+  color: #8a94a3;
+  background-color: transparent;
+  border-color: #8a94a3;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+  background-size: 0% 100%;
+  background-repeat: no-repeat;
+  position: relative;
+  overflow: hidden;
+  transition: background-size 0.35s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus,
+.btn-outline-secondary:active,
+.btn-outline-secondary.active {
+  color: #ffffff !important;
+  border-color: var(--btn-grad-start);
+  background-size: 100% 100%;
+}
+
+.btn-outline-secondary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transition: left 0.42s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.btn-outline-secondary:hover::after,
+.btn-outline-secondary:focus::after,
+.btn-outline-secondary:active::after,
+.btn-outline-secondary.active::after {
+  left: 140%;
+}
+
+.btn-outline-secondary.btn-gradient-rtl {
+  background-image: linear-gradient(to left, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-outline-secondary.btn-gradient-rtl::after {
+  left: auto;
+  right: -100%;
+  background: linear-gradient(to left, transparent, rgba(255, 255, 255, 0.22), transparent);
+}
+
+.btn-outline-secondary.btn-gradient-rtl:hover::after,
+.btn-outline-secondary.btn-gradient-rtl:focus::after,
+.btn-outline-secondary.btn-gradient-rtl:active::after,
+.btn-outline-secondary.btn-gradient-rtl.active::after {
+  right: 140%;
+}
+
 /* RTL gradient direction */
 .btn-primary.btn-gradient-rtl,
+.btn-secondary.btn-gradient-rtl,
 .btn-success.btn-gradient-rtl,
 .btn-info.btn-gradient-rtl,
 .btn-warning.btn-gradient-rtl,
@@ -2433,6 +2502,7 @@ code {
 
 /* Slide shimmer hover effect — pseudo-element sweeps across button on hover */
 .btn-primary,
+.btn-secondary,
 .btn-success,
 .btn-info,
 .btn-warning,
@@ -2445,6 +2515,7 @@ code {
 }
 
 .btn-primary::after,
+.btn-secondary::after,
 .btn-success::after,
 .btn-info::after,
 .btn-warning::after,
@@ -2470,6 +2541,7 @@ code {
 }
 
 .btn-primary:hover::after,
+.btn-secondary:hover::after,
 .btn-success:hover::after,
 .btn-info:hover::after,
 .btn-warning:hover::after,
@@ -2482,6 +2554,7 @@ code {
 
 /* RTL shimmer slides from right to left */
 .btn-primary.btn-gradient-rtl::after,
+.btn-secondary.btn-gradient-rtl::after,
 .btn-success.btn-gradient-rtl::after,
 .btn-info.btn-gradient-rtl::after,
 .btn-warning.btn-gradient-rtl::after,
@@ -2499,6 +2572,7 @@ code {
 }
 
 .btn-primary.btn-gradient-rtl:hover::after,
+.btn-secondary.btn-gradient-rtl:hover::after,
 .btn-success.btn-gradient-rtl:hover::after,
 .btn-info.btn-gradient-rtl:hover::after,
 .btn-warning.btn-gradient-rtl:hover::after,

@@ -31,6 +31,7 @@
  * ── SECTION A: Core variants (gradient, LTR shimmer on hover) ──
  *
  *   <button class="btn btn-primary">Primary</button>
+ *   <button class="btn btn-secondary">Secondary</button>
  *   <button class="btn btn-success">Success</button>
  *   <button class="btn btn-info">Info</button>
  *   <button class="btn btn-warning">Warning</button>
@@ -48,6 +49,7 @@
  *   Add  btn-gradient-rtl  alongside any core variant:
  *
  *   <button class="btn btn-primary  btn-gradient-rtl">Primary RTL</button>
+ *   <button class="btn btn-secondary btn-gradient-rtl">Secondary RTL</button>
  *   <button class="btn btn-danger   btn-gradient-rtl">Danger RTL</button>
  *   <button class="btn btn-success  btn-gradient-rtl">Success RTL</button>
  *
@@ -243,6 +245,15 @@
   background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
 }
 
+.btn-secondary {
+  --btn-grad-start: #8a94a3;
+  --btn-grad-end:   #a7afbc;
+  color: #ffffff !important;
+  background-color: var(--btn-grad-start);
+  border-color: var(--btn-grad-start);
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
 .btn-success {
   --btn-grad-start: #07bc88;
   --btn-grad-end:   #12dba2;
@@ -306,12 +317,74 @@
   background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
 }
 
+/* Outline secondary with gradient fill + shimmer hover */
+.btn-outline-secondary {
+  --btn-grad-start: #8a94a3;
+  --btn-grad-end:   #a7afbc;
+  color: #8a94a3;
+  background-color: transparent;
+  border-color: #8a94a3;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+  background-size: 0% 100%;
+  background-repeat: no-repeat;
+  position: relative;
+  overflow: hidden;
+  transition: background-size 0.35s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus,
+.btn-outline-secondary:active,
+.btn-outline-secondary.active {
+  color: #ffffff !important;
+  border-color: var(--btn-grad-start);
+  background-size: 100% 100%;
+}
+
+.btn-outline-secondary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transition: left 0.42s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.btn-outline-secondary:hover::after,
+.btn-outline-secondary:focus::after,
+.btn-outline-secondary:active::after,
+.btn-outline-secondary.active::after {
+  left: 140%;
+}
+
+.btn-outline-secondary.btn-gradient-rtl {
+  background-image: linear-gradient(to left, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-outline-secondary.btn-gradient-rtl::after {
+  left: auto;
+  right: -100%;
+  background: linear-gradient(to left, transparent, rgba(255, 255, 255, 0.22), transparent);
+}
+
+.btn-outline-secondary.btn-gradient-rtl:hover::after,
+.btn-outline-secondary.btn-gradient-rtl:focus::after,
+.btn-outline-secondary.btn-gradient-rtl:active::after,
+.btn-outline-secondary.btn-gradient-rtl.active::after {
+  right: 140%;
+}
+
 
 /* ─────────────────────────────────────────────────────────────────
    4. RTL GRADIENT DIRECTION UTILITY
    Add class="btn btn-primary btn-gradient-rtl" to flip direction.
 ───────────────────────────────────────────────────────────────── */
 .btn-primary.btn-gradient-rtl,
+.btn-secondary.btn-gradient-rtl,
 .btn-success.btn-gradient-rtl,
 .btn-info.btn-gradient-rtl,
 .btn-warning.btn-gradient-rtl,
@@ -330,6 +403,7 @@
    color so legacy Bootstrap hover rules cannot override it.
 ───────────────────────────────────────────────────────────────── */
 .btn-primary,
+.btn-secondary,
 .btn-success,
 .btn-info,
 .btn-warning,
@@ -343,6 +417,7 @@
 
 /* Shimmer band — parked off left edge at rest */
 .btn-primary::after,
+.btn-secondary::after,
 .btn-success::after,
 .btn-info::after,
 .btn-warning::after,
@@ -369,6 +444,7 @@
 
 /* Hover: sweep shimmer to the right */
 .btn-primary:hover::after,
+.btn-secondary:hover::after,
 .btn-success:hover::after,
 .btn-info:hover::after,
 .btn-warning:hover::after,
@@ -381,6 +457,7 @@
 
 /* RTL variant: park shimmer off right edge, sweep to the left */
 .btn-primary.btn-gradient-rtl::after,
+.btn-secondary.btn-gradient-rtl::after,
 .btn-success.btn-gradient-rtl::after,
 .btn-info.btn-gradient-rtl::after,
 .btn-warning.btn-gradient-rtl::after,
@@ -398,6 +475,7 @@
 }
 
 .btn-primary.btn-gradient-rtl:hover::after,
+.btn-secondary.btn-gradient-rtl:hover::after,
 .btn-success.btn-gradient-rtl:hover::after,
 .btn-info.btn-gradient-rtl:hover::after,
 .btn-warning.btn-gradient-rtl:hover::after,
