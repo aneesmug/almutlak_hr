@@ -2327,6 +2327,290 @@ code {
   background-color: #171515;
 }
 
+/* Enhanced Dark UI Buttons */
+.btn {
+  border-radius: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  border-width: 1px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  box-shadow: none;
+  background-image: none;
+}
+
+.btn:hover:not(:disabled):not(.disabled) {
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.btn:active:not(:disabled):not(.disabled),
+.btn.active {
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:focus,
+.btn.focus,
+.btn:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(123, 166, 255, 0.3);
+}
+
+.btn-primary,
+.btn-success,
+.btn-info,
+.btn-warning,
+.btn-danger,
+.btn-dark,
+.btn-custom,
+.btn-purple,
+.btn-pink {
+  background-image: none;
+}
+
+/* Same-tone directional gradients for core button variants */
+.btn-primary {
+  --btn-grad-start: #256fdd;
+  --btn-grad-end: #3a88ff;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-success {
+  --btn-grad-start: #07bc88;
+  --btn-grad-end: #12dba2;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-info {
+  --btn-grad-start: #3ca9df;
+  --btn-grad-end: #62c3f2;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-warning {
+  --btn-grad-start: #e3a706;
+  --btn-grad-end: #ffc925;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-danger {
+  --btn-grad-start: #de4760;
+  --btn-grad-end: #fb647c;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-dark {
+  --btn-grad-start: #272f3a;
+  --btn-grad-end: #3a4655;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+.btn-light {
+  --btn-grad-start: #edf2f6;
+  --btn-grad-end: #ffffff;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+  color: #313a46;
+}
+
+.btn-custom {
+  --btn-grad-start: #00abb7;
+  --btn-grad-end: #10cddd;
+  background-image: linear-gradient(to right, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+/* RTL gradient direction */
+.btn-primary.btn-gradient-rtl,
+.btn-success.btn-gradient-rtl,
+.btn-info.btn-gradient-rtl,
+.btn-warning.btn-gradient-rtl,
+.btn-danger.btn-gradient-rtl,
+.btn-dark.btn-gradient-rtl,
+.btn-light.btn-gradient-rtl,
+.btn-custom.btn-gradient-rtl {
+  background-image: linear-gradient(to left, var(--btn-grad-start), var(--btn-grad-end));
+}
+
+/* Slide shimmer hover effect — pseudo-element sweeps across button on hover */
+.btn-primary,
+.btn-success,
+.btn-info,
+.btn-warning,
+.btn-danger,
+.btn-dark,
+.btn-light,
+.btn-custom {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::after,
+.btn-success::after,
+.btn-info::after,
+.btn-warning::after,
+.btn-danger::after,
+.btn-dark::after,
+.btn-light::after,
+.btn-custom::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transition: left 0.42s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Light button uses a dark shimmer so it is visible on a white background */
+.btn-light::after {
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.07), transparent);
+}
+
+.btn-primary:hover::after,
+.btn-success:hover::after,
+.btn-info:hover::after,
+.btn-warning:hover::after,
+.btn-danger:hover::after,
+.btn-dark:hover::after,
+.btn-light:hover::after,
+.btn-custom:hover::after {
+  left: 140%;
+}
+
+/* RTL shimmer slides from right to left */
+.btn-primary.btn-gradient-rtl::after,
+.btn-success.btn-gradient-rtl::after,
+.btn-info.btn-gradient-rtl::after,
+.btn-warning.btn-gradient-rtl::after,
+.btn-danger.btn-gradient-rtl::after,
+.btn-dark.btn-gradient-rtl::after,
+.btn-light.btn-gradient-rtl::after,
+.btn-custom.btn-gradient-rtl::after {
+  left: auto;
+  right: -100%;
+  background: linear-gradient(to left, transparent, rgba(255, 255, 255, 0.22), transparent);
+}
+
+.btn-light.btn-gradient-rtl::after {
+  background: linear-gradient(to left, transparent, rgba(0, 0, 0, 0.07), transparent);
+}
+
+.btn-primary.btn-gradient-rtl:hover::after,
+.btn-success.btn-gradient-rtl:hover::after,
+.btn-info.btn-gradient-rtl:hover::after,
+.btn-warning.btn-gradient-rtl:hover::after,
+.btn-danger.btn-gradient-rtl:hover::after,
+.btn-dark.btn-gradient-rtl:hover::after,
+.btn-light.btn-gradient-rtl:hover::after,
+.btn-custom.btn-gradient-rtl:hover::after {
+  right: 140%;
+}
+
+.btn-lg,
+.btn-group-lg>.btn {
+  border-radius: 12px;
+}
+
+.btn-sm,
+.btn-group-sm>.btn {
+  border-radius: 8px;
+}
+
+.btn-pill {
+  border-radius: 999px;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+.btn-soft {
+  color: #d8e3f1 !important;
+  background: rgba(94, 119, 161, 0.18);
+  border-color: rgba(140, 167, 212, 0.36);
+  box-shadow: none;
+}
+
+.btn-soft:hover,
+.btn-soft:focus,
+.btn-soft:active {
+  color: #eef4ff !important;
+  background: rgba(104, 132, 182, 0.24);
+  border-color: rgba(156, 187, 241, 0.55);
+}
+
+.btn-glass {
+  color: #e6f0ff !important;
+  background: rgba(125, 170, 255, 0.14);
+  border-color: rgba(164, 194, 255, 0.36);
+  backdrop-filter: none;
+}
+
+.btn-glass:hover,
+.btn-glass:focus,
+.btn-glass:active {
+  color: #ffffff !important;
+  background: rgba(125, 170, 255, 0.22);
+  border-color: rgba(179, 207, 255, 0.56);
+}
+
+.btn-ghost {
+  color: #cdd9ec !important;
+  background-color: transparent;
+  border-color: rgba(156, 177, 214, 0.45);
+  box-shadow: none;
+}
+
+.btn-ghost:hover,
+.btn-ghost:focus,
+.btn-ghost:active {
+  color: #ffffff !important;
+  background-color: rgba(156, 177, 214, 0.12);
+  border-color: rgba(176, 197, 232, 0.65);
+}
+
+.btn-neon {
+  color: #06111f !important;
+  background: #2fd4ea;
+  border-color: #1fc8db;
+  box-shadow: none;
+}
+
+.btn-neon:hover,
+.btn-neon:focus,
+.btn-neon:active {
+  color: #03101b !important;
+  background: #43dbf0;
+  border-color: #24d2e6;
+  box-shadow: none;
+}
+
+/* Disable legacy ripple effect on buttons */
+.btn.waves-effect .waves-ripple,
+.waves-effect .waves-ripple {
+  display: none !important;
+}
+
+.btn-square {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-square.btn-sm {
+  width: 2rem;
+  height: 2rem;
+}
+
+.btn-square.btn-lg {
+  width: 3rem;
+  height: 3rem;
+}
+
 /* =================
    Ribbons
 ==================== */

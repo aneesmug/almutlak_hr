@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
+require_once __DIR__ . '/includes/init.php';
 require_once __DIR__ . '/includes/payroll_approval_helpers.php';
 
 if (isset($isEmployee) && $isEmployee === true) {

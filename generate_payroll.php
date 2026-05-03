@@ -10,7 +10,7 @@
 
     <head>
         <meta charset="utf-8" />
-        <title><?= $site_title ?> - <?=__('payroll_management_title')?></title>
+        <title><?= $site_title ?? 'AlMutlak' ?> - <?=__('payroll_management_title')?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
@@ -662,7 +662,7 @@
                 }
             }
         </style>
-        <?php if ($is_rtl): ?>
+        <?php if ($is_rtl ?? false): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
         <?php endif; ?>
 		<script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
@@ -854,7 +854,7 @@
                 </div> <!-- content -->
 
                 <footer class="footer">
-                    <?= $site_footer ?>
+                    <?= $site_footer ?? '' ?>
                 </footer>
 
             </div>
