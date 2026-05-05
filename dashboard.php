@@ -134,7 +134,7 @@ if (!empty($allowed_employees_array)) {
 }
 
 // Only HR, Department HR, and System Admin can view dashboard expiry sections
-$can_view_expiry_block = ($is_system_admin || $isHR || $isDeptHr);
+$can_view_expiry_block = ($is_system_admin || $isHR || $isDeptHr || $isGR_Officer);
 
 // Document expiry bands for dashboard cards (30/20/10 day windows)
 $doc_expiry_bands = [
