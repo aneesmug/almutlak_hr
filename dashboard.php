@@ -133,6 +133,129 @@ if (!empty($allowed_employees_array)) {
 	}
 }
 
+// Only HR, Department HR, and System Admin can view dashboard expiry sections
+$can_view_expiry_block = ($is_system_admin || $isHR || $isDeptHr);
+
+// Document expiry bands for dashboard cards (30/20/10 day windows)
+$doc_expiry_bands = [
+	'info' => [],
+	'warning' => [],
+	'danger' => []
+];
+$doc_expiry_counts = [
+	'info' => 0,
+	'warning' => 0,
+	'danger' => 0
+];
+$doc_expiry_doc_counts = [
+	'info' => ['id_iqama' => 0, 'passport' => 0, 'contract' => 0],
+	'warning' => ['id_iqama' => 0, 'passport' => 0, 'contract' => 0],
+	'danger' => ['id_iqama' => 0, 'passport' => 0, 'contract' => 0]
+];
+$doc_expiry_data_json = '{"info":[],"warning":[],"danger":[]}';
+
+if ($can_view_expiry_block) {
+	$doc_expiry_query = "SELECT
+		`e`.`emp_id`,
+		`e`.`name`,
+		`e`.`iqama_exp_g`,
+		`e`.`passport_exp`,
+		`e`.`joining_date`,
+		`e`.`vac_period`,
+		`d`.`dep_nme`,
+		`d`.`dep_nme_ar`
+		FROM `employees` AS `e`
+		LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+		WHERE `e`.`status` = 1 " . $company_filter_alias . $department_filter_alias . $employee_filter_alias;
+
+	$doc_expiry_result = mysqli_query($conDB, $doc_expiry_query);
+	if ($doc_expiry_result) {
+		$today_ts = strtotime(date('Y-m-d'));
+		$seconds_per_day = 86400;
+
+		while ($emp = mysqli_fetch_assoc($doc_expiry_result)) {
+			$documents = [
+				['type' => 'ID/Iqama', 'key' => 'id_iqama', 'date' => $emp['iqama_exp_g'] ?? null],
+				['type' => 'Passport', 'key' => 'passport', 'date' => $emp['passport_exp'] ?? null]
+			];
+
+			$contract_expiry_date = computeContractExpiry(
+				$emp['joining_date'] ?? null,
+				isset($emp['vac_period']) ? (int)$emp['vac_period'] : null,
+				'Y-m-d'
+			);
+			if (!empty($contract_expiry_date)) {
+				$documents[] = ['type' => 'Contract Renewal', 'key' => 'contract', 'date' => $contract_expiry_date];
+			}
+
+			foreach ($documents as $doc) {
+				$raw_date = $doc['date'] ?? '';
+				if (empty($raw_date) || $raw_date === '0000-00-00') {
+					continue;
+				}
+
+				$normalized_date = str_replace('/', '-', $raw_date);
+				$expiry_ts = strtotime($normalized_date);
+				if ($expiry_ts === false) {
+					continue;
+				}
+
+				$days_remaining = (int) floor(($expiry_ts - $today_ts) / $seconds_per_day);
+				if ($days_remaining > 30) {
+					continue;
+				}
+
+				if ($days_remaining <= 10) {
+					$band = 'danger';
+				} elseif ($days_remaining <= 20) {
+					$band = 'warning';
+				} else {
+					$band = 'info';
+				}
+
+				$doc_key = $doc['key'] ?? null;
+				if ($doc_key && isset($doc_expiry_doc_counts[$band][$doc_key])) {
+					$doc_expiry_doc_counts[$band][$doc_key]++;
+				}
+
+				$emp_id_key = (string)$emp['emp_id'];
+				if (!isset($doc_expiry_bands[$band][$emp_id_key])) {
+					$doc_expiry_bands[$band][$emp_id_key] = [
+						'emp_id' => $emp['emp_id'],
+						'name' => getDisplayName($emp['name']),
+						'department' => ($is_rtl ?? false) ? ($emp['dep_nme_ar'] ?? '') : ($emp['dep_nme'] ?? ''),
+						'docs' => []
+					];
+				}
+
+				$doc_expiry_bands[$band][$emp_id_key]['docs'][] = [
+					'type' => $doc['type'],
+					'expiry' => date('Y-m-d', $expiry_ts),
+					'days' => $days_remaining,
+					'status' => $days_remaining < 0 ? 'expired' : ($days_remaining === 0 ? 'today' : 'upcoming')
+				];
+			}
+		}
+
+		$doc_expiry_counts = [
+			'info' => count($doc_expiry_bands['info']),
+			'warning' => count($doc_expiry_bands['warning']),
+			'danger' => count($doc_expiry_bands['danger'])
+		];
+
+		$doc_expiry_data_for_js = [
+			'info' => array_values($doc_expiry_bands['info']),
+			'warning' => array_values($doc_expiry_bands['warning']),
+			'danger' => array_values($doc_expiry_bands['danger'])
+		];
+
+		$doc_expiry_data_json = json_encode(
+			$doc_expiry_data_for_js,
+			JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT
+		);
+	}
+}
+
 if(isset($_POST['submit'])){
 	if($_POST['iqama_exp']){
 		$iqama_exp_gup = $DateConv->HijriToGregorian($_POST['iqama_exp'], $format);
@@ -408,6 +531,36 @@ if(isset($_POST['submit'])){
 				font-size: 13px;
 				font-style: italic;
 			}
+
+			/* Document Expiry cards + SweetAlert listing */
+			.doc-expiry-card {
+				cursor: pointer;
+				min-height: 145px;
+			}
+
+			.doc-expiry-card .stats-card-label small {
+				display: block;
+				font-size: 12px;
+				opacity: 0.9;
+				margin-top: 4px;
+			}
+
+			.doc-expiry-table {
+				text-align: left;
+				max-height: 420px;
+				overflow: auto;
+			}
+
+			.doc-expiry-doc-badge {
+				display: inline-block;
+				padding: 3px 8px;
+				border-radius: 12px;
+				font-size: 11px;
+				font-weight: 600;
+				margin: 2px 4px 2px 0;
+				background: #eef2ff;
+				color: #3730a3;
+			}
 		</style>
 
 		<?php if ($is_rtl): ?>
@@ -654,10 +807,64 @@ if(isset($_POST['submit'])){
 								</div>
 							</div>
 							</div>
-						</div>                        
+							</div>
                         </div>
+						<?php if ($can_view_expiry_block): ?>
 						<div class="card-box">
-							<h4 class="m-t-0 header-title"><?= __('access_scope') ?: 'Access Scope' ?></h4>
+							<div class="card-box mt-2">
+								<h4 class="m-t-0 header-title"><?= getDisplayName('Document Expiry Alerts') ?></h4>
+								<div class="row text-center">
+									<div class="col-sm-4 col-xl-4">
+										<div class="stats-card doc-expiry-card" data-color="info" data-level="info">
+											<div class="stats-card-icon" data-color="info">
+												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['info'] ?></div>
+												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 21-30 days range') ?></span>
+												<i class="fa fa-circle-info"></i>
+											</div>
+											<div class="stats-card-content">
+												<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= getDisplayName('Within 30 Days') ?>
+													<small><?= getDisplayName('ID/Iqama') ?>: <?= (int)$doc_expiry_doc_counts['info']['id_iqama'] ?> | <?= getDisplayName('Passport') ?>: <?= (int)$doc_expiry_doc_counts['info']['passport'] ?> | <?= getDisplayName('Contract') ?>: <?= (int)$doc_expiry_doc_counts['info']['contract'] ?></small>
+												</div>
+											</div>
+										</div>
+									</div>
+
+									<div class="col-sm-4 col-xl-4">
+										<div class="stats-card doc-expiry-card" data-color="warning" data-level="warning">
+											<div class="stats-card-icon" data-color="warning">
+												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['warning'] ?></div>
+												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 11-20 days range') ?></span>
+												<i class="fa fa-triangle-exclamation"></i>
+											</div>
+											<div class="stats-card-content">
+												<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= getDisplayName('Within 20 Days') ?>
+													<small><?= getDisplayName('ID/Iqama') ?>: <?= (int)$doc_expiry_doc_counts['warning']['id_iqama'] ?> | <?= getDisplayName('Passport') ?>: <?= (int)$doc_expiry_doc_counts['warning']['passport'] ?> | <?= getDisplayName('Contract') ?>: <?= (int)$doc_expiry_doc_counts['warning']['contract'] ?></small>
+												</div>
+											</div>
+										</div>
+									</div>
+
+									<div class="col-sm-4 col-xl-4">
+										<div class="stats-card doc-expiry-card" data-color="danger" data-level="danger">
+											<div class="stats-card-icon" data-color="danger">
+												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['danger'] ?></div>
+												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 0-10 days or expired range') ?></span>
+												<i class="fa fa-skull-crossbones"></i>
+											</div>
+											<div class="stats-card-content">
+												<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= getDisplayName('Within 10 Days') ?>
+													<small><?= getDisplayName('ID/Iqama') ?>: <?= (int)$doc_expiry_doc_counts['danger']['id_iqama'] ?> | <?= getDisplayName('Passport') ?>: <?= (int)$doc_expiry_doc_counts['danger']['passport'] ?> | <?= getDisplayName('Contract') ?>: <?= (int)$doc_expiry_doc_counts['danger']['contract'] ?></small>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+						<?php endif; ?>
+
+						<div class="card-box">
+							<h4 class="m-t-0 header-title"><?= getDisplayName('Access Scope') ?></h4>
 							<div class="row">
 								<div class="col-md-4">
 									<div class="card-box" style="border: 1px solid #e5e7eb;">
@@ -701,7 +908,7 @@ if(isset($_POST['submit'])){
 							<?php
 
 							// Show expiry notifications for: Administrators, HR team, Finance team, IT team, and department managers
-							if ($is_system_admin || $isHR || $isDeptHr ):
+							if ($can_view_expiry_block):
 								// Use the same access control pattern for expiry notifications
 								if(!$can_see_all_employees && isset($user_dept)){
 									$result=mysqli_query($conDB, "SELECT 
@@ -937,6 +1144,92 @@ if(isset($_POST['submit'])){
         <!-- <script src="assets/pages/jquery.dashboard.init.js"></script> -->
 		
 		<script type="text/javascript">
+			var docExpiryBandData = <?= $doc_expiry_data_json ?: '{"info":[],"warning":[],"danger":[]}' ?>;
+
+			function escapeDocExpiryHtml(value) {
+				if (value === null || value === undefined) {
+					return '';
+				}
+				return String(value)
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#039;');
+			}
+
+			function formatDocDays(doc) {
+				var days = parseInt(doc.days, 10);
+				if (isNaN(days)) {
+					return '';
+				}
+
+				if (days < 0) {
+					return '<?= getDisplayName('Expired') ?> ' + Math.abs(days) + ' <?= getDisplayName('day(s) ago') ?>';
+				}
+				if (days === 0) {
+					return '<?= getDisplayName('Expires today') ?>';
+				}
+				return days + ' <?= getDisplayName('day(s) left') ?>';
+			}
+
+			function getDocExpiryTitle(level) {
+				if (level === 'danger') {
+					return '<?= getDisplayName('Employees with documents within 10 days or expired') ?>';
+				}
+				if (level === 'warning') {
+					return '<?= getDisplayName('Employees with documents within 20 days') ?>';
+				}
+				return '<?= getDisplayName('Employees with documents within 30 days') ?>';
+			}
+
+			function buildDocExpiryListHtml(level) {
+				var rows = (docExpiryBandData && docExpiryBandData[level]) ? docExpiryBandData[level] : [];
+				if (!rows.length) {
+					return '<div class="text-muted py-3"><?= getDisplayName('No employees found in this range.') ?></div>';
+				}
+
+				var tableRows = rows.map(function(emp) {
+					var docs = Array.isArray(emp.docs) ? emp.docs : [];
+					var docsHtml = docs.map(function(doc) {
+						return '<span class="doc-expiry-doc-badge">'
+							+ escapeDocExpiryHtml(doc.type)
+							+ ' - '
+							+ escapeDocExpiryHtml(doc.expiry)
+							+ ' ('
+							+ escapeDocExpiryHtml(formatDocDays(doc))
+							+ ')</span>';
+					}).join('');
+
+					var viewUrl = 'view_employee.php?emp_id=' + encodeURIComponent(emp.emp_id);
+					var actionHtml = ''
+						+ '<a href="' + viewUrl + '" class="btn btn-sm btn-primary" target="_blank" rel="noopener">'
+						+ '<i class="mdi mdi-account-eye"></i> <?= getDisplayName('View Employee') ?>'
+						+ '</a>';
+
+					return '<tr>'
+						+ '<td>' + escapeDocExpiryHtml(emp.emp_id) + '</td>'
+						+ '<td>' + escapeDocExpiryHtml(emp.name) + '</td>'
+						+ '<td>' + escapeDocExpiryHtml(emp.department || '-') + '</td>'
+						+ '<td>' + docsHtml + '</td>'
+						+ '<td>' + actionHtml + '</td>'
+						+ '</tr>';
+				}).join('');
+
+				return ''
+					+ '<div class="doc-expiry-table">'
+					+ '<table class="table table-sm table-striped table-bordered mb-0">'
+					+ '<thead class="thead-light"><tr>'
+					+ '<th style="width:90px;"><?= getDisplayName('Emp ID') ?></th>'
+					+ '<th style="width:220px;"><?= getDisplayName('Name') ?></th>'
+					+ '<th style="width:180px;"><?= getDisplayName('Department') ?></th>'
+					+ '<th><?= getDisplayName('Documents') ?></th>'
+					+ '<th style="width:140px;"><?= getDisplayName('Action') ?></th>'
+					+ '</tr></thead>'
+					+ '<tbody>' + tableRows + '</tbody>'
+					+ '</table>'
+					+ '</div>';
+			}
 
 			$('.updateExpID').click(function() {
 	            $('#iid')      .val($(this).data('iid'));
@@ -1092,6 +1385,18 @@ if(isset($_POST['submit'])){
 						});
 					},
 				})
+			});
+
+			$(document).on('click', '.doc-expiry-card', function () {
+				var level = $(this).data('level');
+				Swal.fire({
+					title: getDocExpiryTitle(level),
+					html: buildDocExpiryListHtml(level),
+					width: '1100px',
+					allowOutsideClick: false,
+					confirmButtonText: __('close') || 'Close',
+					confirmButtonColor: APP_COLORS.primary
+				});
 			});
 
 		// Initialize Allowed Employees Badge Card

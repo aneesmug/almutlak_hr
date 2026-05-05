@@ -1,0 +1,15 @@
+{
+  "php.validate.enable": false,
+  "intelephense.environment.includePaths": [
+    ".",
+    "includes"
+  ],
+  "intelephense.files.exclude": [
+    "**/includes/emp_top_info.php"
+  ],
+  "intelephense.diagnostics.enable": false,
+  "intelephense.files.associations": [
+    "*.php"
+  ],
+  "intelephense.diagnostics.undefinedVariables": false
+}

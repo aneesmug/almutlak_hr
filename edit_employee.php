@@ -759,11 +759,19 @@ if (mysqli_num_rows($query) == 1) {
 
 		<!-- Modal-Effect -->
 		<script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
+		<script src="./plugins/bootstrap-inputmask/jquery.inputmask.min.js" type="text/javascript"></script>
 		<script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
 
-
 		<script src="./plugins/moment/moment.js"></script>
-
+		<script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
+		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js"></script>
+		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js"></script>
+		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js"></script>
+		<script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
+		<script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
+		<script src="./plugins/croppie/croppie.js" type="text/javascript"></script>
+		<script src="./plugins/croppie/croppie.min.js" type="text/javascript"></script>
+		<script src="./plugins/croppie/exif.js" type="text/javascript"></script>
 		<script src="./plugins/bootstrap-filestyle/js/bootstrap-filestyle.min.js" type="text/javascript"></script>
 
 		<!-- App js -->

@@ -6189,3 +6189,117 @@ if (!function_exists('getEmployeeFilterSQL')) {
         return " AND $column_name IN ($employees_list)";
     }
 }
+
+
+/*=============================================
+=      Document Expiry Alert Functions        =
+=============================================*/
+
+/**
+ * Generates Bootstrap alert HTML for documents that are expiring soon or already expired.
+ *
+ * Alert thresholds (counting from today to expiry_date):
+ *  - 21–30 days remaining  → info  (blue)
+ *  - 11–20 days remaining  → warning (yellow)
+ *  - ≤ 10 days remaining   → danger (red)
+ *  - Already expired       → danger (red) with "Expired" label
+ *  - > 30 days             → no alert shown
+ *
+ * @param array $documents  Array of items, each:
+ *                          ['label' => string, 'expiry_date' => string|null (Y-m-d Gregorian)]
+ * @return string           HTML string (empty string when nothing to show)
+ */
+if (!function_exists('get_document_expiry_alerts')) {
+    function get_document_expiry_alerts(array $documents): string
+    {
+        $alerts = [];
+        $today  = new DateTime('today');
+
+        foreach ($documents as $doc) {
+            $label       = htmlspecialchars($doc['label'] ?? '', ENT_QUOTES, 'UTF-8');
+            $expiry_raw  = $doc['expiry_date'] ?? null;
+
+            // Skip if no date or clearly invalid
+            if (empty($expiry_raw) || $expiry_raw === '0000-00-00') {
+                continue;
+            }
+
+            $expiry_date = DateTime::createFromFormat('Y-m-d', $expiry_raw);
+            if ($expiry_date === false) {
+                continue;
+            }
+            $expiry_date->setTime(0, 0, 0);
+
+            // Signed difference: negative means already expired
+            $diff_days = (int) $today->diff($expiry_date)->days;
+            if ($expiry_date < $today) {
+                $diff_days = -$diff_days;
+            }
+
+            if ($diff_days > 30) {
+                // Nothing to show yet
+                continue;
+            }
+
+            $expiry_display = $expiry_date->format('d M Y');
+
+            if ($diff_days < 0) {
+                // Already expired
+                $type    = 'danger';
+                $icon    = 'mdi mdi-alert-circle';
+                $badge   = '<span class="badge badge-danger ml-1">' . getDisplayName('Expired') . '</span>';
+                $message = getDisplayName('has expired') . " (" . getDisplayName('on') . " <strong>{$expiry_display}</strong>).";
+            } elseif ($diff_days === 0) {
+                $type    = 'danger';
+                $icon    = 'mdi mdi-alert-circle';
+                $badge   = '<span class="badge badge-danger ml-1">' . getDisplayName('Expires Today') . '</span>';
+                $message = getDisplayName('expires today') . " (" . getDisplayName('on') . " <strong>{$expiry_display}</strong>).";
+            } elseif ($diff_days <= 10) {
+                $type    = 'danger';
+                $icon    = 'mdi mdi-alert-circle';
+                $badge   = '<span class="badge badge-danger ml-1">' . $diff_days . ' ' . getDisplayName('day') . ($diff_days !== 1 ? 's' : '') . ' ' . getDisplayName('left') . '</span>';
+                $message = getDisplayName('expires in') . " <strong>{$diff_days} " . getDisplayName('day') . ($diff_days !== 1 ? 's' : '') . "</strong> " . getDisplayName('on') . " <strong>{$expiry_display}</strong>.";
+            } elseif ($diff_days <= 20) {
+                $type    = 'warning';
+                $icon    = 'mdi mdi-alert';
+                $badge   = '<span class="badge badge-warning ml-1">' . $diff_days . ' ' . getDisplayName('days left') . '</span>';
+                $message = getDisplayName('expires in') . " <strong>{$diff_days} " . getDisplayName('days') . "</strong> " . getDisplayName('on') . " <strong>{$expiry_display}</strong>.";
+            } else {
+                // 21–30 days
+                $type    = 'info';
+                $icon    = 'mdi mdi-information';
+                $badge   = '<span class="badge badge-info ml-1">' . $diff_days . ' ' . getDisplayName('days left') . '</span>';
+                $message = getDisplayName('is due for renewal in') . " <strong>{$diff_days} " . getDisplayName('days') . "</strong> " . getDisplayName('on') . " <strong>{$expiry_display}</strong>.";
+            }
+
+            $bg_class = ($type === 'warning') ? 'bg-warning text-dark' : "bg-{$type} text-white";
+
+            $alerts[] = <<<HTML
+<div class="alert {$bg_class} border-0 mb-2 d-flex align-items-center" role="alert" style="border-radius:6px;">
+    <i class="{$icon} mr-2" style="font-size:1.3rem;flex-shrink:0;"></i>
+    <div class="flex-grow-1">
+        <strong>{$label}</strong> {$badge} — {$message}
+    </div>
+    <button type="button" class="close ml-3" data-dismiss="alert" aria-label="Close">
+        <span aria-hidden="true" style="font-size:1.2rem;">&times;</span>
+    </button>
+</div>
+HTML;
+        }
+
+        if (empty($alerts)) {
+            return '';
+        }
+
+        $inner = implode("\n", $alerts);
+        return <<<HTML
+<div class="row mb-2">
+    <div class="col-12">
+        {$inner}
+    </div>
+</div>
+HTML;
+    }
+}
+
+/*=====  End of Document Expiry Alert Functions ======*/

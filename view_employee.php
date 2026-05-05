@@ -811,6 +811,20 @@ if (mysqli_num_rows($query) == 1) {
 					<div class="container-fluid">
 						<?php //echo $thismonthexp 
 						?>
+						<?php
+						// --- Document Expiry Alerts ---
+						$_doc_iqama_gregorian = $DateConv->HijriToGregorian($emprow['iqama_exp'] ?? '', $format);
+						$_doc_contract_expiry = computeContractExpiry(
+							$emprow['joining_date'] ?? null,
+							isset($emprow['vac_period']) ? (int)$emprow['vac_period'] : null,
+							'Y-m-d'
+						);
+						echo get_document_expiry_alerts([
+							['label' => getDisplayName('ID / Iqama'),          'expiry_date' => $_doc_iqama_gregorian],
+							['label' => getDisplayName('Passport'),            'expiry_date' => $emprow['passport_exp'] ?? null],
+							['label' => getDisplayName('Contract Renewal'),    'expiry_date' => $_doc_contract_expiry],
+						]);
+						?>
 						<?php include("./includes/emp_top_info.php"); ?>
 						<div class="row">
 							<div class="col-xl-12">

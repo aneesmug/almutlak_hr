@@ -513,9 +513,10 @@ include(__DIR__ . "/menu_active_class.php");
  * Runs on EVERY page load to ensure immediate updates.
  * 
  * How it works:
- * 1. Sets fly=1 when employee is currently on Fly vacation (active date window)
- * 2. Only affects Fly vacations (annual/emergency), never local/encashed
- * 3. Only affects regular vacation (VAC-*), NOT leave requests (LV-*)
+ * 1. Sets fly=1 when employee is currently on Fly vacation (annual/emergency)
+ * 2. Also sets fly=1 for Local Vacation (annual/emergency) ONLY when vacdays >= 5
+ * 3. Local Vacation with days < 5 does NOT trigger fly=1
+ * 4. Only affects regular vacation (VAC-*), NOT leave requests (LV-*)
  * 
  * @param mysqli $conDB Database connection
  * @return void
@@ -525,6 +526,7 @@ function update_employee_fly_status_on_session($conDB) {
         $today = date('Y-m-d');
         
         // STEP 1: Set fly=1 for active Fly vacations (annual/emergency)
+        // Also set fly=1 for Local Vacation (annual/emergency) ONLY when vacdays >= 5
         // (Only for regular vacation VAC-*, not leave requests LV-*)
         $sql_find_employees = "
             SELECT DISTINCT v.emp_id
@@ -533,9 +535,12 @@ function update_employee_fly_status_on_session($conDB) {
                 AND v.start_date <= ?
                 AND v.return_date >= ?
                 AND v.request_inv_no LIKE 'VAC-%'
-                AND LOWER(v.vac_type) = 'fly'
                 AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
                 AND v.review = 'A'
+                AND (
+                    LOWER(v.vac_type) = 'fly'
+                    OR (LOWER(v.vac_type) = 'local vacation' AND v.vacdays >= 5)
+                )
         ";
         
         $stmt_find = mysqli_prepare($conDB, $sql_find_employees);

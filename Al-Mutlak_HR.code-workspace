@@ -72,5 +72,18 @@
 			}
 		},
 		"chat.permissions.default": "autoApprove"
+		,
+		"intelephense.environment.includePaths": [
+			".",
+			"includes"
+		],
+		"intelephense.files.exclude": [
+			"**/includes/emp_top_info.php"
+		],
+		"intelephense.files.associations": [
+			"*.php"
+		],
+		"intelephense.diagnostics.enable": false,
+		"intelephense.diagnostics.undefinedVariables": false
 	}
 }
