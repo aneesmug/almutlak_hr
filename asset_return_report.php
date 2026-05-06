@@ -79,7 +79,7 @@ if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_G
                 </tr>
                  <tr>
                     <th>Assigned Date</th>
-                    <td><?= date('d M, Y', strtotime($asset['assigned_date'])) ?></td>
+                    <td><?= format_safe_date($asset['assigned_date'] ?? null, 'd M, Y') ?></td>
                 </tr>
                 <tr>
                     <th>Asset Condition</th>

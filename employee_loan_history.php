@@ -183,13 +183,13 @@ $status_badges = [
                                                 </td>
                                                 <td>
                                                     <?php if (isset($loan['application_date']) && $loan['application_date']): ?>
-                                                        <span class="date-batch-g"><?= date('M d, Y', strtotime($loan['application_date'])) ?></span>
+                                                        <span class="date-batch-g"><?= format_safe_date($loan['application_date'] ?? null, 'M d, Y') ?></span>
                                                         <br><small class="text-muted"><?= $DateConv->GregorianToHijri($loan['application_date'], $format) ?></small>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
                                                     <?php if (isset($loan['approval_date']) && $loan['approval_date']): ?>
-                                                        <span class="date-batch-g"><?= date('M d, Y', strtotime($loan['approval_date'])) ?></span>
+                                                        <span class="date-batch-g"><?= format_safe_date($loan['approval_date'] ?? null, 'M d, Y') ?></span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>

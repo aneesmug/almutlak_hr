@@ -664,7 +664,7 @@ if ($can_see_all_depts) {
                                                         <span class="float-right"><?= __('emp_id') ?>: <?= htmlspecialchars($req['emp_id']); ?></span>
                                                     </div>
                                                     <div class="card-body">
-                                                        <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?= __('applied') ?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($req['created_at']))); ?></div>
+                                                        <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?= __('applied') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'd M Y')); ?></div>
                                                         <div class="detail-item"><i class="fad fa-suitcase-rolling duotone-info"></i><strong><?= __('type') ?>:</strong> <?= getDisplayName($req['vac_type']) . " | " . $req['fly_type_translated']; ?></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?= __('start') ?>:</strong> <?= htmlspecialchars($req['start_date'] ?? 'N/A'); ?></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?= __('return') ?>:</strong> <?= htmlspecialchars($req['return_date'] ?? 'N/A'); ?></div>

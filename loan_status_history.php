@@ -249,7 +249,7 @@ $avatar_path = getAvatarImagePath($loan['avatar'] ?? '', $loan['sex'] ?? 1);
                         <?php if (!empty($loan['rejection_timestamp'])): ?>
                         <div class="info-row" style="background:transparent;border:none;padding:0;">
                             <div class="info-label" style="width:auto;"><i class="fas fa-calendar-times"></i> <?= __('rejection_date') ?>:</div>
-                            <div class="info-value" style="width:auto;color:#721c24;"><?= date('d M Y, H:i:s', strtotime($loan['rejection_timestamp'])); ?></div>
+                            <div class="info-value" style="width:auto;color:#721c24;"><?= format_safe_date($loan['rejection_timestamp'] ?? null, 'd M Y, H:i:s'); ?></div>
                         </div>
                         <?php endif; ?>
                         <?php elseif (!empty($loan['rejection_reason'])): ?>
@@ -260,7 +260,7 @@ $avatar_path = getAvatarImagePath($loan['avatar'] ?? '', $loan['sex'] ?? 1);
                         <?php if (!empty($loan['rejection_date'])): ?>
                         <div class="info-row" style="background:transparent;border:none;padding:0 0 12px 0;">
                             <div class="info-label" style="width:auto;"><i class="fas fa-calendar-times"></i> <?= __('rejection_date') ?>:</div>
-                            <div class="info-value" style="width:auto;color:#721c24;"><?= date('d M Y, H:i:s', strtotime($loan['rejection_date'])); ?></div>
+                            <div class="info-value" style="width:auto;color:#721c24;"><?= format_safe_date($loan['rejection_date'] ?? null, 'd M Y, H:i:s'); ?></div>
                         </div>
                         <?php endif; ?>
                         <?php if (!empty($loan['rejected_by_name'])): ?>
@@ -294,7 +294,7 @@ $avatar_path = getAvatarImagePath($loan['avatar'] ?? '', $loan['sex'] ?? 1);
                             <div class="payment-item">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <i class="fas fa-calendar"></i> <?= date('d M Y', strtotime($payment['payment_date'])) ?>
+                                        <i class="fas fa-calendar"></i> <?= format_safe_date($payment['payment_date'] ?? null, 'd M Y') ?>
                                         <span class="badge badge-<?= ($payment['payment_method']==='manual') ? 'info' : 'primary' ?> ml-2"><?= ucfirst($payment['payment_method']) ?></span>
                                     </div>
                                     <strong>SAR <?= number_format($payment['amount'], 2) ?></strong>
@@ -337,7 +337,7 @@ $avatar_path = getAvatarImagePath($loan['avatar'] ?? '', $loan['sex'] ?? 1);
                                 <td><strong><?= getDisplayName(parseName($link['approver_name']) ?? 'N/A') ?></strong><br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= getDisplayName($link['user_type'] ?? '') ?></small></td>
                                 <td>
                                     <span class="badge badge-<?= $cClass ?>"><i class="fas <?= $cIcon ?>"></i> <?= getDisplayName(ucfirst($link['status'])) ?></span>
-                                    <?php if (!empty($link['action_date'])): ?><br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= date('d M Y, H:i', strtotime($link['action_date'])) ?></small><?php endif; ?>
+                                    <?php if (!empty($link['action_date'])): ?><br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= format_safe_date($link['action_date'], 'd M Y, H:i') ?></small><?php endif; ?>
                                     <?php if (!empty($link['note'])):
                                         $note_border_color = ($link['status'] === 'rejected') ? '#dc3545' : '#667eea';
                                         $note_label = ($link['status'] === 'rejected') ? __('Rejection Reason') : __('note');
@@ -374,7 +374,7 @@ $avatar_path = getAvatarImagePath($loan['avatar'] ?? '', $loan['sex'] ?? 1);
                         <div class="timeline-content">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="status-badge bg-<?= $badge ?> text-white"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
-                                <small class="text-muted"><i class="far fa-clock"></i> <?= date('d M Y, H:i', strtotime($item['created_at'])) ?></small>
+                                <small class="text-muted"><i class="far fa-clock"></i> <?= format_safe_date($item['created_at'] ?? null, 'd M Y, H:i') ?></small>
                             </div>
                             <p class="mb-1"><strong><?= nl2br(htmlspecialchars(getDisplayName(($item['note']) ?? 'No notes'))) ?></strong></p>
                             <small class="text-muted"><i class="far fa-user"></i> <?= getDisplayName($item['emp_name']) ?></small>

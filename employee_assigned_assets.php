@@ -227,13 +227,13 @@ $cars_drv_result = $stmt->get_result();
                                                 <td><?= htmlspecialchars($asset['serial_number'] ?? 'N/A') ?></td>
                                                 <td>
                                                     <?php if (isset($asset['assigned_date']) && $asset['assigned_date']): ?>
-                                                        <?= date('M d, Y', strtotime($asset['assigned_date'])) ?>
+                                                        <?= format_safe_date($asset['assigned_date'], 'M d, Y') ?>
                                                         <br><small class="text-muted"><?= $DateConv->GregorianToHijri($asset['assigned_date'], $format) ?></small>
                                                     <?php else: echo 'N/A'; endif; ?>
                                                 </td>
                                                 <td>
                                                     <?php if (isset($asset['return_date']) && $asset['return_date']): ?>
-                                                        <?= date('M d, Y', strtotime($asset['return_date'])) ?>
+                                                        <?= format_safe_date($asset['return_date'], 'M d, Y') ?>
                                                         <br><small class="text-muted"><?= $DateConv->GregorianToHijri($asset['return_date'], $format) ?></small>
                                                     <?php else: echo '-'; endif; ?>
                                                 </td>
@@ -272,13 +272,13 @@ $cars_drv_result = $stmt->get_result();
                                                 <td><?= htmlspecialchars($car_drv['plate_no'] ?? 'N/A') ?></td>
                                                 <td>
                                                     <?php if (isset($car_drv['assigned_date']) && $car_drv['assigned_date']): ?>
-                                                        <?= date('M d, Y', strtotime($car_drv['assigned_date'])) ?>
+                                                        <?= format_safe_date($car_drv['assigned_date'], 'M d, Y') ?>
                                                         <br><small class="text-muted"><?= $DateConv->GregorianToHijri($car_drv['assigned_date'], $format) ?></small>
                                                     <?php else: echo 'N/A'; endif; ?>
                                                 </td>
                                                 <td>
                                                     <?php if ($has_return_date): ?>
-                                                        <?= date('M d, Y', strtotime($car_drv['return_date'])) ?>
+                                                        <?= format_safe_date($car_drv['return_date'], 'M d, Y') ?>
                                                         <br><small class="text-muted"><?= $DateConv->GregorianToHijri($car_drv['return_date'], $format) ?></small>
                                                     <?php else: echo '-'; endif; ?>
                                                 </td>

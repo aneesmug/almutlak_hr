@@ -252,8 +252,8 @@ function display_gui_report($rejected_count, $failed_count, $total_stale, $rejec
                                                 <?php echo htmlspecialchars($log['rejection_reason']); ?>
                                             </small>
                                         </td>
-                                        <td><span class="timestamp"><?php echo date('d M Y H:i', strtotime($log['created_at'])); ?></span></td>
-                                        <td><span class="timestamp"><?php echo date('d M Y H:i', strtotime($log['rejected_at'])); ?></span></td>
+                                        <td><span class="timestamp"><?php echo format_safe_date($log['created_at'] ?? null, 'd M Y H:i'); ?></span></td>
+                                        <td><span class="timestamp"><?php echo format_safe_date($log['rejected_at'] ?? null, 'd M Y H:i'); ?></span></td>
                                         <td>
                                             <span class="status-badge <?php echo ($log['status'] === 'successfully_rejected') ? 'rejected' : 'failed'; ?>">
                                                 <i class="<?php echo ($log['status'] === 'successfully_rejected') ? 'fas fa-ban' : 'fas fa-exclamation'; ?>"></i>

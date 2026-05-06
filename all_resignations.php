@@ -425,10 +425,10 @@ if ($can_see_all_depts) {
                                                             <span class="float-right"><?=__('emp_id')?>: <?= htmlspecialchars($resignation['employee_id']) ?></span>
                                                         </div>
                                                         <div class="card-body">
-                                                            <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?=__('submitted')?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($resignation['created_at']))) ?></div>
+                                                            <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?=__('submitted')?>:</strong> <?= htmlspecialchars(format_safe_date($resignation['created_at'] ?? null, 'd M Y')) ?></div>
                                                             <div class="detail-item"><i class="fad fa-building duotone-info"></i><strong><?=__('department')?>:</strong> <?= htmlspecialchars($resignation['department'] ?? 'N/A') ?></div>
                                                             <div class="detail-item"><i class="fad fa-briefcase duotone-info"></i><strong><?=__('designation')?>:</strong> <?= htmlspecialchars($resignation['designation'] ?? 'N/A') ?></div>
-                                                            <div class="detail-item"><i class="fad fa-calendar-times duotone-info"></i><strong><?=__('last_working_day')?>:</strong> <span class="text-danger font-weight-bold"><?= date('d M Y', strtotime($resignation['last_working_day'])) ?></span></div>
+                                                            <div class="detail-item"><i class="fad fa-calendar-times duotone-info"></i><strong><?=__('last_working_day')?>:</strong> <span class="text-danger font-weight-bold"><?= format_safe_date($resignation['last_working_day'] ?? null, 'd M Y') ?></span></div>
                                                             
                                                             <div class="detail-item">
                                                                 <?php 

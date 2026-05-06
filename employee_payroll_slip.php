@@ -284,7 +284,7 @@ $all_payrolls = $stmt->get_result();
                                     <div class="payroll-header">
                                         <h5><i class="fa fa-file-text"></i> <?= __('payroll_slip_for', 'Payroll Slip for') ?> <?= date('F Y', strtotime($payroll_record['month_year'] . '-01')) ?></h5>
                                         <p class="mb-0">
-                                            <i class="fa fa-calendar"></i> <?=__('generated') ?>: <?= date('M d, Y', strtotime($payroll_record['generated_at'])) ?> 
+                                            <i class="fa fa-calendar"></i> <?=__('generated') ?>: <?= format_safe_date($payroll_record['generated_at'] ?? null, 'M d, Y') ?> 
                                             | <i class="fa fa-clock"></i> <?= __('period', 'Period') ?>: <?= date('F Y', strtotime($payroll_record['month_year'] . '-01')) ?>
                                             | <i class="fa fa-check-circle"></i> <?= __('status', 'Status') ?>: <?= ucfirst($payroll_record['status']) ?>
                                         </p>

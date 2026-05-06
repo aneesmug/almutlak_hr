@@ -201,9 +201,9 @@ $status_badges = [
                                                 <td><?= htmlspecialchars((string)__($trip['transportation_type'] ?? '-')) ?></td>
                                                 <td><?= htmlspecialchars((string)$destination_text) ?></td>
                                                 <td>
-                                                    <?= date('M d, Y', strtotime((string)$trip['trip_start_date'])) ?>
+                                                    <?= format_safe_date((string)$trip['trip_start_date'], 'M d, Y') ?>
                                                     <?= __('to', 'to') ?>
-                                                    <?= date('M d, Y', strtotime((string)$trip['trip_end_date'])) ?>
+                                                    <?= format_safe_date((string)$trip['trip_end_date'], 'M d, Y') ?>
                                                 </td>
                                                 <td>
                                                     <span class="badge <?= $badge_class ?>">
@@ -211,7 +211,7 @@ $status_badges = [
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <?= date('M d, Y', strtotime((string)$trip['created_at'])) ?>
+                                                    <?= format_safe_date((string)$trip['created_at'], 'M d, Y') ?>
                                                     <br><small class="text-muted"><?= $DateConv->GregorianToHijri($trip['created_at'], $format) ?></small>
                                                 </td>
                                                 <td>

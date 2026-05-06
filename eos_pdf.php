@@ -202,15 +202,15 @@ if(mysqli_num_rows($query) == 1){
             <td class="label-ar ar" width="15%">الجلسة / المنطقة</td>
         </tr>
         <tr>
-            <td class="label-en en" width="25%">Date of Birth: '.(!empty($emprow['dob']) ? date('M d, Y', strtotime(str_replace('/', '-', $emprow['dob']))) : "").' (Age: '.$years_age.')</td>
+            <td class="label-en en" width="25%">Date of Birth: '.(!empty($emprow['dob']) ? format_safe_date($emprow['dob'], 'M d, Y') : '').' (Age: '.$years_age.')</td>
             <td class="label-ar ar" width="25%">تاريخ الميلاد</td>
-            <td class="label-en en" width="35%">Date Hired: '.date('M d, Y', strtotime(str_replace('/', '-', $emprow['joining_date']))).'</td>
+            <td class="label-en en" width="35%">Date Hired: '.format_safe_date($emprow['joining_date'] ?? null, 'M d, Y').'</td>
             <td class="label-ar ar" width="15%">تاريخ التعيين</td>
         </tr>
         <tr>
             <td class="label-en en" width="25%">Nationality: '.$emprow['country_name'].'</td>
             <td class="label-ar ar" width="25%">الجنسية</td>
-            <td class="label-en en" width="35%">Termination Date: '.date('M d, Y', strtotime(str_replace('/', '-', $emprow['ter_date']))).'</td>
+            <td class="label-en en" width="35%">Termination Date: '.format_safe_date($emprow['ter_date'] ?? null, 'M d, Y').'</td>
             <td class="label-ar ar" width="15%">تاريخ الإنهاء</td>
         </tr>';
     

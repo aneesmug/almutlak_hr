@@ -6303,3 +6303,42 @@ HTML;
 }
 
 /*=====  End of Document Expiry Alert Functions ======*/
+
+if (!function_exists('is_valid_date_value')) {
+    function is_valid_date_value($dateValue)
+    {
+        if ($dateValue === null) {
+            return false;
+        }
+
+        $value = trim((string) $dateValue);
+        if ($value === '') {
+            return false;
+        }
+
+        $invalidValues = [
+            '0000-00-00',
+            '0000-00-00 00:00:00',
+            '0000-00-00T00:00:00',
+            '0000/00/00'
+        ];
+
+        return !in_array($value, $invalidValues, true);
+    }
+}
+
+if (!function_exists('format_safe_date')) {
+    function format_safe_date($dateValue, $format = 'd M Y', $fallback = '-')
+    {
+        if (!is_valid_date_value($dateValue)) {
+            return $fallback;
+        }
+
+        $timestamp = strtotime((string) $dateValue);
+        if ($timestamp === false) {
+            return $fallback;
+        }
+
+        return date($format, $timestamp);
+    }
+}

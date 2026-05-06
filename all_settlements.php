@@ -629,7 +629,7 @@ if ($canSeeAllDepts) {
                                                     <div class="card-body">
                                                         <div class="detail-item"><i class="fad fa-file-invoice"></i><strong><?= __('settlement_id') ?>:</strong> <?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES); ?></div>
                                                         <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <span class="badge badge-success" style="font-size: 0.95em; padding: 0.5rem 0.75rem;">SAR <?= number_format(round($payableAmount), 2); ?></span></div>
-                                                        <div class="detail-item"><i class="fad fa-calendar-alt"></i><strong><?= __('created') ?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($settlement['created_at'])), ENT_QUOTES); ?></div>
+                                                        <div class="detail-item"><i class="fad fa-calendar-alt"></i><strong><?= __('created') ?>:</strong> <?= htmlspecialchars(format_safe_date($settlement['created_at'] ?? null, 'd M Y'), ENT_QUOTES); ?></div>
                                                         <?php
                                                             $settlementAttachments = getSettlementAttachments(
                                                                 $pdo,

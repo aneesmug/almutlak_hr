@@ -669,7 +669,7 @@
                                     <hr>
                                     <?php if($eos_id){ ?>
                                         <div class="alert alert-danger text-center">
-                                            <strong><?=__('Terminated on:');?></strong> <?= date('d M, Y', strtotime($terminationDate)); ?> | 
+                                            <strong><?=__('Terminated on:');?></strong> <?= format_safe_date($terminationDate ?? null, 'd M, Y') ?> | 
                                             <strong><?=__('Reason:');?></strong> <?= htmlspecialchars($eos_reason); ?>
                                         </div>
                                     <?php } ?>
@@ -692,7 +692,7 @@
                                                                 <div class="col-md-4"><p><strong><?=__('Iqama / ID');?>:</strong><br><?= htmlspecialchars($emprow['iqama'] ?? ''); ?></p></div>
                                                                 <div class="col-md-4"><p><strong><?=__('Department');?>:</strong><br><?= htmlspecialchars($emprow['deptnme'] ?? ''); ?></p></div>
                                                                 <div class="col-md-4"><p><strong><?=__('Job Title');?>:</strong><br><?= htmlspecialchars($emprow['jobname'] ?? ''); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Joining Date');?>:</strong><br><?= date('d M, Y', strtotime($emprow['joining_date'])); ?></p></div>
+                                                                <div class="col-md-4"><p><strong><?=__('Joining Date');?>:</strong><br><?= format_safe_date($emprow['joining_date'] ?? null, 'd M, Y'); ?></p></div>
                                                             </div>
                                                         </div>
                                                     </div>

@@ -237,7 +237,7 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
                     <h5><i class="fas fa-file-alt"></i> <?= __('request_information')?></h5>
                     <div class="info-row"><div class="info-label"><i class="fas fa-circle"></i> <?= __('status') ?>:</div><div class="info-value"><span class="badge badge-<?= htmlspecialchars($status_class) ?>"><i class="fas <?= htmlspecialchars($status_icon) ?>"></i> <?= htmlspecialchars(getDisplayName(ucfirst(str_replace('_', ' ', $trip['current_status'])))) ?></span></div></div>
                     <div class="info-row"><div class="info-label"><i class="fas fa-user-check"></i> <?= __('approval_level') ?>:</div><div class="info-value"><?= (int)($trip['current_approval_level'] ?? 0) ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar"></i> <?= __('submitted_date') ?>:</div><div class="info-value"><?= isset($trip['created_at']) ? date('d M Y H:i', strtotime($trip['created_at'])) : 'N/A' ?></div></div>
+                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar"></i> <?= __('submitted_date') ?>:</div><div class="info-value"><?= isset($trip['created_at']) ? format_safe_date($trip['created_at'], 'd M Y H:i') : 'N/A' ?></div></div>
                 </div>
             </div>
         </div>
@@ -275,7 +275,7 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
                                     ?>
                                     <span class="badge badge-<?= htmlspecialchars($badge_class) ?>"><?= htmlspecialchars(getDisplayName(ucfirst(str_replace('_', ' ', $status)))) ?></span>
                                 </td>
-                                <td><?= $item['action_date'] ? date('d M Y H:i', strtotime($item['action_date'])) : __('pending') ?></td>
+                                <td><?= $item['action_date'] ? format_safe_date($item['action_date'], 'd M Y H:i') : __('pending') ?></td>
                                 <td><small><?= htmlspecialchars(getDisplayName($item['note'] ?? '-')) ?></small></td>
                             </tr>
                             <?php endforeach; ?>
@@ -316,7 +316,7 @@ if (strtolower($trip['trip_type'] ?? '') === 'international') {
                         <div class="timeline-content">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                                 <strong><?= ucfirst(htmlspecialchars(str_replace('_', ' ', $event['status']))) ?></strong>
-                                <span class="timeline-time"><i class="fas fa-clock"></i> <?= date('d M Y H:i', strtotime($event['created_at'])) ?></span>
+                                <span class="timeline-time"><i class="fas fa-clock"></i> <?= format_safe_date($event['created_at'] ?? null, 'd M Y H:i') ?></span>
                             </div>
                             <div style="color:#666; margin-bottom:6px;">
                                 <i class="fas fa-user"></i> <strong><?= getDisplayName($event['emp_name']) ?></strong>

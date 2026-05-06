@@ -441,7 +441,7 @@
                                                     <tbody>
                                                         <tr><th style="width:150px;"><?=__('maker_model_label')?>:</th><td><?= $car_info['maker_name'] ?> - <?= $car_info['model'] ?> (<?= $car_info['made_year'] ?>)</td></tr>
                                                         <tr><th><?=__('plate_no_label')?>:</th><td><?= $car_info['plate_no'] ?></td></tr>
-                                                        <tr><th><?=__('receive_date_label')?>:</th><td><?= date('d, M Y', strtotime($emprow['rcv_date'])) ?></td></tr>
+                                                        <tr><th><?=__('receive_date_label')?>:</th><td><?= format_safe_date($emprow['rcv_date'] ?? null, 'd, M Y') ?></td></tr>
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -454,7 +454,7 @@
                                                     <tr>
                                                         <td style="width:150px;"><?= htmlspecialchars($asset['asset_name']); ?></td>
                                                         <td><?= htmlspecialchars($asset['serial_number']); ?></td>
-                                                        <td><?= date('d M Y', strtotime($asset['assigned_date'])); ?></td>
+                                                        <td><?= format_safe_date($asset['assigned_date'] ?? null, 'd M Y'); ?></td>
                                                     </tr>
                                                     <?php endforeach; ?>
                                                 </table>
@@ -484,8 +484,8 @@
                                                     <td><?= number_format($loan['loan_amount'], 2); ?></td>
                                                     <td><?= number_format($loan['monthly_deduction'], 2); ?></td>
                                                     <td class="font-weight-bold <?= ($remaining_balance_hist > 0) ? 'text-danger' : 'text-success' ?>"><?= number_format($remaining_balance_hist, 2); ?></td>
-                                                    <td><?= date('d M Y', strtotime($loan['start_date'])); ?></td>
-                                                    <td><?= date('d M Y', strtotime($loan['end_date'])); ?></td>
+                                                    <td><?= format_safe_date($loan['start_date'] ?? null, 'd M Y'); ?></td>
+                                                    <td><?= format_safe_date($loan['end_date'] ?? null, 'd M Y'); ?></td>
                                                     <td><span class="badge badge-<?= ($loan['loan_type'] == 'emergency' ? 'warning' : 'info') ?>"><?= __($loan['loan_type']); ?></span></td>
                                                     <td><span class="badge badge-<?= ($loan['status'] == 'approved' ? 'success' : ($loan['status'] == 'paid' ? 'primary' : ($loan['status'] == 'rejected' ? 'danger' : 'warning'))) ?>"><?= __($loan['status']); ?></span></td>
                                                 </tr>
@@ -505,12 +505,12 @@
                                                 <?php foreach ($vacation_history as $vac): ?>
                                                 <tr>
                                                     <td><?= htmlspecialchars($vac['note'] ?? 'N/A'); ?></td>
-                                                    <td><?= date('d M Y', strtotime($vac['start_date'])); ?></td>
-                                                    <td><?= date('d M Y', strtotime($vac['return_date'])); ?></td>
+                                                    <td><?= format_safe_date($vac['start_date'] ?? null, 'd M Y'); ?></td>
+                                                    <td><?= format_safe_date($vac['return_date'] ?? null, 'd M Y'); ?></td>
                                                     <td><?= htmlspecialchars($vac['vacdays']); ?></td>
                                                     <td><?= htmlspecialchars($vac['permit_no']); ?></td>
                                                     <td><?= ($vac["review"] == 'A') ? __('approved') : (($vac["review"] == 'C') ? __('completed') : __('pending')); ?></td>
-                                                    <td><?= ($vac["arrived_date"] == "") ? __('not_yet_text') : date('d M Y', strtotime($vac['arrived_date'])); ?></td>
+                                                    <td><?= ($vac["arrived_date"] == "") ? __('not_yet_text') : format_safe_date($vac['arrived_date'], 'd M Y'); ?></td>
                                                 </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
@@ -524,8 +524,8 @@
                                             <div class="col-md-6">
                                                 <table class="table table-sm">
                                                     <tbody>
-                                                        <tr><th style="width:150px;"><?=__('resignation_date_label')?>:</th><td><?= date('d M Y', strtotime($end_of_service['resignation_date'])); ?></td></tr>
-                                                        <tr><th><?=__('last_working_day_label')?>:</th><td><?= date('d M Y', strtotime($end_of_service['last_working_day'])); ?></td></tr>
+                                                        <tr><th style="width:150px;"><?=__('resignation_date_label')?>:</th><td><?= format_safe_date($end_of_service['resignation_date'] ?? null, 'd M Y'); ?></td></tr>
+                                                        <tr><th><?=__('last_working_day_label')?>:</th><td><?= format_safe_date($end_of_service['last_working_day'] ?? null, 'd M Y'); ?></td></tr>
                                                         <tr><th><?=__('reason_label')?>:</th><td><?= htmlspecialchars($end_of_service['reason'] ?? 'N/A'); ?></td></tr>
                                                     </tbody>
                                                 </table>
@@ -555,7 +555,7 @@
                                             <tbody>
                                                 <?php foreach ($employee_notes as $note): ?>
                                                 <tr>
-                                                    <td><?= date('d, M Y', strtotime($note['created_at'])); ?></td>
+                                                    <td><?= format_safe_date($note['created_at'] ?? null, 'd, M Y'); ?></td>
                                                     <td><?= htmlspecialchars($note['note']); ?></td>
                                                 </tr>
                                                 <?php endforeach; ?>

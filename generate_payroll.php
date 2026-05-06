@@ -5323,6 +5323,9 @@ async function showPayrollDetails(empId, empName, month) {
     }
 }
 // NOTE: All your other functions are preserved but omitted here for brevity.
+    // Temporary QA flag for Bank Excel button visibility.
+    // Set to false after testing to restore approval-based visibility only.
+    const FORCE_SHOW_BANK_EXCEL_FOR_TESTING = true;
         
         // --- New helper function to encapsulate report fetching and display ---
         async function fetchAndDisplayPayrollReport(selectedMonth, selectedCompany = '') {
@@ -5349,6 +5352,7 @@ async function showPayrollDetails(empId, empName, month) {
                 const reportData = data.report;
                 const vacationEmployeesData = Array.isArray(data.vacation_employees) ? data.vacation_employees : [];
                 const bankFileReady = !!data.bank_file_ready;
+                const showBankExcelButton = bankFileReady || FORCE_SHOW_BANK_EXCEL_FOR_TESTING;
                 if (reportData.length === 0) {
                     Swal.fire({ icon: 'info', title: __('no_payroll_data_info_title'), text: __('no_generated_payrolls_for_month_info') });
                     return;
@@ -5360,9 +5364,9 @@ async function showPayrollDetails(empId, empName, month) {
                         <div class="mb-4 text-center">
                             <button id="markAsPaidBtn" class="btn btn-custom"><i class="fas fa-check-circle"></i> ${__('mark_as_paid_button')}</button>
                             <button id="exportPdfBtn" class="btn btn-danger"><i class="fas fa-file-pdf"></i> ${__('pdf_button')}</button>
-                            <button id="exportExcelBtn" class="btn btn-success" style="display:${bankFileReady ? 'inline-block' : 'none'};"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
+                            <button id="exportExcelBtn" class="btn btn-success" style="display:${showBankExcelButton ? 'inline-block' : 'none'};"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
                             <button id="exportDetailedExcelBtn" class="btn btn-info"><i class="fas fa-file-excel"></i> Detailed Excel</button>
-                            <div id="bankExcelPendingNote" class="mt-2 text-muted" style="display:${bankFileReady ? 'none' : 'block'}; font-size: 13px; font-weight: 600;">
+                            <div id="bankExcelPendingNote" class="mt-2 text-muted" style="display:${showBankExcelButton ? 'none' : 'block'}; font-size: 13px; font-weight: 600;">
                                 Payroll approval is still pending. Bank EXCEL will be available immediately after final GM approval.
                             </div>
                         </div>

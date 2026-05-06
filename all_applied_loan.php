@@ -400,8 +400,8 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                     <i class="fad fa-check-circle text-success"></i><strong><?=__('approved')?>:</strong> <span class="text-success font-weight-bold"><?=htmlspecialchars($loan['approved_amount']); ?></span>
                                                                 </div>
                                                             <?php endif; ?>
-                                                            <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start_date')?>:</strong> <?=htmlspecialchars(!empty($loan['start_date']) ? date('d M Y', strtotime($loan['start_date'])) : 'N/A'); ?></div>
-                                                            <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?=__('end_date')?>:</strong> <?=htmlspecialchars(!empty($loan['end_date']) ? date('d M Y', strtotime($loan['end_date'])) : 'N/A'); ?></div>
+                                                            <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start_date')?>:</strong> <?=htmlspecialchars(format_safe_date($loan['start_date'] ?? null, 'd M Y', 'N/A')); ?></div>
+                                                            <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?=__('end_date')?>:</strong> <?=htmlspecialchars(format_safe_date($loan['end_date'] ?? null, 'd M Y', 'N/A')); ?></div>
                                                             <div class="detail-item"><i class="fad fa-wallet duotone-info"></i><strong><?=__('monthly')?>:</strong> <?=htmlspecialchars($loan['monthly_deduction']); ?></div>
                                                             <div class="detail-item">
                                                                 <?php

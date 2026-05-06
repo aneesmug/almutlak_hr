@@ -193,11 +193,11 @@ $status_badges = [
                                         ?>
                                             <tr>
                                                 <td>
-                                                    <?= date('M d, Y', strtotime($vac['start_date'])) ?>
+                                                    <?= format_safe_date($vac['start_date'] ?? null, 'M d, Y') ?>
                                                     <br><small class="text-muted"><?= $DateConv->GregorianToHijri($vac['start_date'], $format) ?></small>
                                                 </td>
                                                 <td>
-                                                    <?= date('M d, Y', strtotime($vac['return_date'])) ?>
+                                                    <?= format_safe_date($vac['return_date'] ?? null, 'M d, Y') ?>
                                                     <br><small class="text-muted"><?= $DateConv->GregorianToHijri($vac['return_date'], $format) ?></small>
                                                 </td>
                                                 <td><strong><?= number_format($vac['vacdays'], 2) ?></strong> days</td>
@@ -212,14 +212,14 @@ $status_badges = [
                                                         <?= isset($all_statuses[$vac['current_status']]) ? (is_callable($all_statuses[$vac['current_status']]) ? $all_statuses[$vac['current_status']]() : $all_statuses[$vac['current_status']]) : ucfirst(str_replace('_', ' ', $vac['current_status'])) ?>
                                                     </span>
                                                 </td>
-                                                <td><?= date('M d, Y', strtotime($vac['created_at'])) ?></td>
+                                                <td><?= format_safe_date($vac['created_at'] ?? null, 'M d, Y') ?></td>
                                                 <td>
                                                     <div class="btn-group btn-group-sm" role="group">
                                                         <a href="vacation_report_details.php?id=<?= $vac['id'] ?>&emp_id=<?= $vac['emp_id'] ?>" class="btn btn-info" title="View Details">
                                                             <i class="fa fa-eye"></i>
                                                         </a>
                                                         <?php if ($vac['current_status'] !== 'completed' && $vac['current_status'] !== 'cancelled' && $vac['current_status'] !== 'rejected'): ?>
-                                                            <button type="button" class="btn btn-danger" onclick="cancelVacationRequest(<?= $vac['id'] ?>, '<?= htmlspecialchars(addslashes($vac['vac_type']), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(date('M d, Y', strtotime($vac['start_date']))), ENT_QUOTES) ?>')" title="Cancel Request">
+                                                            <button type="button" class="btn btn-danger" onclick="cancelVacationRequest(<?= $vac['id'] ?>, '<?= htmlspecialchars(addslashes($vac['vac_type']), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(format_safe_date($vac['start_date'] ?? null, 'M d, Y')), ENT_QUOTES) ?>'" title="Cancel Request">
                                                                 <i class="fa fa-times"></i>
                                                             </button>
                                                         <?php endif; ?>

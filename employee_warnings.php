@@ -294,7 +294,7 @@ if (!$warnings_result) {
                                                                         <i class="fa fa-calendar-alt" style="margin-<?= $is_rtl ? 'left' : 'right' ?>: 6px;"></i> <?= __('date', 'Date') ?>
                                                                     </div>
                                                                     <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">
-                                                                        <?= date('M d, Y', strtotime($warning['created_at'])) ?>
+                                                                        <?= format_safe_date($warning['created_at'] ?? null, 'M d, Y') ?>
                                                                     </div>
                                                                     <div style="font-size: 12px; opacity: 0.85;">
                                                                         <?= $DateConv->GregorianToHijri($warning['created_at'], $format) ?>

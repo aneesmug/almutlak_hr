@@ -807,7 +807,7 @@ function getPayrollMonthCompanyIds(PDO $pdo, string $monthValue): array
                                                         <div class="detail-item"><i class="fad fa-user"></i><strong><?= __('requested_by', 'Requested By') ?>:</strong> <?= htmlspecialchars(getDisplayName($request['requester_name'])) ?></div>
                                                         <?php endif; ?>
                                                         <?php if (!empty($request['approval_created_at'])): ?>
-                                                        <div class="detail-item"><i class="fad fa-clock"></i><strong><?= __('submitted', 'Submitted') ?>:</strong> <?= htmlspecialchars(date('d M Y', strtotime($request['approval_created_at']))) ?></div>
+                                                        <div class="detail-item"><i class="fad fa-clock"></i><strong><?= __('submitted', 'Submitted') ?>:</strong> <?= htmlspecialchars(format_safe_date($request['approval_created_at'] ?? null, 'd M Y')) ?></div>
                                                         <?php endif; ?>
                                                         <div class="detail-item">
                                                             <i class="fad fa-tasks"></i>

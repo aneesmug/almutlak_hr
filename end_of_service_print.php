@@ -256,16 +256,16 @@
                                                         <p class="detail-line"><span><strong>Name of Employee:</strong> <?=$emprow['name']; ?></span><span class="arabic-label"><strong>اسم الموظف</strong></span></p>
                                                         <p class="detail-line"><span><strong>Iqama / ID:</strong> <?=$emprow['iqama']; ?></span><span class="arabic-label"><strong>رقم الإقامة</strong></span></p>
                                                         <p class="detail-line"><span><strong>Passport No:</strong> <?=$emprow['passport_number']; ?></span><span class="arabic-label"><strong>رقم الجواز</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Date of Birth:</strong> <?=(!empty($emprow['dob'])) ? date('M d, Y', strtotime(str_replace('/', '-', $emprow['dob']))) : "";?> (Age: <?=$years; ?>)</span><span class="arabic-label"><strong>تاريخ الميلاد</strong></span></p>
+                                                        <p class="detail-line"><span><strong>Date of Birth:</strong> <?=(!empty($emprow['dob'])) ? format_safe_date($emprow['dob'], 'M d, Y') : "";?> (Age: <?=$years; ?>)</span><span class="arabic-label"><strong>تاريخ الميلاد</strong></span></p>
                                                         <p class="detail-line"><span><strong>Nationality:</strong> <?=$emprow['country_name']; ?></span><span class="arabic-label"><strong>الجنسية</strong></span></p>
                                                     </div>
                                                     <div class="grid-item">
                                                         <p class="detail-line"><span><strong>Employee ID:</strong> <?=$emprow['empid']; ?></span><span class="arabic-label"><strong>الرقم الوظيفي</strong></span></p>
                                                         <p class="detail-line"><span><strong>Department:</strong> <?=$emprow['deptnme']; ?></span><span class="arabic-label"><strong>القسم</strong></span></p>
                                                         <p class="detail-line"><span><strong>Section / Area:</strong> <?=$emprow['sectin_nme']; ?></span><span class="arabic-label"><strong>الشعبة</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Date Hired:</strong> <?=date('M d, Y', strtotime(str_replace('/', '-', $emprow['joining_date']))); ?></span><span class="arabic-label"><strong>تاريخ التعيين</strong></span></p>
+                                                        <p class="detail-line"><span><strong>Date Hired:</strong> <?=format_safe_date($emprow['joining_date'] ?? null, 'M d, Y'); ?></span><span class="arabic-label"><strong>تاريخ التعيين</strong></span></p>
                                                         <?php if($emprow['status'] == 0): ?>
-                                                        <p class="detail-line"><span><strong>Termination Date:</strong> <?=date('M d, Y', strtotime(str_replace('/', '-', $emprow['ter_date'])));?></span><span class="arabic-label"><strong>تاريخ الإنهاء</strong></span></p>
+                                                        <p class="detail-line"><span><strong>Termination Date:</strong> <?=format_safe_date($emprow['ter_date'] ?? null, 'M d, Y');?></span><span class="arabic-label"><strong>تاريخ الإنهاء</strong></span></p>
                                                         <?php endif; ?>
                                                     </div>
                                                 </div>

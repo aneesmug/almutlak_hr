@@ -119,7 +119,7 @@ if (mysqli_num_rows($query) == 1) {
 	}
 
 	$date = $DateConv->HijriToGregorian($emprow['iqama_exp'], $format);
-	$exprydte = date('m-', strtotime($date)); //
+	$exprydte = format_safe_date($date, 'm-'); //
 	$today = date('m');
 
 	$salaryItems = ['basic', 'housing', 'transport', 'food', 'misc', 'cashier', 'fuel', 'tel', 'other', 'guard'];
@@ -1073,7 +1073,7 @@ if (mysqli_num_rows($query) == 1) {
 																		'Y-m-d'
 																	);
 																	if ($expiryIso) {
-																		$expiryDisplay = date('d M Y', strtotime($expiryIso));
+																		$expiryDisplay = format_safe_date($expiryIso, 'd M Y');
 																		?>
 																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= htmlspecialchars($expiryDisplay) ?></span>
 																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($expiryIso, $format); ?></span>
@@ -1381,8 +1381,8 @@ if (mysqli_num_rows($query) == 1) {
 																		<span class="text-muted">-</span>
 																	<?php endif; ?>
 																</td>
-																<td><?= $start_date ? date('d M, Y', strtotime($start_date)) : '-'; ?></td>
-																<td><?= $return_date_emp ? date('d M, Y', strtotime($return_date_emp)) : '-'; ?></td>
+																<td><?= $start_date ? format_safe_date($start_date, 'd M, Y') : '-'; ?></td>
+																<td><?= $return_date_emp ? format_safe_date($return_date_emp, 'd M, Y') : '-'; ?></td>
 																<td><span class="badge badge-secondary"><?= $vacdays_emp ?? 0; ?></span></td>
 																<td><?= $permit_no_emp ?: '-'; ?></td>
 																<td>
@@ -1391,7 +1391,7 @@ if (mysqli_num_rows($query) == 1) {
 																	?>
 																	<span class="badge badge-<?= $status_badge ?>"><?= __(strtolower($current_status)) ?></span>
 																</td>
-																<td><?= ($arrived_date_get == "") ? "<span class='text-muted'>" . __('not_yet') . "</span>" : date('d M, Y', strtotime($arrived_date_get)); ?></td>
+																<td><?= ($arrived_date_get == "") ? "<span class='text-muted'>" . __('not_yet') . "</span>" : format_safe_date($arrived_date_get, 'd M, Y'); ?></td>
 																<td><?= $remarks_get ?: '-'; ?></td>
 																<td><?= $new_date_format; ?></td>
 																<?php if ($user_type <> "dept_user") { ?>
@@ -1404,7 +1404,7 @@ if (mysqli_num_rows($query) == 1) {
 																				<button
 																					type="button"
 																					class="btn btn-sm btn-warning waves-effect"
-																					onclick="cancelVacationRequest(<?= (int)$id_emp_reg ?>, '<?= htmlspecialchars(addslashes($vac_type), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(date('M d, Y', strtotime($start_date))), ENT_QUOTES) ?>')"
+																					onclick="cancelVacationRequest(<?= (int)$id_emp_reg ?>, '<?= htmlspecialchars(addslashes($vac_type), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(format_safe_date($start_date, 'M d, Y')), ENT_QUOTES) ?>')"
 																					title="<?= __('cancel_vacation_request') ?>">
 																					<i class="fa fa-times"></i>
 																				</button>
@@ -1485,11 +1485,25 @@ if (mysqli_num_rows($query) == 1) {
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('start_date') ?>:</td>
-																			<td><?= date('d M, Y', strtotime($loan_summary['start_date'])) ?></td>
+																			<td>
+																				<?php
+																				$loanStartDate = $loan_summary['start_date'] ?? '';
+																				echo (!empty($loanStartDate) && $loanStartDate !== '0000-00-00')
+																					? format_safe_date($loanStartDate, 'd M, Y')
+																					: '-';
+																				?>
+																			</td>
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('end_date') ?>:</td>
-																			<td><?= date('d M, Y', strtotime($loan_summary['end_date'])) ?></td>
+																			<td>
+																				<?php
+																				$loanEndDate = $loan_summary['end_date'] ?? '';
+																				echo (!empty($loanEndDate) && $loanEndDate !== '0000-00-00')
+																					? format_safe_date($loanEndDate, 'd M, Y')
+																					: '-';
+																				?>
+																			</td>
 																		</tr>
 																	</table>
 																</div>
@@ -1584,8 +1598,22 @@ if (mysqli_num_rows($query) == 1) {
 															<td><?= number_format($loan_rec['loan_amount'], 2); ?></td>
 															<td><?= number_format($loan_rec['monthly_deduction'], 2); ?></td>
 															<td class="font-weight-bold <?= ($remaining_balance_hist > 0) ? 'text-danger' : 'text-success' ?>"><?= number_format($remaining_balance_hist, 2); ?></td>
-															<td><?= date('d, M Y', strtotime($loan_rec['start_date'])); ?></td>
-															<td><?= date('d, M Y', strtotime($loan_rec['end_date'])); ?></td>
+															<td>
+																<?php
+																$loanRowStartDate = $loan_rec['start_date'] ?? '';
+																echo (!empty($loanRowStartDate) && $loanRowStartDate !== '0000-00-00')
+																	? format_safe_date($loanRowStartDate, 'd, M Y')
+																	: '-';
+																?>
+															</td>
+															<td>
+																<?php
+																$loanRowEndDate = $loan_rec['end_date'] ?? '';
+																echo (!empty($loanRowEndDate) && $loanRowEndDate !== '0000-00-00')
+																	? format_safe_date($loanRowEndDate, 'd, M Y')
+																	: '-';
+																?>
+															</td>
 															<td><span class="badge badge-<?= ($loan_rec['loan_type'] == 'emergency' ? 'warning' : 'info') ?>"><?= ucfirst(__($loan_rec['loan_type'])); ?></span></td>
 															<td><span class="badge badge-<?= ($loan_rec['status'] == 'approved' ? 'success' : ($loan_rec['status'] == 'paid' ? 'primary' : ($loan_rec['status'] == 'rejected' ? 'danger' : 'warning'))) ?>"><?= ucfirst(__($loan_rec['status'])); ?></span></td>
 															<td><a href="./loan_report_details.php?id=<?= $loan_id_hist ?>&emp_id=<?= $emprow['emp_id'] ?>" target="_blank" class="btn btn-sm btn-dark"><i class="fa fa-eye"></i> <?= __('view') ?></a></td>
@@ -1626,7 +1654,7 @@ if (mysqli_num_rows($query) == 1) {
 														}
 													?>
 														<tr>
-															<td><?= date('d, M Y', strtotime($payment_rec['payment_date'])); ?></td>
+															<td><?= format_safe_date($payment_rec['payment_date'] ?? null, 'd, M Y'); ?></td>
 															<td class="font-weight-bold text-success"><?= number_format($payment_rec['amount'], 2); ?> SAR</td>
 															<td><?= $payment_method_badge; ?></td>
 															<td><?= !empty($payment_rec['receipt_id']) ? htmlspecialchars($payment_rec['receipt_id']) : '<span class="text-muted">N/A</span>'; ?></td>
@@ -1686,13 +1714,13 @@ if (mysqli_num_rows($query) == 1) {
 														<tr>
 															<td><?= getDisplayName($asset_rec['asset_name']); ?></td>
 															<td><?= htmlspecialchars($asset_rec['serial_number']); ?></td>
-															<td><?= date('d, M Y', strtotime($asset_rec['assigned_date'])); ?></td>
+															<td><?= format_safe_date($asset_rec['assigned_date'] ?? null, 'd, M Y'); ?></td>
 															<td>
 																<span class="badge badge-<?= ($asset_rec['status'] == 'Assigned' ? 'success' : ($asset_rec['status'] == 'Lost' ? 'danger' : ($asset_rec['status'] == 'Damaged' ? 'warning' : 'secondary'))) ?>">
 																	<?= __(strtolower($asset_rec['status'])); ?>
 																</span>
 															</td>
-															<td><?= $asset_rec['return_date'] ? date('d, M Y', strtotime($asset_rec['return_date'])) : __(strtolower('N/A')); ?></td>
+															<td><?= $asset_rec['return_date'] ? format_safe_date($asset_rec['return_date'], 'd, M Y') : __(strtolower('N/A')); ?></td>
 															<td>
 																<?php if ($asset_rec['status'] == 'Assigned'): ?>
 																	<div class="btn-group">

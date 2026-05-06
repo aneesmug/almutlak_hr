@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 /****************************************************************
  * MODIFICATION SUMMARY:
@@ -331,8 +331,8 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="detail-item"><span class="label"><?= __('loan_installments_label') ?></span> <span class="value"><?= htmlspecialchars($loan_details['installments'] ?? '1'); ?> <?= __('months') ?></span></div>
                                         <div class="detail-item"><span class="label"><?= __('total_payable_label') ?></span> <span class="value highlight"><?= number_format($loan_details['total_payable'], 2); ?> <?= __('sar_currency') ?></span></div>
                                         <div class="detail-item"><span class="label"><?= __('monthly_deduction_label') ?></span> <span class="value"><?= number_format($loan_details['monthly_deduction'], 2); ?> <?= __('sar_currency') ?></span></div>
-                                        <div class="detail-item"><span class="label"><?= __('start_date_label') ?></span> <span class="value"><?= date('d M Y', strtotime($loan_details['start_date'])); ?></span></div>
-                                        <div class="detail-item"><span class="label"><?= __('end_date_label') ?></span> <span class="value"><?= date('d M Y', strtotime($loan_details['end_date'])); ?></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('start_date_label') ?></span> <span class="value"><?php $loanStartDate = $loan_details['start_date'] ?? ''; echo (!empty($loanStartDate) && $loanStartDate !== '0000-00-00') ? format_safe_date($loanStartDate, 'd M Y') : '-'; ?></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('end_date_label') ?></span> <span class="value"><?php $loanEndDate = $loan_details['end_date'] ?? ''; echo (!empty($loanEndDate) && $loanEndDate !== '0000-00-00') ? format_safe_date($loanEndDate, 'd M Y') : '-'; ?></span></div>
                                         <div class="detail-item"><span class="label"><?= __('current_status_label') ?></span> <span class="value highlight text-primary"><?= $status_text ?></span></div>
                                     </div>
                                 </div>
@@ -399,7 +399,7 @@ if (mysqli_num_rows($query) == 1) {
                                                                     }
                                                                 ?>
                                                                 <tr>
-                                                                    <td><?= date('d M Y', strtotime($payment['payment_date'])); ?></td>
+                                                                    <td><?= format_safe_date($payment['payment_date'] ?? null, 'd M Y'); ?></td>
                                                                     <td>
                                                                         <span class="badge <?= $payment_method_badge ?>">
                                                                             <i class="fa <?= $badge_icon ?>"></i> <?= $method_text ?>
@@ -539,7 +539,7 @@ if (mysqli_num_rows($query) == 1) {
                                                                 </span>
                                                                 <?php if (!empty($level['action_date'])): ?>
                                                                 <div style="font-size:0.85rem; color:#999; margin-top:4px; <?= ($is_rtl) ? 'margin-right:22px !important;' : 'margin-left:22px !important;' ?>">
-                                                                    <i class="fa fa-calendar"></i> <?= date('d M Y, H:i', strtotime($level['action_date'])); ?>
+                                                                    <i class="fa fa-calendar"></i> <?= format_safe_date($level['action_date'] ?? null, 'd M Y, H:i'); ?>
                                                                 </div>
                                                                 <?php endif; ?>
                                                                 <?php if (!empty($level['note'])):
@@ -627,3 +627,4 @@ if (mysqli_num_rows($query) == 1) {
     $conDB->close();
 }
 ?>
+
