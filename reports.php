@@ -71,6 +71,9 @@ if (mysqli_num_rows($query) == 1) {
         <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
+        <!-- Date Picker -->
+        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
+
         <!-- Select2 (CDN) -->
         <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
         <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
@@ -461,6 +464,23 @@ if (mysqli_num_rows($query) == 1) {
                 }
             }
             
+            /* Wide month picker for payroll filter */
+            .payroll-month-picker {
+                min-width: 280px !important;
+                width: 280px !important;
+            }
+            .payroll-month-picker .datepicker-months table {
+                width: 100%;
+            }
+            .payroll-month-picker .datepicker-months table tr td span {
+                width: 22% !important;
+                margin: 1% !important;
+            }
+            .payroll-month-picker .datepicker-switch {
+                font-size: 15px;
+                font-weight: 600;
+            }
+
             <?php if ($is_rtl): ?>
             /* RTL overrides */
             body { direction: rtl; text-align: right; }
@@ -617,6 +637,16 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="col-md-4 mb-3">
                                             <label for="dateTo"><?= __('date_to') ?></label>
                                             <input type="text" class="form-control datepicker" id="dateTo" placeholder="<?= __('select_end_date') ?>">
+                                        </div>
+
+                                        <div class="col-md-4 mb-3" id="payrollMonthFilterWrapper" style="display:none;">
+                                            <label for="payrollMonthFilter"><?= __('month') ?></label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="payrollMonthFilter" placeholder="YYYY-MM" readonly style="background:#fff;cursor:pointer;">
+                                                <div class="input-group-append">
+                                                    <span class="input-group-text" style="cursor:pointer;" onclick="$('#payrollMonthFilter').datepicker('show');"><i class="mdi mdi-calendar"></i></span>
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <!-- Status Filter (contextual per report) -->
@@ -855,6 +885,19 @@ if (mysqli_num_rows($query) == 1) {
                 
                 // Initialize date pickers with RTL support (using global function)
                 initializeDatepickerRTL();
+
+                // Initialize month picker for payroll month filter
+                $('#payrollMonthFilter').datepicker({
+                    format: 'yyyy-mm',
+                    viewMode: 'months',
+                    minViewMode: 'months',
+                    autoclose: true,
+                    orientation: 'auto'
+                }).on('show', function() {
+                    $(this).data('datepicker').picker.addClass('payroll-month-picker');
+                }).datepicker('setDate', new Date());
+
+                const currentMonthValue = new Date().toISOString().slice(0, 7);
 
                 // Format function for dropdown options with checkmarks
                 function formatDeptOption(data) {
@@ -1204,6 +1247,18 @@ if (mysqli_num_rows($query) == 1) {
                     } else {
                         $('#employeeFilter').val('').trigger('change');
                         $('#employeeFilterWrapper').hide();
+                    }
+                }
+
+                function togglePayrollMonthFilter(reportType) {
+                    if (reportType === 'payroll') {
+                        $('#payrollMonthFilterWrapper').show();
+                        $('#dateFrom').val('');
+                        $('#dateTo').val('');
+                        $('#dateFrom').closest('.col-md-4, .form-group').hide();
+                        $('#dateTo').closest('.col-md-4, .form-group').hide();
+                    } else {
+                        $('#payrollMonthFilterWrapper').hide();
                     }
                 }
 
@@ -1774,6 +1829,26 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('emp_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('employee_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('department') : 'Department',
+                            default: false
+                        },
+                        {
+                            id: 'comp_name',
+                            label: (typeof __ === 'function') ? __('company_name') : 'Company Name',
+                            default: false
+                        },
+                        {
                             id: 'month',
                             label: (typeof __ === 'function') ? __('month') : 'Month',
                             default: true
@@ -1794,6 +1869,61 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
+                            id: 'basic_salary',
+                            label: (typeof __ === 'function') ? __('basic_salary') : 'Basic Salary',
+                            default: true
+                        },
+                        {
+                            id: 'housing_allowance',
+                            label: (typeof __ === 'function') ? __('housing_allowance') : 'Housing Allowance',
+                            default: true
+                        },
+                        {
+                            id: 'transport_allowance',
+                            label: (typeof __ === 'function') ? __('transport_allowance') : 'Transport Allowance',
+                            default: true
+                        },
+                        {
+                            id: 'food_allowance',
+                            label: (typeof __ === 'function') ? __('food_allowance') : 'Food Allowance',
+                            default: false
+                        },
+                        {
+                            id: 'miscellaneous_allowance',
+                            label: (typeof __ === 'function') ? __('miscellaneous_allowance') : 'Miscellaneous Allowance',
+                            default: false
+                        },
+                        {
+                            id: 'cashier_allowance',
+                            label: (typeof __ === 'function') ? __('cashier_allowance') : 'Cashier Allowance',
+                            default: false
+                        },
+                        {
+                            id: 'fuel_allowance',
+                            label: (typeof __ === 'function') ? __('fuel_allowance') : 'Fuel Allowance',
+                            default: false
+                        },
+                        {
+                            id: 'telephone_allowance',
+                            label: (typeof __ === 'function') ? __('telephone_allowance') : 'Telephone Allowance',
+                            default: false
+                        },
+                        {
+                            id: 'other_allowance',
+                            label: (typeof __ === 'function') ? __('other_allowance') : 'Other Allowance',
+                            default: false
+                        },
+                        {
+                            id: 'guard_allowance',
+                            label: (typeof __ === 'function') ? __('guard_allowance') : 'Guard Allowance',
+                            default: false
+                        },
+                        {
+                            id: 'total_benefits',
+                            label: (typeof __ === 'function') ? __('total_benefits') : 'Total Benefits',
+                            default: true
+                        },
+                        {
                             id: 'total_deductions',
                             label: (typeof __ === 'function') ? __('total_deductions') : 'Total Deductions',
                             default: true
@@ -1804,8 +1934,8 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
-                            id: 'generated_by',
-                            label: (typeof __ === 'function') ? __('generated_by') : 'Generated By',
+                            id: 'status',
+                            label: (typeof __ === 'function') ? __('status') : 'Status',
                             default: false
                         },
                         {
@@ -2469,8 +2599,16 @@ if (mysqli_num_rows($query) == 1) {
                         $('label[for="dateFrom"]').html('<?= __('date_from') ?>');
                         $('label[for="dateTo"]').html('<?= __('date_to') ?>');
                         $('#dateTo').attr('placeholder', '<?= __('select_end_date') ?>');
-                        $('#dateFrom').closest('.col-md-4').show(); // Show date from for other reports
+                        if (reportType === 'payroll') {
+                            $('#dateFrom').closest('.col-md-4').hide();
+                            $('#dateTo').closest('.col-md-4').hide();
+                        } else {
+                            $('#dateFrom').closest('.col-md-4').show(); // Show date from for other reports
+                            $('#dateTo').closest('.col-md-4').show();
+                        }
                     }
+
+                    togglePayrollMonthFilter(reportType);
 
                     // Update status and vacation-type filters based on report type
                     renderStatusFilter(reportType);
@@ -2506,6 +2644,9 @@ if (mysqli_num_rows($query) == 1) {
                         if (reportType === 'eos') {
                             $('#dateFrom').closest('.col-md-4, .form-group').hide();
                             $('#dateTo').closest('.col-md-4, .form-group').show();
+                        } else if (reportType === 'payroll') {
+                            $('#dateFrom').closest('.col-md-4, .form-group').hide();
+                            $('#dateTo').closest('.col-md-4, .form-group').hide();
                         } else {
                             $('#dateFrom').closest('.col-md-4, .form-group').show();
                             $('#dateTo').closest('.col-md-4, .form-group').show();
@@ -2529,6 +2670,9 @@ if (mysqli_num_rows($query) == 1) {
                             if (reportType === 'eos') {
                                 $('#dateFrom').closest('.col-md-4, .form-group').hide();
                                 $('#dateTo').closest('.col-md-4, .form-group').show();
+                            } else if (reportType === 'payroll') {
+                                $('#dateFrom').closest('.col-md-4, .form-group').hide();
+                                $('#dateTo').closest('.col-md-4, .form-group').hide();
                             } else {
                                 $('#dateFrom').closest('.col-md-4, .form-group').show();
                                 $('#dateTo').closest('.col-md-4, .form-group').show();
@@ -2551,6 +2695,9 @@ if (mysqli_num_rows($query) == 1) {
                             $('#dateFrom').closest('.col-md-4, .form-group').hide();
                             $('#dateTo').closest('.col-md-4, .form-group').hide();
                         }
+
+                        // Final enforcement: payroll uses Month filter only.
+                        togglePayrollMonthFilter(reportType);
                     }
                 });
 
@@ -2973,13 +3120,21 @@ if (mysqli_num_rows($query) == 1) {
                     const statusValue = $('#statusFilterWrapper').is(':visible') ? $('#statusFilter').val() : '';
                     const vacationTypeValue = $('#vacationTypeFilterWrapper').is(':visible') ? $('#vacationTypeFilter').val() : '';
                     const employeeIdValue = $('#employeeFilterWrapper').is(':visible') ? $('#employeeFilter').val() : '';
+                    const payrollMonthValue = $('#payrollMonthFilter').val();
+
+                    const effectiveDateFrom = reportType === 'payroll'
+                        ? (payrollMonthValue || '')
+                        : $('#dateFrom').val();
+                    const effectiveDateTo = reportType === 'payroll'
+                        ? (payrollMonthValue || '')
+                        : $('#dateTo').val();
 
                     const filterData = {
                         reportType: reportType,
                         columns: selectedColumns,
                         departments: departments,
-                        dateFrom: $('#dateFrom').val(),
-                        dateTo: $('#dateTo').val(),
+                        dateFrom: effectiveDateFrom,
+                        dateTo: effectiveDateTo,
                         status: statusValue,
                         hasFullAccess: <?= $has_full_access ? 'true' : 'false' ?>,
                         userDept: '<?= $user_dept ?>',
@@ -3843,6 +3998,7 @@ if (mysqli_num_rows($query) == 1) {
                     $('#deptFilter').val('');
                     $('#dateFrom').val('');
                     $('#dateTo').val('');
+                    $('#payrollMonthFilter').datepicker('setDate', new Date());
                     $('#statusFilter').val('');
                     $('#vacationTypeFilter').val('');
                     $('#employeeFilter').val('').trigger('change');
@@ -3852,6 +4008,7 @@ if (mysqli_num_rows($query) == 1) {
                     // Show global date filters after reset
                     $('#dateFrom').closest('.col-md-4, .form-group').show(); 
                     $('#dateTo').closest('.col-md-4, .form-group').show();
+                    $('#payrollMonthFilterWrapper').hide();
 
                     // Reset custom report date filters
                     $('#customDateFrom').val('');

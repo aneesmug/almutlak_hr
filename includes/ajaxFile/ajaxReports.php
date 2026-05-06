@@ -520,6 +520,17 @@ function getColumnLabel($column) {
         'total_settlement' => 'Total Settlement',
         'total_amount' => 'Total Amount',
         'basic_salary' => 'Basic Salary',
+        'housing_allowance' => 'Housing Allowance',
+        'transport_allowance' => 'Transport Allowance',
+        'food_allowance' => 'Food Allowance',
+        'miscellaneous_allowance' => 'Miscellaneous Allowance',
+        'cashier_allowance' => 'Cashier Allowance',
+        'fuel_allowance' => 'Fuel Allowance',
+        'telephone_allowance' => 'Telephone Allowance',
+        'other_allowance' => 'Other Allowance',
+        'guard_allowance' => 'Guard Allowance',
+        'total_benefits' => 'Total Benefits',
+        'comp_name' => 'Company Name',
         'department' => 'Department',
         'active_employees' => 'Active Employees',
         'inactive_employees' => 'Inactive Employees',
@@ -1321,6 +1332,18 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
             case 'payroll_id':
                 $selectCols[] = 'p.id AS payroll_id';
                 break;
+            case 'emp_id':
+                $selectCols[] = 'p.emp_id AS emp_id';
+                break;
+            case 'emp_name':
+                $selectCols[] = 'e.name AS emp_name';
+                break;
+            case 'dept':
+                $selectCols[] = 'd.dep_nme AS dept';
+                break;
+            case 'comp_name':
+                $selectCols[] = 'c.comp_name AS comp_name';
+                break;
             case 'month':
                 $selectCols[] = "SUBSTRING(p.month_year, 6, 2) AS month";
                 break;
@@ -1332,6 +1355,39 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
                 break;
             case 'total_salary':
                 $selectCols[] = 'p.total_gross_salary AS total_salary';
+                break;
+            case 'basic_salary':
+                $selectCols[] = 'p.basic_salary AS basic_salary';
+                break;
+            case 'housing_allowance':
+                $selectCols[] = 'p.housing_allowance AS housing_allowance';
+                break;
+            case 'transport_allowance':
+                $selectCols[] = 'p.transport_allowance AS transport_allowance';
+                break;
+            case 'food_allowance':
+                $selectCols[] = 'p.food_allowance AS food_allowance';
+                break;
+            case 'miscellaneous_allowance':
+                $selectCols[] = 'p.miscellaneous_allowance AS miscellaneous_allowance';
+                break;
+            case 'cashier_allowance':
+                $selectCols[] = 'p.cashier_allowance AS cashier_allowance';
+                break;
+            case 'fuel_allowance':
+                $selectCols[] = 'p.fuel_allowance AS fuel_allowance';
+                break;
+            case 'telephone_allowance':
+                $selectCols[] = 'p.telephone_allowance AS telephone_allowance';
+                break;
+            case 'other_allowance':
+                $selectCols[] = 'p.other_allowance AS other_allowance';
+                break;
+            case 'guard_allowance':
+                $selectCols[] = 'p.guard_allowance AS guard_allowance';
+                break;
+            case 'total_benefits':
+                $selectCols[] = 'p.total_benefits AS total_benefits';
                 break;
             case 'total_deductions':
                 $selectCols[] = 'p.total_deductions AS total_deductions';
@@ -1345,6 +1401,9 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
             case 'created_at':
                 $selectCols[] = 'p.generated_at AS created_at';
                 break;
+            case 'status':
+                $selectCols[] = 'p.status AS status';
+                break;
             default:
                 break;
         }
@@ -1353,11 +1412,25 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
     if (empty($selectCols)) {
         $selectCols = [
             'p.id AS payroll_id',
+            'p.emp_id AS emp_id',
+            'e.name AS emp_name',
             "SUBSTRING(p.month_year, 6, 2) AS month",
             "SUBSTRING(p.month_year, 1, 4) AS year",
+            'p.basic_salary AS basic_salary',
+            'p.housing_allowance AS housing_allowance',
+            'p.transport_allowance AS transport_allowance',
+            'p.food_allowance AS food_allowance',
+            'p.miscellaneous_allowance AS miscellaneous_allowance',
+            'p.cashier_allowance AS cashier_allowance',
+            'p.fuel_allowance AS fuel_allowance',
+            'p.telephone_allowance AS telephone_allowance',
+            'p.other_allowance AS other_allowance',
+            'p.guard_allowance AS guard_allowance',
             'p.total_gross_salary AS total_salary',
+            'p.total_benefits AS total_benefits',
             'p.total_deductions AS total_deductions',
             'p.net_salary AS net_salary',
+            'p.status AS status',
             'p.generated_at AS created_at'
         ];
     }
@@ -1412,6 +1485,8 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
     $sql = "SELECT $selectClause 
             FROM payrolls p
             LEFT JOIN employees e ON p.emp_id = e.emp_id
+            LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN companies c ON e.comp_no = c.comp_id
             WHERE $whereClause
             ORDER BY p.month_year DESC, p.id DESC";
 
