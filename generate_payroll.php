@@ -5718,6 +5718,64 @@ async function showPayrollDetails(empId, empName, month) {
                 ? reportData.filter(p => parseInt(p.payment_type || 1, 10) !== 2)
                 : [];
 
+            // Build a stable on-screen employee order by emp_id, then use it for export sorting.
+            const getEmpSortKey = (row) => {
+                const raw = String((row && row.emp_id) || '')
+                    .replace(/\u200E|\u200F|\u202A|\u202B|\u202C|\u202D|\u202E/g, '')
+                    .trim();
+                const digitsOnly = raw.replace(/\D/g, '');
+                const hasDigits = digitsOnly !== '';
+                return {
+                    raw,
+                    hasDigits,
+                    numeric: hasDigits ? parseInt(digitsOnly, 10) : Number.MAX_SAFE_INTEGER
+                };
+            };
+
+            const visibleEmployeeOrder = Array.isArray(allEmployeesData)
+                ? [...allEmployeesData].sort((a, b) => {
+                    const keyA = getEmpSortKey(a);
+                    const keyB = getEmpSortKey(b);
+
+                    if (keyA.hasDigits && keyB.hasDigits && keyA.numeric !== keyB.numeric) {
+                        return keyA.numeric - keyB.numeric;
+                    }
+
+                    return keyA.raw.localeCompare(keyB.raw, undefined, { numeric: true, sensitivity: 'base' });
+                })
+                : [];
+
+            const employeeOrderMap = new Map(
+                visibleEmployeeOrder.map((employee, index) => [String(employee.emp_id || '').trim(), index])
+            );
+
+            bankRows.sort((a, b) => {
+                const orderA = employeeOrderMap.has(String(a.emp_id || '').trim())
+                    ? employeeOrderMap.get(String(a.emp_id || '').trim())
+                    : Number.MAX_SAFE_INTEGER;
+                const orderB = employeeOrderMap.has(String(b.emp_id || '').trim())
+                    ? employeeOrderMap.get(String(b.emp_id || '').trim())
+                    : Number.MAX_SAFE_INTEGER;
+
+                if (orderA !== orderB) {
+                    return orderA - orderB;
+                }
+
+                const keyA = getEmpSortKey(a);
+                const keyB = getEmpSortKey(b);
+
+                if (keyA.hasDigits && keyB.hasDigits && keyA.numeric !== keyB.numeric) {
+                    return keyA.numeric - keyB.numeric;
+                }
+
+                const idCompare = keyA.raw.localeCompare(keyB.raw, undefined, { numeric: true, sensitivity: 'base' });
+                if (idCompare !== 0) {
+                    return idCompare;
+                }
+
+                return String(a.employee_name || '').localeCompare(String(b.employee_name || ''), undefined, { sensitivity: 'base' });
+            });
+
             // 2. Map reportData to the desired row format, converting strings to numbers
             // By processing the data first, we can separate logic from the sheet creation step.
             const dataRows = bankRows.map((p, index) => {

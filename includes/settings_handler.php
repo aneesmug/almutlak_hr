@@ -26,6 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'get_full_access_candidates':
             get_full_access_candidates($conDB);
             break;
+        case 'get_report_permission_users':
+            get_report_permission_users($conDB);
+            break;
         default:
             echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);
             break;
@@ -44,6 +47,7 @@ $conDB->close();
  */
 function get_all_settings($conDB) {
     ensure_full_access_override_setting($conDB);
+    ensure_report_visibility_setting($conDB);
 
     $settings = [];
     $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings ORDER BY setting_group, id";
@@ -64,6 +68,7 @@ function get_all_settings($conDB) {
  */
 function update_all_settings($conDB) {
     ensure_full_access_override_setting($conDB);
+    ensure_report_visibility_setting($conDB);
 
     // IMPORTANT: Make sure this path is correct and writable by your web server.
     $upload_dir = __DIR__ . '/../assets/logo/'; // Assumes 'assets/logo/' is one level up from this script's directory.
@@ -164,6 +169,47 @@ function ensure_full_access_override_setting($conDB) {
 }
 
 /**
+ * Ensure report visibility map setting exists in app_settings.
+ */
+function ensure_report_visibility_setting($conDB) {
+    $settingName = 'report_visibility_by_user';
+    $defaultValue = '{}';
+
+    $checkSql = "SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1";
+    $checkStmt = $conDB->prepare($checkSql);
+    if (!$checkStmt) {
+        return;
+    }
+
+    $checkStmt->bind_param("s", $settingName);
+    if (!$checkStmt->execute()) {
+        $checkStmt->close();
+        return;
+    }
+
+    $result = $checkStmt->get_result();
+    $exists = ($result && $result->num_rows > 0);
+    if ($result) {
+        $result->free();
+    }
+    $checkStmt->close();
+
+    if ($exists) {
+        return;
+    }
+
+    $insertSql = "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'report_permissions', 'report_visibility_by_user_json_map_emp_id_to_report_type_array', 'text', NULL)";
+    $insertStmt = $conDB->prepare($insertSql);
+    if (!$insertStmt) {
+        return;
+    }
+
+    $insertStmt->bind_param("ss", $settingName, $defaultValue);
+    $insertStmt->execute();
+    $insertStmt->close();
+}
+
+/**
  * Return employees list for full-access multi-selection UI.
  */
 function get_full_access_candidates($conDB) {
@@ -186,5 +232,40 @@ function get_full_access_candidates($conDB) {
     }
 
     echo json_encode(['success' => true, 'employees' => $employees]);
+}
+
+/**
+ * Return active admin users for report-permission assignment.
+ */
+function get_report_permission_users($conDB) {
+    $users = [];
+
+    $sql = "SELECT al.emp_id, al.id_iqama, al.user_type, al.status, e.name
+            FROM admin_login al
+            LEFT JOIN employees e ON e.emp_id = al.emp_id
+                        WHERE al.emp_id IS NOT NULL
+                            AND al.emp_id <> ''
+                            AND LOWER(TRIM(COALESCE(al.user_type, ''))) <> 'employee'
+            ORDER BY e.name ASC, al.emp_id ASC";
+
+    $result = $conDB->query($sql);
+    if (!$result) {
+        echo json_encode(['success' => false, 'message' => 'Error fetching users: ' . $conDB->error]);
+        return;
+    }
+
+    while ($row = $result->fetch_assoc()) {
+        $rawName = trim((string)($row['name'] ?? ''));
+        $name = $rawName !== '' ? parseName($rawName) : (string)($row['id_iqama'] ?? '');
+
+        $users[] = [
+            'emp_id' => (string)($row['emp_id'] ?? ''),
+            'name' => $name,
+            'user_type' => (string)($row['user_type'] ?? ''),
+            'status' => (string)($row['status'] ?? ''),
+        ];
+    }
+
+    echo json_encode(['success' => true, 'users' => $users]);
 }
 ?>

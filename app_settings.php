@@ -235,6 +235,10 @@
         let appSettings = [];
         let groupedSettings = {};
         let fullAccessCandidates = null;
+        let reportPermissionUsers = null;
+        let reportPermissionEligibleUsers = [];
+        let reportPermissionMap = {};
+        let currentReportPermissionEmpId = '';
         const settingsContainer = document.getElementById('settings-container');
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
@@ -253,6 +257,62 @@
                 .split(',')
                 .map(v => v.trim())
                 .filter(v => v !== '');
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function getReportTypeCatalog() {
+            return [
+                { value: 'employee', label: '<?= __('employee_report') ?>' },
+                { value: 'vacation', label: '<?= __('vacation_report') ?>' },
+                { value: 'loan', label: '<?= __('loan_report') ?>' },
+                { value: 'salary', label: '<?= __('salary_report') ?>' },
+                { value: 'payroll', label: '<?= __('payroll_report') ?>' },
+                { value: 'attendance', label: '<?= __('attendance_report') ?>' },
+                { value: 'document', label: '<?= __('document_report') ?>' },
+                { value: 'assets', label: '<?= __('assets_report') ?>' },
+                { value: 'assets_list', label: '<?= __('assets_list') ?>' },
+                { value: 'evaluation', label: '<?= __('evaluation_report') ?>' },
+                { value: 'resignation', label: '<?= __('resignation_report') ?>' },
+                { value: 'terminated_employees', label: '<?= __('terminated_employees') ?>' },
+                { value: 'eos', label: '<?= __('calculate_end_of_service') ?>' },
+                { value: 'dept_comparison', label: '<?= __('dept_comparison_report') ?>' },
+                { value: 'custom', label: '<?= __('custom_report') ?>' }
+            ];
+        }
+
+        function parseReportPermissionMap(rawValue) {
+            if (!rawValue) return {};
+
+            try {
+                const parsed = JSON.parse(rawValue);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    return {};
+                }
+                const normalized = {};
+                Object.keys(parsed).forEach(empId => {
+                    const key = String(empId || '').trim();
+                    if (!key) return;
+                    normalized[key] = normalizeReportTypeList(parsed[empId]);
+                });
+                return normalized;
+            } catch (e) {
+                console.warn('Invalid report permission JSON, resetting:', e);
+                return {};
+            }
+        }
+
+        function normalizeReportTypeList(values) {
+            const allowed = new Set(getReportTypeCatalog().map(item => item.value));
+            if (!Array.isArray(values)) return [];
+            return [...new Set(values.map(v => String(v || '').trim()).filter(v => allowed.has(v)))];
         }
 
         async function fetchFullAccessCandidates() {
@@ -430,6 +490,12 @@
                 return;
             }
 
+            // Special handling for report permissions configuration
+            if (normalizedGroupName === 'report_permissions') {
+                renderReportPermissionsSettings();
+                return;
+            }
+
             formHtml += `<div class="tab-pane active" id="group-${groupName}" role="tabpanel">`;
             settings.forEach(setting => {
                 const id = `setting-${setting.setting_name}`;
@@ -561,6 +627,312 @@
                 // Trigger input event on load to show current value
                 input.dispatchEvent(new Event('input'));
             });
+        }
+
+        async function fetchReportPermissionUsers() {
+            if (Array.isArray(reportPermissionUsers)) {
+                return reportPermissionUsers;
+            }
+
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_report_permission_users' })
+                });
+
+                if (!response.ok) {
+                    throw new Error('<?= __('failed_to_load_users') ?>');
+                }
+
+                const data = await response.json();
+                if (!data.success || !Array.isArray(data.users)) {
+                    throw new Error(data.message || '<?= __('failed_to_load_users') ?>');
+                }
+
+                reportPermissionUsers = data.users;
+                return reportPermissionUsers;
+            } catch (error) {
+                console.error('Failed loading report permission users:', error);
+                reportPermissionUsers = [];
+                return reportPermissionUsers;
+            }
+        }
+
+        function updateReportPermissionHiddenValue() {
+            const hidden = document.getElementById('setting-report_visibility_by_user');
+            if (hidden) {
+                hidden.value = JSON.stringify(reportPermissionMap);
+            }
+        }
+
+        function renderAssignedUsersSummary(users) {
+            const container = document.getElementById('report-assigned-users-list');
+            if (!container) return;
+
+            const userMap = new Map((users || []).map(user => [String(user.emp_id || ''), user]));
+            const catalogMap = new Map(getReportTypeCatalog().map(item => [item.value, item.label]));
+            const assignedEmpIds = Object.keys(reportPermissionMap || {});
+
+            if (!assignedEmpIds.length) {
+                container.innerHTML = `<p class="text-muted mb-0"><?= __('no_assigned_users_yet') ?></p>`;
+                return;
+            }
+
+            let html = '<div class="table-responsive">';
+            html += '<table class="table table-sm table-bordered mb-0">';
+            html += '<thead class="thead-light"><tr>';
+            html += `<th><?= __('user') ?></th>`;
+            html += `<th><?= __('allowed_reports') ?></th>`;
+            html += `<th style="width:140px;"><?= __('actions') ?></th>`;
+            html += '</tr></thead><tbody>';
+
+            assignedEmpIds.forEach(empId => {
+                const user = userMap.get(empId);
+                const name = user ? ((user.name || '').trim() || empId) : empId;
+                const role = user ? ((user.user_type || '').trim()) : '';
+                const allowedTypes = normalizeReportTypeList(reportPermissionMap[empId]);
+
+                let reportsHtml = '';
+                if (!allowedTypes.length) {
+                    reportsHtml = `<span class="badge badge-danger"><?= __('no_reports_allowed') ?></span>`;
+                } else {
+                    reportsHtml = allowedTypes.map(type => {
+                        const label = catalogMap.get(type) || type;
+                        return `<span class="badge badge-info mr-1 mb-1">${escapeHtml(label)}</span>`;
+                    }).join('');
+                }
+
+                html += '<tr>';
+                html += `<td><strong>${escapeHtml(name)}</strong><br><small class="text-muted">${escapeHtml(empId)}${role ? ' - ' + escapeHtml(role) : ''}</small></td>`;
+                html += `<td>${reportsHtml}</td>`;
+                html += `<td>
+                    <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-user" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-edit"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-user mt-1" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-trash-alt"></i></button>
+                </td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.edit-assigned-user').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const empId = String(this.dataset.empId || '');
+                    const select = document.getElementById('report-permission-user-select');
+                    if (!select || !empId) return;
+                    select.value = empId;
+                    $(select).trigger('change');
+                });
+            });
+
+            container.querySelectorAll('.remove-assigned-user').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const empId = String(this.dataset.empId || '');
+                    if (!empId) return;
+                    Swal.fire({
+                        title: '<?= __('remove_user_assignment') ?>',
+                        text: '<?= __('this_will_remove_custom_report_permissions_for_this_user') ?>',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: '<?= __('yes_remove_it') ?>',
+                        cancelButtonText: '<?= __('cancel') ?>'
+                    }).then((result) => {
+                        if (!result.isConfirmed) return;
+
+                        delete reportPermissionMap[empId];
+                        updateReportPermissionHiddenValue();
+                        renderAssignedUsersSummary(reportPermissionEligibleUsers);
+
+                        const select = document.getElementById('report-permission-user-select');
+                        if (select && select.value === empId) {
+                            renderReportPermissionCheckboxes(empId);
+                        }
+                    });
+                });
+            });
+        }
+
+        function renderReportPermissionCheckboxes(empId) {
+            const container = document.getElementById('report-permission-checkboxes');
+            if (!container) return;
+
+            currentReportPermissionEmpId = String(empId || '').trim();
+
+            if (!currentReportPermissionEmpId) {
+                container.innerHTML = '<p class="text-muted mb-0"><?= __('select_user_to_configure_report_access') ?></p>';
+                renderAssignedUsersSummary(reportPermissionEligibleUsers);
+                return;
+            }
+
+            const catalog = getReportTypeCatalog();
+            const allTypeValues = catalog.map(item => item.value);
+            const hasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, currentReportPermissionEmpId);
+            const selectedTypes = hasExplicit
+                ? normalizeReportTypeList(reportPermissionMap[currentReportPermissionEmpId])
+                : allTypeValues;
+            const selectedSet = new Set(selectedTypes);
+            const safeEmpId = String(currentReportPermissionEmpId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+            let html = '<div class="d-flex justify-content-between align-items-center mb-2">';
+            html += '<small class="text-muted"><?= __('check_reports_user_can_view') ?></small>';
+            html += '<div>';
+            html += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="report-select-all-btn"><?= __('select_all') ?></button>';
+            html += '<button type="button" class="btn btn-sm btn-outline-secondary mr-1" id="report-clear-all-btn"><?= __('clear_all') ?></button>';
+            html += '<button type="button" class="btn btn-sm btn-outline-warning" id="report-reset-default-btn"><?= __('reset_default') ?></button>';
+            html += '</div></div>';
+            html += '<div class="row">';
+
+            catalog.forEach(item => {
+                const checkboxId = `report-type-${safeEmpId}-${item.value}`;
+                html += `
+                    <div class="col-md-6 mb-2">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input report-type-checkbox" id="${checkboxId}" value="${item.value}" data-report-type="${item.value}">
+                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(item.label)}</label>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Force checked state after DOM insertion to avoid stale browser form-state reuse.
+            container.querySelectorAll('.report-type-checkbox').forEach(checkbox => {
+                const reportType = checkbox.getAttribute('data-report-type') || '';
+                checkbox.checked = selectedSet.has(reportType);
+            });
+
+            function persistFromCheckboxes() {
+                const activeEmpId = String(currentReportPermissionEmpId || '').trim();
+                if (!activeEmpId) return;
+                const checkedValues = Array.from(container.querySelectorAll('.report-type-checkbox:checked'))
+                    .map(el => el.value);
+                reportPermissionMap[activeEmpId] = normalizeReportTypeList(checkedValues);
+                updateReportPermissionHiddenValue();
+                renderAssignedUsersSummary(reportPermissionEligibleUsers);
+            }
+
+            container.querySelectorAll('.report-type-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', persistFromCheckboxes);
+            });
+
+            const selectAllBtn = document.getElementById('report-select-all-btn');
+            const clearAllBtn = document.getElementById('report-clear-all-btn');
+            const resetDefaultBtn = document.getElementById('report-reset-default-btn');
+
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', function() {
+                    container.querySelectorAll('.report-type-checkbox').forEach(el => { el.checked = true; });
+                    persistFromCheckboxes();
+                });
+            }
+
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', function() {
+                    container.querySelectorAll('.report-type-checkbox').forEach(el => { el.checked = false; });
+                    persistFromCheckboxes();
+                });
+            }
+
+            if (resetDefaultBtn) {
+                resetDefaultBtn.addEventListener('click', function() {
+                    const activeEmpId = String(currentReportPermissionEmpId || '').trim();
+                    if (!activeEmpId) return;
+                    delete reportPermissionMap[activeEmpId];
+                    updateReportPermissionHiddenValue();
+                    renderReportPermissionCheckboxes(activeEmpId);
+                });
+            }
+
+            renderAssignedUsersSummary(reportPermissionEligibleUsers);
+        }
+
+        async function renderReportPermissionsSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-report-permissions" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0"><?= __('report_access_by_user') ?></h5>
+                    </div>
+                    <p class="text-muted mb-3"><?= __('select_user_and_enable_the_reports_they_are_allowed_to_view') ?></p>
+                    <div class="form-group">
+                        <label for="report-permission-user-select"><?= __('select_user') ?></label>
+                        <select id="report-permission-user-select" class="form-control select2"></select>
+                    </div>
+                    <div id="report-permission-checkboxes" class="border rounded p-3 bg-light">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            <span class="ml-2"><?= __('loading') ?></span>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h6 class="mb-2"><?= __('assigned_users') ?></h6>
+                        <div id="report-assigned-users-list" class="border rounded p-3 bg-white">
+                            <div class="text-center text-muted">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <span class="ml-2"><?= __('loading') ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="setting-report_visibility_by_user" name="report_visibility_by_user" value="{}">
+                </div>
+            `;
+
+            const setting = appSettings.find(s => s.setting_name === 'report_visibility_by_user');
+            reportPermissionMap = parseReportPermissionMap(setting ? setting.setting_value : '{}');
+            updateReportPermissionHiddenValue();
+
+            const usersRaw = await fetchReportPermissionUsers();
+            const users = usersRaw.filter(user => {
+                const role = String(user.user_type || '').trim().toLowerCase();
+                return role !== 'employee';
+            });
+            reportPermissionEligibleUsers = users;
+            const select = document.getElementById('report-permission-user-select');
+            const checkboxContainer = document.getElementById('report-permission-checkboxes');
+
+            if (!select || !checkboxContainer) return;
+
+            if (!users.length) {
+                select.innerHTML = '<option value=""><?= __('no_users_found') ?></option>';
+                checkboxContainer.innerHTML = '<p class="text-muted mb-0"><?= __('no_users_found') ?></p>';
+                return;
+            }
+
+            let options = `<option value=""><?= __('select_user') ?></option>`;
+            users.forEach(user => {
+                const empId = String(user.emp_id || '').trim();
+                if (!empId) return;
+                const displayName = (user.name || '').trim() || empId;
+                const role = (user.user_type || '').trim();
+                options += `<option value="${escapeHtml(empId)}">${escapeHtml(displayName)} (${escapeHtml(empId)})${role ? ' - ' + escapeHtml(role) : ''}</option>`;
+            });
+            select.innerHTML = options;
+
+            if ($(select).hasClass('select2-hidden-accessible')) {
+                $(select).trigger('change.select2');
+            } else {
+                $(select).select2({ width: '100%' });
+            }
+
+            const $select = $(select);
+            $select.off('change.reportPermissions select2:select.reportPermissions select2:clear.reportPermissions');
+            $select.on('change.reportPermissions select2:select.reportPermissions select2:clear.reportPermissions', function() {
+                const selectedEmpId = String($select.val() || '').trim();
+                currentReportPermissionEmpId = selectedEmpId;
+                renderReportPermissionCheckboxes(selectedEmpId);
+            });
+
+            const firstUserOption = users.find(user => String(user.emp_id || '').trim() !== '');
+            if (firstUserOption) {
+                const firstEmpId = String(firstUserOption.emp_id);
+                currentReportPermissionEmpId = firstEmpId;
+                $select.val(firstEmpId).trigger('change');
+            } else {
+                currentReportPermissionEmpId = '';
+                renderReportPermissionCheckboxes('');
+            }
         }
 
         function renderJobTitlesSettings() {

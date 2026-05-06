@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../session_check.php';
 require_once __DIR__ . '/../evaluation_acknowledgment_handler.php';
+require_once __DIR__ . '/../report_permissions_helper.php';
 // Include shared functions to ensure __() translation helper is available (robust path resolution)
 ($functionPath = (function() {
     $candidates = [
@@ -33,11 +34,25 @@ if (!in_array($user_role, $can_see_reports_page) && $user_type !== 'administrato
     exit();
 }
 
+$current_emp_id_for_reports = (string)($_SESSION['empid'] ?? ($empid ?? ''));
+$allowed_report_types_for_current_user = get_allowed_report_types_for_user(
+    $conDB,
+    $current_emp_id_for_reports,
+    $user_role ?? '',
+    $user_type ?? '',
+    !empty($is_system_admin)
+);
+
 // Handle AJAX actions
 $action = isset($_POST['action']) ? $_POST['action'] : '';
 
 // Get evaluation details endpoint
 if ($action === 'getEvaluationDetails') {
+    if (!in_array('evaluation', $allowed_report_types_for_current_user, true)) {
+        echo json_encode(['success' => false, 'message' => 'Unauthorized report access']);
+        exit();
+    }
+
     $evalId = isset($_POST['evalId']) ? intval($_POST['evalId']) : 0;
     
     if ($evalId <= 0) {
@@ -117,6 +132,11 @@ if ($action === 'getEvaluationDetails') {
 
 // Get asset full activity/history endpoint
 if ($action === 'getAssetActivity') {
+    if (!in_array('assets', $allowed_report_types_for_current_user, true) && !in_array('assets_list', $allowed_report_types_for_current_user, true)) {
+        echo json_encode(['success' => false, 'message' => 'Unauthorized report access']);
+        exit();
+    }
+
     // Accept either assetItemId (preferred for per-item history) or assetId (fallback)
     $assetItemId = isset($_POST['assetItemId']) ? intval($_POST['assetItemId']) : 0;
     $assetId = isset($_POST['assetId']) ? intval($_POST['assetId']) : 0;
@@ -352,6 +372,11 @@ if (!is_array($departments)) {
 
 if (empty($reportType) || empty($columns)) {
     echo json_encode(['success' => false, 'message' => 'Report type and columns are required']);
+    exit();
+}
+
+if (!in_array($reportType, $allowed_report_types_for_current_user, true)) {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized report access']);
     exit();
 }
 

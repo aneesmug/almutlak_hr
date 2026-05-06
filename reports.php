@@ -1,6 +1,7 @@
 ﻿<?php
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/evaluation_acknowledgment_handler.php';
+require_once __DIR__ . '/includes/report_permissions_helper.php';
 
 // Define who can see reports
 $can_see_reports_page = [
@@ -38,6 +39,34 @@ $has_full_access = in_array($user_role, [
     'HR_Recruitment',
     'HR_Payroll'
     ]) || $is_system_admin;
+
+$all_report_options = [
+    'employee' => __('employee_report'),
+    'vacation' => __('vacation_report'),
+    'loan' => __('loan_report'),
+    'salary' => __('salary_report'),
+    'payroll' => __('payroll_report'),
+    'attendance' => __('attendance_report'),
+    'document' => __('document_report'),
+    'assets' => __('assets_report') ?: 'Asset Inventory Report',
+    'assets_list' => __('assets_list') ?: 'Assets List',
+    'evaluation' => __('evaluation_report'),
+    'resignation' => __('resignation_report'),
+    'terminated_employees' => __('terminated_employees'),
+    'eos' => __('calculate_end_of_service'),
+    'dept_comparison' => __('dept_comparison_report'),
+    'custom' => __('custom_report')
+];
+
+$current_emp_id_for_reports = (string)($_SESSION['empid'] ?? ($empid ?? ''));
+$allowed_report_types = get_allowed_report_types_for_user(
+    $conDB,
+    $current_emp_id_for_reports,
+    $user_role ?? '',
+    $user_type ?? '',
+    !empty($is_system_admin)
+);
+$allowed_report_types_map = array_fill_keys($allowed_report_types, true);
 
 // Get user's department for filtering
 $user_dept = isset($_SESSION['user_dept']) ? $_SESSION['user_dept'] : '';
@@ -572,25 +601,21 @@ if (mysqli_num_rows($query) == 1) {
                                             <label for="reportType"><?= __('report_type') ?></label>
                                             <select class="form-control" id="reportType">
                                                 <option value=""><?= __('select_report_type') ?></option>
-                                                <option value="employee"><?= __('employee_report') ?></option>
-                                                <option value="vacation"><?= __('vacation_report') ?></option>
-                                                <option value="loan"><?= __('loan_report') ?></option>
-                                                <option value="salary"><?= __('salary_report') ?></option>
-                                                <option value="payroll"><?= __('payroll_report') ?></option>
-                                                <option value="attendance"><?= __('attendance_report') ?></option>
-                                                <option value="document"><?= __('document_report') ?></option>
-                                                <option value="assets"><?= __('assets_report') ?: 'Asset Inventory Report' ?></option>
-                                                <option value="assets_list"><?= __('assets_list') ?: 'Assets List' ?></option>
-                                                <?php if (can_acknowledge_evaluations($user_type, $user_role)):
-                                                ?>
-                                                    <option value="evaluation"><?= __('evaluation_report') ?></option>
-                                                <?php endif; ?>
-                                                <option value="resignation"><?= __('resignation_report') ?></option>
-                                                <option value="terminated_employees"><?= __('terminated_employees') ?></option>
-                                                <option value="eos"><?= __('calculate_end_of_service') ?></option>
-                                                <option value="dept_comparison"><?= __('dept_comparison_report') ?></option>
-                                                <option value="custom"><?= __('custom_report') ?></option>
+                                                <?php foreach ($all_report_options as $report_key => $report_label): ?>
+                                                    <?php
+                                                        if (!isset($allowed_report_types_map[$report_key])) {
+                                                            continue;
+                                                        }
+                                                        if ($report_key === 'evaluation' && !can_acknowledge_evaluations($user_type, $user_role)) {
+                                                            continue;
+                                                        }
+                                                    ?>
+                                                    <option value="<?= htmlspecialchars($report_key, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($report_label, ENT_QUOTES, 'UTF-8') ?></option>
+                                                <?php endforeach; ?>
                                             </select>
+                                            <?php if (empty($allowed_report_types)): ?>
+                                                <small class="text-danger d-block mt-1"><?= __('no_report_types_assigned_for_your_account') ?></small>
+                                            <?php endif; ?>
                                         </div> <!-- Department Filter (if authorized) -->
                                         <?php if ($has_full_access): ?>
                                             <div class="col-md-4 mb-3" id="singleDeptFilter">
