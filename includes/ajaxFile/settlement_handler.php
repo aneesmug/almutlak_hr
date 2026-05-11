@@ -415,7 +415,8 @@ function approveSettlement($settlementManager, $currentUserId) {
         $typeId = (int)mysqli_fetch_assoc($typeQry)['id'];
         mysqli_free_result($typeQry);
         
-        // Get current approval status
+        // Get pending approval row assigned to the current user.
+        // This avoids false mismatches when duplicate/stale pending rows exist for the same settlement.
         $currentQry = mysqli_query($conDB, "
             SELECT ra.*, r.settlement_status 
             FROM request_approvers ra
@@ -423,22 +424,35 @@ function approveSettlement($settlementManager, $currentUserId) {
             WHERE ra.request_inv_no = '$settlementInvNo' 
             AND ra.request_type_id = $typeId
             AND ra.status = 'pending'
+            AND ra.approver_id = $currentUserId
+            ORDER BY ra.approval_level ASC, ra.id ASC
             LIMIT 1
         ");
         
         if (!$currentQry || mysqli_num_rows($currentQry) == 0) {
-            echo json_encode(['success' => false, 'message' => 'No pending approval found for this settlement']);
+            $hasPendingQry = mysqli_query($conDB, "
+                SELECT 1
+                FROM request_approvers
+                WHERE request_inv_no = '$settlementInvNo'
+                AND request_type_id = $typeId
+                AND status = 'pending'
+                LIMIT 1
+            ");
+            
+            if ($hasPendingQry && mysqli_num_rows($hasPendingQry) > 0) {
+                mysqli_free_result($hasPendingQry);
+                echo json_encode(['success' => false, 'message' => 'You are not the assigned approver for this settlement']);
+            } else {
+                if ($hasPendingQry) {
+                    mysqli_free_result($hasPendingQry);
+                }
+                echo json_encode(['success' => false, 'message' => 'No pending approval found for this settlement']);
+            }
             return;
         }
         
         $current = mysqli_fetch_assoc($currentQry);
         mysqli_free_result($currentQry);
-        
-        // Verify current user is the approver
-        if ($current['approver_id'] != $currentUserId) {
-            echo json_encode(['success' => false, 'message' => 'You are not the assigned approver for this settlement']);
-            return;
-        }
         
         // Update approval status to 'approved' for current assigned approver row only
         $updateQry = mysqli_query($conDB, "
@@ -448,7 +462,7 @@ function approveSettlement($settlementManager, $currentUserId) {
             AND request_type_id = $typeId
             AND approver_id = $currentUserId
             AND status = 'pending'
-        ");
+        "); 
         
         if (!$updateQry) {
             echo json_encode(['success' => false, 'message' => 'Failed to update approval status']);
@@ -524,7 +538,7 @@ function approveSettlement($settlementManager, $currentUserId) {
         $settlementDataQry = mysqli_query($conDB, "
             SELECT s.*, 
                    e.gosi, e.country as country_id,
-                   v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
+                                     v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type, v.is_deductible,
                      v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
                    sal.basic, sal.housing, sal.transport, sal.food, sal.misc, sal.cashier,
                    sal.fuel, sal.tel, sal.other, sal.guard
@@ -551,14 +565,27 @@ function approveSettlement($settlementManager, $currentUserId) {
                 $approved_days = (float)($settlementData['vacdays'] ?? 0);
                 
                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
-                $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
+                $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
+                    $vac_type,
+                    $fly_type,
+                    $settlementData['country_id'] ?? 0,
+                    $approved_days,
+                    $settlementData['is_deductible'] ?? 0
+                );
+                $is_settlement_payable_vacation = isSettlementPayableVacation(
+                    $vac_type,
+                    $fly_type,
+                    $settlementData['country_id'] ?? 0,
+                    $approved_days,
+                    $settlementData['is_deductible'] ?? 0
+                );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
                 $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
                 
-                $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+                $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
                 
                 if ($calculate_payments) {
                     $basic_salary = (float)($settlementData['basic'] ?? 0);
@@ -590,7 +617,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         $overtime_amount = 0;
                         $deduction_amount = 0;
                         
-                        if ($is_fly_annual && !empty($settlementData['start_date'])) {
+                        if ($is_settlement_payable_vacation && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $working_days = (int)$start_date_obj->format('d') - 1;
@@ -604,7 +631,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                             }
                         }
                         
-                        if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                        if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
                             $vacation_salary = round($daily_rate * $approved_days);
                         }
                         
@@ -626,7 +653,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         
                         if ($settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
                             $gosi_percentage = (float)$settlementData['gosi'];
-                            if ($is_fly_annual) {
+                            if ($is_settlement_payable_vacation) {
                                 $gosi_base = $working_days_salary + $vacation_salary;
                                 $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
                             }
@@ -634,7 +661,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         
                         if ($is_encashment) {
                             $calculatedPayableAmount = 0;
-                        } elseif ($is_fly_annual) {
+                        } elseif ($is_settlement_payable_vacation) {
                             $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                         }
                     }
@@ -1080,7 +1107,8 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
         $typeId = (int)mysqli_fetch_assoc($typeQry)['id'];
         mysqli_free_result($typeQry);
         
-        // Get current approval status
+        // Get pending approval row assigned to the current user.
+        // This avoids false mismatches when duplicate/stale pending rows exist for the same settlement.
         $currentQry = mysqli_query($conDB, "
             SELECT ra.*, r.settlement_status 
             FROM request_approvers ra
@@ -1088,22 +1116,35 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
             WHERE ra.request_inv_no = '$settlementInvNo' 
             AND ra.request_type_id = $typeId
             AND ra.status = 'pending'
+            AND ra.approver_id = $currentUserId
+            ORDER BY ra.approval_level ASC, ra.id ASC
             LIMIT 1
         ");
         
         if (!$currentQry || mysqli_num_rows($currentQry) == 0) {
-            echo json_encode(['success' => false, 'message' => 'No pending approval found for this settlement']);
+            $hasPendingQry = mysqli_query($conDB, "
+                SELECT 1
+                FROM request_approvers
+                WHERE request_inv_no = '$settlementInvNo'
+                AND request_type_id = $typeId
+                AND status = 'pending'
+                LIMIT 1
+            ");
+            
+            if ($hasPendingQry && mysqli_num_rows($hasPendingQry) > 0) {
+                mysqli_free_result($hasPendingQry);
+                echo json_encode(['success' => false, 'message' => 'You are not the assigned approver for this settlement']);
+            } else {
+                if ($hasPendingQry) {
+                    mysqli_free_result($hasPendingQry);
+                }
+                echo json_encode(['success' => false, 'message' => 'No pending approval found for this settlement']);
+            }
             return;
         }
         
         $current = mysqli_fetch_assoc($currentQry);
         mysqli_free_result($currentQry);
-        
-        // Verify current user is the approver
-        if ($current['approver_id'] != $currentUserId) {
-            echo json_encode(['success' => false, 'message' => 'You are not the assigned approver for this settlement']);
-            return;
-        }
         
         // Begin transaction
         $pdo->beginTransaction();
@@ -1172,7 +1213,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
         $settlementDataQry = mysqli_query($conDB, "
             SELECT s.*, 
                    e.gosi, e.country as country_id,
-                   v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
+                                     v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type, v.is_deductible,
                      v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
                    sal.basic, sal.housing, sal.transport, sal.food, sal.misc, sal.cashier,
                    sal.fuel, sal.tel, sal.other, sal.guard
@@ -1199,14 +1240,27 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                 $approved_days = (float)($settlementData['vacdays'] ?? 0);
                 
                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
-                $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
+                $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
+                    $vac_type,
+                    $fly_type,
+                    $settlementData['country_id'] ?? 0,
+                    $approved_days,
+                    $settlementData['is_deductible'] ?? 0
+                );
+                $is_settlement_payable_vacation = isSettlementPayableVacation(
+                    $vac_type,
+                    $fly_type,
+                    $settlementData['country_id'] ?? 0,
+                    $approved_days,
+                    $settlementData['is_deductible'] ?? 0
+                );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
                 $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
                 
-                $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+                $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
                 
                 if ($calculate_payments) {
                     $basic_salary = (float)($settlementData['basic'] ?? 0);
@@ -1238,7 +1292,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         $overtime_amount = 0;
                         $deduction_amount = 0;
                         
-                        if ($is_fly_annual && !empty($settlementData['start_date'])) {
+                        if ($is_settlement_payable_vacation && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $working_days = (int)$start_date_obj->format('d') - 1;
@@ -1252,7 +1306,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                             }
                         }
                         
-                        if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                        if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
                             $vacation_salary = round($daily_rate * $approved_days);
                         }
                         
@@ -1274,7 +1328,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         
                         if ($settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
                             $gosi_percentage = (float)$settlementData['gosi'];
-                            if ($is_fly_annual) {
+                            if ($is_settlement_payable_vacation) {
                                 $gosi_base = $working_days_salary + $vacation_salary;
                                 $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
                             }
@@ -1282,7 +1336,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         
                         if ($is_encashment) {
                             $calculatedPayableAmount = 0;
-                        } elseif ($is_fly_annual) {
+                        } elseif ($is_settlement_payable_vacation) {
                             $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                         }
                     }
@@ -1469,7 +1523,7 @@ function rejectSettlement($settlementManager, $currentUserId) {
         $typeId = (int)mysqli_fetch_assoc($typeQry)['id'];
         mysqli_free_result($typeQry);
         
-        // Get current approval
+        // Get current user's pending approval row.
         $currentQry = mysqli_query($conDB, "
             SELECT ra.*, r.emp_id, r.settlement_amount
             FROM request_approvers ra
@@ -1477,6 +1531,8 @@ function rejectSettlement($settlementManager, $currentUserId) {
             WHERE ra.request_inv_no = '$settlementInvNo' 
             AND ra.request_type_id = $typeId
             AND ra.status = 'pending'
+            AND ra.approver_id = $currentUserId
+            ORDER BY ra.approval_level ASC, ra.id ASC
             LIMIT 1
         ");
         
@@ -1488,11 +1544,7 @@ function rejectSettlement($settlementManager, $currentUserId) {
         $current = mysqli_fetch_assoc($currentQry);
         mysqli_free_result($currentQry);
         
-        // Verify current user is the approver
-        if ($current['approver_id'] != $currentUserId) {
-            echo json_encode(['success' => false, 'message' => 'You are not authorized to reject this settlement']);
-            return;
-        }
+        // Verify is no longer needed because query is already scoped to current approver.
         
         // Update approval status to 'rejected' for current assigned approver row only
         $updateQry = mysqli_query($conDB, "
@@ -1708,15 +1760,28 @@ function getSettlementDetails($settlementManager) {
                 
                 // Determine vacation categories
                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
-                $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
+                $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
+                    $vac_type,
+                    $fly_type,
+                    $vacation['country_id'] ?? 0,
+                    $approved_days,
+                    $vacation['is_deductible'] ?? 0
+                );
+                $is_settlement_payable_vacation = isSettlementPayableVacation(
+                    $vac_type,
+                    $fly_type,
+                    $vacation['country_id'] ?? 0,
+                    $approved_days,
+                    $vacation['is_deductible'] ?? 0
+                );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
                 $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
                 
                 // Calculate only if payable
-                $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+                $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
                 
                 if ($calculate_payments && $salary) {
                     $basic_salary = (float)($salary['basic'] ?? 0);
@@ -1746,8 +1811,8 @@ function getSettlementDetails($settlementManager) {
                     $overtime_amount = 0;
                     $deduction_amount = 0;
                     
-                    // Calculate working days salary (Fly + Annual only)
-                    if ($is_fly_annual && !empty($vacation['start_date'])) {
+                    // Calculate working days salary for vacations removed from active payroll.
+                    if ($is_settlement_payable_vacation && !empty($vacation['start_date'])) {
                         $start_date_obj = new DateTime($vacation['start_date']);
                         // Exclude the start day from working-days salary (working days BEFORE departure)
                         $working_days = (int)$start_date_obj->format('d') - 1;
@@ -1758,8 +1823,8 @@ function getSettlementDetails($settlementManager) {
                         }
                     }
                     
-                    // Calculate vacation salary (Fly + Annual with payroll type only)
-                    if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+                    // Calculate vacation salary for deductible payable vacations with payroll type.
+                    if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
                         $vacation_salary = round($daily_rate * $approved_days);
                     }
                     
@@ -1778,7 +1843,7 @@ function getSettlementDetails($settlementManager) {
                     // Calculate GOSI
                     if ($vacation['country_id'] == 191 && isset($vacation['gosi']) && is_numeric($vacation['gosi'])) {
                         $gosi_percentage = (float)$vacation['gosi'];
-                        if ($is_fly_annual) {
+                        if ($is_settlement_payable_vacation) {
                             $gosi_base = $working_days_salary + $vacation_salary;
                             $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
                         }
@@ -1787,8 +1852,8 @@ function getSettlementDetails($settlementManager) {
                     // Calculate total payable
                     if ($is_encashment) {
                         $calculatedPayableAmount = 0; // Handled in encashment section
-                    } elseif ($is_fly_annual) {
-                        // Fly + Annual: Working days + vacation salary + overtime + other earnings - deductions - GOSI
+                    } elseif ($is_settlement_payable_vacation) {
+                        // Deductible payable vacations: Working days + vacation salary + overtime + other earnings - deductions - GOSI
                         $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                     } else {
                         // Local Vacation + Annual or other
@@ -1812,21 +1877,46 @@ function getSettlementDetails($settlementManager) {
         
         $approvalChain = [];
         if ($typeId > 0) {
+            // Deduplicate by (approval_level, approver_id): pick the LATEST row (highest id)
+            // so the current cycle's status (pending/awaiting) is shown rather than an old
+            // "approved" row from a previous settlement run overriding it.
             $approvalQry = mysqli_query($conDB, "
-                SELECT ra.*, e.name as approver_name, e.email as approver_email
+                SELECT ra.approval_level, ra.approver_id, ra.request_type_id, ra.request_inv_no,
+                       ra.action_date, ra.note, ra.status,
+                       e.name  AS approver_name,
+                       e.email AS approver_email
                 FROM request_approvers ra
                 LEFT JOIN employees e ON e.emp_id = ra.approver_id
-                WHERE ra.request_inv_no = '{$settlement['request_inv_no']}'
+                WHERE ra.request_inv_no = '" . mysqli_real_escape_string($conDB, $settlement['request_inv_no']) . "'
                 AND ra.request_type_id = $typeId
-                ORDER BY ra.approval_level ASC
+                ORDER BY ra.approval_level ASC, ra.id DESC
             ");
-            
+
             if ($approvalQry) {
+                $seen = [];
                 while ($row = mysqli_fetch_assoc($approvalQry)) {
-                    $approvalChain[] = $row;
+                    $key = $row['approval_level'] . '_' . $row['approver_id'];
+                    if (!isset($seen[$key])) {
+                        $seen[$key] = true;
+                        $approvalChain[] = $row;
+                    }
                 }
                 mysqli_free_result($approvalQry);
             }
+
+            // Enforce logical consistency for display: once a "pending" level is found,
+            // all subsequent levels must appear as "awaiting" — they cannot have beend
+            // actioned while an earlier level is still waiting for approval.
+            $pendingFound = false;
+            foreach ($approvalChain as &$chainRow) {
+                if ($pendingFound) {
+                    $chainRow['status']      = 'awaiting';
+                    $chainRow['action_date'] = null;
+                } elseif ($chainRow['status'] === 'pending' || $chainRow['status'] === 'awaiting') {
+                    $pendingFound = true;
+                }
+            }
+            unset($chainRow);
         }
         
         // Get approval history

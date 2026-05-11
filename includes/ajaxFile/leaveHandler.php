@@ -1212,6 +1212,22 @@ elseif ($ajaxType == 'applyVacation') {
         $attachment_path_sql = $attachment_path ? "'" . mysqli_real_escape_string($conDB, $attachment_path) . "'" : 'NULL';
         $request_inv_no_esc = mysqli_real_escape_string($conDB, $request_inv_no);
 
+        // Resolve employee country for payroll business rules.
+        $employee_country_id = 0;
+        $stmt_emp_country = mysqli_prepare($conDB, "SELECT country FROM employees WHERE emp_id = ? LIMIT 1");
+        if ($stmt_emp_country) {
+            mysqli_stmt_bind_param($stmt_emp_country, "i", $emp_id);
+            mysqli_stmt_execute($stmt_emp_country);
+            $res_emp_country = mysqli_stmt_get_result($stmt_emp_country);
+            if ($res_emp_country && ($row_emp_country = mysqli_fetch_assoc($res_emp_country))) {
+                $employee_country_id = (int)($row_emp_country['country'] ?? 0);
+            }
+            if ($res_emp_country) {
+                mysqli_free_result($res_emp_country);
+            }
+            mysqli_stmt_close($stmt_emp_country);
+        }
+
         // Determine is_deductible flag
         // Emergency vacation is unpaid - does NOT deduct from balance (set is_deductible = 0)
         // Annual vacation does NOT deduct from balance either (set is_deductible = 0)
@@ -1223,6 +1239,19 @@ elseif ($ajaxType == 'applyVacation') {
         // 2. Annual vacation ("Fly" or "Local Vacation" with fly_type "annual")
         if ($is_emergency_vacation || (($vac_type === 'Fly' || $vac_type === 'Local Vacation') && $fly_type === 'annual')) {
             $is_deductible = 0; // Not deductible: does NOT reduce vacation balance, HR_Payroll will handle deduction on approval
+        }
+
+        // Business rule:
+        // Local Vacation + Annual + Saudi (country=191) + days > 20
+        // => remove from active full payroll (treat as deductible in payroll calculations).
+        $is_local_annual_saudi_long_leave = matchesLocalAnnualPayrollRemovalRule(
+            $vac_type,
+            $fly_type,
+            $employee_country_id,
+            $vacdays
+        );
+        if ($is_local_annual_saudi_long_leave) {
+            $is_deductible = 1;
         }
 
 
@@ -3616,6 +3645,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                     v.return_date,
                     v.vac_type,
                     v.fly_type,
+                    v.is_deductible,
                     v.vacation_salary_type,
                     v.vacdays,
                     v.overtime_hours,
@@ -3675,6 +3705,20 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
         $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
         $is_emergency = ($fly_type === 'emergency');
         $is_encashment = ($vac_type === 'Encashed');
+        $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
+            $vac_type,
+            $fly_type,
+            $vacation_data['country'] ?? 0,
+            $vacation_data['vacdays'] ?? 0,
+            $vacation_data['is_deductible'] ?? 0
+        );
+        $is_settlement_payable_vacation = isSettlementPayableVacation(
+            $vac_type,
+            $fly_type,
+            $vacation_data['country'] ?? 0,
+            $vacation_data['vacdays'] ?? 0,
+            $vacation_data['is_deductible'] ?? 0
+        );
         
         $total_payable = 0;
         $working_days_salary = 0;
@@ -3727,8 +3771,8 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             
             $approved_days = (float)($vacation_data['vacdays'] ?? 0);
             
-            // Calculate working days salary (if Fly + Annual)
-            if ($is_fly_annual && !empty($vacation_data['start_date'])) {
+            // Calculate working days salary for vacations removed from active payroll.
+            if ($is_settlement_payable_vacation && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
                 // Business rule: exclude the start day from working-days salary (working days BEFORE departure)
                 // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
@@ -3741,8 +3785,8 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                 }
             }
             
-            // Calculate vacation salary (if Fly + Annual and vacation_salary_type = 'payroll')
-            if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+            // Calculate vacation salary for deductible payable vacations when payroll payment is selected.
+            if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
                 $vacation_salary = round($daily_rate * $approved_days);
             }
             
@@ -3779,14 +3823,14 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             // Calculate GOSI (if Saudi Arabia - country_id = 191)
             if ($vacation_data['country'] == 191 && isset($vacation_data['gosi'])) {
                 $gosi_percentage = (float)$vacation_data['gosi'];
-                if ($is_fly_annual) {
+                if ($is_settlement_payable_vacation) {
                     $gosi_base = $working_days_salary + $vacation_salary;
                     $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
                 }
             }
             
             // Calculate total payable - MUST MATCH vacation_report_details.php exactly
-            if ($is_fly_annual) {
+            if ($is_settlement_payable_vacation) {
                 $total_payable = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction, 0);
             }
         }

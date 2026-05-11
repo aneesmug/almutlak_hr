@@ -113,6 +113,46 @@ if (!function_exists('escape_string')) {
     }
 }
 
+if (!function_exists('getLocalAnnualPayrollRemovalRuleConfig')) {
+    function getLocalAnnualPayrollRemovalRuleConfig()
+    {
+        return [
+            'vac_type' => 'Local Vacation',
+            'fly_type' => 'annual',
+            'country_id' => 191,
+            'minimum_days_exclusive' => 20,
+        ];
+    }
+}
+
+if (!function_exists('matchesLocalAnnualPayrollRemovalRule')) {
+    function matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays)
+    {
+        $rule = getLocalAnnualPayrollRemovalRuleConfig();
+
+        return trim((string)$vacType) === $rule['vac_type']
+            && trim((string)$flyType) === $rule['fly_type']
+            && (int)$countryId === (int)$rule['country_id']
+            && (float)$vacDays > (float)$rule['minimum_days_exclusive'];
+    }
+}
+
+if (!function_exists('isLocalAnnualRemovedFromPayroll')) {
+    function isLocalAnnualRemovedFromPayroll($vacType, $flyType, $countryId, $vacDays, $isDeductible)
+    {
+        return matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays)
+            && (int)$isDeductible === 1;
+    }
+}
+
+if (!function_exists('isSettlementPayableVacation')) {
+    function isSettlementPayableVacation($vacType, $flyType, $countryId, $vacDays, $isDeductible)
+    {
+        return (trim((string)$vacType) === 'Fly' && trim((string)$flyType) === 'annual')
+            || isLocalAnnualRemovedFromPayroll($vacType, $flyType, $countryId, $vacDays, $isDeductible);
+    }
+}
+
 if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
     function assignTemporaryVacationRoleToReplacement($conDB, $vacation_id, $request_inv_no, $employee_emp_id, $assigned_by_emp_id)
     {

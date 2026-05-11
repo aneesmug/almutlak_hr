@@ -141,6 +141,8 @@ if (mysqli_num_rows($query) == 1) {
     
     // Determine vacation salary type
     $vacation_salary_type = $request['vacation_salary_type'] ?? 'payroll';
+    $vacation_salary_payment_yes = ($vacation_salary_type === 'payroll');
+    $vacation_salary_payment_no = ($vacation_salary_type === 'end_of_service');
     $vac_type = $request['vac_type'] ?? '';
     $fly_type = $request['raw_fly_type'] ?? '';
     
@@ -155,6 +157,19 @@ if (mysqli_num_rows($query) == 1) {
     $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
     $is_encashment = ($vac_type === 'Encashed');
     $is_emergency = ($fly_type === 'emergency');
+    $is_local_annual_saudi_long_leave = matchesLocalAnnualPayrollRemovalRule(
+        $vac_type,
+        $fly_type,
+        $request['country_id'] ?? 0,
+        $approved_days
+    );
+    $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
+        $vac_type,
+        $fly_type,
+        $request['country_id'] ?? 0,
+        $approved_days,
+        $request['is_deductible'] ?? 0
+    );
     
     // Non-payable leave types
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
@@ -576,6 +591,31 @@ if (mysqli_num_rows($query) == 1) {
                                         <?php endif; ?>
                                     </div>
                                 </div>
+
+                                <?php if (!$is_encashment && !$is_non_payable_leave): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('vacation_salary_payment') ?? 'Vacation Salary Payment' ?></h5>
+                                    <?php if ($vacation_salary_payment_yes): ?>
+                                        <div class="alert alert-success mb-0">
+                                            <i class="fa fa-check-circle"></i>
+                                            <strong><?= __('selected') ?? 'Selected' ?>: <?= __('yes') ?? 'Yes' ?></strong>
+                                            <p class="mb-0 mt-2"><?= __('vacation_salary_payroll_message') ?? 'The employee selected Yes. Vacation salary will be paid now with payroll (based on approved vacation days and payroll rules).' ?></p>
+                                        </div>
+                                    <?php elseif ($vacation_salary_payment_no): ?>
+                                        <div class="alert alert-info mb-0">
+                                            <i class="fa fa-info-circle"></i>
+                                            <strong><?= __('selected') ?? 'Selected' ?>: <?= __('no') ?? 'No' ?></strong>
+                                            <p class="mb-0 mt-2"><?= __('vacation_salary_eos_message') ?? 'The employee selected No. Vacation salary is deferred and will be paid with the end of service settlement.' ?></p>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="alert alert-secondary mb-0">
+                                            <i class="fa fa-question-circle"></i>
+                                            <strong><?= __('vacation_salary_payment') ?? 'Vacation Salary Payment' ?>:</strong>
+                                            <span><?= __('not_available') ?? 'Not available' ?></span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
                                 
                                 <?php 
                                     // Show bank payment information only if:
@@ -723,7 +763,7 @@ if (mysqli_num_rows($query) == 1) {
                                 <?php endif; ?>
                                 
                                 <?php // Hide payroll info for employees
-                                    if ($is_local_annual && (empty($isEmployee) || $isEmployee === false)): ?>
+                                    if ($is_local_annual && !$is_local_annual_removed_from_payroll && (empty($isEmployee) || $isEmployee === false)): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-briefcase"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
                                     <div class="alert alert-success mb-0">
@@ -734,6 +774,23 @@ if (mysqli_num_rows($query) == 1) {
                                             <li><?= __('payroll_status') ?>: <strong><?= __('active_full_salary') ?? 'Active - Full Salary' ?></strong></li>
                                             <li><?= __('vacation_days_deducted') ?? 'Vacation Days Deducted' ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
                                             <li><?= __('salary_deduction') ?? 'Salary Deduction' ?>: <strong><?= __('none') ?? 'None' ?></strong></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php if ($is_local_annual_removed_from_payroll && (empty($isEmployee) || $isEmployee === false)): ?>
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-user-minus"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
+                                    <div class="alert alert-warning mb-0">
+                                        <i class="fa fa-exclamation-circle"></i>
+                                        <strong><?= __('employee_removed_from_payroll') ?? 'Employee Removed from Active Payroll' ?></strong>
+                                        <p class="mb-2 mt-2"><?= __('local_annual_saudi_long_leave_payroll_message') ?? 'This is a Local Annual vacation for a Saudi employee with more than 20 days. The employee is removed from active payroll for this period.' ?></p>
+                                        <ul class="mb-0 pl-4">
+                                            <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
+                                            <li><?= __('payroll_status') ?>: <strong><?= __('removed_from_active_payroll') ?? 'Removed from Active Payroll' ?></strong></li>
+                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
+                                            <li><?= __('country') ?? 'Country' ?>: <strong><?= __('saudi_arabia') ?? 'Saudi Arabia' ?></strong></li>
                                         </ul>
                                     </div>
                                 </div>

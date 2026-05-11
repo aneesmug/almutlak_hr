@@ -42,7 +42,7 @@ if ($emprow['status'] == 1) {
 	
 	// Apply Loan (HR/Admin only, if no active loan)
 	if (empty($emprow['has_active_regular_loan']) /*&& ($is_system_admin || $isDeptHr || $isHR)*/) {
-		$hr_actions .= "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
+		// *$hr_actions .= "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
 	}
 	
 	if ($hr_actions) {

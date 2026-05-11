@@ -27,7 +27,7 @@ $sql = "SELECT s.*,
                e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp, e.gosi, e.country as country_id,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
-               v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type,
+               v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type, v.is_deductible,
                v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
                (SELECT basic FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_basic,
                (SELECT housing FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_housing,
@@ -65,15 +65,20 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
     $vacation_salary_type = $settlement['vacation_salary_type'] ?? 'payroll';
     $approved_days = (float)($settlement['vacdays'] ?? 0);
     
-    $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
-    $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
     $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
     $is_emergency = ($fly_type === 'emergency');
+    $is_settlement_payable_vacation = isSettlementPayableVacation(
+        $vac_type,
+        $fly_type,
+        $settlement['country_id'] ?? 0,
+        $approved_days,
+        $settlement['is_deductible'] ?? 0
+    );
     
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
     $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
     
-    $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+    $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
     
     if ($calculate_payments) {
         $basic_salary = (float)($settlement['salary_basic'] ?? 0);
@@ -103,8 +108,8 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             $other_earnings = 0;
             $deduction_amount = 0;
             
-            // Calculate working days salary (Fly + Annual only)
-            if ($is_fly_annual && !empty($settlement['start_date'])) {
+            // Calculate working days salary for deductible payable vacations.
+            if ($is_settlement_payable_vacation && !empty($settlement['start_date'])) {
                 try {
                     $start_date_obj = new DateTime($settlement['start_date']);
                     // Exclude the start day from working-days salary (working days BEFORE departure)
@@ -119,8 +124,8 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
                 }
             }
             
-            // Calculate vacation salary (Fly + Annual with payroll type only)
-            if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+            // Calculate vacation salary for deductible payable vacations with payroll type.
+            if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
                 $vacation_salary = round($daily_rate * $approved_days);
             }
             
@@ -148,7 +153,7 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             // Calculate GOSI
             if ($settlement['country_id'] == 191 && !empty($settlement['gosi']) && is_numeric($settlement['gosi'])) {
                 $gosi_percentage = (float)$settlement['gosi'];
-                if ($is_fly_annual) {
+                if ($is_settlement_payable_vacation) {
                     $gosi_base = $working_days_salary + $vacation_salary;
                     $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
                 }
@@ -157,7 +162,7 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             // Calculate total payable
             if ($is_encashment) {
                 $payableAmount = 0;
-            } elseif ($is_fly_annual) {
+            } elseif ($is_settlement_payable_vacation) {
                 $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
             }
         }
