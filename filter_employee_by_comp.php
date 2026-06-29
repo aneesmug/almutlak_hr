@@ -130,15 +130,8 @@ if ($department_id > 0) {
     $types .= "i";
 }
 
-// --- NEW ACCESS CONTROL: Always apply company and department filters ---
-$company_filter = getCompanyFilterSQL('comp_no', false);
-if (!empty($company_filter)) {
-    $where_clauses[] = substr($company_filter, 5); // remove leading ' AND '
-}
-$department_filter = getDepartmentFilterSQL('dept', false);
-if (!empty($department_filter)) {
-    $where_clauses[] = substr($department_filter, 5); // remove leading ' AND '
-}
+// Apply effective employee scope only to preserve explicit special access
+// even when employee is outside restricted company/department assignments.
 $employee_filter = getEmployeeFilterSQL('emp_id', false);
 if (!empty($employee_filter)) {
     $where_clauses[] = substr($employee_filter, 5); // remove leading ' AND '

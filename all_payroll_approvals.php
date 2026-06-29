@@ -242,6 +242,11 @@ $isHeadOfficeFinanceManager = strtolower(trim((string)($user_type ?? ''))) === '
     && strtolower(trim((string)($emp_type ?? ''))) === 'manager'
     && (int)($user_dept ?? 0) === 2;
 
+$normalizedUserType = str_replace([' ', '-'], '_', strtolower(trim((string)($user_type ?? ''))));
+$isHrManagerUser = in_array($normalizedUserType, ['hr_manager', 'hrmanager', 'hr'], true);
+$isGeneralManagerUser = in_array($normalizedUserType, ['general_manager', 'generalmanager', 'gm'], true);
+$approvalModalUseWideLayout = $isHrManagerUser || $isGeneralManagerUser;
+
 function getPayrollModifiedEmployeesForApprovalGate(PDO $pdo, string $requestInvNo, string $monthValue): array
 {
     if ($requestInvNo === '' || $monthValue === '') {
@@ -473,6 +478,254 @@ function getPayrollMonthCompanyIds(PDO $pdo, string $monthValue): array
 
     $cache[$monthValue] = $companyIds;
     return $companyIds;
+}
+
+function mapPayrollBankBucketFromName(string $name): string
+{
+    if ($name === '') {
+        return '';
+    }
+
+    // SNB / NCB / Al Ahli / Saudi National Bank
+    if (
+        strpos($name, 'national commercial') !== false ||
+        strpos($name, 'ncb') !== false ||
+        strpos($name, 'alahli') !== false ||
+        strpos($name, 'al ahli') !== false ||
+        strpos($name, 'al-ahli') !== false ||
+        strpos($name, 'alahly') !== false ||
+        strpos($name, 'snb') !== false ||
+        strpos($name, 'saudi national') !== false ||
+        strpos($name, 'ahli bank') !== false
+    ) {
+        return 'ncb';
+    }
+
+    // Riyadh Bank (official English is "Riyad Bank" without h)
+    if (
+        strpos($name, 'riyadh') !== false ||
+        strpos($name, 'riyad') !== false ||
+        $name === 'rb' ||
+        $name === 'riyad bank' ||
+        $name === 'bank riyad'
+    ) {
+        return 'riyadh_bank';
+    }
+
+    // Saudi Investment Bank / SAIB
+    if (
+        strpos($name, 'saudi investment') !== false ||
+        strpos($name, 'saib') !== false ||
+        $name === 'sib'
+    ) {
+        return 'saudi_investment_bank';
+    }
+
+    // Al Rajhi Bank
+    if (
+        strpos($name, 'alrajhi') !== false ||
+        strpos($name, 'al rajhi') !== false ||
+        strpos($name, 'al-rajhi') !== false ||
+        strpos($name, 'rajhi') !== false ||
+        $name === 'arb'
+    ) {
+        return 'al_rajhi_bank';
+    }
+
+    // Alinma Bank
+    if (
+        strpos($name, 'alinma') !== false ||
+        strpos($name, 'al inma') !== false ||
+        strpos($name, 'al-inma') !== false ||
+        strpos($name, 'inma') !== false
+    ) {
+        return 'alinma_bank';
+    }
+
+    // Arab National Bank / ANB
+    if (
+        preg_match('/\banb\b/', $name) ||
+        strpos($name, 'arab national') !== false ||
+        strpos($name, 'arab nat') !== false
+    ) {
+        return 'anb_bank';
+    }
+
+    // Bank AlJazira / BAJ
+    if (
+        strpos($name, 'jazira') !== false ||
+        strpos($name, 'al jazira') !== false ||
+        strpos($name, 'aljazira') !== false ||
+        $name === 'baj'
+    ) {
+        return 'al_jazira';
+    }
+
+    return '';
+}
+
+function mapPayrollBankBucket(string $bankNameShort, string $bankNameFull = ''): string
+{
+    // Try short name first, then full name
+    $shortNorm = strtolower(trim($bankNameShort));
+    $fullNorm  = strtolower(trim($bankNameFull));
+
+    $bucket = mapPayrollBankBucketFromName($shortNorm);
+    if ($bucket !== '') {
+        return $bucket;
+    }
+
+    if ($fullNorm !== '') {
+        $bucket = mapPayrollBankBucketFromName($fullNorm);
+        if ($bucket !== '') {
+            return $bucket;
+        }
+    }
+
+    // Not recognizable as a specific bank — do NOT classify as cash
+    return 'other_bank';
+}
+
+function getPayrollBankBucketLabels(): array
+{
+    return [
+        'ncb' => 'NATIONAL COMMERCIAL BANK',
+        'riyadh_bank' => 'RIYADH BANK',
+        'saudi_investment_bank' => 'SAUDI INVESTMENT BANK',
+        'al_rajhi_bank' => 'AL RAJHI BANK',
+        'alinma_bank' => 'ALINMA BANK',
+        'anb_bank' => 'ANB BANK',
+        'al_jazira' => 'AL JAZIRA',
+        'other_bank' => 'OTHER BANKS',
+    ];
+}
+
+function getPayrollBankWiseCompanySummary(PDO $pdo, string $monthValue): array
+{
+    $summary = [
+        'month' => $monthValue,
+        'bank_columns' => [],
+        'rows' => []
+    ];
+
+    if ($monthValue === '') {
+        return $summary;
+    }
+
+    $stmt = $pdo->prepare("SELECT
+            p.emp_id,
+            p.net_salary,
+            COALESCE(e.payment_type, 1) AS payment_type,
+            COALESCE(c.comp_name, 'N/A') AS company_name,
+            COALESCE(bl.bank_name_s, '') AS bank_name_short,
+            COALESCE(bl.name, '') AS bank_name_full
+        FROM payrolls p
+        INNER JOIN employees e ON e.emp_id = p.emp_id
+        LEFT JOIN companies c ON c.comp_id = e.comp_no
+        LEFT JOIN bank_list bl ON bl.bnk_id = e.bank_name
+        WHERE p.month_year = :month_year
+        ORDER BY c.comp_name ASC, p.emp_id ASC");
+    $stmt->execute([':month_year' => $monthValue]);
+
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (empty($rows)) {
+        return $summary;
+    }
+
+    $companies = [];
+    $companyEmployeeMap = [];
+    $activeBankColumns = [];
+    $allBankColumns = array_keys(getPayrollBankBucketLabels());
+
+    foreach ($rows as $row) {
+        $companyName = trim((string)($row['company_name'] ?? ''));
+        if ($companyName === '') {
+            $companyName = 'N/A';
+        }
+
+        if (!isset($companies[$companyName])) {
+            $companies[$companyName] = [
+                'branch' => $companyName,
+                'no_of_emp' => 0,
+                'salary_register' => 0.0,
+                'cash_salary' => 0.0,
+            ];
+            foreach ($allBankColumns as $bankColumn) {
+                $companies[$companyName][$bankColumn] = 0.0;
+            }
+            $companyEmployeeMap[$companyName] = [];
+        }
+
+        $empId = trim((string)($row['emp_id'] ?? ''));
+        if ($empId !== '') {
+            $companyEmployeeMap[$companyName][$empId] = true;
+        }
+
+        $netSalary = (float)($row['net_salary'] ?? 0);
+        $paymentType = (int)($row['payment_type'] ?? 1);
+
+        $companies[$companyName]['salary_register'] += $netSalary;
+
+        if ($paymentType === 1) {
+            $bucket = mapPayrollBankBucket(
+                (string)($row['bank_name_short'] ?? ''),
+                (string)($row['bank_name_full'] ?? '')
+            );
+            $companies[$companyName][$bucket] += $netSalary;
+            $activeBankColumns[$bucket] = true;
+        } else {
+            $companies[$companyName]['cash_salary'] += $netSalary;
+        }
+    }
+
+    $summary['bank_columns'] = array_values(array_filter($allBankColumns, static function ($bankColumn) use ($activeBankColumns) {
+        return !empty($activeBankColumns[$bankColumn]);
+    }));
+
+    $totals = [
+        'branch' => 'TOTAL',
+        'no_of_emp' => 0,
+        'salary_register' => 0.0,
+        'cash_salary' => 0.0,
+    ];
+    foreach ($allBankColumns as $bankColumn) {
+        $totals[$bankColumn] = 0.0;
+    }
+
+    foreach ($companies as $companyName => &$companyRow) {
+        $companyRow['no_of_emp'] = count($companyEmployeeMap[$companyName]);
+
+        $totals['no_of_emp'] += (int)$companyRow['no_of_emp'];
+        $totals['salary_register'] += (float)$companyRow['salary_register'];
+        foreach ($summary['bank_columns'] as $bankColumn) {
+            $totals[$bankColumn] += (float)$companyRow[$bankColumn];
+        }
+        $totals['cash_salary'] += (float)$companyRow['cash_salary'];
+    }
+    unset($companyRow);
+
+    $summary['rows'] = array_values($companies);
+    $summary['rows'][] = $totals;
+
+    return $summary;
+}
+
+$approvalBankReportByRequest = [];
+$approvalBankReportByMonth = [];
+if (!empty($requests)) {
+    foreach ($requests as $request) {
+        $requestInvNo = trim((string)($request['request_inv_no'] ?? ''));
+        $payrollMonth = trim((string)($request['payroll_month'] ?? ''));
+        if ($requestInvNo === '' || $payrollMonth === '') {
+            continue;
+        }
+
+        if (!isset($approvalBankReportByMonth[$payrollMonth])) {
+            $approvalBankReportByMonth[$payrollMonth] = getPayrollBankWiseCompanySummary($pdo, $payrollMonth);
+        }
+
+        $approvalBankReportByRequest[$requestInvNo] = $approvalBankReportByMonth[$payrollMonth];
+    }
 }
 ?>
 <!doctype html>
@@ -842,7 +1095,7 @@ function getPayrollMonthCompanyIds(PDO $pdo, string $monthValue): array
                                                             <?php endif; ?>
                                                             <?php if ($canApproveNow): ?>
                                                                 <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['employee_count'] ?? 0) ?>, <?= (float)($request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>')">
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['employee_count'] ?? 0) ?>, <?= (float)($request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName(parseName($request['requester_name'] ?? '')), ENT_QUOTES) ?>')">
                                                                     <i class="fa fa-check text-success"></i> <?= __('approve') ?>
                                                                 </a>
                                                                 <a class="dropdown-item" href="javascript:void(0);" onclick="rejectPayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['employee_count'] ?? 0) ?>, <?= (float)($request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>')">
@@ -894,9 +1147,23 @@ function getPayrollMonthCompanyIds(PDO $pdo, string $monthValue): array
 <script src="assets/js/jquery.core.js"></script>
 <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 <script>
+const payrollApprovalBankReports = <?= json_encode($approvalBankReportByRequest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+const payrollApprovalUseWideModal = <?= $approvalModalUseWideLayout ? 'true' : 'false' ?>;
+const payrollApprovalCanViewBankReport = payrollApprovalUseWideModal;
+
 function buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName) {
     const safeRequesterName = requesterName || '<?= __('not_available', 'N/A') ?>';
+    const report = payrollApprovalBankReports[String(requestInvNo || '').trim()] || null;
+    const reportRows = Array.isArray(report && report.rows) ? report.rows : [];
+    const totalsRow = reportRows.find((row) => String(row.branch || '').toUpperCase() === 'TOTAL') || null;
+    const totalNetValue = Number(totalNet || 0);
+    const cashSalaryValue = Number(totalsRow && totalsRow.cash_salary ? totalsRow.cash_salary : 0);
+    const bankWpsPaymentValue = Math.max(0, totalNetValue - cashSalaryValue);
     const formattedTotalNet = Number(totalNet || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+    const formattedBankWpsPayment = bankWpsPaymentValue.toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
@@ -910,7 +1177,94 @@ function buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCoun
                 <div class="swal-detail-item"><span class="swal-detail-label">${__('employees', 'Employees')}</span><span class="swal-detail-value">${employeeCount || 0}</span></div>
                 <div class="swal-detail-item"><span class="swal-detail-label">${__('total_net', 'Total Net')}</span><span class="swal-detail-value">SAR ${formattedTotalNet}</span></div>
                 <div class="swal-detail-item"><span class="swal-detail-label">${__('requested_by', 'Requested By')}</span><span class="swal-detail-value">${safeRequesterName}</span></div>
+                <div class="swal-detail-item"><span class="swal-detail-label">${__('bank_wps_payment', 'Bank WPS Payment')}</span><span class="swal-detail-value">SAR ${formattedBankWpsPayment}</span></div>
             </div>
+        </div>
+    `;
+}
+
+function buildPayrollApprovalBankReportHtml(requestInvNo, payrollMonth) {
+    const report = payrollApprovalBankReports[String(requestInvNo || '').trim()] || null;
+    const rows = Array.isArray(report && report.rows) ? report.rows : [];
+    const bankColumns = Array.isArray(report && report.bank_columns) ? report.bank_columns : [];
+    const bankColumnLabels = {
+        ncb: 'NATIONAL COMMERCIAL BANK',
+        riyadh_bank: 'RIYADH BANK',
+        saudi_investment_bank: 'SAUDI INVESTMENT BANK',
+        al_rajhi_bank: 'AL RAJHI BANK',
+        alinma_bank: 'ALINMA BANK',
+        anb_bank: 'ANB BANK',
+        al_jazira: 'AL JAZIRA',
+        other_bank: 'OTHER BANKS'
+    };
+
+    if (rows.length === 0) {
+        return `
+            <div class="swal-payroll-details">
+                <div class="swal-details-header"><i class="fas fa-table"></i> Payroll Summary Report</div>
+                <div class="text-muted">No payroll summary data available for ${payrollMonth || 'selected month'}.</div>
+            </div>
+        `;
+    }
+
+    const monthTitle = String(payrollMonth || report.month || '').trim();
+    const formatAmount = (value) => Number(value || 0).toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+    const bankHeaderCells = bankColumns.map((bankColumn) => `
+        <th style="padding:6px 8px;border:1px solid #dbe3ef;">${bankColumnLabels[bankColumn] || String(bankColumn || '').replace(/_/g, ' ').toUpperCase()}</th>
+    `).join('');
+
+    const bodyRows = rows.map((row, index) => {
+        const isTotal = String(row.branch || '').toUpperCase() === 'TOTAL';
+        const bankValueCells = bankColumns.map((bankColumn) => `
+            <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:right;">${formatAmount(row[bankColumn])}</td>
+        `).join('');
+        return `
+            <tr ${isTotal ? 'style="font-weight:700;background:#eef5ff;"' : ''}>
+                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:center;">${isTotal ? '' : (index + 1)}</td>
+                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:center;">${Number(row.no_of_emp || 0)}</td>
+                <td style="padding:6px 8px;border:1px solid #dbe3ef;white-space:nowrap;">${String(row.branch || '-')}</td>
+                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:right;">${formatAmount(row.salary_register)}</td>
+                ${bankValueCells}
+                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:right;">${formatAmount(row.cash_salary)}</td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="swal-payroll-details" style="max-height:360px;overflow:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;">
+                <thead>
+                    <tr style="background:#f1f5f9;">
+                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">S/N</th>
+                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">NO OF EMP.</th>
+                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">BRANCH</th>
+                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">SALARY REGISTER</th>
+                        ${bankHeaderCells}
+                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">CASH SALARY</th>
+                    </tr>
+                </thead>
+                <tbody>${bodyRows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function buildPayrollApprovalBankReportToggleHtml(requestInvNo, payrollMonth) {
+    if (!payrollApprovalCanViewBankReport) {
+        return '';
+    }
+
+    return `
+        <div class="text-left mb-2">
+            <button type="button" id="togglePayrollBankReportBtn" class="btn btn-sm btn-outline-primary">
+                ${__('hide_payroll_report', 'Hide Payroll Report')}
+            </button>
+        </div>
+        <div id="payrollBankReportContainer">
+            ${buildPayrollApprovalBankReportHtml(requestInvNo, payrollMonth)}
         </div>
     `;
 }
@@ -930,8 +1284,10 @@ function resetFilters(defaultLimit) {
 async function approvePayrollRequest(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName) {
     const result = await Swal.fire({
         title: '<?= __('approve') ?> Payroll',
-        // ${buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName)}
+        ...(payrollApprovalUseWideModal ? { width: '95%' } : {width: '40%' }),
         html: `
+            ${buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName)}
+            ${buildPayrollApprovalBankReportToggleHtml(requestInvNo, payrollMonth)}
             <div class="text-left">
                 <label for="payrollApprovalComment" class="font-weight-bold"><?= __('approval_comment', 'Approval Comment') ?> <span class="text-muted"><?= __('optional', 'Optional') ?></span></label>
                 <textarea id="payrollApprovalComment" class="form-control" rows="3" placeholder="<?= __('add_comments', 'Add comments') ?>"></textarea>
@@ -943,6 +1299,22 @@ async function approvePayrollRequest(requestInvNo, payrollMonth, employeeCount, 
         cancelButtonText: '<?= __('cancel') ?>',
         confirmButtonColor: '#28a745',
         allowOutsideClick: false,
+        didOpen: () => {
+            const toggleBtn = document.getElementById('togglePayrollBankReportBtn');
+            const reportContainer = document.getElementById('payrollBankReportContainer');
+
+            if (!toggleBtn || !reportContainer) {
+                return;
+            }
+
+            toggleBtn.addEventListener('click', () => {
+                const willShow = reportContainer.classList.contains('d-none');
+                reportContainer.classList.toggle('d-none', !willShow);
+                toggleBtn.textContent = willShow
+                    ? __('hide_payroll_report', 'Hide Payroll Report')
+                    : __('show_payroll_report', 'Show Payroll Report');
+            });
+        },
         preConfirm: () => ({
             note: (document.getElementById('payrollApprovalComment') || {}).value || ''
         })

@@ -1,0 +1,200 @@
+[
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "3",
+        "EnDescription":  "Direct termination of the contract during the probationary period according to Article 53 of  the Labor Law",
+        "ArDescription":  "فسخ العقد خلال فترة التجربة وفقاً للمادة 53 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "4",
+        "EnDescription":  "By mutual agreement according to Article 74 of the Labor Law",
+        "ArDescription":  "بإتفاق الطرفين وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "5",
+        "EnDescription":  "Direct termination of the employment contract by the employer according to Article 80 of the Labor Law",
+        "ArDescription":  "فسخ عقد العمل من قبل صاحب العمل وفقاً للمادة 80 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "6",
+        "EnDescription":  "Termination of the contract upon its expiration",
+        "ArDescription":  "إنتهاء العقد بإنتهاء مدته"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "7",
+        "EnDescription":  "The worker reached retirement age according to Article 74 of the Labor Law",
+        "ArDescription":  "بلوغ العامل سن التقاعد وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "9",
+        "EnDescription":  "Permanent closure of the establishment according to Article 74 of the Labor Law",
+        "ArDescription":  "إغلاق المنشأة نهائياً وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "10",
+        "EnDescription":  "Termination of the activity in which the worker is employed according to Article 74 of the Labor Law",
+        "ArDescription":  "إنهاء النشاط الذي يعمل فيه العامل وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "12",
+        "EnDescription":  "Worker's inability to work according to Article 79 of the Labor Law",
+        "ArDescription":  "عجز العامل عن العمل وفقاً للمادة 79 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "13",
+        "EnDescription":  "Termination of the contract without a legitimate reason according to Article 77 of the Labor Law",
+        "ArDescription":  "إنهاء العقد دون سبب مشروع وفقاً للمادة 77 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "14",
+        "EnDescription":  "Death of the worker according to Article 79 of the Labor Law",
+        "ArDescription":  "وفاة العامل وفقاً للمادة 79 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "15",
+        "EnDescription":  "Lack of desire to continue the contractual relationship based on mutual agreement",
+        "ArDescription":  "عدم الرغبة في استمرار العلاقة التعاقدية بناء على إرادة أحد الطرفين المنفردة في العقود الغير محددة المدة وفقاً للمادة 75 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "16",
+        "EnDescription":  "Worker's inability to work (resulting from a work injury) according to Article 137 of the Labor Law",
+        "ArDescription":  "عجز العامل عن العمل (الناتج عن إصابة العمل) وفقاً للمادة 137 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "17",
+        "EnDescription":  "Transfer of ownership of the individual establishment to a new owner and the worker refuses to continue according to Article 18 of the Labor Law",
+        "ArDescription":  "إنتقال ملكية المنشأة (الفردية) إلى مالك جديد وفقاً للمادة 18 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "19",
+        "EnDescription":  "Termination of the contract by a female worker due to childbirth according to Article 87 of the Labor Law",
+        "ArDescription":  "إنهاء المرأة العاملة العقد بسبب الوضع وفقاً للمادة 87 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "20",
+        "EnDescription":  "Termination of the contract by a female worker due to marriage within six months of marriage date according to Article 87 of the Labor Law",
+        "ArDescription":  "إنهاء المرأة العاملة العقد بسبب الزواج وفقاً للمادة 87 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "21",
+        "EnDescription":  "Death of the employer according to Article 79 if the employer is an individual and the worker refuses to continue with the employer's heirs",
+        "ArDescription":  "وفاة صاحب العمل وفقاً للمادة 79 من نظام العمل إذا  كانت شخصيته قد روعيت في عقد العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "22",
+        "EnDescription":  "Direct termination of the contract by the worker according to Article 81 of the Labor Law",
+        "ArDescription":  "فسخ العقد من قبل العامل وفقاً للمادة 81 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "3",
+        "EnDescription":  "Direct termination of the contract during the probationary period according to Article 53 of  the Labor Law",
+        "ArDescription":  "فسخ العقد خلال فترة التجربة وفقاً للمادة 53 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "4",
+        "EnDescription":  "By mutual agreement according to Article 74 of the Labor Law",
+        "ArDescription":  "بإتفاق الطرفين وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "5",
+        "EnDescription":  "Direct termination of the employment contract by the employer according to Article 80 of the Labor Law",
+        "ArDescription":  "فسخ عقد العمل من قبل صاحب العمل وفقاً للمادة 80 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "7",
+        "EnDescription":  "The worker reached retirement age according to Article 74 of the Labor Law",
+        "ArDescription":  "بلوغ العامل سن التقاعد وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "9",
+        "EnDescription":  "Permanent closure of the establishment according to Article 74 of the Labor Law",
+        "ArDescription":  "إغلاق المنشأة نهائياً وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "10",
+        "EnDescription":  "Termination of the activity in which the worker is employed according to Article 74 of the Labor Law",
+        "ArDescription":  "إنهاء النشاط الذي يعمل فيه العامل وفقاً للمادة 74 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "12",
+        "EnDescription":  "Worker's inability to work according to Article 79 of the Labor Law",
+        "ArDescription":  "عجز العامل عن العمل وفقاً للمادة 79 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "13",
+        "EnDescription":  "Termination of the contract without a legitimate reason according to Article 77 of the Labor Law",
+        "ArDescription":  "إنهاء العقد دون سبب مشروع وفقاً للمادة 77 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "14",
+        "EnDescription":  "Death of the worker according to Article 79 of the Labor Law",
+        "ArDescription":  "وفاة العامل وفقاً للمادة 79 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "16",
+        "EnDescription":  "Worker's inability to work (resulting from a work injury) according to Article 137 of the Labor Law",
+        "ArDescription":  "عجز العامل عن العمل (الناتج عن إصابة العمل) وفقاً للمادة 137 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "17",
+        "EnDescription":  "Transfer of ownership of the individual establishment to a new owner and the worker refuses to continue according to Article 18 of the Labor Law",
+        "ArDescription":  "إنتقال ملكية المنشأة (الفردية) إلى مالك جديد وفقاً للمادة 18 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "19",
+        "EnDescription":  "Termination of the contract by a female worker due to childbirth according to Article 87 of the Labor Law",
+        "ArDescription":  "إنهاء المرأة العاملة العقد بسبب الوضع وفقاً للمادة 87 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "20",
+        "EnDescription":  "Termination of the contract by a female worker due to marriage within six months of marriage date according to Article 87 of the Labor Law",
+        "ArDescription":  "إنهاء المرأة العاملة العقد بسبب الزواج وفقاً للمادة 87 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "21",
+        "EnDescription":  "Death of the employer according to Article 79 if the employer is an individual and the worker refuses to continue with the employer's heirs",
+        "ArDescription":  "وفاة صاحب العمل وفقاً للمادة 79 من نظام العمل إذا  كانت شخصيته قد روعيت في عقد العمل"
+    },
+    {
+        "ContractTypeCode":  "2",
+        "ContractEndReasonCode":  "22",
+        "EnDescription":  "Direct termination of the contract by the worker according to Article 81 of the Labor Law",
+        "ArDescription":  "فسخ العقد من قبل العامل وفقاً للمادة 81 من نظام العمل"
+    },
+    {
+        "ContractTypeCode":  "1",
+        "ContractEndReasonCode":  "1",
+        "EnDescription":  "Employee resignation",
+        "ArDescription":  "استقالة الموظف"
+    }
+]

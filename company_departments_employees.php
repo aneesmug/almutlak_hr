@@ -24,8 +24,6 @@ $fallback_company_filter_emp = (!$can_see_all_employees && !$has_explicit_scope_
     ? " AND `emp`.`comp_no`='" . mysqli_real_escape_string($conDB, $currentUserCompany) . "'"
     : "";
 
-$company_filter_emp = getCompanyFilterSQL('emp.comp_no', true);
-$department_filter_emp = getDepartmentFilterSQL('emp.dept', true);
 $employee_filter_emp = getEmployeeFilterSQL('emp.emp_id', true);
 
 $companies = [];
@@ -35,7 +33,7 @@ $companies_sql = "SELECT DISTINCT
     `companies`.`comp_name_ar`
     FROM `employees` `emp`
     LEFT JOIN `companies` ON `companies`.`comp_id` = `emp`.`comp_no`
-    WHERE `emp`.`status` = 1" . $company_filter_emp . $department_filter_emp . $employee_filter_emp . $fallback_dept_filter_emp . $fallback_company_filter_emp . "
+    WHERE `emp`.`status` = 1" . $employee_filter_emp . $fallback_dept_filter_emp . $fallback_company_filter_emp . "
     ORDER BY `companies`.`comp_name` ASC";
 $companies_query = mysqli_query($conDB, $companies_sql);
 if ($companies_query) {
@@ -63,7 +61,7 @@ if ($selected_company > 0) {
 
     $total_company_sql = "SELECT COUNT(*) AS `total`
         FROM `employees` `emp`
-        WHERE `emp`.`status` = 1" . $company_filter_emp . $department_filter_emp . $employee_filter_emp . $fallback_dept_filter_emp . $fallback_company_filter_emp . $company_clause;
+        WHERE `emp`.`status` = 1" . $employee_filter_emp . $fallback_dept_filter_emp . $fallback_company_filter_emp . $company_clause;
     $total_company_res = mysqli_query($conDB, $total_company_sql);
     $total_company_row = $total_company_res ? mysqli_fetch_assoc($total_company_res) : null;
     $total_company_employees = $total_company_row && isset($total_company_row['total']) ? (int)$total_company_row['total'] : 0;
@@ -75,7 +73,7 @@ if ($selected_company > 0) {
         `department`.`dep_nme_ar`
         FROM `employees` `emp`
         LEFT JOIN `department` ON `department`.`id` = `emp`.`dept`
-        WHERE `emp`.`status` = 1" . $company_filter_emp . $department_filter_emp . $employee_filter_emp . $fallback_dept_filter_emp . $fallback_company_filter_emp . $company_clause . "
+        WHERE `emp`.`status` = 1" . $employee_filter_emp . $fallback_dept_filter_emp . $fallback_company_filter_emp . $company_clause . "
         GROUP BY `emp`.`dept`, `department`.`dep_nme`, `department`.`dep_nme_ar`
         ORDER BY `department`.`dep_nme` ASC";
     $departments_query = mysqli_query($conDB, $departments_sql);

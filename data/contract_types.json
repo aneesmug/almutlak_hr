@@ -1,0 +1,14 @@
+{
+  "ContractTypes": [
+    {
+      "ContractTypeCode": "1",
+      "EnDescription": "Limited Period",
+      "ArDescription": "محدد المدة"
+    },
+    {
+      "ContractTypeCode": "2",
+      "EnDescription": "Unlimited Period",
+      "ArDescription": "غير محدد المدة"
+    }
+  ]
+}

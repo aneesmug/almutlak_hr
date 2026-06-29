@@ -1,13 +1,12 @@
 <div class="row">
 <?php
-	// Add company filter for supervisor employee view
+	// Use effective employee scope so explicitly allowed employees are not
+	// hidden by company/department intersection.
     require_once __DIR__ . '/session_check.php';
-    $company_filter = getCompanyFilterSQL('comp_no', true);
-    $department_filter = getDepartmentFilterSQL('dept', true);
 	$employee_filter = getEmployeeFilterSQL('emp_id', true);
     $dept_get_safe = mysqli_real_escape_string($conDB, $dept_get);
     $emp_id_get_safe = mysqli_real_escape_string($conDB, $emp_id_get);
-	$sqlsup = "SELECT * FROM `employees` WHERE `dept` = '" . $dept_get_safe . "' AND `emp_id`<>'" . $emp_id_get_safe . "' AND `status`=1" . $company_filter . $department_filter . $employee_filter;
+	$sqlsup = "SELECT * FROM `employees` WHERE `dept` = '" . $dept_get_safe . "' AND `emp_id`<>'" . $emp_id_get_safe . "' AND `status`=1" . $employee_filter;
 	$querysup = mysqli_query($conDB, $sqlsup);
 
 	while ($rec = mysqli_fetch_array($querysup)) {

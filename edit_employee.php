@@ -48,7 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'gosi',
 			'insurance_class',
 			'probation',
-			'payment_type'
+			'payment_type',
+			'is_overtime_eligible'
 		];
 		
 		// FETCH OLD VALUES BEFORE UPDATE
@@ -681,6 +682,18 @@ if (mysqli_num_rows($query) == 1) {
 													<option value="2" <?= ($emprow['payment_type'] == '2' ? 'selected' : '') ?>><?= __("cash_option") ?></option>
 													<option value="3" <?= ($emprow['payment_type'] == '3' ? 'selected' : '') ?>><?= __("hold_option") ?></option>
 												</select>
+											</div>
+
+											<div class="form-group col-md-4">
+												<label class="col-form-label d-block"><?= __('eligible_for_overtime', 'Eligible For Overtime') ?></label>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="overtimeEligibleYes" name="is_overtime_eligible" value="1" <?= ((string)($emprow['is_overtime_eligible'] ?? '0') === '1') ? 'checked' : '' ?> required>
+													<label for="overtimeEligibleYes" class="atch"><?= __('yes', 'Yes') ?></label>
+												</div>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="overtimeEligibleNo" name="is_overtime_eligible" value="0" <?= ((string)($emprow['is_overtime_eligible'] ?? '0') !== '1') ? 'checked' : '' ?>>
+													<label for="overtimeEligibleNo" class="atch"><?= __('no', 'No') ?></label>
+												</div>
 											</div>
 
 											<div class="form-group col-md-12">

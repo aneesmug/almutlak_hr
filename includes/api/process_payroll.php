@@ -306,36 +306,67 @@ try {
         ];
         
         // --- PRORATED SALARY LOGIC FOR MID-MONTH JOINERS / RETURNING EMPLOYEES ---
-        $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND current_status = 'approved' AND is_deductible = 1");
-        $stmtVacationReturn->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-        $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
-
         $monthStartDate = new DateTime($monthYear . '-01');
+        $monthStartDate->setTime(0, 0, 0);
         $monthEndDate = new DateTime($monthYear . '-01');
         $monthEndDate->modify('last day of this month');
-        $daysInMonth = (int)$monthEndDate->format('d');
+        $monthEndDate->setTime(0, 0, 0);
+        $daysInMonth = 30;
         $prorationFactor = 1.0;
         $payableStartDate = clone $monthStartDate;
+        $joinedThisPayrollMonth = false;
+        $joiningDate = null;
+        $joiningDeductionDays = 0;
 
         $joiningDateValue = $employeeStatus['joining_date'] ?? null;
-        if (!empty($joiningDateValue) && $joiningMonthYear === $monthYear) {
-            $joiningDate = DateTime::createFromFormat('Y-m-d', $joiningDateValue);
+        if (!empty($joiningDateValue)) {
+            $joiningDate = DateTime::createFromFormat('!Y-m-d', substr((string)$joiningDateValue, 0, 10));
             if (!$joiningDate instanceof DateTime) {
                 $joiningTimestamp = strtotime((string)$joiningDateValue);
                 if ($joiningTimestamp !== false) {
                     $joiningDate = new DateTime(date('Y-m-d', $joiningTimestamp));
+                    $joiningDate->setTime(0, 0, 0);
                 }
             }
 
-            if ($joiningDate instanceof DateTime && $joiningDate > $payableStartDate) {
-                $payableStartDate = clone $joiningDate;
+            // Apply proration when joining happens within the selected payroll month.
+            if (
+                $joiningDate instanceof DateTime
+                && $joiningDate >= $monthStartDate
+                && $joiningDate <= $monthEndDate
+            ) {
+                $joinedThisPayrollMonth = true;
+                if ($joiningDate > $payableStartDate) {
+                    $payableStartDate = clone $joiningDate;
+                }
             }
         }
 
-        if ($vacationReturn) {
-            $returnDate = new DateTime($vacationReturn['return_date']);
-            if ($returnDate > $payableStartDate) {
-                $payableStartDate = clone $returnDate;
+        if (!$joinedThisPayrollMonth) {
+            $stmtVacationReturn = $pdo->prepare("SELECT return_date
+                FROM emp_vacation
+                WHERE emp_id = :emp_id
+                  AND current_status = 'approved'
+                  AND is_deductible = 1
+                                    AND start_date <= :month_start_upper
+                                    AND return_date >= :month_start_lower
+                  AND return_date <= :month_end
+                ORDER BY return_date DESC
+                LIMIT 1");
+            $stmtVacationReturn->execute([
+                ':emp_id' => $empId,
+                                ':month_start_upper' => $monthYear . '-01',
+                                ':month_start_lower' => $monthYear . '-01',
+                ':month_end' => $monthEndDate->format('Y-m-d')
+            ]);
+            $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
+
+            if ($vacationReturn) {
+                $returnDate = new DateTime($vacationReturn['return_date']);
+                $returnDate->setTime(0, 0, 0);
+                if ($returnDate > $payableStartDate) {
+                    $payableStartDate = clone $returnDate;
+                }
             }
         }
 
@@ -346,6 +377,13 @@ try {
         $daysWorked = ((int)$monthEndDate->diff($payableStartDate)->format('%a')) + 1;
         if ($daysWorked > 0 && $daysWorked < $daysInMonth) {
             $prorationFactor = $daysWorked / $daysInMonth;
+        }
+
+        // For employees joining during this payroll month, keep full gross salary
+        // and apply the pre-joining period as a separate deduction entry.
+        if ($joinedThisPayrollMonth && $joiningDate instanceof DateTime) {
+            $joiningDeductionDays = max(0, ((int)$joiningDate->format('d')) - 1);
+            $prorationFactor = 1.0;
         }
         
         foreach ($salaryComponents as $key => $value) {
@@ -362,6 +400,8 @@ try {
         $existingPayroll = $stmtCheckPayroll->fetch(PDO::FETCH_ASSOC);
         
         $isRegeneration = !empty($existingPayroll);
+
+        addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $joiningDeductionDays);
         
         if (!$isRegeneration) {
             // Only add automatic benefits/deductions on initial payroll generation
@@ -509,18 +549,34 @@ try {
                                     AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
                         )");
             $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-            $totalDeductions = (float)$stmtDeductionsSum->fetchColumn();
+            $totalDeductions = round((float)$stmtDeductionsSum->fetchColumn(), 0);
         } else {
-            // Regeneration: Get existing totals from payroll record to preserve manual changes
-            $stmtExisting = $pdo->prepare("SELECT total_benefits, total_deductions FROM payrolls WHERE emp_id = :emp_id AND month_year = :month_year");
-            $stmtExisting->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-            $existingTotals = $stmtExisting->fetch(PDO::FETCH_ASSOC);
-            $totalBenefits = floatval($existingTotals['total_benefits'] ?? 0);
-            $totalDeductions = floatval($existingTotals['total_deductions'] ?? 0);
+            // Regeneration: Recalculate totals from current rows (including joining-date deduction)
+            $stmtBenefitsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(note AS DECIMAL(10,2))), 0)
+                FROM payroll_benefits
+                WHERE emp_id = :emp_id AND month = :month_year AND status = 1
+            ");
+            $stmtBenefitsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+            $totalBenefits = (float)$stmtBenefitsSum->fetchColumn();
+
+            $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0)
+                    FROM payroll_deductions pd
+                    WHERE pd.emp_id = :emp_id
+                        AND pd.month = :month_year
+                        AND pd.status = 1
+                        AND NOT EXISTS (
+                                SELECT 1 FROM emp_loan el
+                                WHERE el.emp_id = pd.emp_id
+                                    AND el.deduction_mode = 'manual'
+                                    AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
+                        )
+            ");
+            $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+            $totalDeductions = round((float)$stmtDeductionsSum->fetchColumn(), 0);
         }
         
         // Calculate net salary
-        $netSalary = $totalGrossSalary + $totalBenefits - $totalDeductions;
+        $netSalary = round($totalGrossSalary + $totalBenefits - $totalDeductions, 0);
         
         // --- Insert or update the final payroll record ---
         $stmt = $pdo->prepare("INSERT INTO payrolls (
@@ -591,12 +647,14 @@ try {
     }
     if (!$skipApprovalChecks && !empty($requestInvNo)) {
         $completeStmt = $pdo->prepare("UPDATE payroll_approval_requests
-            SET status = CASE WHEN :processed_count > 0 THEN 'completed' ELSE status END,
-                processed_at = CASE WHEN :processed_count > 0 THEN NOW() ELSE processed_at END,
-                processed_by = CASE WHEN :processed_count > 0 THEN :processed_by ELSE processed_by END
+            SET status = CASE WHEN :processed_count_status > 0 THEN 'completed' ELSE status END,
+                processed_at = CASE WHEN :processed_count_time > 0 THEN NOW() ELSE processed_at END,
+                processed_by = CASE WHEN :processed_count_user > 0 THEN :processed_by ELSE processed_by END
             WHERE request_inv_no = :request_inv_no");
         $completeStmt->execute([
-            ':processed_count' => (int)$processedCount,
+            ':processed_count_status' => (int)$processedCount,
+            ':processed_count_time' => (int)$processedCount,
+            ':processed_count_user' => (int)$processedCount,
             ':processed_by' => (string)$requestedBy,
             ':request_inv_no' => $requestInvNo
         ]);
@@ -634,6 +692,38 @@ function addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary) 
     // If you do not track absences, then do not insert any absence deduction here at all.
     // (If you want to keep absence deduction for true absences, implement that logic here)
     // For now, this function will NOT insert any deduction for approved leave days.
+}
+
+/**
+ * Maintains a fixed joining-date deduction row for employees who join mid-month.
+ * Deduction is calculated on a 30-day divisor and represents days before joining.
+ */
+function addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $joiningDeductionDays) {
+    $stmtDelete = $pdo->prepare("DELETE FROM payroll_deductions
+        WHERE emp_id = :emp_id AND month = :month_year AND deduction LIKE 'Joining Date Deduction%'");
+    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+
+    $days = (int)$joiningDeductionDays;
+    if ($days <= 0) {
+        return;
+    }
+
+    $amount = round((floatval($totalGrossSalary) / 30) * $days, 2);
+    if ($amount <= 0) {
+        return;
+    }
+
+    $label = 'Joining Date Deduction (' . $days . ' days)';
+    $stmtInsert = $pdo->prepare("INSERT INTO payroll_deductions
+        (emp_id, deduction, note, month, status, calculation_type, hours, days)
+        VALUES (:emp_id, :deduction, :amount, :month_year, 1, 'daily_deduction', NULL, :days)");
+    $stmtInsert->execute([
+        ':emp_id' => $empId,
+        ':deduction' => $label,
+        ':amount' => number_format($amount, 2, '.', ''),
+        ':month_year' => $monthYear,
+        ':days' => $days
+    ]);
 }
 
 /**

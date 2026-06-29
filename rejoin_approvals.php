@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
 
-// Verify user is logged in and is a supervisor
+// Verify user is logged in and is allowed to view rejoin approvals
 if (empty($_SESSION['empid'])) {
     header('Location: index.php');
     exit;
@@ -405,6 +405,23 @@ $supervisor_emp_id = $_SESSION['empid'];
     <script>
         let pendingTable, approvedTable, rejectedTable;
 
+        function updateStatusCount(badgeSelector, json) {
+            const total = Number((json && json.recordsTotal) || 0);
+            $(badgeSelector).text(total);
+        }
+
+        function loadRejoinRequests() {
+            if (pendingTable) {
+                pendingTable.ajax.reload(null, false);
+            }
+            if (approvedTable) {
+                approvedTable.ajax.reload(null, false);
+            }
+            if (rejectedTable) {
+                rejectedTable.ajax.reload(null, false);
+            }
+        }
+
         $(document).ready(function() {
             // Initialize DataTables
             pendingTable = $('#pendingRequestsTable').DataTable({
@@ -415,6 +432,10 @@ $supervisor_emp_id = $_SESSION['empid'];
                     type: 'POST',
                     data: function(d) {
                         d.status = 'pending';
+                    },
+                    dataSrc: function(json) {
+                        updateStatusCount('#pending-count', json);
+                        return json.data || [];
                     }
                 },
                 columns: [
@@ -473,6 +494,10 @@ $supervisor_emp_id = $_SESSION['empid'];
                     type: 'POST',
                     data: function(d) {
                         d.status = 'approved';
+                    },
+                    dataSrc: function(json) {
+                        updateStatusCount('#approved-count', json);
+                        return json.data || [];
                     }
                 },
                 columns: [
@@ -516,6 +541,10 @@ $supervisor_emp_id = $_SESSION['empid'];
                     type: 'POST',
                     data: function(d) {
                         d.status = 'rejected';
+                    },
+                    dataSrc: function(json) {
+                        updateStatusCount('#rejected-count', json);
+                        return json.data || [];
                     }
                 },
                 columns: [

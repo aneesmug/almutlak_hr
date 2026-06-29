@@ -53,7 +53,7 @@ try {
     // Include only non-Fly active vacations overlapping the payroll month.
     // This keeps Local Annual / Emergency requests visible in payroll until rejoining closes them,
     // while excluding employees on Fly annual vacation from payroll generation.
-    $sql = "SELECT DISTINCT
+    $sql = "SELECT
             e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept, e.payment_type,
             e.joining_date,
             es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard,
@@ -72,8 +72,26 @@ try {
             v.current_status AS vacation_status,
             v.is_deductible as vacation_is_deductible
         FROM employees e
-        LEFT JOIN emp_salary es ON e.emp_id = es.emp_id AND es.status = 1
-        LEFT JOIN payrolls gp ON e.emp_id = gp.emp_id AND gp.month_year = :month_year_param
+        LEFT JOIN (
+            SELECT es1.*
+            FROM emp_salary es1
+            INNER JOIN (
+                SELECT emp_id, MAX(id) AS latest_id
+                FROM emp_salary
+                WHERE status = 1
+                GROUP BY emp_id
+            ) es_latest ON es1.id = es_latest.latest_id
+        ) es ON e.emp_id = es.emp_id
+        LEFT JOIN (
+            SELECT gp1.*
+            FROM payrolls gp1
+            INNER JOIN (
+                SELECT emp_id, MAX(id) AS latest_id
+                FROM payrolls
+                WHERE month_year = :month_year_param
+                GROUP BY emp_id
+            ) gp_latest ON gp1.id = gp_latest.latest_id
+        ) gp ON e.emp_id = gp.emp_id
         LEFT JOIN (
             SELECT emp_id, COUNT(*) AS open_feedback_count
             FROM payroll_checklist_feedback
@@ -84,13 +102,21 @@ try {
         LEFT JOIN department d ON e.dept = d.id
         LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
         LEFT JOIN companies c ON e.comp_no = c.comp_id
-        LEFT JOIN emp_vacation v ON e.emp_id = v.emp_id 
-            AND v.review = 'A'
-            AND v.current_status IN ('approved', 'completed')
-            AND v.start_date <= :month_end_param
-            AND v.return_date >= :month_start_param
-            AND LOWER(COALESCE(v.vac_type, '')) <> 'fly'
-            AND LOWER(COALESCE(v.note, '')) <> 'fly'
+        LEFT JOIN (
+            SELECT v1.*
+            FROM emp_vacation v1
+            INNER JOIN (
+                SELECT emp_id, MAX(id) AS latest_id
+                FROM emp_vacation
+                WHERE review = 'A'
+                  AND current_status IN ('approved', 'completed')
+                  AND start_date <= :month_end_param
+                  AND return_date >= :month_start_param
+                  AND LOWER(COALESCE(vac_type, '')) <> 'fly'
+                  AND LOWER(COALESCE(note, '')) <> 'fly'
+                GROUP BY emp_id
+            ) v_latest ON v1.id = v_latest.latest_id
+        ) v ON e.emp_id = v.emp_id
         WHERE e.status = 1 
         AND (
             e.fly = 0 

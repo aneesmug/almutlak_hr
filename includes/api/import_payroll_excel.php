@@ -159,7 +159,6 @@ function calculateImportedDeductionAmount(array $payrollRecord, string $deductio
     }
 
     $totalGrossSalary = (float)($payrollRecord['total_gross_salary'] ?? 0);
-    $housingAllowance = (float)($payrollRecord['housing_allowance'] ?? 0);
     $foodAllowance = (float)($payrollRecord['food_allowance'] ?? 0);
 
     if ($totalGrossSalary <= 0) {
@@ -169,7 +168,7 @@ function calculateImportedDeductionAmount(array $payrollRecord, string $deductio
             + (float)($payrollRecord['transport_allowance'] ?? 0);
     }
 
-    $deductibleSalary = max($totalGrossSalary - $housingAllowance - $foodAllowance, 0.0);
+    $deductibleSalary = max($totalGrossSalary - $foodAllowance, 0.0);
     $hourlyRate = $deductibleSalary > 0 ? ($deductibleSalary / 240) : 0;
 
     return [

@@ -52,6 +52,22 @@ switch ($action) {
         sendCompanyManagerPayrollReport($pdo, $conDB, $currentUserId);
         break;
 
+    case 'upload_manager_payroll_excel':
+        uploadManagerPayrollExcel($pdo, $conDB, $currentUserId);
+        break;
+
+    case 'get_manager_uploaded_payroll_excel_rows':
+        getManagerUploadedPayrollExcelRows($pdo, $currentUserId);
+        break;
+
+    case 'list_manager_uploaded_payroll_excel_files':
+        listManagerUploadedPayrollExcelFiles($pdo, $currentUserId);
+        break;
+
+    case 'mark_manager_uploaded_payroll_excel_reviewed':
+        markManagerUploadedPayrollExcelReviewed($pdo, $currentUserId);
+        break;
+
     case 'get_finance_verification_setup':
         getFinanceVerificationSetup($pdo, $currentUserId, $requestTypeId);
         break;
@@ -1568,6 +1584,679 @@ function getCompanyManagerOptionsForPayroll(PDO $pdo, string $currentUserId): vo
     }
 }
 
+function getManagerPayrollUploadStorageDir(): string
+{
+    return __DIR__ . '/../../assets/payroll_manager_uploads';
+}
+
+function ensureManagerPayrollImportCheckpointRegistryTable(PDO $pdo): void
+{
+    $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_import_checkpoint_registry (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        checkpoint_code VARCHAR(255) NOT NULL UNIQUE,
+        default_month VARCHAR(7) DEFAULT NULL,
+        created_by VARCHAR(100) DEFAULT NULL,
+        issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        used_at TIMESTAMP NULL DEFAULT NULL,
+        INDEX idx_default_month (default_month),
+        INDEX idx_used_at (used_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+}
+
+function generateManagerPayrollImportCheckpointCode(string $defaultMonth): string
+{
+    $prefix = 'PAYIMP';
+    $monthValue = preg_replace('/[^0-9]/', '', (string)$defaultMonth);
+    if ($monthValue === '') {
+        $monthValue = date('Ym');
+    }
+
+    try {
+        $randomCode = strtoupper(bin2hex(random_bytes(6)));
+    } catch (Throwable $e) {
+        $randomCode = strtoupper(dechex((int)(microtime(true) * 1000000))) . strtoupper(substr(md5(uniqid('', true)), 0, 6));
+    }
+
+    return $prefix . '-' . $monthValue . '-' . $randomCode;
+}
+
+function issueManagerPayrollImportCheckpoint(PDO $pdo, string $defaultMonth, string $createdBy): string
+{
+    ensureManagerPayrollImportCheckpointRegistryTable($pdo);
+    $checkpointCode = generateManagerPayrollImportCheckpointCode($defaultMonth);
+
+    $insertStmt = $pdo->prepare("INSERT INTO payroll_import_checkpoint_registry (checkpoint_code, default_month, created_by) VALUES (:checkpoint_code, :default_month, :created_by)");
+    $insertStmt->execute([
+        ':checkpoint_code' => $checkpointCode,
+        ':default_month' => $defaultMonth,
+        ':created_by' => $createdBy
+    ]);
+
+    return $checkpointCode;
+}
+
+function normalizeManagerPayrollUploadKey(string $requestInvNo, string $monthYear): string
+{
+    $requestPart = preg_replace('/[^A-Za-z0-9_-]+/', '_', trim($requestInvNo));
+    $monthPart = preg_replace('/[^0-9-]+/', '', trim($monthYear));
+    return $requestPart . '__' . $monthPart;
+}
+
+function getManagerPayrollUploadMetaPath(string $requestInvNo, string $monthYear): string
+{
+    return getManagerPayrollUploadStorageDir() . DIRECTORY_SEPARATOR
+        . normalizeManagerPayrollUploadKey($requestInvNo, $monthYear)
+        . '.json';
+}
+
+function loadManagerPayrollUploadMeta(string $requestInvNo, string $monthYear): array
+{
+    $metaPath = getManagerPayrollUploadMetaPath($requestInvNo, $monthYear);
+    if (!file_exists($metaPath)) {
+        return [];
+    }
+
+    $raw = @file_get_contents($metaPath);
+    if ($raw === false || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function saveManagerPayrollUploadMeta(string $requestInvNo, string $monthYear, array $meta): void
+{
+    $storageDir = getManagerPayrollUploadStorageDir();
+    if (!is_dir($storageDir) && !@mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
+        throw new Exception('Unable to create manager upload storage directory.');
+    }
+
+    $metaPath = getManagerPayrollUploadMetaPath($requestInvNo, $monthYear);
+    $encoded = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    if ($encoded === false || @file_put_contents($metaPath, $encoded, LOCK_EX) === false) {
+        throw new Exception('Unable to save manager upload metadata.');
+    }
+}
+
+function buildManagerPayrollUploadFileId(string $storedName, string $uploadedAt): string
+{
+    return substr(sha1($storedName . '|' . $uploadedAt), 0, 20);
+}
+
+function extractManagerPayrollCompanyNameFromFileName(string $fileName): string
+{
+    $baseName = pathinfo(trim($fileName), PATHINFO_FILENAME);
+    if ($baseName === '') {
+        return '';
+    }
+
+    // Expected pattern is typically: payroll_YYYY-MM_COMPANY_NAME
+    if (preg_match('/^payroll_\d{4}-\d{2}_(.+)$/i', $baseName, $matches)) {
+        $baseName = (string)($matches[1] ?? '');
+    } elseif (preg_match('/^payroll_(.+)$/i', $baseName, $matches)) {
+        $baseName = (string)($matches[1] ?? '');
+    }
+
+    $baseName = trim(str_replace('_', ' ', $baseName));
+    $baseName = preg_replace('/\s+/', ' ', (string)$baseName);
+
+    return trim((string)$baseName);
+}
+
+function normalizeManagerPayrollUploadMeta(array $meta, string $requestInvNo, string $monthYear): array
+{
+    $normalized = [
+        'request_inv_no' => $requestInvNo,
+        'month' => $monthYear,
+        'uploads' => []
+    ];
+
+    $uploads = isset($meta['uploads']) && is_array($meta['uploads']) ? $meta['uploads'] : [];
+
+    // Backward compatibility: migrate legacy single-file metadata to uploads[] format.
+    if (empty($uploads) && !empty($meta['stored_name'])) {
+        $legacyUploadedAt = trim((string)($meta['uploaded_at'] ?? ''));
+        $legacyStoredName = trim((string)$meta['stored_name']);
+        $uploads[] = [
+            'file_id' => buildManagerPayrollUploadFileId($legacyStoredName, $legacyUploadedAt !== '' ? $legacyUploadedAt : date('Y-m-d H:i:s')),
+            'checkpoint_code' => (string)($meta['checkpoint_code'] ?? ''),
+            'original_name' => (string)($meta['original_name'] ?? $legacyStoredName),
+            'stored_name' => $legacyStoredName,
+            'uploaded_by' => (string)($meta['uploaded_by'] ?? ''),
+            'uploaded_by_name' => (string)($meta['uploaded_by_name'] ?? ''),
+            'uploaded_at' => $legacyUploadedAt,
+            'reviewed_by' => (string)($meta['reviewed_by'] ?? ''),
+            'reviewed_by_name' => (string)($meta['reviewed_by_name'] ?? ''),
+            'reviewed_at' => (string)($meta['reviewed_at'] ?? ''),
+            'review_note' => (string)($meta['review_note'] ?? '')
+        ];
+    }
+
+    foreach ($uploads as $upload) {
+        if (!is_array($upload)) {
+            continue;
+        }
+
+        $storedName = trim((string)($upload['stored_name'] ?? ''));
+        if ($storedName === '') {
+            continue;
+        }
+
+        $uploadedAt = trim((string)($upload['uploaded_at'] ?? ''));
+        $fileId = trim((string)($upload['file_id'] ?? ''));
+        if ($fileId === '') {
+            $fileId = buildManagerPayrollUploadFileId($storedName, $uploadedAt !== '' ? $uploadedAt : date('Y-m-d H:i:s'));
+        }
+
+        $normalized['uploads'][] = [
+            'file_id' => $fileId,
+            'checkpoint_code' => strtoupper(trim((string)($upload['checkpoint_code'] ?? ''))),
+            'original_name' => trim((string)($upload['original_name'] ?? $storedName)),
+            'stored_name' => $storedName,
+            'uploaded_by' => trim((string)($upload['uploaded_by'] ?? '')),
+            'uploaded_by_name' => trim((string)($upload['uploaded_by_name'] ?? '')),
+            'uploaded_at' => $uploadedAt,
+            'reviewed_by' => trim((string)($upload['reviewed_by'] ?? '')),
+            'reviewed_by_name' => trim((string)($upload['reviewed_by_name'] ?? '')),
+            'reviewed_at' => trim((string)($upload['reviewed_at'] ?? '')),
+            'review_note' => trim((string)($upload['review_note'] ?? ''))
+        ];
+    }
+
+    usort($normalized['uploads'], static function (array $a, array $b): int {
+        $at = strtotime((string)($a['uploaded_at'] ?? '')) ?: 0;
+        $bt = strtotime((string)($b['uploaded_at'] ?? '')) ?: 0;
+        return $bt <=> $at;
+    });
+
+    return $normalized;
+}
+
+function findManagerPayrollUploadByFileId(array $meta, string $fileId): array
+{
+    $uploads = isset($meta['uploads']) && is_array($meta['uploads']) ? $meta['uploads'] : [];
+    foreach ($uploads as $index => $upload) {
+        if (!is_array($upload)) {
+            continue;
+        }
+        if (trim((string)($upload['file_id'] ?? '')) === $fileId) {
+            return ['index' => (int)$index, 'upload' => $upload];
+        }
+    }
+    return ['index' => -1, 'upload' => []];
+}
+
+function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpointCode, bool $isBenefitsSheet): array
+{
+    if (!$sheet) {
+        return [];
+    }
+
+    $rows = $sheet->toArray('', true, true, true);
+    if (empty($rows)) {
+        return [];
+    }
+
+    $headerRow = array_shift($rows);
+    $headerMap = [];
+    foreach ($headerRow as $column => $headerValue) {
+        $normalized = strtolower(trim((string)$headerValue));
+        if ($normalized !== '') {
+            $headerMap[$normalized] = $column;
+        }
+    }
+
+    $getCell = static function (array $row, array $map, array $keys): string {
+        foreach ($keys as $key) {
+            if (isset($map[$key])) {
+                $column = $map[$key];
+                return trim((string)($row[$column] ?? ''));
+            }
+        }
+        return '';
+    };
+
+    $normalizedRows = [];
+    foreach ($rows as $row) {
+        $empId = $getCell($row, $headerMap, ['emp_id', 'employee_id']);
+        if ($empId === '') {
+            continue;
+        }
+
+        if ($isBenefitsSheet) {
+            $benefitType = strtolower($getCell($row, $headerMap, ['benefit_type', 'overtime_type']));
+            $benefitValue = $getCell($row, $headerMap, ['benefit_value', 'overtime_value']);
+            $benefitHours = $getCell($row, $headerMap, ['benefit_hours', 'overtime_hours']);
+            $benefitReason = $getCell($row, $headerMap, ['benefit_reason', 'overtime_reason']);
+
+            if ($benefitType === '' && $benefitValue === '' && $benefitHours === '' && $benefitReason === '') {
+                continue;
+            }
+
+            $normalizedRows[] = [
+                'checkpoint_code' => $checkpointCode,
+                'emp_id' => $empId,
+                'month' => $monthYear,
+                'benefit_type' => $benefitType === '' ? 'fixed' : $benefitType,
+                'benefit_value' => $benefitValue,
+                'benefit_hours' => $benefitHours,
+                'benefit_reason' => $benefitReason,
+                'deduction_type' => 'fixed',
+                'deduction_value' => '',
+                'deduction_hours' => '',
+                'deduction_days' => '',
+                'deduction_reason' => ''
+            ];
+        } else {
+            $deductionType = strtolower($getCell($row, $headerMap, ['deduction_type']));
+            $deductionValue = $getCell($row, $headerMap, ['deduction_value']);
+            $deductionHours = $getCell($row, $headerMap, ['deduction_hours']);
+            $deductionDays = $getCell($row, $headerMap, ['deduction_days']);
+            $deductionReason = $getCell($row, $headerMap, ['deduction_reason']);
+
+            if ($deductionType === '' && $deductionValue === '' && $deductionHours === '' && $deductionDays === '' && $deductionReason === '') {
+                continue;
+            }
+
+            $normalizedRows[] = [
+                'checkpoint_code' => $checkpointCode,
+                'emp_id' => $empId,
+                'month' => $monthYear,
+                'benefit_type' => 'fixed',
+                'benefit_value' => '',
+                'benefit_hours' => '',
+                'benefit_reason' => '',
+                'deduction_type' => $deductionType === '' ? 'fixed' : $deductionType,
+                'deduction_value' => $deductionValue,
+                'deduction_hours' => $deductionHours,
+                'deduction_days' => $deductionDays,
+                'deduction_reason' => $deductionReason
+            ];
+        }
+    }
+
+    return $normalizedRows;
+}
+
+function parseManagerUploadedPayrollFileToRows(string $filePath, string $monthYear): array
+{
+    if (!class_exists('PhpOffice\\PhpSpreadsheet\\Spreadsheet')) {
+        $autoloadPaths = [
+            __DIR__ . '/../../vendor/autoload.php',
+            __DIR__ . '/../../../vendor/autoload.php',
+            __DIR__ . '/../../includes/vendor/autoload.php'
+        ];
+        foreach ($autoloadPaths as $path) {
+            if (file_exists($path)) {
+                require_once $path;
+                break;
+            }
+        }
+    }
+
+    if (!class_exists('PhpOffice\\PhpSpreadsheet\\Spreadsheet')) {
+        throw new Exception('Spreadsheet library is not available on server.');
+    }
+
+    $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
+    $benefitsSheet = $spreadsheet->getSheetByName('Benefits Import');
+    $deductionsSheet = $spreadsheet->getSheetByName('Deductions Import');
+    $metadataSheet = $spreadsheet->getSheetByName('__PAYROLL_IMPORT_META');
+
+    $checkpointCode = '';
+    if ($metadataSheet) {
+        $checkpointCode = strtoupper(trim((string)$metadataSheet->getCell('A1')->getValue()));
+    }
+
+    if ($checkpointCode === '' || !preg_match('/^PAYIMP-\d{6}-[A-Z0-9]+$/', $checkpointCode)) {
+        throw new Exception('The uploaded file is not valid.');
+    }
+
+    $benefitRows = parseManagerPayrollSheetRows($benefitsSheet, $monthYear, $checkpointCode, true);
+    $deductionRows = parseManagerPayrollSheetRows($deductionsSheet, $monthYear, $checkpointCode, false);
+
+    return [
+        'checkpoint_code' => $checkpointCode,
+        'rows' => array_values(array_merge($benefitRows, $deductionRows))
+    ];
+}
+
+function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+
+    try {
+        $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        $currentEmpType = strtolower(trim((string)($GLOBALS['emp_type'] ?? '')));
+        if ($currentEmpType !== 'manager' || $currentUserType === 'employee') {
+            throw new Exception('Only manager users can upload this payroll Excel file.');
+        }
+
+        if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+            throw new Exception('Missing request number or valid month.');
+        }
+
+        if (!isset($_FILES['payroll_excel']) || !is_array($_FILES['payroll_excel'])) {
+            throw new Exception('Please choose an Excel file to upload.');
+        }
+
+        $upload = $_FILES['payroll_excel'];
+        if ((int)($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new Exception('Unable to upload file. Please try again.');
+        }
+
+        $originalName = trim((string)($upload['name'] ?? ''));
+        $tmpPath = (string)($upload['tmp_name'] ?? '');
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['xlsx', 'xls'], true)) {
+            throw new Exception('Only .xlsx or .xls files are allowed.');
+        }
+
+        $requestStmt = $pdo->prepare('SELECT payroll_month FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1');
+        $requestStmt->execute([':inv_no' => $requestInvNo]);
+        $requestRow = $requestStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$requestRow) {
+            throw new Exception('Payroll request not found.');
+        }
+
+        $requestMonth = trim((string)($requestRow['payroll_month'] ?? ''));
+        if ($requestMonth !== '' && $requestMonth !== $monthYear) {
+            throw new Exception('Upload month must match the payroll request month.');
+        }
+
+        // Validate hidden checkpoint code before accepting the upload.
+        $parsedUpload = parseManagerUploadedPayrollFileToRows($tmpPath, $monthYear);
+        $checkpointCode = strtoupper(trim((string)($parsedUpload['checkpoint_code'] ?? '')));
+        if ($checkpointCode === '') {
+            throw new Exception('The uploaded file is not valid.');
+        }
+
+        ensureManagerPayrollImportCheckpointRegistryTable($pdo);
+        $checkpointStmt = $pdo->prepare("SELECT used_at FROM payroll_import_checkpoint_registry WHERE checkpoint_code = :checkpoint_code LIMIT 1");
+        $checkpointStmt->execute([':checkpoint_code' => $checkpointCode]);
+        $checkpointRecord = $checkpointStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        if (!$checkpointRecord) {
+            throw new Exception('The uploaded file is not valid.');
+        }
+        if (!empty($checkpointRecord['used_at'])) {
+            throw new Exception("This file is already uploaded, so you can't upload it again.");
+        }
+
+        $existingMetaForCheckpoint = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+        $existingUploadsForCheckpoint = isset($existingMetaForCheckpoint['uploads']) && is_array($existingMetaForCheckpoint['uploads'])
+            ? $existingMetaForCheckpoint['uploads']
+            : [];
+        foreach ($existingUploadsForCheckpoint as $existingUpload) {
+            if (!is_array($existingUpload)) {
+                continue;
+            }
+
+            $existingCheckpoint = strtoupper(trim((string)($existingUpload['checkpoint_code'] ?? '')));
+            if ($existingCheckpoint !== '' && $existingCheckpoint === $checkpointCode) {
+                throw new Exception("This file is already uploaded, so you can't upload it again.");
+            }
+        }
+
+        $storageDir = getManagerPayrollUploadStorageDir();
+        if (!is_dir($storageDir) && !@mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
+            throw new Exception('Unable to prepare upload storage directory.');
+        }
+
+        $safeKey = normalizeManagerPayrollUploadKey($requestInvNo, $monthYear);
+        $storedName = $safeKey . '__' . date('Ymd_His') . '__' . bin2hex(random_bytes(4)) . '.' . $extension;
+        $storedPath = $storageDir . DIRECTORY_SEPARATOR . $storedName;
+
+        if (!@move_uploaded_file($tmpPath, $storedPath)) {
+            throw new Exception('Failed to save uploaded file on server.');
+        }
+
+        $uploaderNameStmt = $pdo->prepare('SELECT name FROM employees WHERE emp_id = :emp_id LIMIT 1');
+        $uploaderNameStmt->execute([':emp_id' => $currentUserId]);
+        $uploaderName = (string)($uploaderNameStmt->fetchColumn() ?: $currentUserId);
+        if ($uploaderName !== '' && function_exists('parseName')) {
+            $parsedUploaderName = trim((string)parseName($uploaderName, 'FIRST_LAST'));
+            if ($parsedUploaderName !== '') {
+                $uploaderName = $parsedUploaderName;
+            }
+        }
+
+        $existingMeta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+        $fileId = buildManagerPayrollUploadFileId($storedName, date('Y-m-d H:i:s'));
+        $newUpload = [
+            'file_id' => $fileId,
+            'request_inv_no' => $requestInvNo,
+            'month' => $monthYear,
+            'checkpoint_code' => $checkpointCode,
+            'original_name' => $originalName,
+            'stored_name' => $storedName,
+            'uploaded_by' => $currentUserId,
+            'uploaded_by_name' => $uploaderName,
+            'uploaded_at' => date('Y-m-d H:i:s'),
+            'reviewed_by' => '',
+            'reviewed_by_name' => '',
+            'reviewed_at' => '',
+            'review_note' => ''
+        ];
+
+        $existingMeta['uploads'][] = $newUpload;
+        $meta = normalizeManagerPayrollUploadMeta($existingMeta, $requestInvNo, $monthYear);
+        saveManagerPayrollUploadMeta($requestInvNo, $monthYear, $meta);
+
+        if (function_exists('create_and_show_notification')) {
+            $hrStmt = $pdo->prepare("SELECT DISTINCT emp_id FROM admin_login WHERE LOWER(TRIM(COALESCE(user_type, ''))) = 'hr_payroll'");
+            $hrStmt->execute();
+            foreach ($hrStmt->fetchAll(PDO::FETCH_COLUMN) as $hrEmpId) {
+                $hrEmpId = trim((string)$hrEmpId);
+                if ($hrEmpId === '') {
+                    continue;
+                }
+                create_and_show_notification(
+                    $conDB,
+                    $hrEmpId,
+                    'Manager Payroll Excel Uploaded',
+                    'Manager uploaded payroll Excel for ' . $monthYear . ' (' . $requestInvNo . '). Please review and import.',
+                    'payroll_checklist_report.php?month=' . urlencode($monthYear) . '&request_inv_no=' . urlencode($requestInvNo),
+                    'info'
+                );
+            }
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Payroll Excel uploaded successfully and sent to HR Payroll for review.',
+            'meta' => $meta
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function getManagerUploadedPayrollExcelRows(PDO $pdo, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+    $fileId = trim((string)($_POST['file_id'] ?? ''));
+
+    try {
+        $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        if ($currentUserType !== 'hr_payroll') {
+            throw new Exception('Only HR Payroll can review manager uploaded payroll Excel.');
+        }
+
+        if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+            throw new Exception('Missing request number or valid month.');
+        }
+
+        $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+        $uploads = isset($meta['uploads']) && is_array($meta['uploads']) ? $meta['uploads'] : [];
+        if (empty($uploads)) {
+            throw new Exception('No manager uploaded payroll Excel found for this request and month.');
+        }
+
+        $selectedUpload = [];
+        if ($fileId !== '') {
+            $found = findManagerPayrollUploadByFileId($meta, $fileId);
+            $selectedUpload = $found['upload'];
+            if (empty($selectedUpload)) {
+                throw new Exception('Selected manager uploaded file was not found.');
+            }
+        } else {
+            $selectedUpload = $uploads[0];
+        }
+
+        $filePath = getManagerPayrollUploadStorageDir() . DIRECTORY_SEPARATOR . basename((string)($selectedUpload['stored_name'] ?? ''));
+        if (!is_file($filePath)) {
+            throw new Exception('Uploaded file no longer exists on server.');
+        }
+
+        $parsed = parseManagerUploadedPayrollFileToRows($filePath, $monthYear);
+        $rows = isset($parsed['rows']) && is_array($parsed['rows']) ? $parsed['rows'] : [];
+        if (empty($rows)) {
+            throw new Exception('Uploaded file contains no importable rows in Benefits Import or Deductions Import sheets.');
+        }
+
+        $checkpointCode = strtoupper(trim((string)($parsed['checkpoint_code'] ?? '')));
+        if ($checkpointCode === '') {
+            throw new Exception('The uploaded file is not valid.');
+        }
+
+        ensureManagerPayrollImportCheckpointRegistryTable($pdo);
+        $checkpointStmt = $pdo->prepare("SELECT used_at FROM payroll_import_checkpoint_registry WHERE checkpoint_code = :checkpoint_code LIMIT 1");
+        $checkpointStmt->execute([':checkpoint_code' => $checkpointCode]);
+        $checkpointRecord = $checkpointStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        if (!$checkpointRecord) {
+            throw new Exception('The uploaded file is not valid.');
+        }
+        if (!empty($checkpointRecord['used_at'])) {
+            throw new Exception("This file is already uploaded, so you can't upload it again.");
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Manager uploaded file is ready for review.',
+            'meta' => $selectedUpload,
+            'checkpoint_code' => $checkpointCode,
+            'rows' => $rows
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+
+    try {
+        $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        if ($currentUserType !== 'hr_payroll') {
+            throw new Exception('Only HR Payroll can review manager uploaded payroll Excel.');
+        }
+
+        if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+            throw new Exception('Missing request number or valid month.');
+        }
+
+        $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+        $uploads = isset($meta['uploads']) && is_array($meta['uploads']) ? $meta['uploads'] : [];
+        if (empty($uploads)) {
+            throw new Exception('No manager uploaded payroll Excel found for this request and month.');
+        }
+
+        $storageDir = getManagerPayrollUploadStorageDir();
+        $files = [];
+        foreach ($uploads as $upload) {
+            if (!is_array($upload)) {
+                continue;
+            }
+
+            $storedName = trim((string)($upload['stored_name'] ?? ''));
+            if ($storedName === '') {
+                continue;
+            }
+
+            $originalName = trim((string)($upload['original_name'] ?? $storedName));
+            $uploadedByNameRaw = trim((string)($upload['uploaded_by_name'] ?? ''));
+            $uploadedByNameDisplay = $uploadedByNameRaw;
+            if ($uploadedByNameDisplay !== '' && function_exists('parseName')) {
+                $parsedName = trim((string)parseName($uploadedByNameDisplay, 'FIRST_LAST'));
+                if ($parsedName !== '') {
+                    $uploadedByNameDisplay = $parsedName;
+                }
+            }
+
+            $files[] = [
+                'file_id' => trim((string)($upload['file_id'] ?? '')),
+                'original_name' => $originalName,
+                'company_name' => extractManagerPayrollCompanyNameFromFileName($originalName),
+                'stored_name' => $storedName,
+                'uploaded_by' => trim((string)($upload['uploaded_by'] ?? '')),
+                'uploaded_by_name' => $uploadedByNameDisplay,
+                'uploaded_at' => trim((string)($upload['uploaded_at'] ?? '')),
+                'reviewed_by' => trim((string)($upload['reviewed_by'] ?? '')),
+                'reviewed_by_name' => trim((string)($upload['reviewed_by_name'] ?? '')),
+                'reviewed_at' => trim((string)($upload['reviewed_at'] ?? '')),
+                'review_note' => trim((string)($upload['review_note'] ?? '')),
+                'is_available' => is_file($storageDir . DIRECTORY_SEPARATOR . basename($storedName))
+            ];
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'files' => $files
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+    $fileId = trim((string)($_POST['file_id'] ?? ''));
+    $reviewNote = trim((string)($_POST['review_note'] ?? ''));
+
+    try {
+        $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        if ($currentUserType !== 'hr_payroll') {
+            throw new Exception('Only HR Payroll can update manager upload review records.');
+        }
+
+        if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear) || $fileId === '') {
+            throw new Exception('Missing file selection, request number, or valid month.');
+        }
+
+        $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+        $found = findManagerPayrollUploadByFileId($meta, $fileId);
+        if ($found['index'] < 0 || empty($found['upload'])) {
+            throw new Exception('Selected manager uploaded file was not found.');
+        }
+
+        $reviewerNameStmt = $pdo->prepare('SELECT name FROM employees WHERE emp_id = :emp_id LIMIT 1');
+        $reviewerNameStmt->execute([':emp_id' => $currentUserId]);
+        $reviewerName = (string)($reviewerNameStmt->fetchColumn() ?: $currentUserId);
+
+        $meta['uploads'][$found['index']]['reviewed_by'] = $currentUserId;
+        $meta['uploads'][$found['index']]['reviewed_by_name'] = $reviewerName;
+        $meta['uploads'][$found['index']]['reviewed_at'] = date('Y-m-d H:i:s');
+        $meta['uploads'][$found['index']]['review_note'] = $reviewNote !== '' ? $reviewNote : 'Reviewed by HR Payroll and imported into payroll.';
+
+        saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Review record updated successfully.',
+            'meta' => $meta['uploads'][$found['index']]
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
 function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId): void
 {
     $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
@@ -1762,6 +2451,8 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $mainSheet = $spreadsheet->getActiveSheet();
             $mainSheet->setTitle('Payroll Report');
 
+            $checkpointCode = issueManagerPayrollImportCheckpoint($pdo, $monthValue, $currentUserId);
+
             $benefitsSheet = $spreadsheet->createSheet();
             $benefitsSheet->setTitle('Benefits Import');
 
@@ -1770,6 +2461,9 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
 
             $typeListSheet = $spreadsheet->createSheet();
             $typeListSheet->setTitle('__PAYROLL_IMPORT_TYPE_LISTS');
+
+            $metaSheet = $spreadsheet->createSheet();
+            $metaSheet->setTitle('__PAYROLL_IMPORT_META');
 
             $mainHeaders = ['#', 'Emp ID', 'Employee Name', 'Department', 'Basic Salary', 'Benefits', 'Benefits Reason', 'Deductions', 'Deduction Reason', 'Net Salary', 'Status'];
             $mainSheet->fromArray($mainHeaders, null, 'A1');
@@ -1806,6 +2500,8 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $typeListSheet->fromArray(['overtime_total', 'daily_deduction'], null, 'A4');
             $typeListSheet->fromArray(['overtime_basic', ''], null, 'A5');
 
+            $metaSheet->fromArray([$checkpointCode, $monthValue], null, 'A1');
+
             $benefitTypeValidation = new \PhpOffice\PhpSpreadsheet\Cell\DataValidation();
             $benefitTypeValidation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
             $benefitTypeValidation->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
@@ -1813,7 +2509,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $benefitTypeValidation->setShowInputMessage(true);
             $benefitTypeValidation->setShowErrorMessage(true);
             $benefitTypeValidation->setShowDropDown(true);
-            $benefitTypeValidation->setFormula1("='__PAYROLL_IMPORT_TYPE_LISTS'!$A$2:$A$5");
+            $benefitTypeValidation->setFormula1('"fixed,by_hours,overtime_total,overtime_basic"');
 
             $deductionTypeValidation = new \PhpOffice\PhpSpreadsheet\Cell\DataValidation();
             $deductionTypeValidation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
@@ -1822,7 +2518,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $deductionTypeValidation->setShowInputMessage(true);
             $deductionTypeValidation->setShowErrorMessage(true);
             $deductionTypeValidation->setShowDropDown(true);
-            $deductionTypeValidation->setFormula1("='__PAYROLL_IMPORT_TYPE_LISTS'!$B$2:$B$4");
+            $deductionTypeValidation->setFormula1('"fixed,hourly_deduction,daily_deduction"');
 
             for ($validationRow = 2; $validationRow <= 5000; $validationRow++) {
                 $benefitsSheet->getCell('B' . $validationRow)->setDataValidation(clone $benefitTypeValidation);
@@ -1830,6 +2526,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             }
 
             $typeListSheet->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
+            $metaSheet->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
 
             $mainRowIndex = 2;
             $benefitRowIndex = 3;
@@ -2015,12 +2712,23 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $requestUrl = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com')
                 . '/payroll_checklist_report.php?month=' . urlencode($monthValue)
                 . '&request_inv_no=' . urlencode($requestInvNo);
+            $importantNoteTitle = 'Important Message';
+            $importantNoteText = 'For company ' . (string)$company['comp_name'] . ' and month ' . $monthValue . ', when entering Benefits and Deductions in the attached file, all values must strictly follow BioTime machine records. This file will be rechecked again to make sure there is no discrepancy, so please ensure every entered value is accurate.';
+            $importantNoteArabicText = 'بالنسبة لشركة ' . (string)$company['comp_name'] . ' ولشهر ' . $monthValue . '، عند إدخال قيم البدلات والاستقطاعات في الملف المرفق، يجب أن تتوافق جميع القيم بشكل صارم مع سجلات جهاز BioTime. سيتم إعادة التحقق من هذا الملف مرة أخرى للتأكد من عدم وجود أي اختلافات، لذا يرجى التأكد من دقة كل قيمة يتم إدخالها.';
             $emailMessage = 'Please review the attached payroll report for company ' . (string)$company['comp_name']
                 . ' (' . count($rows) . ' employees) for month ' . $monthValue . '.';
             $emailMessageHtml = '<div style="margin:0; color:#e0e0e0; line-height:1.7;">'
                 . htmlspecialchars($emailMessage, ENT_QUOTES, 'UTF-8')
                 . '<br><br><strong>Request ID:</strong> ' . htmlspecialchars($requestInvNo, ENT_QUOTES, 'UTF-8')
                 . '<br><strong>Total Net Salary:</strong> SAR ' . number_format($totalNetSalary, 2)
+                . '<div style="margin-top:14px; padding:10px 12px; border:1px solid #ff4d4f; border-radius:6px; color:#ff4d4f; font-weight:700; background:#fff5f5;">'
+                . htmlspecialchars($importantNoteTitle, ENT_QUOTES, 'UTF-8')
+                . ': '
+                . htmlspecialchars($importantNoteText, ENT_QUOTES, 'UTF-8')
+                . '<br><span dir="rtl" style="display:inline-block; margin-top:6px;">'
+                . htmlspecialchars('رسالة مهمة: ' . $importantNoteArabicText, ENT_QUOTES, 'UTF-8')
+                . '</span>'
+                . '</div>'
                 . '</div>';
 
             $emailSent = sendPayrollEmailWithAttachment(
@@ -2045,7 +2753,12 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             );
 
             if (!$emailSent) {
-                throw new Exception('Failed to send email. Please verify SMTP settings.');
+                $mailError = trim((string)($GLOBALS['payroll_company_report_mail_error'] ?? ''));
+                if ($mailError === '') {
+                    $mailError = 'Failed to send email. Please verify SMTP settings.';
+                }
+
+                throw new Exception($mailError);
             }
 
             $dispatchInsert->execute([
@@ -2081,15 +2794,20 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
 
 function sendPayrollEmailWithAttachment($conDB, string $toEmail, string $toName, string $subject, array $templateData, string $attachmentPath, string $attachmentName): bool
 {
+    $GLOBALS['payroll_company_report_mail_error'] = '';
+
     if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+        $GLOBALS['payroll_company_report_mail_error'] = 'Email library is not available on the server.';
         return false;
     }
 
     if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+        $GLOBALS['payroll_company_report_mail_error'] = 'Selected manager email address is invalid.';
         return false;
     }
 
     if (!file_exists($attachmentPath)) {
+        $GLOBALS['payroll_company_report_mail_error'] = 'Payroll attachment file was not generated.';
         return false;
     }
 
@@ -2102,6 +2820,7 @@ function sendPayrollEmailWithAttachment($conDB, string $toEmail, string $toName,
     $smtpSecure = strtolower((string)get_setting($conDB, 'smtp_encryption'));
 
     if (empty($smtpHost) || empty($smtpPort) || empty($smtpUser) || empty($smtpPass) || empty($smtpFromEmail)) {
+        $GLOBALS['payroll_company_report_mail_error'] = 'SMTP settings are incomplete. Please verify smtp_host, smtp_port, smtp_user, smtp_pass, and from_email.';
         return false;
     }
 
@@ -2146,7 +2865,13 @@ function sendPayrollEmailWithAttachment($conDB, string $toEmail, string $toName,
         $mail->send();
         return true;
     } catch (Exception $e) {
-        error_log('PAYROLL_COMPANY_REPORT_EMAIL_ERROR: ' . $e->getMessage());
+        $mailInfo = '';
+        if (isset($mail) && is_object($mail) && !empty($mail->ErrorInfo)) {
+            $mailInfo = ' | PHPMailer: ' . $mail->ErrorInfo;
+        }
+
+        $GLOBALS['payroll_company_report_mail_error'] = trim('Failed to send email. ' . $e->getMessage() . $mailInfo);
+        error_log('PAYROLL_COMPANY_REPORT_EMAIL_ERROR: ' . $GLOBALS['payroll_company_report_mail_error']);
         return false;
     }
 }

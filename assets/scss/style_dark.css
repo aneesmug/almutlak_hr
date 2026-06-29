@@ -1892,7 +1892,6 @@ code {
 ==================== */
 .ribbon-box {
   position: relative;
-  /* Ribbon two */
 }
 .ribbon-box .ribbon {
   position: relative;
@@ -1974,6 +1973,9 @@ code {
 }
 .ribbon-box .ribbon-dark:before {
   border-color: rgb(28, 33.1428571429, 40) transparent transparent;
+}
+.ribbon-box {
+  /* Ribbon two */
 }
 .ribbon-box .ribbon-two {
   position: absolute;

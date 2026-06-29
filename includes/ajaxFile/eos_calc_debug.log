@@ -1,0 +1,76 @@
+[2026-06-11 10:23:31] ========== NEW REQUEST ==========
+[2026-06-11 10:23:31] Request Method: GET
+[2026-06-11 10:23:31] Request URI: /includes/ajaxFile/ajax_eos_calculator_v2.php
+[2026-06-11 10:23:31] Content-Type: application/x-www-form-urlencoded
+[2026-06-11 10:23:31] Final merged request data: []
+[2026-06-11 10:23:31] ERROR: No request data found!
+[2026-06-11 10:23:42] ========== NEW REQUEST ==========
+[2026-06-11 10:23:42] Request Method: GET
+[2026-06-11 10:23:42] Request URI: /includes/ajaxFile/ajax_eos_calculator_v2.php
+[2026-06-11 10:23:42] Content-Type: application/x-www-form-urlencoded
+[2026-06-11 10:23:42] Final merged request data: []
+[2026-06-11 10:23:42] ERROR: No request data found!
+[2026-06-11 10:23:54] ========== NEW REQUEST ==========
+[2026-06-11 10:23:54] Request Method: GET
+[2026-06-11 10:23:54] Request URI: /includes/ajaxFile/ajax_eos_calculator_v2.php?contract_type=2&eos_reason=1&end_date=2026-06-11&joining_date=2023-10-25&salary=2487.5&anul_vac_days=54.43
+[2026-06-11 10:23:54] Content-Type: none
+[2026-06-11 10:23:54] Found GET params: {"contract_type":"2","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43"}
+[2026-06-11 10:23:54] Final merged request data: {"contract_type":"2","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43"}
+[2026-06-11 10:23:54] Parsed inputs: contractType=2, reason=1, endDate=2026-06-11, joiningDate=2023-10-25, salary=2487.5, vacDays=54.43
+[2026-06-11 10:23:54] Calling Qiwa API: https://knowledge-center-be.qiwa.sa/api/v1/end-of-service-lookup?StartDate=2023-10-25&EndDate=2026-06-11&Salary=2487.5&ContractTypeCode=2&ContractEndReasonCode=1
+[2026-06-11 10:23:54] Qiwa API response code: 200, error: none
+[2026-06-11 10:23:54] Qiwa API response preview: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:23:54] API data decoded: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:23:54] Extracted RewardAmount: 1091.74
+[2026-06-11 10:23:54] Success: EOS=1091.74, Vacation=4513.1541666667, Net=5604.8941666667
+[2026-06-11 10:23:54] Response sent: {"success":true,"eos_amount":"1091.74","vacation_salary":"4513.15","net_payment":"5604.89","message":"Calculation successful."}
+[2026-06-11 10:23:54] ========== END REQUEST ==========
+
+[2026-06-11 10:24:21] ========== NEW REQUEST ==========
+[2026-06-11 10:24:21] Request Method: GET
+[2026-06-11 10:24:21] Request URI: /includes/ajaxFile/ajax_eos_calculator_v2.php?contract_type=2&eos_reason=1&end_date=2026-06-11&joining_date=2023-10-25&salary=2487.5&anul_vac_days=54.43
+[2026-06-11 10:24:21] Content-Type: none
+[2026-06-11 10:24:21] Found GET params: {"contract_type":"2","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43"}
+[2026-06-11 10:24:21] Final merged request data: {"contract_type":"2","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43"}
+[2026-06-11 10:24:21] Parsed inputs: contractType=2, reason=1, endDate=2026-06-11, joiningDate=2023-10-25, salary=2487.5, vacDays=54.43
+[2026-06-11 10:24:21] Calling Qiwa API: https://knowledge-center-be.qiwa.sa/api/v1/end-of-service-lookup?StartDate=2023-10-25&EndDate=2026-06-11&Salary=2487.5&ContractTypeCode=2&ContractEndReasonCode=1
+[2026-06-11 10:24:21] Qiwa API response code: 200, error: none
+[2026-06-11 10:24:21] Qiwa API response preview: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:24:21] API data decoded: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:24:21] Extracted RewardAmount: 1091.74
+[2026-06-11 10:24:21] Success: EOS=1091.74, Vacation=4513.1541666667, Net=5604.8941666667
+[2026-06-11 10:24:21] Response sent: {"success":true,"eos_amount":"1091.74","vacation_salary":"4513.15","net_payment":"5604.89","message":"Calculation successful."}
+[2026-06-11 10:24:21] ========== END REQUEST ==========
+
+[2026-06-11 10:26:45] ========== NEW REQUEST ==========
+[2026-06-11 10:26:45] Request Method: GET
+[2026-06-11 10:26:45] Request URI: /includes/ajaxFile/ajax_eos_calculator_v2.php?contract_type=1&eos_reason=1&end_date=2026-06-11&joining_date=2023-10-25&salary=2487.5&anul_vac_days=54.43
+[2026-06-11 10:26:45] Content-Type: none
+[2026-06-11 10:26:45] Found GET params: {"contract_type":"1","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43"}
+[2026-06-11 10:26:45] Final merged request data: {"contract_type":"1","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43"}
+[2026-06-11 10:26:45] Parsed inputs: contractType=1, reason=1, endDate=2026-06-11, joiningDate=2023-10-25, salary=2487.5, vacDays=54.43
+[2026-06-11 10:26:45] Calling Qiwa API: https://knowledge-center-be.qiwa.sa/api/v1/end-of-service-lookup?StartDate=2023-10-25&EndDate=2026-06-11&Salary=2487.5&ContractTypeCode=1&ContractEndReasonCode=1
+[2026-06-11 10:26:46] Qiwa API response code: 200, error: none
+[2026-06-11 10:26:46] Qiwa API response preview: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:26:46] API data decoded: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:26:46] Extracted RewardAmount: 1091.74
+[2026-06-11 10:26:46] Success: EOS=1091.74, Vacation=4513.1541666667, Net=5604.8941666667
+[2026-06-11 10:26:46] Response sent: {"success":true,"eos_amount":"1091.74","vacation_salary":"4513.15","net_payment":"5604.89","message":"Calculation successful."}
+[2026-06-11 10:26:46] ========== END REQUEST ==========
+
+[2026-06-11 10:26:55] ========== NEW REQUEST ==========
+[2026-06-11 10:26:55] Request Method: GET
+[2026-06-11 10:26:55] Request URI: /includes/ajaxFile/ajax_eos_calculator_v2.php?contract_type=1&eos_reason=1&end_date=2026-06-11&joining_date=2023-10-25&salary=2487.5&anul_vac_days=54.43&calculated_housing=312.5&housing_allowance=0
+[2026-06-11 10:26:55] Content-Type: none
+[2026-06-11 10:26:55] Found GET params: {"contract_type":"1","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43","calculated_housing":"312.5","housing_allowance":"0"}
+[2026-06-11 10:26:55] Final merged request data: {"contract_type":"1","eos_reason":"1","end_date":"2026-06-11","joining_date":"2023-10-25","salary":"2487.5","anul_vac_days":"54.43","calculated_housing":"312.5","housing_allowance":"0"}
+[2026-06-11 10:26:55] Parsed inputs: contractType=1, reason=1, endDate=2026-06-11, joiningDate=2023-10-25, salary=2487.5, vacDays=54.43
+[2026-06-11 10:26:55] Calling Qiwa API: https://knowledge-center-be.qiwa.sa/api/v1/end-of-service-lookup?StartDate=2023-10-25&EndDate=2026-06-11&Salary=2487.5&ContractTypeCode=1&ContractEndReasonCode=1
+[2026-06-11 10:26:56] Qiwa API response code: 200, error: none
+[2026-06-11 10:26:56] Qiwa API response preview: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:26:56] API data decoded: {"StartDate":"2023-10-25","EndDate":"2026-06-11","Salary":"2487.5","RewardAmount":"1091.74","Duration":"years:2, months:7, days:18"}
+[2026-06-11 10:26:56] Extracted RewardAmount: 1091.74
+[2026-06-11 10:26:56] Success: EOS=1091.74, Vacation=4513.1541666667, Net=5604.8941666667
+[2026-06-11 10:26:56] Response sent: {"success":true,"eos_amount":"1091.74","vacation_salary":"4513.15","net_payment":"5604.89","message":"Calculation successful."}
+[2026-06-11 10:26:56] ========== END REQUEST ==========
+

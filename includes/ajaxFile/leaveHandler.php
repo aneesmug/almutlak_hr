@@ -3701,6 +3701,25 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
         $vac_type = $vacation_data['vac_type'] ?? '';
         $fly_type = $vacation_data['fly_type'] ?? '';
         $vacation_salary_type = $vacation_data['vacation_salary_type'] ?? 'payroll';
+        $approved_days = (float)($vacation_data['vacdays'] ?? 0);
+
+        // Fallback for legacy/incomplete rows where vacdays is zero but date range exists.
+        if (
+            $approved_days <= 0 &&
+            !empty($vacation_data['start_date']) &&
+            !empty($vacation_data['return_date']) &&
+            strtolower(trim((string)$vac_type)) !== 'encashed'
+        ) {
+            try {
+                $start_date_obj = new DateTime($vacation_data['start_date']);
+                $return_date_obj = new DateTime($vacation_data['return_date']);
+                if ($return_date_obj >= $start_date_obj) {
+                    $approved_days = (float)$start_date_obj->diff($return_date_obj)->days + 1;
+                }
+            } catch (Exception $e) {
+                // Keep original approved_days when parsing fails.
+            }
+        }
         
         $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
         $is_emergency = ($fly_type === 'emergency');
@@ -3709,14 +3728,14 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             $vac_type,
             $fly_type,
             $vacation_data['country'] ?? 0,
-            $vacation_data['vacdays'] ?? 0,
+            $approved_days,
             $vacation_data['is_deductible'] ?? 0
         );
         $is_settlement_payable_vacation = isSettlementPayableVacation(
             $vac_type,
             $fly_type,
             $vacation_data['country'] ?? 0,
-            $vacation_data['vacdays'] ?? 0,
+            $approved_days,
             $vacation_data['is_deductible'] ?? 0
         );
         
@@ -3769,19 +3788,24 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
             $hourly_rate_deduction = round(($daily_rate / 8), 2);
             
-            $approved_days = (float)($vacation_data['vacdays'] ?? 0);
-            
             // Calculate working days salary for vacations removed from active payroll.
             if ($is_settlement_payable_vacation && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
-                // Business rule: exclude the start day from working-days salary (working days BEFORE departure)
-                // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
-                $working_days = (int)$start_date_obj->format('d') - 1;
-                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                $start_day = (int)$start_date_obj->format('d');
+
+                // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
+                // Special case: if vacation starts on day 1, employee completed the previous month in full.
+                if ($start_day === 1) {
                     $working_days_salary = round($total_monthly_salary);
                 } else {
-                    $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
-                    $working_days_salary = round($working_days_daily_rate_display * $working_days);
+                    // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
+                    $working_days = $start_day - 1;
+                    if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                        $working_days_salary = round($total_monthly_salary);
+                    } else {
+                        $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
+                        $working_days_salary = round($working_days_daily_rate_display * $working_days);
+                    }
                 }
             }
             
@@ -3838,6 +3862,9 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
         echo json_encode([
             'status' => 200,
             'vac_type' => $vac_type,
+            'vacdays' => $approved_days,
+            'start_date' => $vacation_data['start_date'] ?? '',
+            'return_date' => $vacation_data['return_date'] ?? '',
             'total_payable' => round($total_payable, 0),
             'working_days_salary' => round($working_days_salary, 0),
             'vacation_salary' => round($vacation_salary, 0),

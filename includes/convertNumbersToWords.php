@@ -3,7 +3,7 @@
 function getSaudiCurrency($number)
 // function getSaudiCurrency(float $number)
 {
-    $decimal = round($number - ($no = floor($number)), 2) * 100;
+    $decimal = (int) round((round($number, 2) - ($no = floor($number))) * 100);
     $hundred = null;
     $digits_length = strlen($no);
     $i = 0;
@@ -30,7 +30,15 @@ function getSaudiCurrency($number)
         } else $str[] = null;
     }
     $Riyals = implode('', array_reverse($str));
-    $Halala = ($decimal > 0) ? "and " . ($words[$decimal / 10] . " " . $words[$decimal % 10]) . ' halala' : '';
+
+    $halalaWords = '';
+    if ($decimal > 0) {
+        $halalaWords = ($decimal < 21)
+            ? $words[$decimal]
+            : trim($words[(int) floor($decimal / 10) * 10] . ' ' . $words[$decimal % 10]);
+    }
+
+    $Halala = $halalaWords ? "and {$halalaWords} halala" : '';
     return ($Riyals ? $Riyals . 'riyals ' : '') . $Halala;
 }
 

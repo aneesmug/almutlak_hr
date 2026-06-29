@@ -126,10 +126,33 @@ if (mysqli_num_rows($query) == 1) {
     $working_days_divisor_display = 30;
     $working_days_daily_rate_display = 0;
     $is_full_working_month = false;
+    $salaries_earned = 1;
     
     // Get approved vacation days from the request (vacdays = approved days)
     $approved_days = (float)($request['vacdays'] ?? 0);
     $applied_days = $approved_days; // Use approved days for calculations
+
+    // Fallback for legacy/incomplete rows where vacdays is zero but date range exists.
+    // This ensures full-month vacations (1st to last day) are still paid correctly.
+    if (
+        $approved_days <= 0 &&
+        !empty($request['start_date']) &&
+        !empty($request['return_date']) &&
+        (($request['vac_type'] ?? '') !== 'Encashed')
+    ) {
+        try {
+            $start_date_obj = new DateTime($request['start_date']);
+            $return_date_obj = new DateTime($request['return_date']);
+            if ($return_date_obj >= $start_date_obj) {
+                $date_interval = $start_date_obj->diff($return_date_obj);
+                $derived_days = (float)$date_interval->days + 1; // inclusive range
+                $approved_days = $derived_days;
+                $applied_days = $derived_days;
+            }
+        } catch (Exception $e) {
+            // Keep original values if date parsing fails.
+        }
+    }
     
     // Get payroll overtime/deduction values
     $overtime_hours = (float)($request['overtime_hours'] ?? 0);
@@ -148,7 +171,9 @@ if (mysqli_num_rows($query) == 1) {
     
     // === PAYROLL LOGIC RULES ===
     // 1. Fly + Annual: Employee EXCLUDED from payroll → Show vacation salary (if vacation_salary_type = payroll)
-    // 2. Local Vacation + Annual: Employee ACTIVE in payroll → NO vacation salary, only deduct days
+    // 2. Local Vacation + Annual:
+    //    - is_deductible = 0: Employee ACTIVE in payroll → NO vacation salary, only deduct days
+    //    - is_deductible = 1 (rule match): Removed from payroll → payable vacation salary is shown
     // 3. Encashment: Show ONLY encashment amount (no working days salary)
     // 4. Emergency: Not payable
     // 5. Other leave types: Not payable
@@ -175,8 +200,9 @@ if (mysqli_num_rows($query) == 1) {
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
     $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
     
-    // Determine if this vacation gets any payment calculation
-    $calculate_payments = !$is_non_payable_leave && !$is_emergency && !$is_local_annual;
+    // Determine if this vacation gets any payment calculation.
+    // Local Annual can be payable only when it is removed from payroll by rule.
+    $calculate_payments = !$is_non_payable_leave && !$is_emergency && (!$is_local_annual || $is_local_annual_removed_from_payroll);
     
     // Base payroll divisor stays fixed at 30 days for all calculations except Working Days Salary
     $days_in_month = 30;
@@ -222,32 +248,49 @@ if (mysqli_num_rows($query) == 1) {
         // NOT for Encashment or Local Vacation + Annual
         if ($is_fly_annual && !empty($request['start_date'])) {
             $start_date_obj = new DateTime($request['start_date']);
-            // Business rule: exclude the start day from working-days salary (working days BEFORE departure)
-            // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
-            $working_days = (int)$start_date_obj->format('d') - 1;
+            $start_day = (int)$start_date_obj->format('d');
 
-            // New business rule for Working Days Salary only:
-            // 1) If worked days complete the current month (28/29/30/31), pay full monthly salary.
-            // 2) If worked days are less than full month, calculate using 30-day divisor.
-            if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+            // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
+            // Special case: if vacation starts on day 1, employee completed the previous month in full.
+            if ($start_day === 1) {
+                $previous_month_obj = clone $start_date_obj;
+                $previous_month_obj->modify('first day of previous month');
+                $previous_month_days = (int)$previous_month_obj->format('t');
+
+                $working_days = $previous_month_days;
+                $working_days_divisor_display = $previous_month_days;
+                $working_days_daily_rate_display = ($previous_month_days > 0)
+                    ? round($total_monthly_salary / $previous_month_days, 2)
+                    : 0;
                 $working_days_salary = round($total_monthly_salary);
-                $working_days_divisor_display = $working_days_month_days;
-                $working_days_daily_rate_display = $working_daily_rate;
                 $is_full_working_month = true;
             } else {
-                $working_days_divisor_display = 30;
-                $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
-                $working_days_salary = round($working_days_daily_rate_display * $working_days);
+                // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
+                $working_days = $start_day - 1;
+
+                // If worked days complete the current month (28/29/30/31), pay full monthly salary.
+                // Otherwise, calculate using the fixed 30-day payroll divisor.
+                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                    $working_days_salary = round($total_monthly_salary);
+                    $working_days_divisor_display = $working_days_month_days;
+                    $working_days_daily_rate_display = $working_daily_rate;
+                    $is_full_working_month = true;
+                } else {
+                    $working_days_divisor_display = 30;
+                    $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
+                    $working_days_salary = round($working_days_daily_rate_display * $working_days);
+                }
             }
         }
 
         // === VACATION SALARY ===
-        // Only for Fly + Annual AND vacation_salary_type = 'payroll'
-        // NOT for Local Vacation + Annual (stays in payroll)
+        // Only for payable payroll vacations:
+        // - Fly + Annual AND vacation_salary_type = 'payroll'
+        // - Local Vacation + Annual removed from payroll AND vacation_salary_type = 'payroll'
         // NOT for Encashment (handled separately)
         // IMPORTANT: Calculation is based on APPROVED DAYS (vacdays field)
         // Formula: (daily rate × vacation days) = (total_monthly_salary / 30) × approved_days
-        if ($is_fly_annual && $vacation_salary_type === 'payroll') {
+        if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
             // Calculate vacation salary as daily rate × vacation days
             $vacation_salary = round($daily_rate * $approved_days);
             
@@ -278,6 +321,10 @@ if (mysqli_num_rows($query) == 1) {
                 // For Fly + Annual: Apply GOSI on working days + vacation salary
                 $gosi_base = $working_days_salary + $vacation_salary;
                 $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 0);
+            } elseif ($is_local_annual_removed_from_payroll && $vacation_salary_type === 'payroll') {
+                // For Local Annual removed from payroll: apply GOSI on payable vacation salary
+                $gosi_base = $vacation_salary;
+                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 0);
             } elseif ($is_encashment) {
                 // For Encashment: GOSI calculated separately in encashment section
                 $gosi_deduction = 0;
@@ -296,11 +343,12 @@ if (mysqli_num_rows($query) == 1) {
     if ($is_encashment) {
         // Encashment: Total is handled in encashment section
         $total_payable = 0;
-    } elseif ($is_fly_annual) {
-        // Fly + Annual: Working days + vacation salary + ticket + permit + overtime + other earnings - deductions - GOSI
-        // $total_payable = ($working_days_salary + $vacation_salary) + $ticket_fee + $permit_fee + $overtime_amount - $deduction_amount - $gosi_deduction;
+    } elseif ($is_fly_annual || $is_local_annual_removed_from_payroll) {
+        // Payable vacations (Fly + Annual OR Local Annual removed from payroll):
+        // Working days component applies to Fly only.
         // $deduction_amount already includes $other_deductions from the calculation above
-        $total_payable = round(($working_days_salary + $vacation_salary)  + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
+        $working_component = $is_fly_annual ? $working_days_salary : 0;
+        $total_payable = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
         $total_payable = 0;
@@ -310,9 +358,15 @@ if (mysqli_num_rows($query) == 1) {
     // Fetch approval chain for this request
     $request_inv_no = $request['request_inv_no'] ?? '';
     $current_status = $request['current_status'] ?? 'pending_approval';
+    $is_cancelled_by_employee = ($current_status === 'cancelled');
     
     // Initialize approval chain array
     $approval_chain = [];
+
+    // Employee-cancelled requests have no active approval chain.
+    if ($is_cancelled_by_employee) {
+        $request_inv_no = '';
+    }
     
     // Only fetch chain if we have a request_inv_no (new system)
     if (!empty($request_inv_no)) {
@@ -459,6 +513,7 @@ if (mysqli_num_rows($query) == 1) {
             .timeline-item.approved .icon { background-color: var(--success-color); }
             .timeline-item.pending .icon { background-color: var(--warning-color); }
             .timeline-item.rejected .icon { background-color: var(--danger-color); }
+            .timeline-item.cancelled .icon { background-color: #495057; }
             .timeline-item.future .icon, .timeline-item .icon { background-color: #ced4da; }
             .timeline-item .status { font-weight: 600; line-height: 20px; font-size: 0.9rem; }
             
@@ -539,7 +594,7 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="detail-item"><span class="label"><?= __('start_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['start_date']) ? date('d M Y', strtotime($request['start_date'])) : null); ?></small></span></div>
                                         <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['return_date']) ? date('d M Y', strtotime($request['return_date'])) : null); ?></small></span></div>
                                         <?php endif; ?>
-                                        <div class="detail-item"><span class="label"><?= __('vacation_days') ?></span> <span class="value highlight"><small><?= display_or_na($request['vacdays'] ?? null); ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('vacation_days') ?></span> <span class="value highlight"><small><?= display_or_na($applied_days); ?> <?= __('days') ?></small></span></div>
                                         <?php 
                                         // Calculate flight days if both departure and arrival dates exist
                                         $flight_days = 0;
@@ -784,7 +839,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <h5 class="section-title"><i class="fa fa-user-minus"></i><?= __('payroll_information') ?? 'Payroll Information' ?></h5>
                                     <div class="alert alert-warning mb-0">
                                         <i class="fa fa-exclamation-circle"></i>
-                                        <strong><?= __('employee_removed_from_payroll') ?? 'Employee Removed from Active Payroll' ?></strong>
+                                        <strong><?= __('employee_removed_from_active_payroll') ?? 'Employee Removed from Active Payroll' ?></strong>
                                         <p class="mb-2 mt-2"><?= __('local_annual_saudi_long_leave_payroll_message') ?? 'This is a Local Annual vacation for a Saudi employee with more than 20 days. The employee is removed from active payroll for this period.' ?></p>
                                         <ul class="mb-0 pl-4">
                                             <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
@@ -811,11 +866,12 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php endif; ?>
                                 
-                                <?php if ($is_fly_annual && $vacation_salary_type === 'payroll'): ?>
+                                <?php if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll'): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?? 'Payment Details' ?></h5>
                                     <div class="payment-summary">
                                         <ul>
+                                            <?php if ($is_fly_annual): ?>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
@@ -827,6 +883,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 </div>
                                                 <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
                                             </li>
+                                            <?php endif; ?>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?><?php if ($salaries_earned > 1): ?> <span style="color: #28a745; font-weight: 700;">x<?= (int)$salaries_earned ?></span><?php endif; ?></span>
@@ -922,7 +979,16 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="report-section">
                                             <h5 class="section-title"><i class="fa fa-tasks"></i><?= __('approval_status') ?></h5>
                                             <div class="approval-timeline">
-                                                <?php if ($current_status == 'rejected'): ?>
+                                                <?php if ($is_cancelled_by_employee): ?>
+                                                    <div class="timeline-item cancelled">
+                                                        <div class="icon"><i class="fa fa-ban"></i></div>
+                                                        <span class="status ml-3"><strong><?= __('cancelled_by_employee') ?></strong></span>
+                                                    </div>
+                                                    <div class="alert alert-secondary mt-3 mb-0">
+                                                        <i class="fa fa-info-circle"></i>
+                                                        No active approvers. This request was cancelled by the employee.
+                                                    </div>
+                                                <?php elseif ($current_status == 'rejected'): ?>
                                                     <div class="timeline-item rejected">
                                                         <div class="icon"><i class="fa fa-times-circle"></i></div>
                                                         <span class="status ml-3"><strong><?= __('request_rejected') ?></strong></span>

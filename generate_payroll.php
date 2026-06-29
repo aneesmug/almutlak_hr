@@ -821,7 +821,14 @@
                                         </div>
 
                                         <!-- Table Section -->
-                                        <div class="table-responsive">
+                                        <div id="loadingIndicator" class="text-center py-4">
+                                            <div class="spinner-border text-primary" role="status"></div>
+                                            <div class="mt-2 text-muted"><?= __('loading') ?>...</div>
+                                        </div>
+
+                                        <div id="noDataMessage" class="alert alert-info text-center d-none" role="alert"></div>
+
+                                        <div id="employeeTableWrapper" class="table-responsive" style="display:none;">
                                             <table id="employeeTable" class="table table-striped table-hover align-middle w-100">
                                                 <thead class="table-light">
                                                     <tr>
@@ -1343,7 +1350,9 @@ function collectPayrollModalData(employee) {
         let name = '';
 
         if (calcType === 'hourly_deduction') {
-            hours = parseFloat(row.querySelector('.deduction-hours')?.value) || 0;
+            const enteredHours = parseFloat(row.querySelector('.deduction-hours')?.value) || 0;
+            const enteredMinutes = parseFloat(row.querySelector('.deduction-minutes')?.value) || 0;
+            hours = enteredHours + (enteredMinutes / 60);
             name = nameInput ? nameInput.value.trim() : __('hourly_deduction_default_name');
         } else if (calcType === 'daily_deduction') {
             days = parseFloat(row.querySelector('.deduction-days')?.value) || 0;
@@ -1410,14 +1419,27 @@ const buildDeductionsHtml = (deductions, payrollData) => {
         const calcType = d.calculation_type || 'fixed';
         const deductionName = d.name || d.deduction || '';
         const noteAmount = parseFloat(d.amount || d.note || 0).toFixed(2);
-        const hours = d.hours || '';
+        const rawHours = parseFloat(d.hours || 0);
+        const normalizedHours = Number.isFinite(rawHours) ? Math.max(rawHours, 0) : 0;
+        let wholeHours = Math.floor(normalizedHours);
+        let minutes = Math.round((normalizedHours - wholeHours) * 60);
+        if (minutes >= 60) {
+            wholeHours += 1;
+            minutes = 0;
+        }
+        const hours = calcType === 'hourly_deduction' ? wholeHours : '';
+        const deductionMinutes = calcType === 'hourly_deduction' ? minutes : '';
         const days = d.days || '';
         const isGosi = deductionName.toUpperCase() === 'GOSI';
         const isCalculated = calcType !== 'fixed';
         const isAmountReadonly = isGosi || isCalculated;
+        const deductionByTimeLabelRaw = __('deduction_by_time_option');
+        const deductionByTimeLabel = (!deductionByTimeLabelRaw || deductionByTimeLabelRaw === 'deduction_by_time_option')
+            ? (__('deduction_by_hour_option') || 'Deduction by Time')
+            : deductionByTimeLabelRaw;
         const options = `
             <option value="fixed" ${calcType === 'fixed' ? 'selected' : ''}>${__('fixed_amount_option')}</option>
-            <option value="hourly_deduction" ${calcType === 'hourly_deduction' ? 'selected' : ''}>${__('deduction_by_hour_option')}</option>
+            <option value="hourly_deduction" ${calcType === 'hourly_deduction' ? 'selected' : ''}>${deductionByTimeLabel}</option>
             <option value="daily_deduction" ${calcType === 'daily_deduction' ? 'selected' : ''}>${__('deduction_by_day_option')}</option>
         `;
         let nameColumnHtml;
@@ -1438,24 +1460,27 @@ const buildDeductionsHtml = (deductions, payrollData) => {
         }
         const periodSlotClass = isCalculated ? 'deduction-period-slot' : 'deduction-period-slot deduction-period-input-empty';
         const hoursStyle = calcType === 'hourly_deduction' ? '' : 'display: none;';
+        const minutesStyle = calcType === 'hourly_deduction' ? '' : 'display: none;';
         const daysStyle = calcType === 'daily_deduction' ? '' : 'display: none;';
         const unitStyle = isCalculated ? '' : 'display: none;';
-        const unitLabel = calcType === 'hourly_deduction' ? 'hrs' : 'days';
+        const unitLabel = calcType === 'hourly_deduction' ? `${__('time')}` : `${__('days')}`;
         return `
         <div class="deduction-row row mb-2 align-items-center g-3" data-deduction-id="${deductionId}">
             <div class="col-12 col-md-6">
                 ${nameColumnHtml}
             </div>
-            <div class="col-6 col-md-2 ${periodSlotClass}">
+            <div class="col-6 col-md-3 ${periodSlotClass}">
                 <div class="input-group input-group-sm">
-                    <input type="number" step="any" class="form-control form-control-sm deduction-hours" 
+                    <input type="text" step="any" class="form-control form-control-sm deduction-hours" 
                            placeholder="${__('hours_placeholder')}" value="${hours}" style="${hoursStyle}">
-                    <input type="number" step="any" class="form-control form-control-sm deduction-days" 
+                    <input type="text" step="1" min="0" class="form-control form-control-sm deduction-minutes" 
+placeholder="${__('minutes_placeholder') || 'Mins'}" value="${deductionMinutes}" style="${minutesStyle}">
+                    <input type="text" step="any" class="form-control form-control-sm deduction-days" 
                            placeholder="${__('days_placeholder')}" value="${days}" style="${daysStyle}">
-                    <span class="input-group-text bg-light deduction-period-unit" style="${unitStyle}">${unitLabel}</span>
+                    <span class="input-group-text bg-light deduction-period-unit rounded-left-0" style="${unitStyle}; font-size: 12px !important;">${unitLabel}</span>
                 </div>
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-2">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                     <input type="text" class="form-control deduction-amount" value="${noteAmount}" 
@@ -1552,14 +1577,14 @@ const calculateDeductionAmount = function() {
     const row = $(this).closest('.deduction-row');
     const deductionType = row.find('.deduction-type').val();
     const hoursInput = row.find('.deduction-hours');
+    const minutesInput = row.find('.deduction-minutes');
     const daysInput = row.find('.deduction-days');
     const amountInput = row.find('.deduction-amount');
     const basic = parseFloat(payroll.basic_salary || 0);
-    const housing = parseFloat(payroll.housing_allowance || 0);
     const food = parseFloat(payroll.food_allowance || 0);
     const totalGrossFromPayroll = parseFloat(payroll.total_gross_salary || 0);
     const totalGrossFromComponents = basic
-        + housing
+        + parseFloat(payroll.housing_allowance || 0)
         + food
         + parseFloat(payroll.transport_allowance || 0)
         + parseFloat(payroll.miscellaneous_allowance || 0)
@@ -1570,11 +1595,14 @@ const calculateDeductionAmount = function() {
         + parseFloat(payroll.guard_allowance || 0);
     if (deductionType === 'hourly_deduction' || deductionType === 'daily_deduction') {
         const totalGross = totalGrossFromPayroll > 0 ? totalGrossFromPayroll : totalGrossFromComponents;
-        const deductibleSalary = Math.max(totalGross - housing - food, 0);
+        const deductibleSalary = Math.max(totalGross - food, 0);
         const hourlyRate = deductibleSalary > 0 ? (deductibleSalary / 240) : 0;
         let hoursToDeduct = 0;
         if (deductionType === 'hourly_deduction') {
-            hoursToDeduct = parseFloat(hoursInput.val()) || 0;
+            const enteredHours = parseFloat(hoursInput.val()) || 0;
+            const enteredMinutes = parseFloat(minutesInput.val()) || 0;
+            const normalizedMinutes = Math.max(enteredMinutes, 0);
+            hoursToDeduct = enteredHours + (normalizedMinutes / 60);
         } else { // daily_deduction
             const daysToDeduct = parseFloat(daysInput.val()) || 0;
             hoursToDeduct = daysToDeduct * 8;
@@ -1734,9 +1762,11 @@ function initializeDataTable() {
 async function fetchEmployees() {
     const loadingIndicator = $('#loadingIndicator');
     const noDataMessage = $('#noDataMessage');
+    const tableWrapper = $('#employeeTableWrapper');
     const selectedMonth = $('#payrollMonth').val();
-    loadingIndicator.removeClass('hidden');
-    noDataMessage.addClass('hidden');
+    loadingIndicator.removeClass('d-none').show();
+    noDataMessage.addClass('d-none').text('');
+    tableWrapper.hide();
     try {
         // Ensure this path is correct for your server setup
         const response = await fetch(`./includes/api/get_employees.php?month=${selectedMonth}`);
@@ -1757,20 +1787,24 @@ async function fetchEmployees() {
             updateFeedbackFilterButtonVisibility();
             employeeTable.draw();
             updateMainSelectAllCheckbox();
+
+            if (allEmployeesData.length > 0) {
+                tableWrapper.show();
+            } else {
+                noDataMessage.removeClass('d-none').text(__('no_employee_data_available_for_month'));
+            }
         } else {
             showError('Error', data.message || 'Failed to load employee data.');
             employeeTable.clear().draw(); // Clear table on error
+            noDataMessage.removeClass('d-none').text(data.message || __('no_employee_data_available_for_month'));
         }
     } catch (error) {
         console.error('Error fetching employees:', error);
         showError('Network Error', `Error connecting to the server or parsing data: ${error.message}.`);
         employeeTable.clear().draw(); // Clear table on network error
+        noDataMessage.removeClass('d-none').text(__('no_employee_data_available_for_month'));
     } finally {
-        loadingIndicator.addClass('hidden');
-        if (allEmployeesData.length === 0 && noDataMessage.hasClass('hidden')) {
-                // Only show no data message if there truly is no data after fetch
-            noDataMessage.removeClass('hidden').text(__('no_employee_data_available_for_month'));
-        }
+        loadingIndicator.hide();
         await updateStartApprovalButtonVisibility();
     }
 }
@@ -1797,6 +1831,7 @@ function updateRegenerateButtonVisibility() {
 }
         
 async function fetchBenefitTypes() {
+    const noDataMessage = $('#noDataMessage');
     try {
         // Ensure this path is correct for your server setup
         const response = await fetch(`./includes/api/get_benefit_types.php`);
@@ -1815,9 +1850,9 @@ async function fetchBenefitTypes() {
         showError('Network Error', `Error connecting to the server or parsing data: ${error.message}.`);
         employeeTable.clear().draw(); // Clear table on network error
     } finally {
-        if (allBenefitTypesData.length === 0 && noDataMessage.hasClass('hidden')) {
+        if (allBenefitTypesData.length === 0 && noDataMessage.hasClass('d-none')) {
                 // Only show no data message if there truly is no data after fetch
-            noDataMessage.removeClass('hidden').text(__('no_employee_data_available_for_month'));
+            noDataMessage.removeClass('d-none').text(__('no_employee_data_available_for_month'));
         }
     }
 }
@@ -2265,12 +2300,12 @@ async function downloadPayrollImportTemplate() {
         benefitsWorksheet.dataValidations.add('B2:B5000', {
             type: 'list',
             allowBlank: true,
-            formulae: ['=__PAYROLL_IMPORT_TYPE_LISTS!$A$2:$A$5']
+            formulae: ['"fixed,by_hours,overtime_total,overtime_basic"']
         });
         deductionsWorksheet.dataValidations.add('B2:B5000', {
             type: 'list',
             allowBlank: true,
-            formulae: ['=__PAYROLL_IMPORT_TYPE_LISTS!$B$2:$B$4']
+            formulae: ['"fixed,hourly_deduction,daily_deduction"']
         });
 
         benefitsWorksheet.columns = [
@@ -2692,7 +2727,7 @@ function computePayrollImportDeductionValue(empId, deductionType, hours, days) {
     const parsedHours = Number(hours);
     const parsedDays = Number(days);
     const comp = getPayrollImportEmployeeCompensation(empId);
-    const deductibleSalary = Math.max(comp.totalGross - comp.housing - comp.food, 0);
+    const deductibleSalary = Math.max(comp.totalGross - comp.food, 0);
 
     if (deductibleSalary <= 0) {
         return '';
@@ -4426,11 +4461,7 @@ async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductio
     }
 }
 
-
-
 // --- (UPDATED) showPayrollDetails Function ---
-
-
 
 async function showPayrollDetails(empId, empName, month) {
     // Clean up previous listeners before opening new modal
@@ -4480,6 +4511,50 @@ async function showPayrollDetails(empId, empName, month) {
             // --- Build Deductions HTML ---
             // --- MODIFIED: Use the new buildDeductionsHtml function ---
             let deductionsHtml = buildDeductionsHtml(deductions, payroll);
+
+            // Explain joining-date deduction clearly so employees understand the reason.
+            const joiningDeductionEntry = deductions.find((item) => {
+                const label = String(item?.deduction || item?.name || '').toLowerCase();
+                return label.includes('joining date deduction');
+            });
+
+            let joiningDeductionInfoHtml = '';
+            if (joiningDeductionEntry) {
+                const formatCurrencyForInfo = (amount) => {
+                    const numeric = Number(amount || 0);
+                    return 'SAR ' + numeric.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2 
+                    });
+                };
+
+                const deductionLabel = String(joiningDeductionEntry.deduction || joiningDeductionEntry.name || '');
+                let deductionDays = parseInt(joiningDeductionEntry.days, 10);
+                if (Number.isNaN(deductionDays)) {
+                    const parsed = deductionLabel.match(/\((\d+)\s*days?\)/i);
+                    deductionDays = parsed ? parseInt(parsed[1], 10) : 0;
+                }
+                if (Number.isNaN(deductionDays) || deductionDays < 0) {
+                    deductionDays = 0;
+                }
+
+                const deductionAmount = parseFloat(joiningDeductionEntry.note ?? joiningDeductionEntry.amount ?? 0) || 0;
+                const grossSalaryValue = parseFloat(payroll.total_gross_salary || 0) || 0;
+                const perDayAmount = grossSalaryValue > 0 ? (grossSalaryValue / 30) : 0;
+
+                joiningDeductionInfoHtml = `
+                    <div class="alert alert-warning mt-3 mb-0" role="alert" style="font-size: 0.92rem;">
+                        <div class="fw-semibold mb-1"><i class="fas fa-info-circle me-1"></i>${__('joining_deduction_explanation_title') || 'Joining Date Deduction Explanation'}</div>
+                        <div>${__('joining_deduction_explanation_line_1') || 'This employee joined mid-month, so days before joining are deducted.'}</div>
+                        <div class="mt-1">
+                            ${__('joining_deduction_formula_label') || 'Formula'}:
+                            (${__('total_gross_salary_label') || 'Total Gross Salary'} / 30) x ${deductionDays} ${__('days') || 'days'}
+                            = <strong>${formatCurrencyForInfo(deductionAmount)}</strong>
+                        </div>
+                        <div class="text-muted mt-1">${__('per_day_rate_label') || 'Per-day rate'}: ${formatCurrencyForInfo(perDayAmount)}</div>
+                    </div>
+                `;
+            }
 
 
             // --- Salary Breakdown HTML ---
@@ -4785,6 +4860,7 @@ async function showPayrollDetails(empId, empName, month) {
                             </div>
                         </div>
                     </div>
+                    ${joiningDeductionInfoHtml}
                 </div>
             `;
 
@@ -5259,13 +5335,14 @@ async function showPayrollDetails(empId, empName, month) {
 
                         periodSlot.toggleClass('deduction-period-input-empty', isFixed);
                         row.find('.deduction-hours').toggle(deductionType === 'hourly_deduction');
+                        row.find('.deduction-minutes').toggle(deductionType === 'hourly_deduction');
                         row.find('.deduction-days').toggle(deductionType === 'daily_deduction');
                         row.find('.deduction-period-unit')
-                            .text(deductionType === 'hourly_deduction' ? 'hrs' : 'days')
+                            .text(deductionType === 'hourly_deduction' ? 'time' : 'days')
                             .toggle(!isFixed);
 
                         if (isFixed) {
-                            row.find('.deduction-hours, .deduction-days').val('');
+                            row.find('.deduction-hours, .deduction-minutes, .deduction-days').val('');
                             amountInput.prop('readonly', false);
                             nameInput.show();
                         } else {
@@ -5289,8 +5366,12 @@ async function showPayrollDetails(empId, empName, month) {
                         }
                         applyDeductionTypeRules(this);
                     });
-                    $(swalContainer).on('keyup change', '.deduction-hours, .deduction-days', calculateDeductionAmount);
-                    $(swalContainer).on('keyup change', '.deduction-amount', function() { if (!$(this).is('[readonly]')) updateNetSalaryDisplay(payroll.total_gross_salary); });
+                    $(swalContainer).on('keyup change', '.deduction-hours, .deduction-minutes, .deduction-days', calculateDeductionAmount);
+                    $(swalContainer).on('keyup change', '.deduction-amount', function() {
+                        if (!$(this).is('[readonly]')) {
+                            updateNetSalaryDisplay(payroll.total_gross_salary);
+                        }
+                    });
                     
                     $(swalContainer).on('click', '#addDeductionBtn', () => {
                          const newRowHtml = buildDeductionsHtml([{ calculation_type: 'fixed' }], payroll);
@@ -5700,7 +5781,7 @@ async function showPayrollDetails(empId, empName, month) {
             if (typeof XLSX === 'undefined') {
                 console.error("The XLSX library (SheetJS) is not loaded. Please include it in your project.");
                 // You could also add a user-facing message here.
-                return;
+                return; 
             }
 
             // Create a new workbook
@@ -5713,9 +5794,26 @@ async function showPayrollDetails(empId, empName, month) {
                 'ADDRESS', 'CUR', 'STATUS', 'DESCRIPTION', 'REF'
             ];
 
-            // Filter out CASH (payment_type = 2) for Bank Excel
+            // Export only BANK payroll employees (exclude cash/hold even if API sends string values).
+            const getPaymentTypeCode = (row) => {
+                const rawValue = row && row.payment_type != null ? String(row.payment_type).trim().toLowerCase() : '';
+
+                if (rawValue === '' || rawValue === '1' || rawValue === 'bank') {
+                    return 1;
+                }
+                if (rawValue === '2' || rawValue === 'cash') {
+                    return 2;
+                }
+                if (rawValue === '3' || rawValue === 'hold' || rawValue === 'on hold' || rawValue === 'on_hold') {
+                    return 3;
+                }
+
+                const parsed = parseInt(rawValue, 10);
+                return Number.isNaN(parsed) ? 1 : parsed;
+            };
+
             const bankRows = Array.isArray(reportData)
-                ? reportData.filter(p => parseInt(p.payment_type || 1, 10) !== 2)
+                ? reportData.filter(p => getPaymentTypeCode(p) === 1)
                 : [];
 
             // Build a stable on-screen employee order by emp_id, then use it for export sorting.

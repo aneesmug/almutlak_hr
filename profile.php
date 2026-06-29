@@ -60,6 +60,21 @@ $activeFlyVacations = array_values(array_filter($allActiveVacations, function ($
 }));
 $activeFlyVacCount = count($activeFlyVacations);
 
+// Get latest selected resignation reason code for preselecting Apply Resignation flow
+$selectedResignationReason = '';
+$selectedResignationReasonText = (string)($emprow['leaving_reason'] ?? '');
+if (!empty($emprow['empid'])) {
+    $reasonQuery = mysqli_query(
+        $conDB,
+        "SELECT `rejection_reason` FROM `emp_resignations` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $emprow['empid']) . "' AND `rejection_reason` <> '' ORDER BY `id` DESC LIMIT 1"
+    );
+    if ($reasonQuery && mysqli_num_rows($reasonQuery) > 0) {
+        $reasonRow = mysqli_fetch_assoc($reasonQuery);
+        $selectedResignationReason = (string)($reasonRow['rejection_reason'] ?? '');
+        mysqli_free_result($reasonQuery);
+    }
+}
+
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
 if ($emprow['status'] == 1) {
@@ -69,7 +84,7 @@ if ($emprow['status'] == 1) {
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
     // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('{$emprow['empid']}', '{$emprow['dept']}', '{$emprow['country']}')\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></a>";
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\" data-selected_reason=\"" . htmlspecialchars($selectedResignationReason, ENT_QUOTES, 'UTF-8') . "\" data-selected_reason_text=\"" . htmlspecialchars($selectedResignationReasonText, ENT_QUOTES, 'UTF-8') . "\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
     if ($activeFlyVacCount > 0) {
         $badgeText = $activeFlyVacCount > 1 ? " ({$activeFlyVacCount})" : '';
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeFlyVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
@@ -105,7 +120,7 @@ $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout t
     <!-- Plugins CSS -->
 
     <!-- Additional Plugins -->
-    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" /> -->
+    <link rel="stylesheet" href="./plugins/croppie/croppie.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
@@ -2580,11 +2595,12 @@ RTL Support
     </div>
 
     <!-- Hidden file input for image cropping -->
-    <!-- <input type="file" id="img-crop-input" accept="image/*" style="display: none;"> -->
+    <input type="file" id="img-crop-input" accept="image/*" style="display: none;">
 
     <script src="assets/js/jquery.min.js?t=<?= time() ?>"></script>
     <script src="assets/js/bootstrap.bundle.min.js?t=<?= time() ?>"></script>
-    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script> -->
+    <script src="./plugins/croppie/exif.js"></script>
+    <script src="./plugins/croppie/croppie.min.js"></script>
 
     <!-- Dropzone JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.js?t=<?= time() ?>"></script>
@@ -2657,9 +2673,11 @@ RTL Support
                             e.preventDefault();
                             var emp_id = $(this).data('emp_id');
                             var emp_name = $(this).data('emp_name');
+                            var selected_reason = $(this).data('selected_reason');
+                            var selected_reason_text = $(this).data('selected_reason_text');
                             Swal.close();
                             setTimeout(function() {
-                                openResignationWizard(emp_id, emp_name);
+                                openResignationWizard(emp_id, emp_name, selected_reason, selected_reason_text);
                             }, 100);
                         });
 

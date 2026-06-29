@@ -1407,6 +1407,16 @@ elseif($ajaxType == 'unassign_asset') {
     $empId = $_POST['empid'];
     $approvalAction = $_POST['contant_check']; // 'approve' or 'not_approve'
     $notes = isset($_POST['notes']) ? trim($_POST['notes']) : '';
+    $normalizePublicAssetPath = static function ($path) {
+        if (empty($path)) {
+            return $path;
+        }
+
+        $normalizedPath = str_replace('\\', '/', trim($path));
+        $normalizedPath = preg_replace('#^(\./)?(?:\.\./)+assets/#', './assets/', $normalizedPath);
+
+        return $normalizedPath;
+    };
     // --- If the request is APPROVED ---
     if ($approvalAction == 'approve') {
     try {
@@ -1429,7 +1439,7 @@ elseif($ajaxType == 'unassign_asset') {
             case 'Profile Picture': $updateField = 'avatar'; break;
             // case 'Upload Documents': $updateField = 'upload_documents'; break;
         }
-        $updateValue = ($request['path']) ? $request['path'] : $request['new_value'];
+        $updateValue = ($request['path']) ? $normalizePublicAssetPath($request['path']) : $request['new_value'];
         // 3. Update the main employees table if a valid field was found
         if (!empty($updateField)) {
             $updateStmt = $pdo->prepare("UPDATE `employees` SET {$updateField} = ? WHERE emp_id = ?");
@@ -1466,7 +1476,7 @@ elseif($ajaxType == 'unassign_asset') {
                 // 2. If it's a document upload or profile picture, delete the physical file
                 if (in_array($request['type'], ['Employee Documents', 'Upload Documents', 'Profile Picture'])) {
                     // Normalize path to use forward slashes and construct absolute path correctly
-                    $relativePath = str_replace('\\', '/', $request['path']);
+                    $relativePath = $normalizePublicAssetPath($request['path']);
                     $filePath = realpath(__DIR__ . '/../../' . $relativePath);
                     
                     // Verify file exists and delete it
@@ -1508,6 +1518,8 @@ elseif($ajaxType == 'unassign_asset') {
     $type = isset($_POST['type']) ? $_POST['type'] : null;
     $newValue = isset($_POST['new_value']) ? trim($_POST['new_value']) : null;
     $path = null;
+    $publicUploadDir = './assets/emp_pics/emp_' . $empId . '/';
+    $filesystemUploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
 
     // Basic Validation
     if (empty($empId) || empty($type)) {
@@ -1517,10 +1529,9 @@ elseif($ajaxType == 'unassign_asset') {
 
     // --- Handle cropped profile picture upload from Croppie ---
     if (isset($_POST['profile_img'])) {
-        $uploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
         $fileName = 'avatar_' . time() . '_' . mt_rand(1000, 9999) . '.png';
-        $targetPath = $uploadDir . $fileName;
-        if (!save_cropped_image($_POST['profile_img'], $uploadDir, $fileName)) {
+        $targetPath = $publicUploadDir . $fileName;
+        if (!save_cropped_image($_POST['profile_img'], $filesystemUploadDir, $fileName)) {
             echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('invalid_or_corrupt_image_data')]);
             exit;
         }
@@ -1528,15 +1539,15 @@ elseif($ajaxType == 'unassign_asset') {
     }
     // --- Handle standard file uploads (for other document types in the future) ---
     else if (isset($_FILES['file']) && $_FILES['file']['error'] == UPLOAD_ERR_OK) {
-        $uploadDir = './../../assets/emp_pics/emp_' . $empId . '/';
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
+        if (!is_dir($filesystemUploadDir)) {
+            mkdir($filesystemUploadDir, 0755, true);
         }
         $fileExtension = pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION);
         $fileName = time() . '_' . uniqid() . '.' . $fileExtension;
-        $targetPath = $uploadDir . $fileName;
+        $targetPath = $publicUploadDir . $fileName;
+        $filesystemTargetPath = $filesystemUploadDir . $fileName;
 
-        if (store_uploaded_file_securely($_FILES['file']['tmp_name'], $targetPath)) {
+        if (store_uploaded_file_securely($_FILES['file']['tmp_name'], $filesystemTargetPath)) {
             $path = $targetPath;
         } else {
             echo json_encode(['type' => 'error', 'title' => __('upload_failed'), 'message' => __('server_could_not_save_the_uploaded_file')]);

@@ -76,7 +76,11 @@ try {
 
 
     // --- PROCESS SUBMITTED DATA (UPDATES & INSERTS) ---
-    $stmtSalary = $pdo->prepare("SELECT basic as basic_salary, housing as housing_allowance, transport as transport_allowance, food as food_allowance, misc as miscellaneous_allowance, cashier as cashier_allowance, fuel as fuel_allowance, tel as telephone_allowance, other as other_allowance, guard as guard_allowance FROM emp_salary WHERE emp_id = :emp_id AND status = 1");
+    $stmtSalary = $pdo->prepare("SELECT es.basic as basic_salary, es.housing as housing_allowance, es.transport as transport_allowance, es.food as food_allowance, es.misc as miscellaneous_allowance, es.cashier as cashier_allowance, es.fuel as fuel_allowance, es.tel as telephone_allowance, es.other as other_allowance, es.guard as guard_allowance, e.joining_date
+        FROM emp_salary es
+        JOIN employees e ON e.emp_id = es.emp_id
+        WHERE es.emp_id = :emp_id AND es.status = 1
+        LIMIT 1");
     $stmtSalary->execute([':emp_id' => $empId]);
     $salaryComponents = $stmtSalary->fetch(PDO::FETCH_ASSOC);
 
@@ -85,19 +89,78 @@ try {
     }
     
     // --- PRORATED SALARY LOGIC ---
-    $stmtVacationReturn = $pdo->prepare("SELECT return_date FROM emp_vacation WHERE emp_id = :emp_id AND DATE_FORMAT(return_date, '%Y-%m') = :month_year AND current_status = 'approved' AND is_deductible = 1");
-    $stmtVacationReturn->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-    $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
-    
-    $daysInMonth = date('t', strtotime($monthYear . '-01'));
+    $monthStartDate = new DateTime($monthYear . '-01');
+    $monthStartDate->setTime(0, 0, 0);
+    $monthEndDate = new DateTime($monthYear . '-01');
+    $monthEndDate->modify('last day of this month');
+    $monthEndDate->setTime(0, 0, 0);
+    $daysInMonth = 30;
     $prorationFactor = 1.0;
+    $payableStartDate = clone $monthStartDate;
+    $joinedThisPayrollMonth = false;
+    $joiningDeductionDays = 0;
 
-    if ($vacationReturn) {
-        $returnDate = new DateTime($vacationReturn['return_date']);
-        $daysWorked = $daysInMonth - ($returnDate->format('d') - 1);
-        if ($daysWorked > 0) {
+    $joiningDateRaw = trim((string)($salaryComponents['joining_date'] ?? ''));
+    unset($salaryComponents['joining_date']);
+
+    if ($joiningDateRaw !== '' && $joiningDateRaw !== '0000-00-00') {
+        $joiningDate = DateTime::createFromFormat('!Y-m-d', substr($joiningDateRaw, 0, 10));
+        if (!$joiningDate instanceof DateTime) {
+            $joiningTimestamp = strtotime($joiningDateRaw);
+            if ($joiningTimestamp !== false) {
+                $joiningDate = new DateTime(date('Y-m-d', $joiningTimestamp));
+                $joiningDate->setTime(0, 0, 0);
+            }
+        }
+
+        if ($joiningDate instanceof DateTime && $joiningDate >= $monthStartDate && $joiningDate <= $monthEndDate) {
+            $joinedThisPayrollMonth = true;
+            $joiningDeductionDays = max(0, ((int)$joiningDate->format('d')) - 1);
+            if ($joiningDate > $payableStartDate) {
+                $payableStartDate = clone $joiningDate;
+            }
+        }
+    }
+
+    if (!$joinedThisPayrollMonth) {
+                $stmtVacationReturn = $pdo->prepare("SELECT return_date
+            FROM emp_vacation
+            WHERE emp_id = :emp_id
+              AND current_status = 'approved'
+              AND is_deductible = 1
+                            AND start_date <= :month_start_upper
+                            AND return_date >= :month_start_lower
+              AND return_date <= :month_end
+            ORDER BY return_date DESC
+            LIMIT 1");
+        $stmtVacationReturn->execute([
+            ':emp_id' => $empId,
+                        ':month_start_upper' => $monthYear . '-01',
+                        ':month_start_lower' => $monthYear . '-01',
+            ':month_end' => $monthEndDate->format('Y-m-d')
+        ]);
+        $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
+
+        if ($vacationReturn) {
+            $returnDate = new DateTime($vacationReturn['return_date']);
+            $returnDate->setTime(0, 0, 0);
+            if ($returnDate > $payableStartDate) {
+                $payableStartDate = clone $returnDate;
+            }
+        }
+    }
+
+    if ($payableStartDate > $monthEndDate) {
+        $prorationFactor = 0.0;
+    } else {
+        $daysWorked = ((int)$monthEndDate->diff($payableStartDate)->format('%a')) + 1;
+        if ($daysWorked > 0 && $daysWorked < $daysInMonth) {
             $prorationFactor = $daysWorked / $daysInMonth;
         }
+    }
+
+    if ($joinedThisPayrollMonth) {
+        $prorationFactor = 1.0;
     }
     
     foreach ($salaryComponents as $key => $value) {
@@ -194,6 +257,27 @@ try {
         }
     }
 
+    // Enforce joining-date deduction based on days before joining in this month.
+    $stmtDeleteJoin = $pdo->prepare("DELETE FROM payroll_deductions
+        WHERE emp_id = :emp_id AND month = :month_year AND deduction LIKE 'Joining Date Deduction%'");
+    $stmtDeleteJoin->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+
+    if ($joiningDeductionDays > 0) {
+        $joiningDeductionAmount = round(($totalGrossSalary / 30) * $joiningDeductionDays, 2);
+        $joiningLabel = 'Joining Date Deduction (' . $joiningDeductionDays . ' days)';
+
+        $stmtInsertJoin = $pdo->prepare("INSERT INTO payroll_deductions
+            (emp_id, deduction, note, month, status, calculation_type, hours, days)
+            VALUES (:emp_id, :deduction, :amount, :month_year, 1, 'daily_deduction', NULL, :days)");
+        $stmtInsertJoin->execute([
+            ':emp_id' => $empId,
+            ':deduction' => $joiningLabel,
+            ':amount' => number_format($joiningDeductionAmount, 2, '.', ''),
+            ':month_year' => $monthYear,
+            ':days' => $joiningDeductionDays
+        ]);
+    }
+
 
     // --- RE-CALCULATE TOTALS AND UPDATE MASTER RECORD ---
     $stmtBenefitsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(note AS DECIMAL(10,2))), 0) FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year AND status = 1");
@@ -202,12 +286,45 @@ try {
 
     $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(note AS DECIMAL(10,2))), 0) FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND status = 1");
     $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
-    $totalDeductions = (float)$stmtDeductionsSum->fetchColumn();
+    $totalDeductions = round((float)$stmtDeductionsSum->fetchColumn(), 0);
 
-    $netSalary = $totalGrossSalary + $totalBenefits - $totalDeductions;
+    $netSalary = round($totalGrossSalary + $totalBenefits - $totalDeductions, 0);
     
-    $stmtUpdateGenerated = $pdo->prepare("UPDATE payrolls SET total_benefits = :total_benefits, total_deductions = :total_deductions, net_salary = :net_salary, status = 'updated' WHERE emp_id = :emp_id AND month_year = :month_year");
-    $stmtUpdateGenerated->execute([':total_benefits' => number_format($totalBenefits, 2, '.', ''), ':total_deductions' => number_format($totalDeductions, 2, '.', ''), ':net_salary' => number_format($netSalary, 2, '.', ''), ':emp_id' => $empId, ':month_year' => $monthYear]);
+    $stmtUpdateGenerated = $pdo->prepare("UPDATE payrolls SET
+        basic_salary = :basic_salary,
+        housing_allowance = :housing_allowance,
+        transport_allowance = :transport_allowance,
+        food_allowance = :food_allowance,
+        miscellaneous_allowance = :miscellaneous_allowance,
+        cashier_allowance = :cashier_allowance,
+        fuel_allowance = :fuel_allowance,
+        telephone_allowance = :telephone_allowance,
+        other_allowance = :other_allowance,
+        guard_allowance = :guard_allowance,
+        total_gross_salary = :total_gross_salary,
+        total_benefits = :total_benefits,
+        total_deductions = :total_deductions,
+        net_salary = :net_salary,
+        status = 'updated'
+        WHERE emp_id = :emp_id AND month_year = :month_year");
+    $stmtUpdateGenerated->execute([
+        ':basic_salary' => number_format((float)$salaryComponents['basic_salary'], 2, '.', ''),
+        ':housing_allowance' => number_format((float)$salaryComponents['housing_allowance'], 2, '.', ''),
+        ':transport_allowance' => number_format((float)$salaryComponents['transport_allowance'], 2, '.', ''),
+        ':food_allowance' => number_format((float)$salaryComponents['food_allowance'], 2, '.', ''),
+        ':miscellaneous_allowance' => number_format((float)$salaryComponents['miscellaneous_allowance'], 2, '.', ''),
+        ':cashier_allowance' => number_format((float)$salaryComponents['cashier_allowance'], 2, '.', ''),
+        ':fuel_allowance' => number_format((float)$salaryComponents['fuel_allowance'], 2, '.', ''),
+        ':telephone_allowance' => number_format((float)$salaryComponents['telephone_allowance'], 2, '.', ''),
+        ':other_allowance' => number_format((float)$salaryComponents['other_allowance'], 2, '.', ''),
+        ':guard_allowance' => number_format((float)$salaryComponents['guard_allowance'], 2, '.', ''),
+        ':total_gross_salary' => number_format($totalGrossSalary, 2, '.', ''),
+        ':total_benefits' => number_format($totalBenefits, 2, '.', ''),
+        ':total_deductions' => number_format($totalDeductions, 2, '.', ''),
+        ':net_salary' => number_format($netSalary, 2, '.', ''),
+        ':emp_id' => $empId,
+        ':month_year' => $monthYear
+    ]);
 
     // Commit the transaction to save all changes.
     $pdo->commit();

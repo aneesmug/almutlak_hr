@@ -113,6 +113,13 @@
         // Set total_salary for API (uses EOS base with calculated housing)
         $total_salary = $actual_salary_base;
 
+        // Vacation salary must use employee master total salary (employees.salary)
+        $employee_master_total_salary = (float)($emprow['salary'] ?? 0);
+        if ($employee_master_total_salary <= 0) {
+            // Fallback to salary components total if master salary is missing
+            $employee_master_total_salary = $vacation_salary_base;
+        }
+
         // Get the annual vacation entitlement directly from the employee's record.
         // Note: This field (`vacation_days`) stores the TOTAL period entitlement (e.g., 42 for 2 years)
         $annual_vacation_entitlement = (float)($emprow['vacation_days'] ?? 0);
@@ -218,82 +225,84 @@
         exit();
 	}
 
-    // --- START: New EOS Calculation Logic ---
-    function makeCurlRequest($url, $method = 'POST', $payload = []) {
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        if ($method === 'POST') {
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        }
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        ]);
-        // Reduced timeout to 5 seconds to prevent long page hangs
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-        // Disable SSL verification for robustness, especially in local environments like XAMPP
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curl_error = curl_error($ch);
-        curl_close($ch);
-
-        if ($curl_error) {
-            error_log("cURL Error for $url: $curl_error");
-            return ['error' => 'Curl error: ' . $curl_error, 'http_code' => 0, 'data' => null];
-        }
-        if ($http_code != 200) {
-            error_log("HTTP Error $http_code for $url. Response: " . mb_substr($response, 0, 500));
-        }
-
-        return ['error' => null, 'http_code' => $http_code, 'data' => json_decode($response, true)];
-    }
-
+    // --- START: New EOS Calculation Logic (LOCAL JSON-BASED - NO EXTERNAL API) ---
+    
     function fetchEndOfServiceReasons() {
-        // Check cache first (24-hour cache to reduce external API calls)
+        // Load from local JSON file ONLY - No API dependency
         $cache_key = 'eos_reasons_cache';
-        $cache_duration = 24 * 60 * 60; // 24 hours in seconds
         
-        if (isset($_SESSION[$cache_key]) && isset($_SESSION[$cache_key . '_time'])) {
-            $cache_age = time() - $_SESSION[$cache_key . '_time'];
-            if ($cache_age < $cache_duration) {
-                // Return cached data
-                return ['error' => null, 'reasons' => $_SESSION[$cache_key]];
+        // Check session cache first for performance
+        if (isset($_SESSION[$cache_key])) {
+            error_log("EOS Reasons: Using session cache");
+            return ['error' => null, 'reasons' => $_SESSION[$cache_key]];
+        }
+        
+        // Load from local JSON file
+        $local_json_path = __DIR__ . '/data/eos_reasons.json';
+        if (file_exists($local_json_path)) {
+            try {
+                $json_content = file_get_contents($local_json_path);
+                $json_data = json_decode($json_content, true);
+                
+                if (is_array($json_data) && isset($json_data['EndOfServiceRewardLookUpRs'])) {
+                    $reasons_data = $json_data['EndOfServiceRewardLookUpRs']['Body']['EndOfServiceRewardLookUp']['ContractEndReason'] ?? [];
+                    
+                    if (!empty($reasons_data)) {
+                        // Cache for this session
+                        $_SESSION[$cache_key] = $reasons_data;
+                        error_log("EOS Reasons: Loaded from local JSON (" . count($reasons_data) . " records)");
+                        return ['error' => null, 'reasons' => $reasons_data];
+                    }
+                }
+            } catch (Exception $e) {
+                error_log("EOS Reasons: Error reading local JSON: " . $e->getMessage());
+                return ['error' => __('Error reading termination reasons: ') . $e->getMessage(), 'reasons' => []];
             }
         }
         
-        $url = "https://knowledge-center-be.qiwa.sa/api/v1/end-of-service";
-        $result = makeCurlRequest($url, 'POST', []);
-
-        if ($result['error']) {
-            // Return cached data if available, even if expired
-            if (isset($_SESSION[$cache_key])) {
-                error_log("Using expired cache due to API error: " . $result['error']);
-                return ['error' => null, 'reasons' => $_SESSION[$cache_key]];
-            }
-            return ['error' => __('Could not fetch initial data from the server: ') . $result['error'], 'reasons' => []];
-        }
-        if ($result['http_code'] !== 200 || empty($result['data'])) {
-            // Return cached data if available
-            if (isset($_SESSION[$cache_key])) {
-                error_log("Using expired cache due to HTTP error: " . $result['http_code']);
-                return ['error' => null, 'reasons' => $_SESSION[$cache_key]];
-            }
-            return ['error' => __('Could not fetch initial data from the server (HTTP Status: ').$result['http_code'].')', 'reasons' => []];
-        }
-
-        $api_reasons_data = $result['data']['EndOfServiceRewardLookUpRs']['Body']['EndOfServiceRewardLookUp']['ContractEndReason'] ?? [];
+        error_log("EOS Reasons: Local JSON file not found at {$local_json_path}");
+        return ['error' => __('Termination reasons data file not found'), 'reasons' => []];
+    }
+    
+    /**
+     * Fetch contract types from local JSON file ONLY
+     * This provides the dropdown options for "Type of Contract"
+     * No external API dependency
+     */
+    function fetchContractTypes() {
+        // Check session cache first
+        $cache_key = 'contract_types_cache';
         
-        // Cache the successful response
-        $_SESSION[$cache_key] = $api_reasons_data;
-        $_SESSION[$cache_key . '_time'] = time();
+        if (isset($_SESSION[$cache_key])) {
+            error_log("Contract Types: Using session cache");
+            return ['error' => null, 'types' => $_SESSION[$cache_key]];
+        }
         
-        return ['error' => null, 'reasons' => $api_reasons_data];
+        // Load from local JSON file
+        $local_json_path = __DIR__ . '/data/contract_types.json';
+        if (file_exists($local_json_path)) {
+            try {
+                $json_content = file_get_contents($local_json_path);
+                $json_data = json_decode($json_content, true);
+                
+                if (is_array($json_data) && isset($json_data['ContractTypes'])) {
+                    $contract_types = $json_data['ContractTypes'];
+                    
+                    if (!empty($contract_types)) {
+                        // Cache for this session
+                        $_SESSION[$cache_key] = $contract_types;
+                        error_log("Contract Types: Loaded from local JSON (" . count($contract_types) . " types)");
+                        return ['error' => null, 'types' => $contract_types];
+                    }
+                }
+            } catch (Exception $e) {
+                error_log("Contract Types: Error reading local JSON: " . $e->getMessage());
+                return ['error' => __('Error reading contract types: ') . $e->getMessage(), 'types' => []];
+            }
+        }
+        
+        error_log("Contract Types: Local JSON file not found at {$local_json_path}");
+        return ['error' => __('Contract types data file not found'), 'types' => []];
     }
     
     $contractType = $_POST['contract_type'] ?? '1';
@@ -374,7 +383,7 @@
                 break;
             }
         }
-    }
+    } 
     if (empty($preFillReasonLabel) && !empty($preFillReason)) {
         $preFillReasonLabel = $preFillReason;
     }
@@ -998,6 +1007,7 @@
                                                         <input type="hidden" name="anul_vac_salry" id="anul_vac_salry_hidden" value="">
                                                         <input type="hidden" name="net_payment" id="net_payment_hidden" value="">
                                                         <input type="hidden" id="total_salary" value="<?= htmlspecialchars($total_salary); ?>">
+                                                        <input type="hidden" id="employee_master_total_salary" value="<?= htmlspecialchars($employee_master_total_salary); ?>">
                                                         <input type="hidden" id="basic_salary" value="<?= htmlspecialchars($salaryrow['basic'] ?? 0); ?>">
                                                         <input type="hidden" id="housing_allowance" value="<?= htmlspecialchars($salaryrow['housing'] ?? 0); ?>">
                                                         <input type="hidden" id="calculated_housing" value="<?= htmlspecialchars($calculated_housing); ?>">
@@ -1372,6 +1382,7 @@
 
                 function performApiCalculation() {
                     const totalSalary = parseFloat($('#total_salary').val()) || 0;
+                    const masterTotalSalary = parseFloat($('#employee_master_total_salary').val()) || 0;
                     const basicSalary = parseFloat($('#basic_salary').val()) || 0;
                     const calculatedHousing = parseFloat($('#calculated_housing').val()) || 0;
                     const housingAllowance = parseFloat($('#housing_allowance').val()) || 0;
@@ -1382,6 +1393,7 @@
                         end_date: $('#end_date').val(),
                         joining_date: $('#joining_date').val(),
                         salary: totalSalary,
+                        vacation_salary_base: masterTotalSalary,
                         anul_vac_days: $('#anul_vac_days').val(),
                         calculated_housing: $('#calculated_housing').val(),
                         housing_allowance: $('#housing_allowance').val()
@@ -1393,6 +1405,7 @@
                     console.log("Calculated Housing:", calculatedHousing);
                     console.log("Housing Allowance:", housingAllowance);
                     console.log("Total Salary:", totalSalary);
+                    console.log("Employee Master Total Salary (Vacation Base):", masterTotalSalary);
                     console.log("Form Data being sent:", formData);
                     console.log("=== END DEBUG INFO ===");
 
@@ -1404,33 +1417,38 @@
 
                     $('#net_payment_display').val('Calculating...');
 
+                    // Use LOCAL EOS calculator (Saudi Arabia Labor Law) - NO external API dependency
                     $.ajax({
-                        type: 'POST',
-                        url: './includes/ajaxFile/ajax_eos_calculator.php',
+                        type: 'GET',
+                        url: './includes/ajaxFile/ajax_eos_calculator_local.php',
                         data: formData,
                         dataType: 'json',
+                        cache: false,
+                        headers: {
+                            'Cache-Control': 'no-cache, no-store, must-revalidate'
+                        },
                         success: function(response) {
+                            console.log("✓ Local EOS Calculator Response:", response);
+                            
                             if (response.success) {
-                                // Log the response for debugging
-                                console.log("API Response:", response);
-                                console.log("EOS Amount from API:", response.eos_amount);
-                                console.log("Vacation Salary from API:", response.vacation_salary);
+                                console.log("✓✓ Calculation Success - Method:", response.calculation_method);
+                                console.log("Service Years:", response.service_years);
+                                console.log("EOS Amount:", response.eos_amount);
                                 
                                 $('#eos_amount_display').val(response.eos_amount);
                                 
-                                // --- Calculate Vacation Salary using vacation_salary_base (WITHOUT calculated housing) ---
-                                const vacationBase = parseFloat($('#vacation_salary_base').val()) || 0;
-                                const vacationDays = parseFloat($('#anul_vac_days').val()) || 0;
-                                const calculatedVacationSalary = (vacationBase > 0 && vacationDays > 0) ? (vacationBase / 30) * vacationDays : 0;
-                                $('#vacation_salary_display').val(calculatedVacationSalary.toFixed(2));
-                                // --- END Vacation Salary Calculation ---
+                                // Use vacation salary from response (already calculated correctly)
+                                $('#vacation_salary_display').val(response.vacation_salary);
 
                             } else {
+                                console.warn("✗ Calculation Failed:", response.message);
                                 $('#eos_amount_display, #vacation_salary_display').val('0.00');
                             }
-                            calculateFinalPayment(); // This will now use the correctly calculated vacation salary
+                            calculateFinalPayment();
                         },
-                        error: function() {
+                        error: function(xhr, status, error) {
+                            console.error("✗✗ Calculator Error:", status, error);
+                            console.error("Response:", xhr.responseText);
                             $('#eos_amount_display, #vacation_salary_display').val('Error');
                             calculateFinalPayment();
                         }

@@ -27,6 +27,7 @@ MODIFICATION SUMMARY (001-smt_print.php):
             `smt`.*, 
             SUM(`smt`.`total_cost`) as subtotal, 
             SUM(`smt`.`vat_val`) as vat_val,
+            MAX(`smt`.`created_at`) as latest_created_at,
             `dpt`.`dep_nme`
             FROM `smart_request` `smt`
             LEFT JOIN `department` `dpt` ON `dpt`.`id` = `smt`.`department`
@@ -40,7 +41,7 @@ MODIFICATION SUMMARY (001-smt_print.php):
         // REMOVED: $tally_id_get = $row["tally_id"];
         // REMOVED: $injazat_id_get = $row["injazat_id"];
         $deptget = $row["dep_nme"];
-        $createdatget = $row["created_at"];
+        $createdatget = $row["latest_created_at"];
         $subtypeget = $row["sub_type"];
         $sub_title_get = $row["sub_title"];
         $prep_by_get = (explode(" ",$row["prep_by"])[0])." ".(explode(" ",$row["prep_by"])[1]);

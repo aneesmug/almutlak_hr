@@ -219,7 +219,7 @@ $status_badges = [
                                                             <i class="fa fa-eye"></i>
                                                         </a>
                                                         <?php if ($vac['current_status'] !== 'completed' && $vac['current_status'] !== 'cancelled' && $vac['current_status'] !== 'rejected'): ?>
-                                                            <button type="button" class="btn btn-danger" onclick="cancelVacationRequest(<?= $vac['id'] ?>, '<?= htmlspecialchars(addslashes($vac['vac_type']), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(format_safe_date($vac['start_date'] ?? null, 'M d, Y')), ENT_QUOTES) ?>'" title="Cancel Request">
+                                                            <button type="button" class="btn btn-danger" onclick="cancelVacationRequest(<?= $vac['id'] ?>, '<?= htmlspecialchars(addslashes($vac['vac_type']), ENT_QUOTES) ?>', '<?= htmlspecialchars(addslashes(format_safe_date($vac['start_date'] ?? null, 'M d, Y')), ENT_QUOTES) ?>')" title="Cancel Request">
                                                                 <i class="fa fa-times"></i>
                                                             </button>
                                                         <?php endif; ?>

@@ -4242,6 +4242,18 @@ if ($can_see_all_depts) {
                 },
                 success: function(vacationData) {
                     if (vacationData.status === 200) {
+                        let resolvedVacationDays = parseFloat(vacationData.vacdays || vacationDays || 0);
+
+                        // Fallback for legacy rows where vacdays is zero: derive from date range.
+                        if (resolvedVacationDays <= 0 && vacationData.start_date && vacationData.return_date) {
+                            const start = new Date(vacationData.start_date + 'T00:00:00');
+                            const end = new Date(vacationData.return_date + 'T00:00:00');
+                            if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
+                                const msPerDay = 24 * 60 * 60 * 1000;
+                                resolvedVacationDays = Math.floor((end - start) / msPerDay) + 1;
+                            }
+                        }
+
                         // Check if this is an Encashed vacation
                         const vacType = vacationData.vac_type || '';
                         const isEncashed = (vacType.toLowerCase() === 'encashed');
@@ -4253,7 +4265,7 @@ if ($can_see_all_depts) {
                             const netEncashmentRaw = parseFloat(vacationData.net_encashment || (encashmentAmount - encashGosi));
                             const netEncashment = Math.round(Math.max(0, netEncashmentRaw));
                             
-                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, netEncashment, 0, 0, 0, 0, 0, 0, true, encashmentAmount, encashGosi);
+                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, resolvedVacationDays, netEncashment, 0, 0, 0, 0, 0, 0, true, encashmentAmount, encashGosi);
                         } else {
                             // For Annual Fly vacations, use the normal total_payable calculation
                             const totalPayableRaw = parseFloat(vacationData.total_payable || 0);
@@ -4265,18 +4277,20 @@ if ($can_see_all_depts) {
                             const deductionAmount = Math.round(parseFloat(vacationData.deduction_amount || 0));
                             const gosiDeduction = Math.round(parseFloat(vacationData.gosi_deduction || 0));
                             
-                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, false, 0, 0);
+                            showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, resolvedVacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, false, 0, 0);
                         }
                     } else {
                         // Fallback if data fetch fails
-                        const settlementAmount = vacationDays * 350;
-                        showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, 0, false, 0, 0);
+                        const safeDays = parseFloat(vacationDays || 0);
+                        const settlementAmount = safeDays * 350;
+                        showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, safeDays, settlementAmount, 0, settlementAmount, 0, 0, 0, 0, false, 0, 0);
                     }
                 },
                 error: function() {
                     // Fallback calculation
-                    const settlementAmount = vacationDays * 350;
-                    showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, settlementAmount, 0, settlementAmount, 0, 0, 0, 0, false, 0, 0);
+                    const safeDays = parseFloat(vacationDays || 0);
+                    const settlementAmount = safeDays * 350;
+                    showSettlementModal(vacationId, requestInvNo, employeeId, employeeName, safeDays, settlementAmount, 0, settlementAmount, 0, 0, 0, 0, false, 0, 0);
                 }
             });
         }

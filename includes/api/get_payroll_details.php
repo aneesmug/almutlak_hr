@@ -206,6 +206,9 @@ try {
     $stmtPayroll->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $payroll = $stmtPayroll->fetch(PDO::FETCH_ASSOC);
 
+    $joiningDeductionPreviewAmount = 0.0;
+    $joiningDeductionPreviewDays = 0;
+
     if (!$payroll) {
         // If no generated payroll, fetch basic salary components
         $stmtEmpSalary = $pdo->prepare("SELECT basic, housing, transport, food, misc, cashier, fuel, tel, other, guard
@@ -214,6 +217,47 @@ try {
         $stmtEmpSalary->execute([':emp_id' => $empId]);
         $empSalaryData = $stmtEmpSalary->fetch(PDO::FETCH_ASSOC);
         if ($empSalaryData) {
+            $monthStartDate = new DateTime($monthYear . '-01');
+            $monthStartDate->setTime(0, 0, 0);
+            $monthEndDate = new DateTime($monthYear . '-01');
+            $monthEndDate->modify('last day of this month');
+            $monthEndDate->setTime(0, 0, 0);
+            $daysInMonth = 30;
+            $prorationFactor = 1.0;
+
+            $joiningDateRaw = trim((string)($employee['joining_date'] ?? ''));
+            if ($joiningDateRaw !== '' && $joiningDateRaw !== '0000-00-00') {
+                $joiningDate = DateTime::createFromFormat('!Y-m-d', substr($joiningDateRaw, 0, 10));
+                if (!$joiningDate instanceof DateTime) {
+                    $joiningTimestamp = strtotime($joiningDateRaw);
+                    if ($joiningTimestamp !== false) {
+                        $joiningDate = new DateTime(date('Y-m-d', $joiningTimestamp));
+                        $joiningDate->setTime(0, 0, 0);
+                    }
+                }
+
+                if ($joiningDate instanceof DateTime && $joiningDate >= $monthStartDate && $joiningDate <= $monthEndDate) {
+                    $joiningDeductionPreviewDays = max(0, ((int)$joiningDate->format('d')) - 1);
+                }
+            }
+
+            foreach ($empSalaryData as $componentKey => $componentValue) {
+                $empSalaryData[$componentKey] = (float)$componentValue * $prorationFactor;
+            }
+
+            $joiningDeductionPreviewAmount = round((
+                (float)$empSalaryData['basic']
+                + (float)$empSalaryData['housing']
+                + (float)$empSalaryData['transport']
+                + (float)$empSalaryData['food']
+                + (float)$empSalaryData['misc']
+                + (float)$empSalaryData['cashier']
+                + (float)$empSalaryData['fuel']
+                + (float)$empSalaryData['tel']
+                + (float)$empSalaryData['other']
+                + (float)$empSalaryData['guard']
+            ) / 30 * $joiningDeductionPreviewDays, 2);
+
             // Populate payroll with basic components if no generated payroll exists yet
             $payroll = [
                 'basic_salary' => (float)$empSalaryData['basic'],
@@ -228,8 +272,8 @@ try {
                 'guard_allowance' => (float)$empSalaryData['guard'],
                 'total_gross_salary' => (float)$empSalaryData['basic'] + (float)$empSalaryData['housing'] + (float)$empSalaryData['transport'] + (float)$empSalaryData['food'] + (float)$empSalaryData['misc'] + (float)$empSalaryData['cashier'] + (float)$empSalaryData['fuel'] + (float)$empSalaryData['tel'] + (float)$empSalaryData['other'] + (float)$empSalaryData['guard'],
                 'total_benefits' => 0.00,
-                'total_deductions' => 0.00,
-                'net_salary' => (float)$employee['salary'], // Default to basic salary or calculate from components
+                'total_deductions' => $joiningDeductionPreviewAmount,
+                'net_salary' => ((float)$empSalaryData['basic'] + (float)$empSalaryData['housing'] + (float)$empSalaryData['transport'] + (float)$empSalaryData['food'] + (float)$empSalaryData['misc'] + (float)$empSalaryData['cashier'] + (float)$empSalaryData['fuel'] + (float)$empSalaryData['tel'] + (float)$empSalaryData['other'] + (float)$empSalaryData['guard']) - $joiningDeductionPreviewAmount,
                 'status' => 'not_generated'
             ];
         } else {
@@ -253,6 +297,19 @@ try {
 
     $stmtDeductions->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $deductions = $stmtDeductions->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$payroll || ($payroll['status'] ?? '') === 'not_generated') {
+        if ($joiningDeductionPreviewAmount > 0 && $joiningDeductionPreviewDays > 0) {
+            $deductions[] = [
+                'id' => null,
+                'deduction' => 'Joining Date Deduction (' . $joiningDeductionPreviewDays . ' days)',
+                'note' => number_format($joiningDeductionPreviewAmount, 2, '.', ''),
+                'calculation_type' => 'daily_deduction',
+                'hours' => null,
+                'days' => $joiningDeductionPreviewDays
+            ];
+        }
+    }
 
     // 5. Fetch benefit types (Corrected from before)
     $stmtBenefitTypes = $pdo->prepare("SELECT id, name, calculation_type FROM benefit_types WHERE status = 1");

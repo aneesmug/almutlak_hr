@@ -208,6 +208,7 @@ $getquery = mysqli_query($conDB, "SELECT
             `smt`.*,
             SUM(`smt`.`total_cost`) as `subtotal`,
             SUM(`smt`.`vat_val`) as `vat_val`,
+            MAX(`smt`.`created_at`) as `latest_created_at`,
             `dpt`.`dep_nme`
             FROM `smart_request` `smt`
             LEFT JOIN `department` `dpt` ON `dpt`.`id` = `smt`.`department`
@@ -253,7 +254,7 @@ if ($getquery && mysqli_num_rows($getquery) > 0) {
         $dep_nme_get = $row["dep_nme"];
         $remarks_get = $row["remarks"];
         $emp_id_get = $row["emp_id"]; // Creator's ID
-        $created_at_get = $row["created_at"];
+        $created_at_get = $row["latest_created_at"];
         $current_status_get = $row['current_status'];
         $current_approval_level_get = $row['current_approval_level'];
         $payable_by_emp_id_get = $row['payable_by_emp_id']; // Fetch new column
@@ -1339,6 +1340,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                            data-sub_type="<?= htmlspecialchars($sub_type_get) ?>"
                                                            data-sub_title="<?= htmlspecialchars($sub_title_get) ?>"
                                                            data-remarks="<?= htmlspecialchars($remarks_get) ?>"
+                                                                              data-request_date="<?= $created_at_get ? htmlspecialchars(date('Y-m-d', strtotime($created_at_get))) : '' ?>"
                                                            data-id="<?= htmlspecialchars($invnoget) ?>"><i class="fa fa-pencil m-r-5"></i> <?=__('edit_request_details')?></a>
                                                     <?php endif; ?>
                                                     <a href="./all_requests.php" class="btn btn-dark waves-effect waves-light"><i class="fa fa-angle-double-left"></i> <?=__('back_button')?></a>
@@ -1687,6 +1689,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
             const sub_type = $(this).data('sub_type');
             const sub_title = $(this).data('sub_title');
             const remarks = $(this).data('remarks');
+            const request_date = $(this).data('request_date');
 
             Swal.fire({
                 title: '<?=__('update_request_information')?>',
@@ -1699,6 +1702,19 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                     $('#reqid').val(id);
                     $('#sub_title').val(sub_title);
                     $('#remarks').val(remarks);
+                    const $requestDate = $('#request_date');
+                    if ($.fn.datepicker) {
+                        $requestDate.datepicker({
+                            format: 'yyyy-mm-dd',
+                            autoclose: true,
+                            todayHighlight: true
+                        });
+                        if (request_date) {
+                            $requestDate.datepicker('setDate', request_date);
+                        }
+                    } else {
+                        $requestDate.val(request_date);
+                    }
                     // AJAX call to populate sub_type dropdown
                     $.ajax({
                         url: './includes/ajaxFile/ajaxSmartRequest.php',
@@ -1952,6 +1968,10 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
             // Added required attributes
             return `
                 <form id="submitEditReqForm" class="text-left" data-parsley-validate>
+                    <div class="form-group">
+                        <label for="request_date">Request date</label>
+                        <input type="text" id="request_date" name="request_date" class="form-control datepicker" placeholder="YYYY-MM-DD" autocomplete="off" readonly required>
+                    </div>
                     <div class="form-group">
                         <label for="sub_type"><?=__('subject_type')?></label>
                         <select id="sub_type" name="sub_type" class="form-control" required><option value=""><?=__('select')?></option></select>

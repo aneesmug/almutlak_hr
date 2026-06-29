@@ -10,8 +10,9 @@ include("./includes/Hijri_GregorianConvert.php");
 $DateConv = new Hijri_GregorianConvert;
 $format = "YYYY-MM-DD";
 
-// Get employee ID securely from session
-$emp_id = $_SESSION['empid'] ?? ($empid ?? null);
+// Get employee ID from the page link first, then fall back to the session employee.
+$emp_id = $_GET['emp_id'] ?? ($_SESSION['empid'] ?? ($empid ?? null));
+$emp_id = is_string($emp_id) ? trim($emp_id) : $emp_id;
 if (empty($emp_id)) {
     header("Location: ./profile.php");
     exit();
@@ -28,20 +29,79 @@ if (!$emprow) {
     die("Employee not found.");
 }
 
-// Fetch loan history (all_applied_loan table or similar)
-$loan_query = "SELECT * FROM emp_loan WHERE emp_id = ? ORDER BY created_at DESC";
+// Fetch loan history with repayment totals so remaining balance can be shown.
+$loan_query = "SELECT l.*, 
+                      COALESCE(p.total_paid, 0) AS total_paid,
+                      GREATEST(COALESCE(l.total_payable, l.loan_amount, 0) - COALESCE(p.total_paid, 0), 0) AS remaining_balance
+               FROM emp_loan l
+               LEFT JOIN (
+                   SELECT loan_id, SUM(amount) AS total_paid
+                   FROM emp_loan_payments
+                   GROUP BY loan_id
+               ) p ON p.loan_id = l.id
+               WHERE l.emp_id = ?
+               ORDER BY COALESCE(l.created_at, l.start_date) DESC, l.id DESC";
 $stmt = $conDB->prepare($loan_query);
 $stmt->bind_param("s", $emp_id);
 $stmt->execute();
 $loan_result = $stmt->get_result();
 
+$loan_history = [];
+while ($loan = $loan_result->fetch_assoc()) {
+    $loan_history[] = $loan;
+}
+
+$loan_payments = [];
+if (!empty($loan_history)) {
+    $loan_ids = array_map(static function ($loan) {
+        return (int)$loan['id'];
+    }, $loan_history);
+    $placeholders = implode(',', array_fill(0, count($loan_ids), '?'));
+    $payment_query = "SELECT loan_id, payment_date, amount, payment_method, receipt_id, attachment
+                      FROM emp_loan_payments
+                      WHERE loan_id IN ($placeholders)
+                      ORDER BY payment_date DESC, id DESC";
+    $payment_stmt = $conDB->prepare($payment_query);
+    $payment_types = str_repeat('i', count($loan_ids));
+    $payment_stmt->bind_param($payment_types, ...$loan_ids);
+    $payment_stmt->execute();
+    $payment_result = $payment_stmt->get_result();
+
+    while ($payment = $payment_result->fetch_assoc()) {
+        $loan_id = (int)$payment['loan_id'];
+        if (!isset($loan_payments[$loan_id])) {
+            $loan_payments[$loan_id] = [];
+        }
+        $loan_payments[$loan_id][] = $payment;
+    }
+}
+
 $status_badges = [
     'approved' => 'badge-success',
     'pending' => 'badge-warning',
+    'dept_manager_pending' => 'badge-warning',
+    'hr_assistant_pending' => 'badge-warning',
+    'hr_manager_pending' => 'badge-warning',
+    'finance_manager_pending' => 'badge-warning',
+    'finance_assistant_pending' => 'badge-warning',
+    'gm_pending' => 'badge-warning',
     'rejected' => 'badge-danger',
     'paid' => 'badge-info',
-    'partial' => 'badge-secondary'
+    'partial' => 'badge-secondary',
+    'processed' => 'badge-primary'
 ];
+
+function format_loan_status_label($status) {
+    if (!$status) {
+        return 'Pending';
+    }
+
+    if (strpos($status, 'pending') !== false) {
+        return 'Pending';
+    }
+
+    return ucwords(str_replace('_', ' ', $status));
+}
 ?>
 
 <!doctype html>
@@ -127,6 +187,17 @@ $status_badges = [
 
         .card { border: none; border-radius: 12px; box-shadow: var(--shadow-md); }
         .card .card-body { padding: 24px; }
+        .repayment-list { min-width: 260px; max-height: 180px; overflow-y: auto; }
+        .repayment-item {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+        }
+        .repayment-item:last-child { margin-bottom: 0; }
+        .repayment-item .amount { font-weight: 700; color: var(--success); }
+        .repayment-item .meta { font-size: 12px; color: var(--secondary); }
 
         @media (max-width: 768px) {
             .profile-header { padding: 20px; }
@@ -160,56 +231,97 @@ $status_badges = [
                                         <tr>
                                             <th><?= __('loan_type', 'Loan Type') ?></th>
                                             <th><?= __('amount', 'Amount') ?></th>
-                                            <th><?= __('applied_date', 'Applied Date') ?></th>
-                                            <th><?= __('approval_date', 'Approval Date') ?></th>
+                                            <th><?= __('monthly_deduction', 'Monthly Deduction') ?></th>
+                                            <th><?= __('total_paid', 'Total Paid') ?></th>
+                                            <th><?= __('remaining_balance', 'Remaining Balance') ?></th>
+                                            <th><?= __('start_date', 'Start Date') ?></th>
                                             <th><?= __('status', 'Status') ?></th>
-                                            <th><?= __('reason', 'Reason') ?></th>
+                                            <th><?= __('repayment_details', 'Repayment Details') ?></th>
                                             <th><?= __('action', 'Action') ?></th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php 
-                                            while ($loan = $loan_result->fetch_assoc()):
-                                                // Do not show legacy invoices in loan history
-                                                if (isset($loan['inv_no']) && strpos($loan['inv_no'], 'LEGACY-') === 0) {
-                                                    continue;
-                                                }
-                                        ?>
+                                        <?php foreach ($loan_history as $loan): ?>
+                                            <?php $payments = $loan_payments[(int)$loan['id']] ?? []; ?>
                                             <tr>
-                                                <td><?= htmlspecialchars($loan['loan_type'] ?? 'Regular') ?></td>
                                                 <td>
-                                                    <strong><?= number_format($loan['amount'] ?? 0, 2) ?></strong>
+                                                    <span class="badge badge-<?= (($loan['loan_type'] ?? 'regular') === 'emergency') ? 'warning' : 'info' ?>">
+                                                        <?= htmlspecialchars(ucfirst($loan['loan_type'] ?? 'regular')) ?>
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <strong><?= number_format((float)($loan['loan_amount'] ?? $loan['total_payable'] ?? 0), 2) ?></strong>
                                                     <i class="icon-saudi_riyal"></i>
                                                 </td>
                                                 <td>
-                                                    <?php if (isset($loan['application_date']) && $loan['application_date']): ?>
-                                                        <span class="date-batch-g"><?= format_safe_date($loan['application_date'] ?? null, 'M d, Y') ?></span>
-                                                        <br><small class="text-muted"><?= $DateConv->GregorianToHijri($loan['application_date'], $format) ?></small>
-                                                    <?php endif; ?>
+                                                    <strong><?= number_format((float)($loan['monthly_deduction'] ?? 0), 2) ?></strong>
+                                                    <i class="icon-saudi_riyal"></i>
                                                 </td>
                                                 <td>
-                                                    <?php if (isset($loan['approval_date']) && $loan['approval_date']): ?>
-                                                        <span class="date-batch-g"><?= format_safe_date($loan['approval_date'] ?? null, 'M d, Y') ?></span>
+                                                    <strong class="text-success"><?= number_format((float)($loan['total_paid'] ?? 0), 2) ?></strong>
+                                                    <i class="icon-saudi_riyal"></i>
+                                                </td>
+                                                <td>
+                                                    <strong class="<?= ((float)($loan['remaining_balance'] ?? 0) > 0) ? 'text-danger' : 'text-success' ?>">
+                                                        <?= number_format((float)($loan['remaining_balance'] ?? 0), 2) ?>
+                                                    </strong>
+                                                    <i class="icon-saudi_riyal"></i>
+                                                </td>
+                                                <td>
+                                                    <?php $loan_date = $loan['start_date'] ?? $loan['created_at'] ?? null; ?>
+                                                    <?php if (!empty($loan_date)): ?>
+                                                        <span class="date-batch-g"><?= format_safe_date($loan_date, 'M d, Y') ?></span>
+                                                        <br><small class="text-muted"><?= $DateConv->GregorianToHijri(substr($loan_date, 0, 10), $format) ?></small>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
                                                     <span class="badge <?= $status_badges[$loan['status']] ?? 'badge-secondary' ?>">
-                                                        <?= ucfirst(str_replace('_', ' ', $loan['status'] ?? 'pending')) ?>
+                                                        <?= htmlspecialchars(format_loan_status_label($loan['status'] ?? 'pending')) ?>
                                                     </span>
                                                 </td>
-                                                <td><?= isset($loan['reason']) ? htmlspecialchars($loan['reason']) : 'N/A' ?></td>
                                                 <td>
-                                                    <a href="view_loan.php?id=<?= $loan['id'] ?? $loan['loan_id'] ?>" class="btn btn-sm btn-info" title="View Details">
-                                                        <i class="fa fa-eye"></i>
-                                                    </a>
+                                                    <?php if (!empty($payments)): ?>
+                                                        <div class="repayment-list">
+                                                            <?php foreach ($payments as $payment): ?>
+                                                                <div class="repayment-item">
+                                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                                        <span><?= format_safe_date($payment['payment_date'] ?? null, 'M d, Y') ?></span>
+                                                                        <span class="amount"><?= number_format((float)$payment['amount'], 2) ?> <i class="icon-saudi_riyal"></i></span>
+                                                                    </div>
+                                                                    <div class="meta">
+                                                                        <?= htmlspecialchars(ucfirst($payment['payment_method'] ?? 'manual')) ?>
+                                                                        <?php if (!empty($payment['receipt_id'])): ?>
+                                                                            | <?= __('receipt_id', 'Receipt ID') ?>: <?= htmlspecialchars($payment['receipt_id']) ?>
+                                                                        <?php endif; ?>
+                                                                    </div>
+                                                                    <?php if (!empty($payment['attachment'])): ?>
+                                                                        <div class="meta mt-1">
+                                                                            <a href="<?= htmlspecialchars($payment['attachment']) ?>" target="_blank"><?= __('view_receipt', 'View Receipt') ?></a>
+                                                                        </div>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            <?php endforeach; ?>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <span class="text-muted small"><?= __('no_repayments_yet', 'No repayments yet') ?></span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <?php if (!empty($loan['inv_no'])): ?>
+                                                        <a href="loan_status_history.php?inv_no=<?= urlencode($loan['inv_no']) ?>" class="btn btn-sm btn-info" title="View Details" target="_blank">
+                                                            <i class="fa fa-eye"></i>
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <span class="text-muted">N/A</span>
+                                                    <?php endif; ?>
                                                 </td>
                                             </tr>
-                                        <?php endwhile; ?>
+                                        <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>
 
-                            <?php if ($loan_result->num_rows == 0): ?>
+                            <?php if (empty($loan_history)): ?>
                                 <div class="alert alert-info">
                                     <i class="fa fa-info-circle"></i> <?= __('no_loan_records_found', 'No loan records found for this employee.') ?>
                                 </div>
@@ -229,7 +341,7 @@ $status_badges = [
     <script>
         $(document).ready(function() {
             $('.datatable').DataTable({
-                order: [[2, 'desc']],
+                order: [[5, 'desc']],
                 pageLength: 8,
                 language: {
                     search: `<span>${__('search')}:</span> _INPUT_`,

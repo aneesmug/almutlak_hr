@@ -1,0 +1,32 @@
+{
+    "request_inv_no": "PAY-202606",
+    "month": "2026-06",
+    "uploads": [
+        {
+            "file_id": "c828ce4854f5f8a133a2",
+            "checkpoint_code": "PAYIMP-202606-7157FE21C3A0",
+            "original_name": "payroll_2026-06_HEAD_OFFICE (003).xlsx",
+            "stored_name": "PAY-202606__2026-06__20260610_134321__58f6e8f5.xlsx",
+            "uploaded_by": "5430",
+            "uploaded_by_name": "ANEES AFZAL MUHAMMAD AFZAL",
+            "uploaded_at": "2026-06-10 13:43:21",
+            "reviewed_by": "",
+            "reviewed_by_name": "",
+            "reviewed_at": "",
+            "review_note": ""
+        },
+        {
+            "file_id": "b281d6ed3dba43d1c6a6",
+            "checkpoint_code": "",
+            "original_name": "payroll_2026-06_KILO_08.xlsx",
+            "stored_name": "PAY-202606__2026-06__20260610_122527__c9379978.xlsx",
+            "uploaded_by": "5430",
+            "uploaded_by_name": "ANEES AFZAL",
+            "uploaded_at": "2026-06-10 12:25:27",
+            "reviewed_by": "3431",
+            "reviewed_by_name": "LEANDRO BUNAG SANTIAGO",
+            "reviewed_at": "2026-06-10 12:46:53",
+            "review_note": "Reviewed by HR Payroll and imported to payroll."
+        }
+    ]
+}

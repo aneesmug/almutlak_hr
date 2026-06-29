@@ -87,15 +87,8 @@ if (strlen($search_term) > 1) {
 	}
 	$construct = implode(" AND ", $construct_parts);
 
-	// --- NEW ACCESS CONTROL: Always apply company and department filters ---
-	$company_filter = getCompanyFilterSQL('comp_no', false);
-	if (!empty($company_filter)) {
-		$construct .= $company_filter;
-	}
-	$department_filter = getDepartmentFilterSQL('dept', false);
-	if (!empty($department_filter)) {
-		$construct .= $department_filter;
-	}
+	// Apply effective employee scope only so explicitly allowed employees
+	// are not hidden by company/department intersection.
 	$employee_filter = getEmployeeFilterSQL('emp_id', false);
 	if (!empty($employee_filter)) {
 		$construct .= $employee_filter;
@@ -152,13 +145,11 @@ if (!empty($construct)) {
 $_SESSION["foundnum"] = $total_items;
 // --- ** NEW ** Get the total unfiltered count ---
 // This query runs first to get the grand total before any search filters are applied.
-$company_filter_unf = getCompanyFilterSQL('comp_no', false);
-$department_filter_unf = getDepartmentFilterSQL('dept', false);
 $employee_filter_unf = getEmployeeFilterSQL('emp_id', false);
 $fallback_dept_clause = (!$can_see_all_employees && !$has_explicit_scope_restrictions && !empty($user_dept))
 	? " AND `dept`='" . mysqli_real_escape_string($conDB, $user_dept) . "'"
 	: "";
-$unfiltered_sql = "SELECT COUNT(*) as total FROM employees WHERE 1=1" . $company_filter_unf . $department_filter_unf . $employee_filter_unf . $fallback_dept_clause;
+$unfiltered_sql = "SELECT COUNT(*) as total FROM employees WHERE 1=1" . $employee_filter_unf . $fallback_dept_clause;
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 ?>

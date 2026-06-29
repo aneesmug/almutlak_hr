@@ -32,7 +32,7 @@ if (mysqli_num_rows($query) == 1) {
 		$accessible_depts = getAccessibleDepartments(true);
 		
 		$user_data = [
-			'emp_id' => $_SESSION['auth_user']['emp_id'] ?? $empid,
+			'emp_id' => $_SESSION['auth_user']['emp_id'] ?? $empid ,
 			'dept' => $_SESSION['auth_user']['dept'] ?? $user_dept,
 			'comp_no' => $_SESSION['auth_user']['comp_no'] ?? 1,
 			'user_type' => $user_type,
@@ -54,7 +54,7 @@ if (mysqli_num_rows($query) == 1) {
 						<h4>You don\'t have access to view this employee. Your access is limited to employees in your department and company.</h4>
 					</div>
 				</div>'
-			);
+			); 
 			header("Location: ./dashboard.php");
 			exit;
 		}
@@ -148,6 +148,10 @@ if (mysqli_num_rows($query) == 1) {
 		: (($joindiff->days < 90)
 			? __('under_probation')
 			: __('no_probation'));
+
+	$overtimeEligibilityText = ((string)($emprow['is_overtime_eligible'] ?? '0') === '1')
+		? __('yes', 'Yes')
+		: __('no', 'No');
 
 	$all_statuses = [
 		'apply' => __('new_request'),
@@ -1129,6 +1133,10 @@ if (mysqli_num_rows($query) == 1) {
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('probation_period') ?></div>
 																<div class="profile-field-value"><?= $probationStatus ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('eligible_for_overtime', 'Eligible For Overtime') ?></div>
+																<div class="profile-field-value"><?= $overtimeEligibilityText ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('sponsorship_label') ?></div>

@@ -11,14 +11,16 @@ $(document).on('click', '.applyResignation', function(e) {
     e.preventDefault();
     const empId = $(this).data('emp_id');
     const empName = $(this).data('emp_name');
-    openResignationWizard(empId, empName);
+    const selectedReason = $(this).data('selected_reason') || '';
+    const selectedReasonText = $(this).data('selected_reason_text') || '';
+    openResignationWizard(empId, empName, selectedReason, selectedReasonText);
 });
 
 
 /**
  * Step 1: Resignation Information - Select Last Working Day
  */
-function openResignationWizard(empId, empName) {
+function openResignationWizard(empId, empName, preselectedReason = '', preselectedReasonText = '') {
     Swal.fire({
         title: __('resignation_title') || 'Employee Resignation',
         html: resignationStep1_HTML(empName),
@@ -34,11 +36,12 @@ function openResignationWizard(empId, empName) {
         allowOutsideClick: false,
         didOpen: () => {
             // Fetch resignation reasons from API
-            loadResignationReasons();
+            loadResignationReasons(preselectedReason, preselectedReasonText);
         },
         preConfirm: () => {
             const lastWorkingDay = $('#last_working_day').val();
             const resignationReason = $('#resignation_reason').val();
+            const resignationReasonText = ($('#resignation_reason option:selected').text() || '').trim();
             
             // Validation
             if (!lastWorkingDay) {
@@ -66,7 +69,8 @@ function openResignationWizard(empId, empName) {
                 empId: empId,
                 empName: empName,
                 lastWorkingDay: lastWorkingDay,
-                resignationReason: resignationReason
+                resignationReason: resignationReason,
+                resignationReasonText: resignationReasonText
             };
             
             return true;
@@ -93,7 +97,7 @@ function openResignationWizard(empId, empName) {
 /**
  * Load resignation reasons from external API via proxy
  */
-function loadResignationReasons() {
+function loadResignationReasons(selectedReasonValue = '', selectedReasonText = '') {
     // IDs to skip/exclude from the dropdown (add IDs here that you want to skip)
     const skipReasonIds = [4,5, 7, 9, 13, 14, 17, 19, 20, 22]; // e.g., [2, 8, 11, 15, 18] to skip specific reasons
     
@@ -131,6 +135,21 @@ function loadResignationReasons() {
                     $select.append(`<option value="${optionValue}">${optionText}</option>`);
                 });
             }
+
+            // Auto-select previously chosen reason (first by reason code, then by displayed text)
+            const normalizedSelectedValue = String(selectedReasonValue || '').trim();
+            const normalizedSelectedText = String(selectedReasonText || '').trim().toLowerCase();
+            if (normalizedSelectedValue !== '' && $select.find(`option[value="${normalizedSelectedValue}"]`).length > 0) {
+                $select.val(normalizedSelectedValue);
+            } else if (normalizedSelectedText !== '') {
+                $select.find('option').each(function() {
+                    const optionText = String($(this).text() || '').trim().toLowerCase();
+                    if (optionText !== '' && optionText === normalizedSelectedText) {
+                        $select.val($(this).val());
+                        return false;
+                    }
+                });
+            }
             
             // Initialize select2 after options are loaded
             $select.select2({
@@ -138,6 +157,10 @@ function loadResignationReasons() {
                 dropdownParent: $('.swal2-container'),
                 placeholder: __('choose_reason') || 'Choose a reason'
             });
+
+            if ($select.val()) {
+                $select.trigger('change');
+            }
         },
         error: function(xhr, status, error) {
             console.error('Failed to load resignation reasons:', error);
@@ -209,7 +232,12 @@ function openExitInterviewWizard() {
             submitResignation();
         } else if (result.dismiss === Swal.DismissReason.cancel) {
             // Go back to Step 1
-            openResignationWizard(window.resignationData.empId, window.resignationData.empName);
+            openResignationWizard(
+                window.resignationData.empId,
+                window.resignationData.empName,
+                window.resignationData.resignationReason || '',
+                window.resignationData.resignationReasonText || ''
+            );
         }
     });
     

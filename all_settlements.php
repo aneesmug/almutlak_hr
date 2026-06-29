@@ -181,6 +181,7 @@ if ($totalItems > 0) {
         v.fly_type,
         v.vacdays,
         v.start_date,
+        v.return_date,
         v.vacation_salary_type,
         v.overtime_hours,
         v.deduction_hours,
@@ -520,6 +521,24 @@ if ($canSeeAllDepts) {
                                                 $fly_type = $settlement['fly_type'];
                                                 $vacation_salary_type = $settlement['vacation_salary_type'] ?? 'payroll';
                                                 $approved_days = (float)($settlement['vacdays'] ?? 0);
+
+                                                // Fallback for legacy/incomplete rows where vacdays is zero but date range exists.
+                                                if (
+                                                    $approved_days <= 0 &&
+                                                    !empty($settlement['start_date']) &&
+                                                    !empty($settlement['return_date']) &&
+                                                    strtolower(trim((string)$vac_type)) !== 'encashed'
+                                                ) {
+                                                    try {
+                                                        $start_date_obj = new DateTime($settlement['start_date']);
+                                                        $return_date_obj = new DateTime($settlement['return_date']);
+                                                        if ($return_date_obj >= $start_date_obj) {
+                                                            $approved_days = (float)$start_date_obj->diff($return_date_obj)->days + 1;
+                                                        }
+                                                    } catch (Exception $e) {
+                                                        // Keep original approved_days when parsing fails.
+                                                    }
+                                                }
                                                 
                                                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
                                                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
@@ -575,12 +594,20 @@ if ($canSeeAllDepts) {
                                                         if ($is_settlement_payable_vacation && !empty($settlement['start_date'])) {
                                                             try {
                                                                 $start_date_obj = new DateTime($settlement['start_date']);
-                                                                // Exclude the start day from working-days salary (working days BEFORE departure)
-                                                                $working_days = (int)$start_date_obj->format('d') - 1;
-                                                                if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                                                                $start_day = (int)$start_date_obj->format('d');
+
+                                                                // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
+                                                                // Special case: if vacation starts on day 1, employee completed the previous month in full.
+                                                                if ($start_day === 1) {
                                                                     $working_days_salary = round($total_monthly_salary);
                                                                 } else {
-                                                                    $working_days_salary = round(($total_monthly_salary / 30) * $working_days);
+                                                                    // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
+                                                                    $working_days = $start_day - 1;
+                                                                    if ($working_days_month_days > 0 && $working_days >= $working_days_month_days) {
+                                                                        $working_days_salary = round($total_monthly_salary);
+                                                                    } else {
+                                                                        $working_days_salary = round(($total_monthly_salary / 30) * $working_days);
+                                                                    }
                                                                 }
                                                             } catch (Exception $e) {
                                                                 $working_days_salary = 0;

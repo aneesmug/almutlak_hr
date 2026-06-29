@@ -2,7 +2,7 @@
 /**
  * API: Get Rejoin Requests for Supervisor
  * Returns pending, approved, and rejected rejoin requests for the logged-in supervisor
- * System admin sees all requests, others see only their supervised employees
+ * System admin and HR Senior BP see all requests, others see only their supervised employees
  * Supports both DataTables server-side processing and JSON API
  */
 
@@ -21,15 +21,31 @@ try {
     $supervisor_id = $_SESSION['empid'];
     $pdo = getDbConnection();
     
-    // Check if user is system admin (case-insensitive role check)
-    // Support multiple admin labels that may exist in user_type
-    $normalized_role = strtolower($user_type ?? '');
-    $is_admin_label = in_array($normalized_role, ['administrator', 'system_admin', 'system admin', 'admin'], true);
-    $is_admin = ($is_system_admin === true) || $is_admin_label;
+    // Check if user can view all requests (system admin / administrator / hr_senior_bp)
+    $role_candidates = [
+        $_SESSION['role'] ?? null,
+        $_SESSION['user_type'] ?? null,
+        $_SESSION['verify_user_type'] ?? null,
+        $user_type ?? null,
+        $user_role ?? null
+    ];
+    $normalized_roles = [];
+    foreach ($role_candidates as $role_candidate) {
+        $normalized = strtolower(trim((string)$role_candidate));
+        if ($normalized === '') {
+            continue;
+        }
+        $normalized_roles[] = str_replace([' ', '-'], '_', $normalized);
+    }
+
+    $is_admin_label = in_array('administrator', $normalized_roles, true);
+    $is_hr_senior_bp = in_array('hr_senior_bp', $normalized_roles, true);
+    $is_all_visibility = (($is_system_admin ?? false) === true) || $is_admin_label || $is_hr_senior_bp;
     
     // Build WHERE clause based on user role
-    $supervisor_where = $is_admin ? "1 = 1" : "e.supervisor_id = :supervisor_id";
-    $params = $is_admin ? [] : [':supervisor_id' => $supervisor_id];
+    $supervisor_where = $is_all_visibility ? "1 = 1" : "e.supervisor_id = :supervisor_id";
+    $params = $is_all_visibility ? [] : [':supervisor_id' => $supervisor_id];
+    $count_params = $params;
     
     // Check if this is a DataTables request
     $is_datatables = !empty($_POST['draw']);
@@ -120,30 +136,88 @@ try {
             $params[':search'] = '%' . $search . '%';
         }
         
-        // Get total records without search
-        $count_query = str_replace(
-            ['SELECT *', 'SELECT 
-                    rr.id as rejoin_request_id,
-                    rr.emp_id,
-                    rr.requested_rejoin_date,
-                    rr.requested_reason,
-                    rr.requested_at,
-                    rr.status,
-                    e.name as emp_name,
-                    v.return_date,
-                    v.id as vacation_id,
-                    v.vac_type,
-                    ra.status as approval_status,
-                    ra.note as approval_note', 'SELECT COUNT(*) as total'],
-            ['SELECT COUNT(*) as total', 'SELECT COUNT(*) as total', 'SELECT COUNT(*) as total'],
-            $query
-        );
-        
-        $count_query = preg_replace('/SELECT .+? FROM/i', 'SELECT COUNT(*) as total FROM', $query);
-        
+        // Get total records without search using explicit count queries.
+        if ($status === 'pending') {
+            $count_query = "
+                SELECT COUNT(DISTINCT rr.id) as total
+                FROM rejoin_requests rr
+                JOIN employees e ON rr.emp_id = e.emp_id
+                JOIN emp_vacation v ON rr.vacation_id = v.id
+                LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
+                WHERE $supervisor_where
+                AND rr.status = 'pending'
+                AND (ra.status = 'pending' OR ra.status IS NULL)
+            ";
+        } elseif ($status === 'approved') {
+            $count_query = "
+                SELECT COUNT(DISTINCT rr.id) as total
+                FROM rejoin_requests rr
+                JOIN employees e ON rr.emp_id = e.emp_id
+                JOIN emp_vacation v ON rr.vacation_id = v.id
+                LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
+                WHERE $supervisor_where
+                AND rr.status IN ('approved', 'adjusted')
+            ";
+        } else {
+            $count_query = "
+                SELECT COUNT(DISTINCT rr.id) as total
+                FROM rejoin_requests rr
+                JOIN employees e ON rr.emp_id = e.emp_id
+                JOIN emp_vacation v ON rr.vacation_id = v.id
+                LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
+                WHERE $supervisor_where
+                AND rr.status = 'rejected'
+            ";
+        }
+
         $stmt = $pdo->prepare($count_query);
-        $stmt->execute($params);
-        $total_records = $stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
+        $stmt->execute($count_params);
+        $total_records = (int)($stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+
+        $filtered_records = $total_records;
+        if (!empty($search)) {
+            if ($status === 'pending') {
+                $filtered_count_query = "
+                    SELECT COUNT(DISTINCT rr.id) as total
+                    FROM rejoin_requests rr
+                    JOIN employees e ON rr.emp_id = e.emp_id
+                    JOIN emp_vacation v ON rr.vacation_id = v.id
+                    LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
+                    WHERE $supervisor_where
+                    AND rr.status = 'pending'
+                    AND (ra.status = 'pending' OR ra.status IS NULL)
+                    AND (e.name LIKE :search OR e.emp_id LIKE :search OR rr.requested_reason LIKE :search)
+                ";
+            } elseif ($status === 'approved') {
+                $filtered_count_query = "
+                    SELECT COUNT(DISTINCT rr.id) as total
+                    FROM rejoin_requests rr
+                    JOIN employees e ON rr.emp_id = e.emp_id
+                    JOIN emp_vacation v ON rr.vacation_id = v.id
+                    LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
+                    WHERE $supervisor_where
+                    AND rr.status IN ('approved', 'adjusted')
+                    AND (e.name LIKE :search OR e.emp_id LIKE :search OR rr.requested_reason LIKE :search)
+                ";
+            } else {
+                $filtered_count_query = "
+                    SELECT COUNT(DISTINCT rr.id) as total
+                    FROM rejoin_requests rr
+                    JOIN employees e ON rr.emp_id = e.emp_id
+                    JOIN emp_vacation v ON rr.vacation_id = v.id
+                    LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
+                    WHERE $supervisor_where
+                    AND rr.status = 'rejected'
+                    AND (e.name LIKE :search OR e.emp_id LIKE :search OR rr.requested_reason LIKE :search)
+                ";
+            }
+
+            $filtered_params = $count_params;
+            $filtered_params[':search'] = '%' . $search . '%';
+            $filtered_stmt = $pdo->prepare($filtered_count_query);
+            $filtered_stmt->execute($filtered_params);
+            $filtered_records = (int)($filtered_stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+        }
         
         // Add sorting
         if (!empty($_POST['order'])) {
@@ -189,7 +263,7 @@ try {
         echo json_encode([
             'draw' => $draw,
             'recordsTotal' => $total_records,
-            'recordsFiltered' => $total_records,
+            'recordsFiltered' => $filtered_records,
             'data' => $data
         ]);
     } else {

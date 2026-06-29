@@ -183,6 +183,23 @@ function sanitize_announcement_html_fragment(string $html): string
 }
 
 /**
+ * Validate and normalize announcement link URL.
+ */
+function sanitize_announcement_link_url(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+
+    if (!preg_match('#^(https?://|mailto:)#i', $url)) {
+        $url = 'https://' . $url;
+    }
+
+    return filter_var($url, FILTER_VALIDATE_URL) ? $url : '';
+}
+
+/**
  * Convert dynamic rows to HTML.
  */
 function render_announcement_blocks_html(array $blocks, string $lang): string
@@ -511,6 +528,8 @@ $defaults = [
     'to_ar' => 'السادة / مدراء المصانع والمعارض والمستودعات',
     'subject_en' => 'Dear colleagues/General Administration staff',
     'subject_ar' => 'السلام / موظفي الادارة العامة المحترمين',
+    'announcement_link_url' => '',
+    'announcement_link_text' => 'Open Announcement Link',
     'footer_en' => 'Shared Services - HR Department',
     'footer_ar' => 'الخدمات المشتركة - قسم الموارد البشرية',
     'content_blocks' => [
@@ -527,7 +546,65 @@ $defaults = [
 
 $formData = $defaults;
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && $formData['circular_no'] === '') {
+// Fetch recent announcements for the search picker — one row per circular_no, newest first.
+$recentAnnouncements = [];
+$recentAnnouncementsRes = mysqli_query($conDB, "SELECT circular_no, subject_en, issue_date FROM announcement_broadcasts GROUP BY circular_no ORDER BY MAX(id) DESC LIMIT 20");
+if ($recentAnnouncementsRes) {
+    while ($recentAnnouncementsRow = mysqli_fetch_assoc($recentAnnouncementsRes)) {
+        $recentAnnouncements[] = $recentAnnouncementsRow;
+    }
+}
+
+// Handle loading a previous announcement by Circular No.
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['load_circular_no'])) {
+    $loadCircularNo = trim((string)$_GET['load_circular_no']);
+    $loadStmt = mysqli_prepare($conDB, "SELECT * FROM announcement_broadcasts WHERE circular_no = ? ORDER BY id DESC LIMIT 1");
+    if ($loadStmt) {
+        mysqli_stmt_bind_param($loadStmt, 's', $loadCircularNo);
+        mysqli_stmt_execute($loadStmt);
+        $loadResult = mysqli_stmt_get_result($loadStmt);
+        $loadedRow = $loadResult ? mysqli_fetch_assoc($loadResult) : null;
+
+        if ($loadedRow) {
+            $loadedBlocks = [];
+            if (!empty($loadedRow['content_blocks_json'])) {
+                $decodedBlocks = json_decode((string)$loadedRow['content_blocks_json'], true);
+                if (is_array($decodedBlocks)) {
+                    $loadedBlocks = $decodedBlocks;
+                }
+            }
+            if (empty($loadedBlocks)) {
+                $legacyEn = trim((string)($loadedRow['body_en'] ?? ''));
+                $legacyAr = trim((string)($loadedRow['body_ar'] ?? ''));
+                if ($legacyEn !== '' || $legacyAr !== '') {
+                    $loadedBlocks = [['en' => $legacyEn, 'ar' => $legacyAr]];
+                }
+            }
+
+            $newCircularNo = get_next_circular_number($conDB);
+            $formData = [
+                'circular_no'            => $newCircularNo,
+                'issue_date'             => date('d-m-Y'),
+                'to_en'                  => (string)($loadedRow['to_en'] ?? $defaults['to_en']),
+                'to_ar'                  => (string)($loadedRow['to_ar'] ?? $defaults['to_ar']),
+                'subject_en'             => (string)($loadedRow['subject_en'] ?? $defaults['subject_en']),
+                'subject_ar'             => (string)($loadedRow['subject_ar'] ?? $defaults['subject_ar']),
+                'announcement_link_url'  => '',
+                'announcement_link_text' => 'Open Announcement Link',
+                'footer_en'              => (string)($loadedRow['footer_en'] ?? $defaults['footer_en']),
+                'footer_ar'             => (string)($loadedRow['footer_ar'] ?? $defaults['footer_ar']),
+                'content_blocks'         => !empty($loadedBlocks) ? $loadedBlocks : $defaults['content_blocks'],
+            ];
+            $selectedRecipientMode = (string)($loadedRow['recipient_mode'] ?? '');
+            $messageType = 'info';
+            $messageHtml = 'Loaded circular #' . htmlspecialchars($loadCircularNo, ENT_QUOTES, 'UTF-8') . '. New Circular No set to <strong>' . htmlspecialchars($newCircularNo, ENT_QUOTES, 'UTF-8') . '</strong>. Modify the content and send.';
+        } else {
+            $messageType = 'warning';
+            $messageHtml = 'No announcement found with Circular No: ' . htmlspecialchars($loadCircularNo, ENT_QUOTES, 'UTF-8') . '.';
+            $formData['circular_no'] = get_next_circular_number($conDB);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'GET' && $formData['circular_no'] === '') {
     $formData['circular_no'] = get_next_circular_number($conDB);
 }
 
@@ -536,7 +613,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
     isset($_POST['save_draft']) ||
     in_array((string)($_POST['form_action'] ?? ''), ['send_announcement', 'save_draft'], true)
 )) {
-    foreach (['circular_no', 'issue_date', 'to_en', 'to_ar', 'subject_en', 'subject_ar', 'footer_en', 'footer_ar'] as $field) {
+    foreach (['circular_no', 'issue_date', 'to_en', 'to_ar', 'subject_en', 'subject_ar', 'announcement_link_url', 'announcement_link_text', 'footer_en', 'footer_ar'] as $field) {
         $formData[$field] = trim((string)($_POST[$field] ?? ''));
     }
 
@@ -613,6 +690,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                 $mailSubject = $formData['subject_en'] . ' | ' . $formData['subject_ar'];
                 $logo = get_setting($conDB, 'logo');
                 $imageBinary = decode_posted_announcement_image((string)($_POST['announcement_image_data'] ?? ''));
+                $linkUrl = sanitize_announcement_link_url((string)($formData['announcement_link_url'] ?? ''));
+                $linkTextRaw = trim((string)($formData['announcement_link_text'] ?? ''));
+                $linkText = $linkTextRaw !== '' ? $linkTextRaw : 'Open Announcement Link';
+                $linkHtml = '';
+
+                if ($linkUrl !== '') {
+                    $linkHtml = '<div style="padding:14px 16px 22px;text-align:center;background:#f2f2f2;">'
+                        . '<a href="' . htmlspecialchars($linkUrl, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer" '
+                        . 'style="display:inline-block;background:#1f4b8f;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:4px;font-weight:700;">'
+                        . htmlspecialchars($linkText, ENT_QUOTES, 'UTF-8')
+                        . '</a></div>';
+                }
 
                 if ($imageBinary === '') {
                     $imageBinary = render_announcement_to_image($formData, (string)$logo);
@@ -622,7 +711,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                     $messageType = 'danger';
                     $messageHtml = 'Announcement image could not be generated. Edge-based screenshot rendering is required, so the email was not sent as HTML fallback.';
                 } else {
-                    $emailBody = '<html><body style="margin:0;padding:0;background:#f2f2f2;"><img src="cid:announcement_preview" alt="Announcement" style="display:block;max-width:100%;width:100%;height:auto;border:0;" /></body></html>';
+                    $emailBody = '<html><body style="margin:0;padding:0;background:#f2f2f2;"><img src="cid:announcement_preview" alt="Announcement" style="display:block;max-width:100%;width:100%;height:auto;border:0;" />' . $linkHtml . '</body></html>';
 
                     $sentSuccess = 0;
                     foreach ($recipients as $rec) {
@@ -821,9 +910,48 @@ if (!empty($formData['issue_date'])) {
                             <h4 class="m-0 header-title">Bilingual Announcement Sender (English / العربية)</h4>
                             <p class="text-muted mt-2 mb-4">Create and send mirrored circular announcements side by side using dynamic content rows.</p>
 
+                            <!-- Load Previous Announcement -->
+                            <div class="card border mb-4">
+                                <div class="card-body py-3">
+                                    <h5 class="mb-3"><i class="fa fa-history"></i> Load Previous Announcement</h5>
+                                    <form method="get" action="<?= htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>" class="form-inline">
+                                        <div class="form-group mr-2 mb-2">
+                                            <label class="mr-2">Circular No</label>
+                                            <input type="text" name="load_circular_no"
+                                                class="form-control"
+                                                placeholder="e.g. 001"
+                                                list="recentCircularsList"
+                                                style="width:180px;"
+                                                value="<?= htmlspecialchars((string)($_GET['load_circular_no'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                            <datalist id="recentCircularsList">
+                                                <?php foreach ($recentAnnouncements as $recentItem): ?>
+                                                    <option value="<?= htmlspecialchars($recentItem['circular_no'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars('#' . $recentItem['circular_no'] . ' — ' . mb_substr((string)($recentItem['subject_en'] ?? ''), 0, 40), ENT_QUOTES, 'UTF-8') ?></option>
+                                                <?php endforeach; ?>
+                                            </datalist>
+                                        </div>
+                                        <button type="submit" class="btn btn-outline-info mb-2"><i class="fa fa-search"></i> Load &amp; Reuse</button>
+                                    </form>
+                                    <?php if (!empty($recentAnnouncements)): ?>
+                                    <div class="mt-2">
+                                        <small class="text-muted font-weight-bold">Recent circulars:</small>
+                                        <div class="d-flex flex-wrap mt-1">
+                                            <?php foreach (array_slice($recentAnnouncements, 0, 12) as $recentItem): ?>
+                                                <a href="?load_circular_no=<?= urlencode($recentItem['circular_no']) ?>" class="badge badge-light border mr-1 mb-1" style="font-size:12px;padding:5px 8px;cursor:pointer;" title="<?= htmlspecialchars((string)($recentItem['subject_en'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                    #<?= htmlspecialchars($recentItem['circular_no'], ENT_QUOTES, 'UTF-8') ?>
+                                                    <?php if (!empty($recentItem['issue_date'])): ?>
+                                                        <span class="text-muted">(<?= htmlspecialchars(date('d-m-Y', strtotime($recentItem['issue_date'])), ENT_QUOTES, 'UTF-8') ?>)</span>
+                                                    <?php endif; ?>
+                                                </a>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
                             <?php if ($messageHtml !== ''): ?>
                                 <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES, 'UTF-8') ?>">
-                                    <?= htmlspecialchars($messageHtml, ENT_QUOTES, 'UTF-8') ?>
+                                    <?= $messageHtml ?>
                                 </div>
                             <?php endif; ?>
 
@@ -859,6 +987,15 @@ if (!empty($formData['issue_date'])) {
                                         <div class="form-group">
                                             <label>العنوان (Arabic) *</label>
                                             <input type="text" name="subject_ar" class="form-control js-bind" data-bind="subject_ar" value="<?= htmlspecialchars($formData['subject_ar'], ENT_QUOTES, 'UTF-8') ?>">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label>Announcement Link URL</label>
+                                            <input type="text" name="announcement_link_url" class="form-control js-bind" data-bind="announcement_link_url" placeholder="https://example.com" value="<?= htmlspecialchars($formData['announcement_link_url'], ENT_QUOTES, 'UTF-8') ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Link Button Text</label>
+                                            <input type="text" name="announcement_link_text" class="form-control js-bind" data-bind="announcement_link_text" value="<?= htmlspecialchars($formData['announcement_link_text'], ENT_QUOTES, 'UTF-8') ?>">
                                         </div>
 
                                         <hr>
@@ -960,6 +1097,7 @@ if (!empty($formData['issue_date'])) {
                                                 <div class="announcement-footer">
                                                     <div id="pvFooterEn"><?= htmlspecialchars($formData['footer_en'], ENT_QUOTES, 'UTF-8') ?></div>
                                                     <div id="pvFooterAr"><?= htmlspecialchars($formData['footer_ar'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <div id="pvAnnouncementLink" class="mt-2"></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1178,6 +1316,19 @@ if (!empty($formData['issue_date'])) {
         return String(new Date().getFullYear());
     }
 
+    function getSafeLinkUrl(value) {
+        var raw = String(value || '').trim();
+        if (!raw) {
+            return '';
+        }
+
+        if (!/^(https?:\/\/|mailto:)/i.test(raw)) {
+            raw = 'https://' + raw;
+        }
+
+        return /^(https?:\/\/|mailto:)/i.test(raw) ? raw : '';
+    }
+
     function renderBlocksPreview() {
         var enHtml = '';
         var arHtml = '';
@@ -1224,6 +1375,14 @@ if (!empty($formData['issue_date'])) {
 
         $('#pvFooterEn').text($('[name="footer_en"]').val() || '');
         $('#pvFooterAr').text($('[name="footer_ar"]').val() || '');
+
+        var linkUrl = getSafeLinkUrl($('[name="announcement_link_url"]').val());
+        var linkText = ($('[name="announcement_link_text"]').val() || '').trim() || 'Open Announcement Link';
+        if (linkUrl) {
+            $('#pvAnnouncementLink').html('<a href="' + $('<div>').text(linkUrl).html() + '" target="_blank" rel="noopener noreferrer">' + $('<div>').text(linkText).html() + '</a>');
+        } else {
+            $('#pvAnnouncementLink').html('');
+        }
 
         renderBlocksPreview();
     }

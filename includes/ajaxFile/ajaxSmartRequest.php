@@ -20,19 +20,30 @@ if($ajaxType == 'sub_type') {
         ini_set('display_errors', 1);
         ini_set('display_startup_errors', 1);
         error_reporting(E_ALL);
+
+        $request_date = $_POST['request_date'] ?? '';
+        $parsed_request_date = DateTime::createFromFormat('Y-m-d', $request_date);
+        if (!$parsed_request_date || $parsed_request_date->format('Y-m-d') !== $request_date) {
+            send_json_response("Invalid Date", "Please select a valid request date.", "error");
+        }
         
         // Fetch old values before update
-        $fetch_stmt = $pdo->prepare("SELECT * FROM `smart_request` WHERE `inv_no` = :reqid");
+        $fetch_stmt = $pdo->prepare("SELECT * FROM `smart_request` WHERE `inv_no` = :reqid ORDER BY `created_at` DESC, `id` DESC LIMIT 1");
         $fetch_stmt->execute([':reqid' => $_POST['reqid']]);
         $old_request = $fetch_stmt->fetch(PDO::FETCH_ASSOC);
+
+        $tally_id = $_POST['tally_id'] ?? ($old_request['tally_id'] ?? null);
+        $injazat_id = $_POST['injazat_id'] ?? ($old_request['injazat_id'] ?? null);
+        $remarks = $_POST['remarks'] ?? '';
         
-        $stmt = $pdo->prepare("UPDATE `smart_request` SET `sub_type`=:sub_type_up, `sub_title`=:sub_title_up, `tally_id`=:tally_id_up, `injazat_id`=:injazat_id_up,`remarks`=:remarks_up WHERE `inv_no`=:reqid ");
+        $stmt = $pdo->prepare("UPDATE `smart_request` SET `sub_type`=:sub_type_up, `sub_title`=:sub_title_up, `tally_id`=:tally_id_up, `injazat_id`=:injazat_id_up, `remarks`=:remarks_up, `created_at`=CONCAT(:request_date_up, ' ', TIME(`created_at`)) WHERE `inv_no`=:reqid ");
         $stmt->execute([
             ':sub_type_up' => $_POST['sub_type'], 
             ':sub_title_up' => mysqli_real_escape_string($conDB, $_POST['sub_title']), 
-            ':tally_id_up' => mysqli_real_escape_string($conDB, $_POST['tally_id']), 
-            ':injazat_id_up' => mysqli_real_escape_string($conDB, $_POST['injazat_id']), 
-            ':remarks_up' => mysqli_real_escape_string($conDB, $_POST['remarks']), 
+            ':tally_id_up' => $tally_id !== null ? mysqli_real_escape_string($conDB, $tally_id) : null, 
+            ':injazat_id_up' => $injazat_id !== null ? mysqli_real_escape_string($conDB, $injazat_id) : null, 
+            ':remarks_up' => mysqli_real_escape_string($conDB, $remarks), 
+            ':request_date_up' => $request_date,
             ':reqid' => $_POST['reqid'],
         ]);
         if($stmt->rowCount() > 0){
@@ -40,9 +51,10 @@ if($ajaxType == 'sub_type') {
             ActivityLogger::logUpdate('Request', 'ajaxSmartRequest.php', $old_request['id'], $old_request, [
                 'sub_type' => $_POST['sub_type'],
                 'sub_title' => $_POST['sub_title'],
-                'tally_id' => $_POST['tally_id'],
-                'injazat_id' => $_POST['injazat_id'],
-                'remarks' => $_POST['remarks']
+                'tally_id' => $tally_id,
+                'injazat_id' => $injazat_id,
+                'remarks' => $remarks,
+                'created_at' => $request_date
             ], "Updated request via AJAX: {$_POST['reqid']}", 'smart_request');
             
             send_json_response("Updated!", "This request has been update successfully.", "success");
