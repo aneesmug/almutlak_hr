@@ -89,7 +89,7 @@ if ($emprow['status'] == 1) {
         $badgeText = $activeFlyVacCount > 1 ? " ({$activeFlyVacCount})" : '';
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeFlyVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
     }
-    // *$moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
 } else {
     $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
 }

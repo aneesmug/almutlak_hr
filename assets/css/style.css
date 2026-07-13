@@ -8603,6 +8603,58 @@ i.fa-clipboard {
   flex-direction: column;
 }
 
+.employee-card-top-line {
+  position: relative;
+  height: 12px;
+  width: 100%;
+  background: linear-gradient(90deg, #556ee6 0%, #50a5f1 100%);
+  overflow: hidden;
+}
+
+.employee-card-top-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -35%;
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.92) 52%, rgba(255, 255, 255, 0) 100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.employee-card-modern:hover .employee-card-top-line::after,
+.employee-card-modern:focus-within .employee-card-top-line::after {
+  opacity: 1;
+  animation: employeeCardTopLineShine 0.85s ease-out 1;
+}
+
+@keyframes employeeCardTopLineShine {
+  0% {
+    left: -35%;
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+.employee-card-modern.status-active .employee-card-top-line {
+  background: linear-gradient(90deg, #556ee6 0%, #50a5f1 100%);
+}
+
+.employee-card-modern.status-fly .employee-card-top-line {
+  background: linear-gradient(90deg, #f1b44c 0%, #ffde7d 100%);
+}
+
+.employee-card-modern.status-inactive .employee-card-top-line {
+  background: linear-gradient(90deg, #f46a6a 0%, #ff6a88 100%);
+}
+
 .employee-card-modern:hover {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
   transform: translateY(-8px);
@@ -8611,7 +8663,7 @@ i.fa-clipboard {
 .employee-card-header {
   position: relative;
   height: 180px;
-  background: linear-gradient(135deg, #007bff 0%, #17a2b8 100%);
+  background: #ffffff;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -8625,21 +8677,21 @@ i.fa-clipboard {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(0, 123, 255, 0.9) 0%, rgba(23, 162, 184, 0.9) 100%);
+  background: transparent;
   z-index: 1;
 }
 
 /* Status-based header gradient overlays */
 .employee-card-modern.status-active .header-gradient {
-  background: linear-gradient(135deg, rgba(0, 123, 255, 0.9) 0%, rgba(23, 162, 184, 0.9) 100%);
+  background: transparent;
 }
 
 .employee-card-modern.status-fly .header-gradient {
-  background: linear-gradient(135deg, rgba(247, 183, 49, 0.9) 0%, rgba(245, 166, 35, 0.9) 100%);
+  background: transparent;
 }
 
 .employee-card-modern.status-inactive .header-gradient {
-  background: linear-gradient(135deg, rgba(231, 76, 60, 0.9) 0%, rgba(192, 57, 43, 0.9) 100%);
+  background: transparent;
 }
 
 .employee-avatar-wrapper {
@@ -8882,15 +8934,15 @@ i.fa-clipboard {
 }
 
 .employee-card-modern.status-inactive .employee-card-header {
-  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  background: #ffffff;
 }
 
 .employee-card-modern.status-active .employee-card-header {
-  background: linear-gradient(135deg, #007bff 0%, #17a2b8 100%);
+  background: #ffffff;
 }
 
 .employee-card-modern.status-fly .employee-card-header {
-  background: linear-gradient(135deg, #f7b731 0%, #f5a623 100%);
+  background: #ffffff;
 }
 
 /* Responsive adjustments */

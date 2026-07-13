@@ -490,6 +490,12 @@
                 return;
             }
 
+            // Special handling for departments configuration
+            if (normalizedGroupName === 'departments') {
+                renderDepartmentsSettings();
+                return;
+            }
+
             // Special handling for report permissions configuration
             if (normalizedGroupName === 'report_permissions') {
                 renderReportPermissionsSettings();
@@ -1255,6 +1261,357 @@
             }
         }
 
+        function renderDepartmentsSettings() {
+            let formHtml = `<div class="tab-pane active" id="group-departments" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0"><?= __('department_management') ?></h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-department"><i class="mdi mdi-plus"></i> <?= __('add_new_department') ?></button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4"><?= __('manage_departments_in_english_and_arabic') ?></p>`;
+
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="department-search-input" class="form-control" placeholder="<?= __('search_departments_english_or_arabic') ?>" style="max-width: 400px;">`;
+            formHtml += `<small class="form-text text-muted mt-1"><?= __('search_by_department_in_english_or_arabic') ?></small>`;
+            formHtml += `</div>`;
+
+            formHtml += `<div id="departments-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted">`;
+            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
+            formHtml += `<span class="ml-2"><?= __('loading') ?></span>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            settingsContainer.innerHTML = formHtml;
+
+            loadDepartments();
+
+            const btnAddDepartment = document.getElementById('btn-add-department');
+            if (btnAddDepartment) {
+                btnAddDepartment.addEventListener('click', showAddDepartmentModal);
+            }
+
+            const searchInput = document.getElementById('department-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    filterDepartments(this.value);
+                });
+            }
+        }
+
+        async function loadDepartments() {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_departments' })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_load_departments') ?>');
+                const data = await response.json();
+
+                const container = document.getElementById('departments-container');
+                if (!data.success || !data.departments || data.departments.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> <?= __('no_departments_configured_yet') ?></p>';
+                    return;
+                }
+
+                let departmentsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th><?= __('department_english') ?></th><th><?= __('department_arabic') ?></th><th><?= __('department_color') ?></th><th><?= __('actions') ?></th></tr></thead><tbody>';
+                data.departments.forEach((department) => {
+                    const rawColor = String(department.dept_clr || '').trim();
+                    const allowedColors = ['custom', 'purple', 'primary', 'success'];
+                    const safeColorClass = allowedColors.includes(rawColor.toLowerCase()) ? rawColor.toLowerCase() : 'custom';
+                    departmentsHtml += `
+                        <tr>
+                            <td><strong>${department.dep_nme || 'N/A'}</strong></td>
+                            <td><strong>${department.dep_nme_ar || 'N/A'}</strong></td>
+                            <td>
+                                <span class="badge ${safeColorClass}">${safeColorClass}</span>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary edit-department-btn" data-department-id="${department.id}" title="<?= __('edit') ?>">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-department-btn" data-department-id="${department.id}" title="<?= __('delete') ?>">
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                departmentsHtml += '</tbody></table></div>';
+                container.innerHTML = departmentsHtml;
+
+                container.querySelectorAll('.edit-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        showEditDepartmentModal(this.dataset.departmentId);
+                    });
+                });
+
+                container.querySelectorAll('.delete-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        deleteDepartment(this.dataset.departmentId);
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error loading departments:', error);
+                const container = document.getElementById('departments-container');
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> <?= __('Error:') ?> ${error.message}</p>`;
+            }
+        }
+
+        function showAddDepartmentModal() {
+            Swal.fire({
+                icon: 'info',
+                title: '<?= __('add_new_department') ?>',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="department-title-en"><?= __('department_english') ?></label>
+                        <input type="text" id="department-title-en" class="form-control" placeholder="<?= __('enter_department_in_english') ?>">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="department-title-ar"><?= __('department_arabic') ?></label>
+                        <input type="text" id="department-title-ar" class="form-control" placeholder="<?= __('enter_department_in_arabic') ?>">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="department-color"><?= __('department_color') ?></label>
+                        <select id="department-color" class="form-control">
+                            <option value="custom">custom</option>
+                            <option value="purple">purple</option>
+                            <option value="primary">primary</option>
+                            <option value="success">success</option>
+                        </select>
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '<?= __('add') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
+                preConfirm: () => {
+                    const titleEn = document.getElementById('department-title-en').value.trim();
+                    const titleAr = document.getElementById('department-title-ar').value.trim();
+                    const color = (document.getElementById('department-color').value || '').trim().toLowerCase();
+
+                    if (!titleEn) {
+                        Swal.showValidationMessage('<?= __('department_in_english_is_required') ?>');
+                        return false;
+                    }
+                    if (!titleAr) {
+                        Swal.showValidationMessage('<?= __('department_in_arabic_is_required') ?>');
+                        return false;
+                    }
+                    if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
+                        Swal.showValidationMessage('<?= __('invalid_department_color') ?>');
+                        return false;
+                    }
+                    return { titleEn, titleAr, color };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    await addDepartment(result.value.titleEn, result.value.titleAr, result.value.color);
+                }
+            });
+        }
+
+        async function addDepartment(titleEn, titleAr, color) {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'add_department',
+                        department_en: titleEn,
+                        department_ar: titleAr,
+                        department_color: color
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_add_department') ?>');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('<?= __('added') ?>', '<?= __('department_added_successfully') ?>', 'success');
+                    loadDepartments();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_add_department') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function showEditDepartmentModal(departmentId) {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'get_department',
+                        department_id: departmentId
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_load_department') ?>');
+                const data = await response.json();
+
+                if (!data.success || !data.department) {
+                    Swal.fire('<?= __('error') ?>', '<?= __('department_not_found') ?>', 'error');
+                    return;
+                }
+
+                const department = data.department;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '<?= __('edit_department') ?>',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-department-title-en"><?= __('department_english') ?></label>
+                            <input type="text" id="edit-department-title-en" class="form-control" value="${department.dep_nme || ''}" placeholder="<?= __('enter_department_in_english') ?>">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-department-title-ar"><?= __('department_arabic') ?></label>
+                            <input type="text" id="edit-department-title-ar" class="form-control" value="${department.dep_nme_ar || ''}" placeholder="<?= __('enter_department_in_arabic') ?>">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-department-color"><?= __('department_color') ?></label>
+                            <select id="edit-department-color" class="form-control">
+                                <option value="custom" ${(String(department.dept_clr || '').trim().toLowerCase() === 'custom' || !String(department.dept_clr || '').trim()) ? 'selected' : ''}>custom</option>
+                                <option value="purple" ${String(department.dept_clr || '').trim().toLowerCase() === 'purple' ? 'selected' : ''}>purple</option>
+                                <option value="primary" ${String(department.dept_clr || '').trim().toLowerCase() === 'primary' ? 'selected' : ''}>primary</option>
+                                <option value="success" ${String(department.dept_clr || '').trim().toLowerCase() === 'success' ? 'selected' : ''}>success</option>
+                            </select>
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '<?= __('update') ?>',
+                    cancelButtonText: '<?= __('cancel') ?>',
+                    preConfirm: () => {
+                        const titleEn = document.getElementById('edit-department-title-en').value.trim();
+                        const titleAr = document.getElementById('edit-department-title-ar').value.trim();
+                        const color = (document.getElementById('edit-department-color').value || '').trim().toLowerCase();
+
+                        if (!titleEn) {
+                            Swal.showValidationMessage('<?= __('department_in_english_is_required') ?>');
+                            return false;
+                        }
+                        if (!titleAr) {
+                            Swal.showValidationMessage('<?= __('department_in_arabic_is_required') ?>');
+                            return false;
+                        }
+                        if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
+                            Swal.showValidationMessage('<?= __('invalid_department_color') ?>');
+                            return false;
+                        }
+                        return { titleEn, titleAr, color };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                        await updateDepartment(departmentId, result.value.titleEn, result.value.titleAr, result.value.color);
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+            async function updateDepartment(departmentId, titleEn, titleAr, color) {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'update_department',
+                        department_id: departmentId,
+                        department_en: titleEn,
+                            department_ar: titleAr,
+                            department_color: color
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_update_department') ?>');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('<?= __('updated') ?>', '<?= __('department_updated_successfully') ?>', 'success');
+                    loadDepartments();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_update_department') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function deleteDepartment(departmentId) {
+            const result = await Swal.fire({
+                title: '<?= __('delete_department') ?>',
+                text: '<?= __('this_action_cannot_be_undone') ?>',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '<?= __('yes_delete_it') ?>',
+                cancelButtonText: '<?= __('cancel') ?>'
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'delete_department',
+                        department_id: departmentId
+                    })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_delete_department') ?>');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('<?= __('deleted') ?>', '<?= __('department_deleted_successfully') ?>', 'success');
+                    loadDepartments();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_delete_department') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        function filterDepartments(searchTerm) {
+            const rows = document.querySelectorAll('#departments-container tbody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const depEn = row.cells[0].textContent.toLowerCase();
+                const depAr = row.cells[1].textContent.toLowerCase();
+                const depColor = row.cells[2].textContent.toLowerCase();
+                const searchLower = searchTerm.toLowerCase();
+
+                if (depEn.includes(searchLower) || depAr.includes(searchLower) || depColor.includes(searchLower)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            const container = document.getElementById('departments-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> <?= __('no_departments_match_your_search') ?>`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
         function renderApprovalChainSettings() {
             //* const defaultRequestTypes = [
             //*     { id: 'vacation_request', name: '<?//= __('vacation_request') ?>', description: '<?//= __('annual_vacation_and_fly_vacation_approval_chain') ?>' },
@@ -1696,9 +2053,12 @@
                     return acc;
                 }, {});
 
-                // Ensure 'job' and 'approval' tabs always exist
+                // Ensure custom management tabs always exist
                 if (!groupedSettings['job titles']) {
                     groupedSettings['job titles'] = [];
+                }
+                if (!groupedSettings['departments']) {
+                    groupedSettings['departments'] = [];
                 }
                 if (!groupedSettings['approval']) {
                     groupedSettings['approval'] = [];

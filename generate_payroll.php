@@ -1302,6 +1302,7 @@ function collectPayrollModalData(employee) {
         const benefitTypeSelect = row.querySelector('.benefit-type');
         const benefitNameInput = row.querySelector('.benefit-name');
         const hoursInput = row.querySelector('.benefit-hours');
+        const minutesInput = row.querySelector('.benefit-minutes');
         const amountInput = row.querySelector('.benefit-amount');
         const noteInput = row.querySelector('.benefit-note');
         const benefitId = benefitTypeSelect?.dataset.benefitId || benefitNameInput?.dataset.benefitId || null;
@@ -1320,7 +1321,9 @@ function collectPayrollModalData(employee) {
             benefit: benefitName,
             note: noteInput ? noteInput.value.trim() : '',
             amount: parseFloat(amountInput?.value || 0),
-            hours: hoursInput ? parseFloat(hoursInput.value || 0) : null
+            hours: hoursInput
+                ? ((parseFloat(hoursInput.value || 0) || 0) + (Math.max(parseFloat(minutesInput?.value || 0) || 0, 0) / 60))
+                : null
         };
     }).filter(b => b.benefit !== '' || b.amount > 0);
 
@@ -1528,6 +1531,13 @@ function buildBenefitsHtml(benefits, benefitTypes) {
         // For vacation benefits, always show as readonly text
         // For regular benefits, use dropdown if benefit types are available
         const savedHours = parseFloat(b.hours || 0);
+        const normalizedBenefitHours = Number.isFinite(savedHours) ? Math.max(savedHours, 0) : 0;
+        let wholeBenefitHours = Math.floor(normalizedBenefitHours);
+        let benefitMinutes = Math.round((normalizedBenefitHours - wholeBenefitHours) * 60);
+        if (benefitMinutes >= 60) {
+            wholeBenefitHours += 1;
+            benefitMinutes = 0;
+        }
         const savedTypeId = parseInt(b.type_id || 0, 10);
 
         const shouldUseBenefitSelect = !isVacationBenefit && savedTypeId > 0 && benefitTypes && benefitTypes.length > 0;
@@ -1553,8 +1563,8 @@ function buildBenefitsHtml(benefits, benefitTypes) {
                     ${benefitOptionsHtml}
                     ${benefitLabel}
                 </div>
-                <div class="col-6 col-md-2 benefit-hours-slot" data-hours="${savedHours}"></div>
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-3 benefit-hours-slot" data-hours="${savedHours}" data-minutes="${benefitMinutes}" data-whole-hours="${wholeBenefitHours}"></div>
+                <div class="col-6 col-md-2">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                         <input type="text" step="0.01" class="form-control benefit-amount ${isVacationBenefit ? 'bg-light' : ''}" 
@@ -2125,11 +2135,11 @@ function isPayrollImportGosiReason(value) {
 
 function normalizePayrollImportBenefitType(value) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (normalized === 'overtime_basic' || normalized === 'overtime_total' || normalized === 'by_hours' || normalized === 'fixed') {
+    if (normalized === 'overtime_basic' || normalized === 'overtime_total' || normalized === 'by_hours' || normalized === 'fixed' || normalized === 'by_hours_and_minutes') {
         return normalized;
     }
 
-    if (normalized === 'hourly' || normalized === 'calculated' || normalized === 'hours') {
+    if (normalized === 'hourly' || normalized === 'calculated' || normalized === 'hours' || normalized === 'by_hours_and_minutes') {
         return 'by_hours';
     }
 
@@ -2138,11 +2148,11 @@ function normalizePayrollImportBenefitType(value) {
 
 function normalizePayrollImportDeductionType(value) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (normalized === 'fixed' || normalized === 'hourly_deduction' || normalized === 'daily_deduction') {
+    if (normalized === 'fixed' || normalized === 'hourly_deduction' || normalized === 'daily_deduction' || normalized === 'by_hours_and_minutes') {
         return normalized;
     }
 
-    if (normalized === 'hourly' || normalized === 'hours') {
+    if (normalized === 'hourly' || normalized === 'hours' || normalized === 'by_hours_and_minutes') {
         return 'hourly_deduction';
     }
 
@@ -2161,11 +2171,12 @@ function mapPayrollImportRow(row, defaultMonth) {
         benefit_type: normalizePayrollImportBenefitType(getPayrollImportValue(row, ['benefit_type', 'overtime_type'])),
         overtime_value: String(getPayrollImportValue(row, ['overtime_value', 'overtime', 'benefit_value', 'benefits']) || '').trim(),
         overtime_hours: String(getPayrollImportValue(row, ['overtime_hours', 'overtime_hour', 'benefit_hours', 'hours']) || '').trim(),
+        overtime_minutes: String(getPayrollImportValue(row, ['overtime_minutes', 'overtime_minute', 'benefit_minutes', 'benefit_minute', 'minutes', 'mins']) || '').trim(),
         overtime_reason: String(getPayrollImportValue(row, ['overtime_reason', 'benefit_reason', 'benefits_reason', 'reason']) || '').trim(),
         deduction_type: normalizePayrollImportDeductionType(getPayrollImportValue(row, ['deduction_type'])),
         deduction_value: String(getPayrollImportValue(row, ['deduction_value', 'deduction', 'deductions', 'total_deduction']) || '').trim(),
         deduction_hours: String(getPayrollImportValue(row, ['deduction_hours', 'deduction_hour']) || '').trim(),
-        deduction_days: String(getPayrollImportValue(row, ['deduction_days', 'deduction_day']) || '').trim(),
+        deduction_minutes: String(getPayrollImportValue(row, ['deduction_minutes', 'deduction_minute', 'minutes', 'mins']) || '').trim(),
         deduction_reason: String(getPayrollImportValue(row, ['deduction_reason', 'deductions_reason', 'deduction_note']) || '').trim(),
     };
 
@@ -2173,7 +2184,7 @@ function mapPayrollImportRow(row, defaultMonth) {
         mappedRow.deduction_type = 'fixed';
         mappedRow.deduction_value = '';
         mappedRow.deduction_hours = '';
-        mappedRow.deduction_days = '';
+        mappedRow.deduction_minutes = '';
         mappedRow.deduction_reason = '';
     }
 
@@ -2268,8 +2279,8 @@ async function fetchPayrollImportCheckpointCode(defaultMonth) {
 async function downloadPayrollImportTemplate() {
     const defaultMonth = $('#payrollMonth').val() || getCurrentPayrollMonthValue();
     const checkpointCode = await fetchPayrollImportCheckpointCode(defaultMonth);
-    const benefitTypeOptions = ['fixed', 'by_hours', 'overtime_total', 'overtime_basic'];
-    const deductionTypeOptions = ['fixed', 'hourly_deduction', 'daily_deduction'];
+    const benefitTypeOptions = ['by_hours'];
+    const deductionTypeOptions = ['hourly_deduction'];
     const benefitsSheetName = getPayrollImportBenefitsSheetName();
     const deductionsSheetName = getPayrollImportDeductionsSheetName();
 
@@ -2278,15 +2289,19 @@ async function downloadPayrollImportTemplate() {
         const benefitsWorksheet = workbook.addWorksheet(benefitsSheetName);
         const deductionsWorksheet = workbook.addWorksheet(deductionsSheetName);
         const typeListSheet = workbook.addWorksheet('__PAYROLL_IMPORT_TYPE_LISTS');
+        const minutesListSheet = workbook.addWorksheet('__PAYROLL_IMPORT_MINUTES');
         const metadataSheet = workbook.addWorksheet(getPayrollImportMetadataSheetName());
 
-        benefitsWorksheet.addRow(['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_reason']);
-        benefitsWorksheet.addRow(['1001', 'fixed', '250.00', '', 'Project Support Benefit']);
+        benefitsWorksheet.addRow(['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_minutes', 'benefit_reason']);
+        benefitsWorksheet.addRow(['1001', 'by_hours_and_minutes', '', '0', '0', 'Project Support Benefit']);
 
-        deductionsWorksheet.addRow(['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_days', 'deduction_reason']);
-        deductionsWorksheet.addRow(['1001', 'hourly_deduction', '', '3', '', 'Late Arrival Deduction']);
+        deductionsWorksheet.addRow(['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_minutes', 'deduction_reason']);
+        deductionsWorksheet.addRow(['1001', 'hourly_deduction', '', '0', '0', 'Late Arrival Deduction']);
 
         typeListSheet.addRow(['benefit_type_options', 'deduction_type_options']);
+        for (let i = 0; i < 60; i += 1) {
+            minutesListSheet.addRow([i]);
+        }
         const maxRows = Math.max(benefitTypeOptions.length, deductionTypeOptions.length);
         for (let i = 0; i < maxRows; i += 1) {
             typeListSheet.addRow([
@@ -2300,17 +2315,28 @@ async function downloadPayrollImportTemplate() {
         benefitsWorksheet.dataValidations.add('B2:B5000', {
             type: 'list',
             allowBlank: true,
-            formulae: ['"fixed,by_hours,overtime_total,overtime_basic"']
+            formulae: ['"by_hours,by_hours_and_minutes"']
+        });
+        benefitsWorksheet.dataValidations.add('E2:E5000', {
+            type: 'list',
+            allowBlank: true,
+            formulae: ['__PAYROLL_IMPORT_MINUTES!$A$2:$A$61']
         });
         deductionsWorksheet.dataValidations.add('B2:B5000', {
             type: 'list',
             allowBlank: true,
-            formulae: ['"fixed,hourly_deduction,daily_deduction"']
+            formulae: ['"hourly_deduction,by_hours_and_minutes"']
+        });
+        deductionsWorksheet.dataValidations.add('E2:E5000', {
+            type: 'list',
+            allowBlank: true,
+            formulae: ['__PAYROLL_IMPORT_MINUTES!$A$2:$A$61']
         });
 
         benefitsWorksheet.columns = [
             { width: 16 },
             { width: 20 },
+            { width: 16 },
             { width: 16 },
             { width: 16 },
             { width: 30 }
@@ -2326,6 +2352,7 @@ async function downloadPayrollImportTemplate() {
         ];
 
         typeListSheet.state = 'veryHidden';
+        minutesListSheet.state = 'veryHidden';
         metadataSheet.state = 'veryHidden';
 
         const buffer = await workbook.xlsx.writeBuffer();
@@ -2354,14 +2381,18 @@ async function downloadPayrollImportTemplate() {
 
     // Fallback in case ExcelJS CDN is blocked; keeps template download available.
     const benefitsWorksheet = XLSX.utils.aoa_to_sheet([
-        ['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_reason'],
-        ['1001', 'fixed', '250.00', '', 'Project Support Benefit']
+        ['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_minutes', 'benefit_reason'],
+        ['1001', 'fixed', '250.00', '', '', 'Project Support Benefit']
     ]);
 
     const deductionsWorksheet = XLSX.utils.aoa_to_sheet([
-        ['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_days', 'deduction_reason'],
+        ['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_minutes', 'deduction_reason'],
         ['1001', 'hourly_deduction', '', '3', '', 'Late Arrival Deduction']
     ]);
+
+    const minutesWorksheet = XLSX.utils.aoa_to_sheet(
+        Array.from({ length: 60 }, (_, index) => [index])
+    );
 
     const metadataSheetName = getPayrollImportMetadataSheetName();
     const metadataWorksheet = XLSX.utils.aoa_to_sheet([
@@ -2371,11 +2402,13 @@ async function downloadPayrollImportTemplate() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, benefitsWorksheet, benefitsSheetName);
     XLSX.utils.book_append_sheet(workbook, deductionsWorksheet, deductionsSheetName);
+    XLSX.utils.book_append_sheet(workbook, minutesWorksheet, '__PAYROLL_IMPORT_MINUTES');
     XLSX.utils.book_append_sheet(workbook, metadataWorksheet, metadataSheetName);
     workbook.Workbook = workbook.Workbook || {};
     workbook.Workbook.Sheets = [
         { name: benefitsSheetName, Hidden: 0 },
         { name: deductionsSheetName, Hidden: 0 },
+        { name: '__PAYROLL_IMPORT_MINUTES', Hidden: 2 },
         { name: metadataSheetName, Hidden: 2 }
     ];
 
@@ -2453,11 +2486,12 @@ function parsePayrollImportFile(file, defaultMonth) {
                         benefit_type: mappedRow.benefit_type,
                         overtime_value: mappedRow.overtime_value,
                         overtime_hours: mappedRow.overtime_hours,
+                        overtime_minutes: mappedRow.overtime_minutes,
                         overtime_reason: mappedRow.overtime_reason,
                         deduction_type: '',
                         deduction_value: '',
                         deduction_hours: '',
-                        deduction_days: '',
+                        deduction_minutes: '',
                         deduction_reason: ''
                     };
                 };
@@ -2471,11 +2505,12 @@ function parsePayrollImportFile(file, defaultMonth) {
                         benefit_type: '',
                         overtime_value: '',
                         overtime_hours: '',
+                        overtime_minutes: '',
                         overtime_reason: '',
                         deduction_type: mappedRow.deduction_type,
                         deduction_value: mappedRow.deduction_value,
                         deduction_hours: mappedRow.deduction_hours,
-                        deduction_days: mappedRow.deduction_days,
+                        deduction_minutes: mappedRow.deduction_minutes,
                         deduction_reason: mappedRow.deduction_reason
                     };
                 };
@@ -2491,11 +2526,12 @@ function parsePayrollImportFile(file, defaultMonth) {
                         benefit_type: '',
                         overtime_value: '',
                         overtime_hours: '',
+                        overtime_minutes: '',
                         overtime_reason: '',
                         deduction_type: '',
                         deduction_value: '',
                         deduction_hours: '',
-                        deduction_days: '',
+                        deduction_minutes: '',
                         deduction_reason: ''
                     });
 
@@ -3082,8 +3118,7 @@ function buildPayrollImportReviewTable(rows) {
                     <option value="" ${selectedBenefitType === '' ? 'selected' : ''}>${escapePayrollImportHtml(__('select_type_option') || 'Select Type')}</option>
                     <option value="fixed" ${selectedBenefitType === 'fixed' ? 'selected' : ''}>${escapePayrollImportHtml(__('fixed_amount_option') || 'Fixed')}</option>
                     <option value="by_hours" ${selectedBenefitType === 'by_hours' ? 'selected' : ''}>${escapePayrollImportHtml(__('benefit_by_hour_option') || __('by_hour_option') || 'By Hour')}</option>
-                    <option value="overtime_total" ${selectedBenefitType === 'overtime_total' ? 'selected' : ''}>${escapePayrollImportHtml(__('overtime') || 'Overtime')} (Total)</option>
-                    <option value="overtime_basic" ${selectedBenefitType === 'overtime_basic' ? 'selected' : ''}>${escapePayrollImportHtml(__('overtime') || 'Overtime')} (Basic)</option>
+                    <option value="by_hours_and_minutes" ${selectedBenefitType === 'by_hours_and_minutes' ? 'selected' : ''}>${escapePayrollImportHtml(__('benefit_by_hour_and_minutes_option') || 'By Hours & Minutes')}</option>
                 </select>
             </td>
             <td>
@@ -3525,8 +3560,8 @@ async function openPayrollExcelImportModal() {
             <div style="text-align:left;">
                 <p class="mb-2">${__('payroll_import_modal_hint') || 'Upload one Excel file to import benefits and deductions into generated payroll records.'}</p>
                 <ol class="pl-3 mb-3 text-danger" style="font-size:13px;">
-                    <li>${__('payroll_import_required_columns') || 'Required columns from row 1: emp_id, benefit type, benefit value, benefit hours, benefit reason, deduction type, deduction value, deduction hours, deduction days, deduction reason.'}</li>
-                    <li>${__('payroll_import_type_options_hint') || 'Type options: benefit_type = fixed/by_hours/overtime_total/overtime_basic, deduction_type = fixed/hourly_deduction/daily_deduction.'}</li>
+                    <li>${__('payroll_import_required_columns') || 'Required columns from row 1: emp_id, benefit type, benefit value, benefit hours, benefit minutes, benefit reason, deduction type, deduction value, deduction hours, deduction minutes, deduction reason.'}</li>
+                    <li>${__('payroll_import_type_options_hint') || 'Type options: benefit_type = by_hours, deduction_type = hourly_deduction.'}</li>
                     <li>${__('payroll_import_file_reuse_hint') || 'Each downloaded template stores the month with hidden one-time validation data. After one successful upload, the same file cannot be uploaded again.'}</li>
                     <li>${__('payroll_import_generate_first_hint') || 'Payroll must already be generated for the employee and month before import.'}</li>
                 </ol>
@@ -4487,6 +4522,7 @@ async function showPayrollDetails(empId, empName, month) {
             let deductions = data.deductions;
             const feedbacks = Array.isArray(data.feedbacks) ? data.feedbacks : [];
             const gosiAmnt = (employee.gosi || 0) / 100;
+            const skipAutoGosiDueToVacation = !!data.skip_auto_gosi_due_to_vacation;
             const navigationState = getEmployeeNavigationState(empId);
             const currentPosition = navigationState.currentIndex >= 0 ? navigationState.currentIndex + 1 : null;
 
@@ -4494,8 +4530,15 @@ async function showPayrollDetails(empId, empName, month) {
             // Your warning for missing benefit types remains
             if (benefitTypes.length === 0) { console.warn('No benefit types received from server'); }
 
+            if (skipAutoGosiDueToVacation) {
+                deductions = deductions.filter(d => {
+                    const deductionName = String(d?.name || d?.deduction || '').toUpperCase();
+                    return deductionName !== 'GOSI';
+                });
+            }
+
             // Your GOSI deduction logic remains unchanged
-            if (employee && employee.country === '191' && payroll) {
+            if (employee && employee.country === '191' && payroll && !skipAutoGosiDueToVacation) {
                 const basicPlusHousing = parseFloat(payroll.basic_salary || 0) + parseFloat(payroll.housing_allowance || 0);
                 const gosiAmount = (basicPlusHousing * gosiAmnt).toFixed(2);
                 const gosiExists = deductions.some(d => (d.name && d.name.toUpperCase() === 'GOSI') || (d.deduction && d.deduction.toUpperCase() === 'GOSI'));
@@ -4552,6 +4595,16 @@ async function showPayrollDetails(empId, empName, month) {
                             = <strong>${formatCurrencyForInfo(deductionAmount)}</strong>
                         </div>
                         <div class="text-muted mt-1">${__('per_day_rate_label') || 'Per-day rate'}: ${formatCurrencyForInfo(perDayAmount)}</div>
+                    </div>
+                `;
+            }
+
+            let gosiHandledInVacationInfoHtml = '';
+            if (skipAutoGosiDueToVacation) {
+                gosiHandledInVacationInfoHtml = `
+                    <div class="alert alert-info mt-3 mb-0" role="alert" style="font-size: 0.92rem;">
+                        <div class="fw-semibold mb-1"><i class="fas fa-shield-alt me-1"></i>${__('gosi_handled_by_vacation_title') || 'GOSI Handled by Vacation'}</div>
+                        <div>${__('gosi_handled_by_vacation_message') || 'GOSI was already deducted in vacation payout for this month. Payroll auto-deduction is skipped to prevent duplicate deduction.'}</div>
                     </div>
                 `;
             }
@@ -4861,6 +4914,7 @@ async function showPayrollDetails(empId, empName, month) {
                         </div>
                     </div>
                     ${joiningDeductionInfoHtml}
+                    ${gosiHandledInVacationInfoHtml}
                 </div>
             `;
 
@@ -5058,15 +5112,36 @@ async function showPayrollDetails(empId, empName, month) {
 
                         if (isCalculated) {
                             if (hoursContainer.find('.benefit-hours').length === 0) {
-                                const storedHours = parseFloat(hoursContainer.attr('data-hours') || 0) || 0;
+                                const storedHoursRaw = parseFloat(hoursContainer.attr('data-hours') || 0) || 0;
+                                const storedMinutesRaw = parseFloat(hoursContainer.attr('data-minutes') || NaN);
+                                let storedWholeHours = parseFloat(hoursContainer.attr('data-whole-hours') || NaN);
+                                let storedMinutes = Number.isFinite(storedMinutesRaw) ? Math.max(storedMinutesRaw, 0) : NaN;
+
+                                if (!Number.isFinite(storedWholeHours) || !Number.isFinite(storedMinutes)) {
+                                    const normalizedStoredHours = Number.isFinite(storedHoursRaw) ? Math.max(storedHoursRaw, 0) : 0;
+                                    storedWholeHours = Math.floor(normalizedStoredHours);
+                                    storedMinutes = Math.round((normalizedStoredHours - storedWholeHours) * 60);
+                                }
+
+                                if (storedMinutes >= 60) {
+                                    storedWholeHours += 1;
+                                    storedMinutes = 0;
+                                }
+
+                                const displayHours = storedWholeHours > 0 ? storedWholeHours : '';
+                                const displayMinutes = storedMinutes > 0 ? storedMinutes : '';
+
                                 hoursContainer.html(`
                                     <div class="input-group input-group-sm">
-                                        <input type="text" min="0" class="form-control benefit-hours" value="${storedHours}" placeholder="Hours">
-                                        <span class="input-group-text bg-light rounded-left-0" style="font-size:12px !important;">hrs</span>
+                                        <input type="text" min="0" class="form-control form-control-sm benefit-hours" value="${displayHours}" placeholder="${__('hours_placeholder') || 'Hours'}">
+                                        <input type="text" min="0" class="form-control form-control-sm benefit-minutes" value="${displayMinutes}" placeholder="${__('minutes_placeholder') || 'Mins'}">
+                                        <span class="input-group-text bg-light deduction-period-unit rounded-left-0" style="font-size:12px !important;">${__('time') || 'time'}</span>
                                     </div>
                                 `);
                                 const newHoursInput = hoursContainer.find('.benefit-hours')[0];
+                                const newMinutesInput = hoursContainer.find('.benefit-minutes')[0];
                                 addDynamicEventListener(newHoursInput, 'input', calculateOvertime);
+                                addDynamicEventListener(newMinutesInput, 'input', calculateOvertime);
                             }
                             amountInput.prop('readonly', true);
                         } else {
@@ -5094,7 +5169,10 @@ async function showPayrollDetails(empId, empName, month) {
 
                         const benefitType = benefitTypeSelect.find('option:selected').data('calculation');
                         const hoursInput = row.find('.benefit-hours');
-                        const hours = hoursInput.length ? parseFloat(hoursInput.val()) || 0 : 0;
+                        const minutesInput = row.find('.benefit-minutes');
+                        const wholeHours = hoursInput.length ? parseFloat(hoursInput.val()) || 0 : 0;
+                        const minutes = minutesInput.length ? Math.max(parseFloat(minutesInput.val()) || 0, 0) : 0;
+                        const hours = wholeHours + (minutes / 60);
                         const amountInput = row.find('.benefit-amount');
                         const noteInput = row.find('.benefit-note');
 
@@ -5109,7 +5187,7 @@ async function showPayrollDetails(empId, empName, month) {
                             
                             amountInput.val(amount).prop('readonly', true);
                             if (noteInput.length) {
-                                noteInput.val(`Overtime (${hours} hours)`);
+                                noteInput.val(`Overtime (${hours.toFixed(2)} hours)`);
                             }
 
                         } else if (benefitType === 'overtime_total' || benefitType === 'by_hours') {
@@ -5118,7 +5196,7 @@ async function showPayrollDetails(empId, empName, month) {
                             const amount = ((totalSalary / 240) * hours).toFixed(2);
                             amountInput.val(amount).prop('readonly', true);
                             if (noteInput.length) {
-                                noteInput.val(`Overtime (${hours} hours)`);
+                                noteInput.val(`Overtime (${hours.toFixed(2)} hours)`);
                             }
 
                         } else {
@@ -5140,7 +5218,7 @@ async function showPayrollDetails(empId, empName, month) {
                     });
 
                     // Add event listeners for existing hours inputs
-                    document.querySelectorAll('.benefit-hours').forEach(input => {
+                    document.querySelectorAll('.benefit-hours, .benefit-minutes').forEach(input => {
                         addDynamicEventListener(input, 'input', calculateOvertime);
                     });
 
@@ -5149,10 +5227,10 @@ async function showPayrollDetails(empId, empName, month) {
                     addDynamicEventListener(addBenefitBtn, 'click', () => {
                         const benefitsList = document.getElementById('benefits-list');
                         const newRow = document.createElement('div');
-                        newRow.classList.add('benefit-row', 'row', 'mb-2', 'align-items-center', 'g-2');
+                        newRow.classList.add('benefit-row', 'row', 'mb-2', 'align-items-center', 'g-3');
                         newRow.innerHTML = `
-                            <div class="col-md-6">
-                                <select class="form-select form-select-sm benefit-type custom-select">
+                            <div class="col-12 col-md-6">
+                                <select class="form-control form-control-sm benefit-type custom-select">
                                     <option value="">${__('select_benefit_type')}</option>
                                     ${benefitTypes.map(type => `
                                         <option value="${type.id}" data-calculation="${type.calculation_type}">
@@ -5161,14 +5239,14 @@ async function showPayrollDetails(empId, empName, month) {
                                     `).join('')}
                                 </select>
                             </div>
-                            <div class="col-md-2 benefit-hours-slot"></div>
-                            <div class="col-md-3">
+                            <div class="col-6 col-md-3 benefit-hours-slot"></div>
+                            <div class="col-6 col-md-2">
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                     <input type="text" step="0.01" class="form-control benefit-amount" placeholder="${__('amount_placeholder')}" readonly>
                                 </div>
                             </div>
-                            <div class="col-md-1 text-center">
+                            <div class="col-12 col-md-1 text-end text-md-center">
                                 <button class="btn btn-sm btn-outline-danger delete-benefit-btn">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>

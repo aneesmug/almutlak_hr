@@ -83,36 +83,12 @@ function normalizeImportCheckpointCode($value): string
 
 function normalizeBenefitImportType($value): string
 {
-    $normalized = strtolower(trim((string)$value));
-
-    if (in_array($normalized, ['fixed', 'by_hours', 'overtime_basic', 'overtime_total'], true)) {
-        return $normalized;
-    }
-
-    if (in_array($normalized, ['hourly', 'hours', 'calculated'], true)) {
-        return 'by_hours';
-    }
-
-    return 'fixed';
+    return 'by_hours';
 }
 
 function normalizeDeductionImportType($value): string
 {
-    $normalized = strtolower(trim((string)$value));
-
-    if (in_array($normalized, ['fixed', 'hourly_deduction', 'daily_deduction'], true)) {
-        return $normalized;
-    }
-
-    if (in_array($normalized, ['hourly', 'hours'], true)) {
-        return 'hourly_deduction';
-    }
-
-    if (in_array($normalized, ['daily', 'days'], true)) {
-        return 'daily_deduction';
-    }
-
-    return 'fixed';
+    return 'hourly_deduction';
 }
 
 function normalizeDeductionName($value): string
@@ -132,7 +108,7 @@ function isGosiDeductionName(string $value): bool
     return strpos(normalizeGosiComparableText(normalizeDeductionName($value)), 'gosi') !== false;
 }
 
-function calculateImportedBenefitAmount(array $payrollRecord, string $benefitType, float $benefitHours): float
+function calculateImportedBenefitAmount(array $payrollRecord, float $benefitHours): float
 {
     $hours = max(0.0, $benefitHours);
     if ($hours <= 0) {
@@ -140,24 +116,14 @@ function calculateImportedBenefitAmount(array $payrollRecord, string $benefitTyp
     }
 
     $totalSalary = (float)($payrollRecord['total_gross_salary'] ?? 0);
-    if ($benefitType === 'overtime_basic') {
-        $basicSalary = (float)($payrollRecord['basic_salary'] ?? 0);
-        $hourlyRate = ($basicSalary / 240 / 2) + ($totalSalary / 240);
-        return $hourlyRate * $hours;
-    }
-
-    return ($totalSalary / 240) * $hours;
+    $basicSalary = (float)($payrollRecord['basic_salary'] ?? 0);
+    $hourlyRate = ($basicSalary / 240 / 2) + ($totalSalary / 240);
+    return $hourlyRate * $hours;
 }
 
-function calculateImportedDeductionAmount(array $payrollRecord, string $deductionType, float $deductionHours, float $deductionDays): array
+function calculateImportedDeductionAmount(array $payrollRecord, float $deductionHours): array
 {
     $hours = max(0.0, $deductionHours);
-    $days = max(0.0, $deductionDays);
-
-    if ($deductionType === 'daily_deduction') {
-        $hours = $days * 8;
-    }
-
     $totalGrossSalary = (float)($payrollRecord['total_gross_salary'] ?? 0);
     $foodAllowance = (float)($payrollRecord['food_allowance'] ?? 0);
 
@@ -173,8 +139,8 @@ function calculateImportedDeductionAmount(array $payrollRecord, string $deductio
 
     return [
         'amount' => $hourlyRate * $hours,
-        'hours' => $deductionType === 'hourly_deduction' ? $hours : 0.0,
-        'days' => $deductionType === 'daily_deduction' ? $days : 0.0,
+        'hours' => $hours,
+        'days' => 0.0,
     ];
 }
 
@@ -469,100 +435,65 @@ try {
         $empId = trim((string)($row['emp_id'] ?? ''));
         $monthYear = normalizeImportMonth($row['month'] ?? $defaultMonth);
         $overtimeStatus = normalizeImportStatus($row['overtime_status'] ?? $row['benefit_status'] ?? $row['overtime_record_status'] ?? $row['status'] ?? '1');
-        $benefitType = normalizeBenefitImportType($row['benefit_type'] ?? $row['overtime_type'] ?? 'fixed');
+        $benefitType = normalizeBenefitImportType($row['benefit_type'] ?? $row['overtime_type'] ?? 'by_hours');
         $overtimeValue = parseImportAmount($row['benefit_value'] ?? $row['overtime_value'] ?? '');
         $overtimeHours = parseImportAmount($row['benefit_hours'] ?? $row['overtime_hours'] ?? '');
+        $overtimeMinutes = parseImportAmount($row['benefit_minutes'] ?? $row['overtime_minutes'] ?? '');
         $overtimeReason = trim((string)($row['benefit_reason'] ?? $row['overtime_reason'] ?? ''));
         $deductionStatus = normalizeImportStatus($row['deduction_status'] ?? $row['deduction_record_status'] ?? $row['status'] ?? '1');
-        $deductionType = normalizeDeductionImportType($row['deduction_type'] ?? 'fixed');
+        $deductionType = normalizeDeductionImportType($row['deduction_type'] ?? 'hourly_deduction');
         $deductionValue = parseImportAmount($row['deduction_value'] ?? '');
         $deductionHours = parseImportAmount($row['deduction_hours'] ?? '');
-        $deductionDays = parseImportAmount($row['deduction_days'] ?? '');
+        $deductionMinutes = parseImportAmount($row['deduction_minutes'] ?? '');
+        $deductionDays = 0.0;
         $deductionReason = trim((string)($row['deduction_reason'] ?? ''));
         $gosiDeductionSkipped = false;
         $missingOvertimePair = false;
         $missingDeductionPair = false;
         $invalidDeductionPeriodPair = false;
 
-        if ($benefitType === 'fixed') {
-            if (($overtimeValue > 0 && $overtimeReason === '') || ($overtimeValue <= 0 && $overtimeReason !== '')) {
+        $overtimeDurationHours = $overtimeHours + ($overtimeMinutes / 60);
+        if ($overtimeDurationHours > 0) {
+            if ($overtimeReason === '') {
                 $missingOvertimePair = true;
             }
-
-            if ($overtimeValue <= 0 || $overtimeReason === '') {
-                $overtimeValue = 0.0;
-                $overtimeReason = '';
-            }
-
-            $overtimeHours = 0.0;
-        } else {
-            if (($overtimeHours > 0 && $overtimeReason === '') || ($overtimeHours <= 0 && $overtimeReason !== '')) {
-                $missingOvertimePair = true;
-            }
-
-            if ($overtimeHours <= 0 || $overtimeReason === '') {
-                $overtimeValue = 0.0;
-                $overtimeHours = 0.0;
-                $overtimeReason = '';
-            }
+        } elseif ($overtimeReason !== '') {
+            $missingOvertimePair = true;
         }
 
-        if (($deductionValue > 0 || $deductionHours > 0 || $deductionDays > 0) && isGosiDeductionName($deductionReason)) {
-            $deductionType = 'fixed';
+        if ($overtimeDurationHours <= 0 || $overtimeReason === '') {
+            $overtimeValue = 0.0;
+            $overtimeHours = 0.0;
+            $overtimeMinutes = 0.0;
+            $overtimeReason = '';
+        }
+
+        if (($deductionValue > 0 || $deductionHours > 0 || $deductionMinutes > 0) && isGosiDeductionName($deductionReason)) {
+            $deductionType = 'hourly_deduction';
             $deductionValue = 0.0;
             $deductionHours = 0.0;
-            $deductionDays = 0.0;
+            $deductionMinutes = 0.0;
             $deductionReason = '';
             $gosiDeductionSkipped = true;
         }
 
-        if ($deductionType === 'fixed') {
-            if (!$gosiDeductionSkipped && (($deductionValue > 0 && $deductionReason === '') || ($deductionValue <= 0 && $deductionReason !== ''))) {
+        $deductionDurationHours = $deductionHours + ($deductionMinutes / 60);
+        if ($deductionDurationHours > 0) {
+            if (!$gosiDeductionSkipped && $deductionReason === '') {
                 $missingDeductionPair = true;
             }
-
-            if ($deductionValue <= 0 || $deductionReason === '') {
-                $deductionValue = 0.0;
-                $deductionReason = '';
-            }
-
-            $deductionHours = 0.0;
-            $deductionDays = 0.0;
-        } else {
-            if ($deductionHours > 0 && $deductionDays > 0) {
-                $invalidDeductionPeriodPair = true;
-            }
-
-            if ($deductionType === 'hourly_deduction') {
-                if (!$gosiDeductionSkipped && (($deductionHours > 0 && $deductionReason === '') || ($deductionHours <= 0 && $deductionReason !== ''))) {
-                    $missingDeductionPair = true;
-                }
-
-                if ($deductionHours <= 0 || $deductionReason === '') {
-                    $deductionValue = 0.0;
-                    $deductionHours = 0.0;
-                    $deductionDays = 0.0;
-                    $deductionReason = '';
-                }
-
-                $deductionDays = 0.0;
-            } else {
-                if (!$gosiDeductionSkipped && (($deductionDays > 0 && $deductionReason === '') || ($deductionDays <= 0 && $deductionReason !== ''))) {
-                    $missingDeductionPair = true;
-                }
-
-                if ($deductionDays <= 0 || $deductionReason === '') {
-                    $deductionValue = 0.0;
-                    $deductionHours = 0.0;
-                    $deductionDays = 0.0;
-                    $deductionReason = '';
-                }
-
-                $deductionHours = 0.0;
-            }
+        } elseif ($deductionReason !== '') {
+            $missingDeductionPair = true;
         }
 
-        if ($empId === '' && $monthYear === null && $overtimeValue === 0.0 && $overtimeHours === 0.0 && $overtimeReason === '' && $deductionValue === 0.0 && $deductionHours === 0.0 && $deductionDays === 0.0 && $deductionReason === '') {
+        if ($deductionDurationHours <= 0 || $deductionReason === '') {
+            $deductionValue = 0.0;
+            $deductionHours = 0.0;
+            $deductionMinutes = 0.0;
+            $deductionReason = '';
+        }
+
+        if ($empId === '' && $monthYear === null && $overtimeValue === 0.0 && $overtimeHours === 0.0 && $overtimeMinutes === 0.0 && $overtimeReason === '' && $deductionValue === 0.0 && $deductionHours === 0.0 && $deductionMinutes === 0.0 && $deductionReason === '') {
             addPayrollImportSkip($summary, $rowNumber, 'Row is empty.', $empId, false);
             continue;
         }
@@ -592,8 +523,8 @@ try {
             continue;
         }
 
-        $hasBenefitEntry = $benefitType === 'fixed' ? $overtimeValue > 0 : $overtimeHours > 0;
-        $hasDeductionEntry = $deductionType === 'fixed' ? $deductionValue > 0 : ($deductionType === 'hourly_deduction' ? $deductionHours > 0 : $deductionDays > 0);
+        $hasBenefitEntry = $overtimeHours > 0 || $overtimeMinutes > 0 || $overtimeValue > 0;
+        $hasDeductionEntry = $deductionHours > 0 || $deductionMinutes > 0 || $deductionValue > 0;
 
         if ($hasBenefitEntry && $overtimeStatus === null) {
             addPayrollImportSkip($summary, $rowNumber, 'Overtime status must be Active/Inactive or 1/0.', $empId);
@@ -605,13 +536,8 @@ try {
             continue;
         }
 
-        if ($overtimeValue < 0 || $overtimeHours < 0 || $deductionValue < 0 || $deductionHours < 0 || $deductionDays < 0) {
-            addPayrollImportSkip($summary, $rowNumber, 'Overtime and deduction values/hours/days cannot be negative.', $empId);
-            continue;
-        }
-
-        if ($invalidDeductionPeriodPair) {
-            addPayrollImportSkip($summary, $rowNumber, 'Deduction hours and deduction days cannot both be filled in the same row.', $empId);
+        if ($overtimeValue < 0 || $overtimeHours < 0 || $overtimeMinutes < 0 || $deductionValue < 0 || $deductionHours < 0 || $deductionMinutes < 0) {
+            addPayrollImportSkip($summary, $rowNumber, 'Overtime and deduction values/hours/minutes cannot be negative.', $empId);
             continue;
         }
 
@@ -624,12 +550,10 @@ try {
             if ($missingOvertimePair || $missingDeductionPair) {
                 $reasons = [];
                 if ($missingOvertimePair) {
-                    $reasons[] = $benefitType === 'fixed' ? 'fixed benefit requires value and reason' : 'calculated benefit requires hours and reason';
+                    $reasons[] = 'hourly benefit requires hours/minutes and reason';
                 }
                 if ($missingDeductionPair) {
-                    $reasons[] = $deductionType === 'fixed'
-                        ? 'fixed deduction requires value and reason'
-                        : ($deductionType === 'hourly_deduction' ? 'hourly deduction requires hours and reason' : 'daily deduction requires days and reason');
+                    $reasons[] = 'hourly deduction requires hours/minutes and reason';
                 }
                 addPayrollImportSkip($summary, $rowNumber, ucfirst(implode('; ', $reasons)) . '.', $empId, false);
                 continue;
@@ -671,22 +595,23 @@ try {
         $rowImported = false;
 
         if ($hasBenefitEntry) {
-            if ($benefitType !== 'fixed' && $overtimeValue <= 0) {
-                $overtimeValue = calculateImportedBenefitAmount($payrollRecord, $benefitType, $overtimeHours);
+            $benefitDurationHours = $overtimeHours + ($overtimeMinutes / 60);
+            if ($benefitDurationHours > 0 && $overtimeValue <= 0) {
+                $overtimeValue = calculateImportedBenefitAmount($payrollRecord, $benefitDurationHours);
             }
 
             $benefitName = $overtimeReason !== '' ? $overtimeReason : 'Imported Overtime';
-            upsertPayrollBenefit($pdo, $empId, $monthYear, $benefitName, $overtimeValue, $overtimeStatus ?? 1, $benefitType, $overtimeHours);
+            upsertPayrollBenefit($pdo, $empId, $monthYear, $benefitName, $overtimeValue, $overtimeStatus ?? 1, $benefitType, $benefitDurationHours);
             $summary['imported_benefits']++;
             $rowImported = true;
         }
 
         if ($hasDeductionEntry) {
-            if ($deductionType !== 'fixed' && $deductionValue <= 0) {
-                $calculatedDeduction = calculateImportedDeductionAmount($payrollRecord, $deductionType, $deductionHours, $deductionDays);
+            if ($deductionValue <= 0) {
+                $calculatedDeduction = calculateImportedDeductionAmount($payrollRecord, $deductionHours + ($deductionMinutes / 60));
                 $deductionValue = $calculatedDeduction['amount'];
                 $deductionHours = $calculatedDeduction['hours'];
-                $deductionDays = $calculatedDeduction['days'];
+                $deductionMinutes = 0.0;
             }
 
             $deductionName = normalizeDeductionName($deductionReason !== '' ? $deductionReason : 'Imported Deduction');

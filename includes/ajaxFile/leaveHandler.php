@@ -1081,7 +1081,7 @@ elseif ($ajaxType == 'applyVacation') {
         }
 
         // Local Vacation | Annual business rule:
-        // - If days <= 5: hide salary option on UI and force default payroll.
+        // - If days <= 5: force payroll.
         // - If days > 5: employee must explicitly choose payroll or end_of_service.
         $is_local_annual_vacation = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
         if ($is_local_annual_vacation) {
@@ -1242,16 +1242,19 @@ elseif ($ajaxType == 'applyVacation') {
         }
 
         // Business rule:
-        // Local Vacation + Annual + Saudi (country=191) + days > 20
-        // => remove from active full payroll (treat as deductible in payroll calculations).
+        // Saudi Local Vacation + Annual follows Vacation Salary Payment choice,
+        // but payroll removal applies only when minimum_days_exclusive is matched.
+        // - payroll (Yes) + rule match => removed from active payroll for vacation period.
+        // - otherwise => stays active in payroll.
         $is_local_annual_saudi_long_leave = matchesLocalAnnualPayrollRemovalRule(
             $vac_type,
             $fly_type,
             $employee_country_id,
-            $vacdays
+            $vacdays,
+            $vacation_salary_type
         );
         if ($is_local_annual_saudi_long_leave) {
-            $is_deductible = 1;
+            $is_deductible = ($vacation_salary_type === 'payroll') ? 1 : 0;
         }
 
 
@@ -3183,6 +3186,7 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         $other_earnings = (float)($_POST['other_earnings'] ?? 0);
         $other_deductions = (float)($_POST['other_deductions'] ?? 0);
         $payroll_note = trim($_POST['payroll_note'] ?? '');
+        $auto_gosi_deduction = (int)($_POST['auto_gosi_deduction'] ?? 1);  // Default to 1 (enabled) for backward compatibility
 
         if (empty($vacation_id)) {
             throw new Exception(__("vacation_id_is_missing"));
@@ -3270,13 +3274,13 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
         // DEBUG: Log calculation details
         error_log("OVERTIME CALC - Emp: {$vacation_row['emp_id']}, Basic: {$basic_salary}, Total: {$salary_base}, Hours: {$overtime_hours}, Rate: {$overtime_hourly_rate}, Amount: {$overtime_amount}");
         
-        // Update adjustments with calculation fields
-        $sql_adj = "UPDATE `emp_vacation` SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `other_earnings` = ?, `other_deductions` = ?, `payroll_note` = ?, `overtime_amount` = ?, `deduction_amount` = ?, `no_modifications` = ?, `review` = IF(`review` IS NULL OR `review` = '', 'A', `review`) WHERE `id` = ?";
+        // Update adjustments with calculation fields and auto_gosi_deduction flag
+        $sql_adj = "UPDATE `emp_vacation` SET `overtime_hours` = ?, `deduction_hours` = ?, `deduction_days` = ?, `other_earnings` = ?, `other_deductions` = ?, `payroll_note` = ?, `overtime_amount` = ?, `deduction_amount` = ?, `no_modifications` = ?, `auto_gosi_deduction` = ?, `review` = IF(`review` IS NULL OR `review` = '', 'A', `review`) WHERE `id` = ?";
         $stmt_adj = mysqli_prepare($conDB, $sql_adj);
         if (!$stmt_adj) {
             throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
         }
-        mysqli_stmt_bind_param($stmt_adj, "dddddsddii", $overtime_hours, $deduction_hours, $deduction_days, $other_earnings, $other_deductions, $payroll_note, $overtime_amount, $deduction_amount, $no_modifications, $vacation_id);
+        mysqli_stmt_bind_param($stmt_adj, "dddddsdddii", $overtime_hours, $deduction_hours, $deduction_days, $other_earnings, $other_deductions, $payroll_note, $overtime_amount, $deduction_amount, $no_modifications, $auto_gosi_deduction, $vacation_id);
         if (!mysqli_stmt_execute($stmt_adj)) {
             $err = mysqli_stmt_error($stmt_adj);
             mysqli_stmt_close($stmt_adj);
@@ -3658,6 +3662,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                     v.ticket_pay,
                     v.permit_fee,
                     v.encashment_amount,
+                    v.auto_gosi_deduction,
                     v.emp_id,
                     e.country,
                     e.gosi,
@@ -3729,14 +3734,16 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             $fly_type,
             $vacation_data['country'] ?? 0,
             $approved_days,
-            $vacation_data['is_deductible'] ?? 0
+            $vacation_data['is_deductible'] ?? 0,
+            $vacation_salary_type
         );
         $is_settlement_payable_vacation = isSettlementPayableVacation(
             $vac_type,
             $fly_type,
             $vacation_data['country'] ?? 0,
             $approved_days,
-            $vacation_data['is_deductible'] ?? 0
+            $vacation_data['is_deductible'] ?? 0,
+            $vacation_salary_type
         );
         
         $total_payable = 0;
@@ -3788,15 +3795,15 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
             $hourly_rate_deduction = round(($daily_rate / 8), 2);
             
-            // Calculate working days salary for vacations removed from active payroll.
-            if ($is_settlement_payable_vacation && !empty($vacation_data['start_date'])) {
+            // Calculate working days salary for vacations removed from payroll.
+            if (($is_fly_annual || $is_local_annual_removed_from_payroll) && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
                 $start_day = (int)$start_date_obj->format('d');
 
                 // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
-                // Special case: if vacation starts on day 1, employee completed the previous month in full.
+                // If vacation starts on day 1, there are zero working days in the same month.
                 if ($start_day === 1) {
-                    $working_days_salary = round($total_monthly_salary);
+                    $working_days_salary = 0;
                 } else {
                     // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
                     $working_days = $start_day - 1;
@@ -3845,17 +3852,22 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             }
             
             // Calculate GOSI (if Saudi Arabia - country_id = 191)
-            if ($vacation_data['country'] == 191 && isset($vacation_data['gosi'])) {
+            // Check auto_gosi_deduction flag: if 1 (enabled), apply GOSI; if 0 (disabled), skip
+            $auto_gosi_deduction = (int)($vacation_data['auto_gosi_deduction'] ?? 1);  // Default to 1 for backward compatibility
+            
+            if ($auto_gosi_deduction && $vacation_data['country'] == 191 && isset($vacation_data['gosi'])) {
                 $gosi_percentage = (float)$vacation_data['gosi'];
-                if ($is_settlement_payable_vacation) {
-                    $gosi_base = $working_days_salary + $vacation_salary;
+                if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
+                    // Match payroll config: GOSI is based on basic + housing salary components.
+                    $gosi_base = (float)$basic_salary + (float)($vacation_data['housing'] ?? 0);
                     $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
                 }
             }
             
-            // Calculate total payable - MUST MATCH vacation_report_details.php exactly
+            // Calculate total payable - MUST MATCH vacation_report_details.php exactly.
             if ($is_settlement_payable_vacation) {
-                $total_payable = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction, 0);
+                $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll) ? $working_days_salary : 0;
+                $total_payable = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction, 0);
             }
         }
 

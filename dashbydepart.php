@@ -127,28 +127,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 color: #fff;
                 overflow: hidden;
             }
-            /* Gradient backgrounds for each color */
-            .stats-card[data-color="primary"] {
-                --card-gradient: linear-gradient(90deg,#556ee6 0%,#50a5f1 100%);
-            }
-            .stats-card[data-color="success"] {
-                --card-gradient: linear-gradient(90deg,#34c38f 0%,#43e97b 100%);
-            }
-            .stats-card[data-color="info"] {
-                --card-gradient: linear-gradient(90deg,#50a5f1 0%,#2196f3 100%);
-            }
-            .stats-card[data-color="danger"] {
-                --card-gradient: linear-gradient(90deg,#f46a6a 0%,#ff6a88 100%);
-            }
-            .stats-card[data-color="warning"] {
-                --card-gradient: linear-gradient(90deg,#f1b44c 0%,#ffde7d 100%);
-            }
-            .stats-card[data-color="secondary"] {
-                --card-gradient: linear-gradient(90deg,#6c757d 0%,#343a40 100%);
-            }
-            .stats-card[data-color="dark"] {
-                --card-gradient: linear-gradient(90deg,#343a40 0%,#232526 100%);
-            }
             .stats-card:hover {
                 box-shadow: 0 8px 32px rgba(0,0,0,0.18);
                 transform: translateY(-4px) scale(1.02);
@@ -186,13 +164,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 font-size: 28px;
                 color: #2196f3;
             }
-            .stats-card-icon[data-color="primary"] i { color: #556ee6; }
-            .stats-card-icon[data-color="success"] i { color: #34c38f; }
-            .stats-card-icon[data-color="info"] i { color: #50a5f1; }
-            .stats-card-icon[data-color="danger"] i { color: #f46a6a; }
-            .stats-card-icon[data-color="warning"] i { color: #f1b44c; }
-            .stats-card-icon[data-color="secondary"] i { color: #6c757d; }
-            .stats-card-icon[data-color="dark"] i { color: #343a40; }
             .stats-card-icon:hover {
                 transform: scale(1.10) rotate(-6deg);
             }
@@ -294,29 +265,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                     font-size: 26px;
                 }
             }
-            /* Dynamic department color for icon */
-            <?php foreach (["primary","success","warning","danger","info","dark"] as $clr) { ?>
-                :root {
-                    --dept-color-<?= $clr ?>: <?php
-                        if ($clr == "primary") {
-                            echo "#556ee6";
-                        } elseif ($clr == "success") {
-                            echo "#34c38f";
-                        } elseif ($clr == "info") {
-                            echo "#50a5f1";
-                        } elseif ($clr == "warning") {
-                            echo "#f1b44c";
-                        } elseif ($clr == "danger") {
-                            echo "#f46a6a";
-                        } elseif ($clr == "secondary") {
-                            echo "#6c757d";
-                        } else {
-                            echo "#343a40";
-                        }
-                    ?>;
-                }
-            <?php } ?>
-
             /* Badge-based card styling for Allowed Employees */
             .allowed-employees-card {
                 background: #f8f9fa;
@@ -500,21 +448,20 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                             
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
                                             if ($querygrp) {
-                                                $colorArr = ["primary","success","warning","danger","info","dark"];
-                                                $colorCount = count($colorArr);
-                                                $cardIndex = 0;
+                                                $allowedCardColors = ["custom", "purple", "primary", "success"];
                                                 // Total active employees (for percentage calculation) - must respect access filters
                                                 $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter . $department_filter . $employee_filter . $fallback_dept_filter_plain);
                                                 $totalEmpRow = mysqli_fetch_assoc($totalEmpRes);
                                                 $totalEmployees = $totalEmpRow && isset($totalEmpRow['total']) ? (int)$totalEmpRow['total'] : 1;
                                                 while ($rec = mysqli_fetch_array($querygrp)) {
-                                                    $cardColor = $colorArr[$cardIndex % $colorCount];
+                                                    $rawCardColor = strtolower(trim((string)($rec["color"] ?? '')));
+                                                    $cardColor = in_array($rawCardColor, $allowedCardColors, true) ? $rawCardColor : 'custom';
                                                     $deptCount = (int)$rec["empcountgrp"];
                                                     $percentage = round(($deptCount / $totalEmployees) * 100, 1);
                                             ?>
                                                 <div class="col-sm-4 col-xl-3" onclick="window.location.href='filter_employee_by_dept.php?page=1&status=1&status=active&dept=<?= $rec["dept"] ?>'" style="cursor: pointer;">
-                                                    <div class="stats-card" data-color="<?= $cardColor ?>">
-                                                        <div class="stats-card-icon" data-color="<?= $cardColor ?>">
+                                                    <div class="stats-card professional-theme theme-<?= $cardColor ?>" data-color="<?= $cardColor ?>">
+                                                        <div class="stats-card-icon professional-theme theme-<?= $cardColor ?>" data-color="<?= $cardColor ?>">
                                                             <div class="stats-card-count-circle"><?= $deptCount ?></div>
                                                             <span class="stats-card-tooltip">Department Info</span>
                                                             <i class="fa fa-building"></i>
@@ -539,7 +486,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                     </div>
                                                 </div>
                                             <?php 
-                                                    $cardIndex++;
                                                 } // end while
                                             } // end if ($querygrp)
                                             ?>
@@ -590,8 +536,8 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                     $percentage = round(($compCount / $totalEmployees) * 100, 1);
                                             ?>
                                                 <div class="col-sm-4 col-xl-3" onclick="window.location.href='company_departments_employees.php?company=<?= $rec["comp_no"] ?>'" style="cursor: pointer;">
-                                                    <div class="stats-card" data-color="<?= $cardColor ?>">
-                                                        <div class="stats-card-icon" data-color="<?= $cardColor ?>">
+                                                    <div class="stats-card professional-theme" data-color="<?= $cardColor ?>">
+                                                        <div class="stats-card-icon professional-theme" data-color="<?= $cardColor ?>">
                                                             <div class="stats-card-count-circle"><?= $compCount ?></div>
                                                             <span class="stats-card-tooltip">Company Info</span>
                                                             <i class="fa fa-industry"></i>

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
@@ -343,21 +344,25 @@ function build_announcement_email_html(array $data, string $logoUrl = ''): strin
 function send_announcement_email(mysqli $conDB, string $toEmail, string $toName, string $subject, string $htmlBody, string $embeddedImage = ''): bool
 {
     if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+        error_log('ANNOUNCEMENT_EMAIL_ERROR: PHPMailer class not found');
         return false;
     }
 
-    $smtp_host = (string)get_setting($conDB, 'smtp_host');
-    $smtp_port = (int)get_setting($conDB, 'smtp_port');
+    $smtp_host = "smtp.office365.com";
+    $smtp_port = "587";
     $smtp_user = 'internal.Communication@almutlak.com';
     $smtp_pass = '@DmiN56539306#';
     $smtp_from_email = 'internal.Communication@almutlak.com';
     $smtp_from_name = 'Internal Communication';
-    $smtp_secure = (string)get_setting($conDB, 'smtp_encryption');
+    // Office 365 port 587 requires STARTTLS encryption - do not fetch from database
+    $smtp_secure = 'tls';
 
     if (
         empty($smtp_host) || empty($smtp_port) || empty($smtp_user) ||
         empty($smtp_pass) || empty($smtp_from_email) || empty($smtp_from_name)
     ) {
+        error_log('ANNOUNCEMENT_EMAIL_ERROR: Missing SMTP configuration - host: ' . (empty($smtp_host) ? 'EMPTY' : 'OK') . 
+                  ', port: ' . (empty($smtp_port) ? 'EMPTY' : 'OK') . ', user: ' . (empty($smtp_user) ? 'EMPTY' : 'OK'));
         return false;
     }
 
@@ -384,6 +389,10 @@ function send_announcement_email(mysqli $conDB, string $toEmail, string $toName,
         $mail->Port = $smtp_port;
         $mail->CharSet = 'UTF-8';
         $mail->Timeout = 15;
+        $mail->SMTPDebug = 0; // Set to 2 or 3 for debugging
+
+        // Log SMTP configuration being used
+        error_log('ANNOUNCEMENT_SMTP_CONFIG: host=' . $smtp_host . ', port=' . $smtp_port . ', security=' . strtolower((string)$smtp_secure) . ', user=' . $smtp_user);
 
         $mail->setFrom($smtp_from_email, $smtp_from_name);
         $mail->addAddress($toEmail, $toName);
@@ -399,9 +408,14 @@ function send_announcement_email(mysqli $conDB, string $toEmail, string $toName,
         $mail->Body = $htmlBody;
         $mail->AltBody = strip_tags($htmlBody);
 
-        return $mail->send();
+        if ($mail->send()) {
+            return true;
+        } else {
+            error_log('ANNOUNCEMENT_EMAIL_ERROR [' . $toEmail . ']: Send failed - ' . $mail->ErrorInfo);
+            return false;
+        }
     } catch (Throwable $e) {
-        error_log('ANNOUNCEMENT_EMAIL_ERROR: ' . $e->getMessage());
+        error_log('ANNOUNCEMENT_EMAIL_ERROR [' . $toEmail . ']: Exception - ' . $e->getMessage() . ' (Code: ' . $e->getCode() . ')');
         return false;
     }
 }
@@ -410,6 +424,11 @@ $announcementGroups = get_announcement_group_recipients();
 $selectedRecipientMode = '';
 $messageHtml = '';
 $messageType = '';
+
+// On initial GET request, default to first recipient group
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && empty($_GET['load_circular_no'])) {
+    $selectedRecipientMode = 'company';
+}
 
 /**
  * Save announcement to database.
@@ -649,7 +668,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
 
     if (!empty($missing)) {
         $messageType = 'danger';
-        $messageHtml = 'Please fill all required fields and add at least one content row before ' . ($isSending ? 'sending' : 'saving') . '.';
+        $messageHtml = 'Please fill all required fields and add at least one content row before ' . ($isSending ? 'sending' : 'saving') . '. Missing: ' . htmlspecialchars(implode(', ', $missing), ENT_QUOTES, 'UTF-8');
     } else {
         if ($isSavingDraft) {
             if (save_announcement_to_db($conDB, $formData, $selectedRecipientMode, 0)) {
@@ -674,8 +693,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                 $messageHtml = 'Failed to save announcement draft.';
             }
         } elseif ($isSending) {
+            error_log('ANNOUNCEMENT_DEBUG: Starting announcement send for circular ' . ($formData['circular_no'] ?? 'unknown'));
+            error_log('ANNOUNCEMENT_DEBUG: Selected recipient mode: ' . $selectedRecipientMode);
+            error_log('ANNOUNCEMENT_DEBUG: POST recipient_mode: ' . (isset($_POST['recipient_mode']) ? $_POST['recipient_mode'] : 'NOT SET'));
+            error_log('ANNOUNCEMENT_DEBUG: Available groups: ' . implode(', ', array_keys($announcementGroups)));
+            
             $selectedGroup = $announcementGroups[$selectedRecipientMode] ?? null;
             $recipients = [];
+            
+            error_log('ANNOUNCEMENT_DEBUG: Selected group is: ' . ($selectedGroup ? 'FOUND' : 'NOT FOUND'));
+            
             if (is_array($selectedGroup)) {
                 $recipients[] = [
                     'email' => (string)($selectedGroup['email'] ?? ''),
@@ -683,7 +710,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                 ];
             }
 
+            error_log('ANNOUNCEMENT_DEBUG: Recipients collected: ' . count($recipients) . ' group(s)');
+            foreach ($recipients as $idx => $rec) {
+                error_log('ANNOUNCEMENT_DEBUG: Recipient ' . $idx . ': ' . ($rec['email'] ?? 'EMPTY') . ' (' . ($rec['recipient_name'] ?? 'unknown') . ')');
+            }
+
             if (empty($recipients)) {
+                error_log('ANNOUNCEMENT_ERROR: No recipients found');
                 $messageType = 'danger';
                 $messageHtml = 'No recipients found with valid email addresses.';
             } else {
@@ -704,29 +737,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                 }
 
                 if ($imageBinary === '') {
+                    error_log('ANNOUNCEMENT_DEBUG: No embedded image provided, rendering from announcement HTML');
                     $imageBinary = render_announcement_to_image($formData, (string)$logo);
                 }
 
+                // Fallback: if image generation failed, send text-based HTML email instead
                 if ($imageBinary === '') {
-                    $messageType = 'danger';
-                    $messageHtml = 'Announcement image could not be generated. Edge-based screenshot rendering is required, so the email was not sent as HTML fallback.';
+                    error_log('ANNOUNCEMENT_WARNING: Image rendering failed, using text fallback for circular ' . ($formData['circular_no'] ?? 'unknown'));
+                    $emailBody = build_announcement_email_html($formData, (string)$logo) . $linkHtml;
                 } else {
+                    error_log('ANNOUNCEMENT_DEBUG: Image rendered successfully, size: ' . strlen($imageBinary) . ' bytes');
                     $emailBody = '<html><body style="margin:0;padding:0;background:#f2f2f2;"><img src="cid:announcement_preview" alt="Announcement" style="display:block;max-width:100%;width:100%;height:auto;border:0;" />' . $linkHtml . '</body></html>';
+                }
 
-                    $sentSuccess = 0;
-                    foreach ($recipients as $rec) {
-                        $toEmail = trim((string)($rec['email'] ?? ''));
-                        $toName = trim((string)($rec['recipient_name'] ?? 'Colleague'));
+                error_log('ANNOUNCEMENT_DEBUG: Email body prepared, length: ' . strlen($emailBody) . ' bytes');
 
-                        if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
-                            continue;
-                        }
+                $sentSuccess = 0;
+                $emailAttemptCount = 0;
+                foreach ($recipients as $rec) {
+                    $toEmail = trim((string)($rec['email'] ?? ''));
+                    $toName = trim((string)($rec['recipient_name'] ?? 'Colleague'));
 
-                        if (send_announcement_email($conDB, $toEmail, $toName, $mailSubject, $emailBody, $imageBinary)) {
-                            $sentSuccess++;
-                        }
+                    error_log('ANNOUNCEMENT_DEBUG: Processing recipient: email=' . $toEmail . ', name=' . $toName);
+
+                    if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+                        error_log('ANNOUNCEMENT_DEBUG: Email validation FAILED for: ' . $toEmail);
+                        continue;
                     }
 
+                    error_log('ANNOUNCEMENT_DEBUG: Email validation PASSED for: ' . $toEmail . ', attempting to send...');
+                    $emailAttemptCount++;
+                    
+                    if (send_announcement_email($conDB, $toEmail, $toName, $mailSubject, $emailBody, $imageBinary)) {
+                        error_log('ANNOUNCEMENT_DEBUG: Email send SUCCESS for: ' . $toEmail);
+                        $sentSuccess++;
+                    } else {
+                        error_log('ANNOUNCEMENT_DEBUG: Email send FAILED for: ' . $toEmail);
+                    }
+                }
+
+                error_log('ANNOUNCEMENT_DEBUG: Send complete - attempted: ' . $emailAttemptCount . ', successful: ' . $sentSuccess);
+
+                // Only save to database if at least one email was sent successfully
+                if ($sentSuccess > 0) {
                     if (save_announcement_to_db($conDB, $formData, $selectedRecipientMode, $sentSuccess)) {
                         if (class_exists('ActivityLogger')) {
                             ActivityLogger::logCreate(
@@ -745,9 +798,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                             );
                         }
                     }
+                } else {
+                    error_log('ANNOUNCEMENT_ERROR: Email send completely failed - not saving to database. Circular: ' . ($formData['circular_no'] ?? 'unknown'));
+                }
 
-                    $messageType = $sentSuccess > 0 ? 'success' : 'warning';
-                    $messageHtml = 'Announcement sent to ' . (int)$sentSuccess . ' recipient(s) with ' . count($formData['content_blocks']) . ' content block(s). (ID: ' . htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') . ')';
+                $messageType = $sentSuccess > 0 ? 'success' : 'warning';
+                $messageHtml = 'Announcement sent to ' . (int)$sentSuccess . ' recipient(s) with ' . count($formData['content_blocks']) . ' content block(s). (ID: ' . htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') . ')';
+                
+                // Debug: append info if no recipients were processed
+                if ($sentSuccess === 0) {
+                    $debugInfo = 'selectedRecipientMode="' . htmlspecialchars($selectedRecipientMode, ENT_QUOTES, 'UTF-8') . '", ';
+                    $debugInfo .= 'recipients_count=' . count($recipients) . ', ';
+                    $debugInfo .= 'emailAttemptCount=' . $emailAttemptCount . ', ';
+                    $debugInfo .= 'received_POST_recipient_mode="' . htmlspecialchars((string)($_POST['recipient_mode'] ?? 'NOT_SET'), ENT_QUOTES, 'UTF-8') . '"';
+                    
+                    $messageHtml .= '<br><small class="mt-2">DEBUG: ' . $debugInfo . '</small>';
+                    
+                    // Also log POST data for analysis
+                    error_log('ANNOUNCEMENT_POSTDATA: ' . json_encode([
+                        'recipient_mode_post' => $_POST['recipient_mode'] ?? 'NOT_SET',
+                        'recipient_mode_var' => $selectedRecipientMode,
+                        'recipients_array' => $recipients,
+                        'all_post_keys' => array_keys($_POST)
+                    ], JSON_UNESCAPED_SLASHES));
                 }
             }
         }

@@ -1207,6 +1207,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                                 <tr>
                                                                     <th width="70">#</th>
                                                                     <th><?=__('description_item_name_invoice_num')?></th>
+                                                                    <th width="150"><?=__('reference', 'Reference')?></th>
                                                                     <th width="160"><?=__('location')?></th>
                                                                     <th width="80"><?=__('quantity')?></th>
                                                                     <th width="120"><?=__('unit_cost')?> <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
@@ -1231,6 +1232,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                                     <tr class="set">
                                                                         <td><input type="text" class="form-control" readonly value="<?= $x++ ?>" id="row"></td>
                                                                         <td><input type="text" name="item_name[]" readonly class="form-control" value="<?= htmlspecialchars($rec["item_name"]); ?>" /></td>
+                                                                        <td><input type="text" name="reference[]" readonly class="form-control" value="<?= htmlspecialchars($rec["reference"] ?? ''); ?>" /></td>
                                                                         <td><input type="text" name="location[]" readonly class="form-control" value="<?= htmlspecialchars($rec["location"]); ?>" /></td>
                                                                         <td><input class="form-control" readonly type='text' name='quantity[]' value="<?= $rec["quantity"]; ?>" /></td>
                                                                         <td><input class="form-control" type='text' name='product_price[]' readonly value="<?= $rec["product_price"]; ?>" /></td>
@@ -1243,7 +1245,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                                                         <?php if ($current_status_get == "draft" && $empid == $emp_id_get): ?>
                                                                             <td class="text-right">
                                                                                 <div class="btn-group" role="group" aria-label="Edit Button">
-                                                                                    <a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect editItemLineAttr bbtn" data-id="<?= $rec['id'] ?>" data-i_item_name="<?= htmlspecialchars($rec['item_name']) ?>" data-i_quantity="<?= $rec['quantity'] ?>" data-i_product_price="<?= $rec['product_price'] ?>" data-i_vat_rate="<?= $rec['vat_rate'] ?>" data-i_idiscount="<?= $rec['idiscount'] ?>" data-i_itmvalue="<?= $rec['itmvalue'] ?>" data-i_vat_val="<?= $rec['vat_val'] ?>" data-i_amount="<?= $rec['amount'] ?>" data-i_total_cost="<?= $rec['total_cost'] ?>" data-i_location="<?= htmlspecialchars($rec['location']) ?>">
+                                                                                    <a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect editItemLineAttr bbtn" data-id="<?= $rec['id'] ?>" data-i_item_name="<?= htmlspecialchars($rec['item_name']) ?>" data-i_reference="<?= htmlspecialchars($rec['reference'] ?? '') ?>" data-i_quantity="<?= $rec['quantity'] ?>" data-i_product_price="<?= $rec['product_price'] ?>" data-i_vat_rate="<?= $rec['vat_rate'] ?>" data-i_idiscount="<?= $rec['idiscount'] ?>" data-i_itmvalue="<?= $rec['itmvalue'] ?>" data-i_vat_val="<?= $rec['vat_val'] ?>" data-i_amount="<?= $rec['amount'] ?>" data-i_total_cost="<?= $rec['total_cost'] ?>" data-i_location="<?= htmlspecialchars($rec['location']) ?>">
                                                                                         <i class="mdi mdi-table-edit"></i>
                                                                                     </a>
                                                                                     <a href="javascript:void(0);" class="btn_remove btn btn-danger btn-sm bbtn deleteAjax" data-id="<?= $rec["id"] ?>" data-tbl="smart_request" data-file="0">
@@ -1774,6 +1776,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
             // Use .data() consistently and provide defaults
             var id = $(this).data('id');
             var i_item_name = $(this).data('i_item_name') || '';
+            var i_reference = $(this).data('i_reference') || '';
             var i_quantity = $(this).data('i_quantity') || 1;
             var i_product_price = $(this).data('i_product_price') || 0;
             var i_vat_rate = $(this).data('i_vat_rate') || <?= get_setting($conDB, 'vat') ?>; // Default VAT rate
@@ -1825,6 +1828,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                 didOpen: function() {
                     $('#itemid').val(id);
                     $('.item_name').val(i_item_name);
+                    $('.item_reference').val(i_reference);
                     $('.quantity').val(i_quantity);
                     $('.product_price').val(i_product_price);
                     // Set VAT option based on calculation
@@ -1996,8 +2000,11 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                 `<form id="submitEditLineForm" data-parsley-validate>
                     <div class="form-row customSweetAlertMLR">
                         <div class="form-group col-md-4"><label><?=__('item_name')?>*</label><input type="text" name="item_name" class="form-control item_name" required></div>
-                        <div class="form-group col-md-3"><label><?=__('location')?>*</label><select id="location" class="form-control location" name="location" required><option value=""><?=__('select')?></option></select></div>
-                        <div class="form-group col-md-2"><label><?=__('quantity')?>*</label><input type="number" step="any" min="0" name="quantity" class="form-control quantity" id='quantity' required data-parsley-type="number" data-parsley-min="0"></div>
+                        <div class="form-group col-md-4"><label><?=__('reference', 'Reference')?></label><input type="text" name="reference" class="form-control item_reference" placeholder="Reference"></div>
+                        <div class="form-group col-md-4"><label><?=__('location')?>*</label><select id="location" class="form-control location" name="location" required><option value=""><?=__('select')?></option></select></div>
+                    </div>
+                    <div class="form-row customSweetAlertMLR">
+                        <div class="form-group col-md-3"><label><?=__('quantity')?>*</label><input type="number" step="any" min="0" name="quantity" class="form-control quantity" id='quantity' required data-parsley-type="number" data-parsley-min="0"></div>
                         <div class="form-group col-md-3"><label><?=__('unit_cost')?>*</label><input type="number" step="0.01" min="0" name="product_price" class="form-control product_price" id='product_price' required data-parsley-type="number" data-parsley-min="0"></div>
                     </div>
                     <div class="form-row customSweetAlertMLR">

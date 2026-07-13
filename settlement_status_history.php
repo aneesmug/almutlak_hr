@@ -27,7 +27,7 @@ $sql = "SELECT s.*,
                e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp, e.gosi, e.country as country_id,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
-               v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type, v.is_deductible,
+               v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type, v.is_deductible, v.auto_gosi_deduction,
                v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
                (SELECT basic FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_basic,
                (SELECT housing FROM emp_salary WHERE emp_id = s.emp_id AND status = 1 ORDER BY id DESC LIMIT 1) AS salary_housing,
@@ -72,7 +72,8 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
         $fly_type,
         $settlement['country_id'] ?? 0,
         $approved_days,
-        $settlement['is_deductible'] ?? 0
+        $settlement['is_deductible'] ?? 0,
+        $vacation_salary_type
     );
     
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
@@ -151,11 +152,15 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             }
             
             // Calculate GOSI
-            if ($settlement['country_id'] == 191 && !empty($settlement['gosi']) && is_numeric($settlement['gosi'])) {
+            // Check auto_gosi_deduction flag: if 1 (enabled), apply GOSI; if 0 (disabled), skip
+            $auto_gosi_deduction = (int)($settlement['auto_gosi_deduction'] ?? 1);  // Default to 1 for backward compatibility
+            
+            if ($auto_gosi_deduction && $settlement['country_id'] == 191 && !empty($settlement['gosi']) && is_numeric($settlement['gosi'])) {
                 $gosi_percentage = (float)$settlement['gosi'];
-                if ($is_settlement_payable_vacation) {
-                    $gosi_base = $working_days_salary + $vacation_salary;
-                    $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                if ($is_settlement_payable_vacation && $vacation_salary_type === 'payroll') {
+                    // Match payroll config: GOSI is based on basic + housing salary components.
+                    $gosi_base = (float)$basic_salary + (float)($settlement['salary_housing'] ?? 0);
+                    $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
                 }
             }
             

@@ -24,6 +24,26 @@ $selectedCompany = trim((string)($_GET['company'] ?? ''));
 $selectedDepartment = trim((string)($_GET['department'] ?? ''));
 $selectedSponsor = trim((string)($_GET['sponsor'] ?? ''));
 $selectedFeedbackStatus = trim((string)($_GET['feedback_status'] ?? ''));
+$selectedPaymentTypes = [];
+$rawPaymentTypeFilter = $_GET['payment_type'] ?? [];
+if (!is_array($rawPaymentTypeFilter)) {
+    $rawPaymentTypeFilter = [$rawPaymentTypeFilter];
+}
+foreach ($rawPaymentTypeFilter as $rawPaymentTypeValue) {
+    $candidates = explode(',', (string)$rawPaymentTypeValue);
+    foreach ($candidates as $candidate) {
+        $paymentType = (int)trim((string)$candidate);
+        if (in_array($paymentType, [1, 2, 3], true)) {
+            $selectedPaymentTypes[$paymentType] = $paymentType;
+        }
+    }
+}
+$hasPaymentTypeInRequest = array_key_exists('payment_type', $_GET);
+if (!$hasPaymentTypeInRequest && empty($selectedPaymentTypes)) {
+    // Default checklist view to Bank employees only unless user chooses other payment types.
+    $selectedPaymentTypes[1] = 1;
+}
+$selectedPaymentTypes = array_values($selectedPaymentTypes);
 $rawAssignedScopeParam = trim((string)($_GET['assigned_scope'] ?? '0'));
 $assignedScopeOnly = ((int)$rawAssignedScopeParam === 1);
 
@@ -305,8 +325,14 @@ if (!$isMainFinanceManager && $assignedScopeOnly) {
     $assignedScopeOnly = false;
 }
 
-if (($isFinanceOfficerChecklistUser || $isFinanceManagerChecklistUser) && !$isAssignedFinanceCompanyVerifier) {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: You are not assigned to verify this payroll checklist request.</div>');
+// Allow Finance Managers to access even without company assignment
+if (
+    $isFinanceOfficerChecklistUser &&
+    !$isAssignedFinanceCompanyVerifier
+) {
+    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">
+        ERROR: You are not assigned to verify this payroll checklist request.
+    </div>');
 }
 
 // Finance assignment review should default to full company scope (all departments/sponsors).
@@ -320,7 +346,7 @@ $applyAssignedScopeFilter = $isAssignedFinanceCompanyVerifier;
 
 $canManageFeedbackActions = $isHrPayrollApprover;
 $canUploadManagerPayrollExcel = $requestInvNo !== '' && $isCompanyManagerChecklistUser;
-$canReviewManagerUploadedPayrollExcel = $requestInvNo !== '' && $isHrPayrollApprover;
+$canReviewManagerUploadedPayrollExcel = $requestInvNo !== '' && $isHrChecklistApprover;
 // HR Payroll / HR Senior BP can mark employees checked both during normal approval
 // (isPendingWithMe) and after final approval for follow-up feedback review.
 $canManageChecklistReview = $requestInvNo !== ''
@@ -382,6 +408,7 @@ if ($deptFilter !== '') {
 $companyFilter = '';
 $departmentFilter = '';
 $sponsorFilter = '';
+$paymentTypeFilter = '';
 
 // Finance Manager: 
 // - Toggle OFF (assignedScopeOnly=false): Show ALL generated employees (no filter)
@@ -426,6 +453,19 @@ if ($isFinanceChecklistUser) {
     }
 }
 
+if (!empty($selectedPaymentTypes)) {
+    $paymentTypePlaceholders = [];
+    foreach ($selectedPaymentTypes as $index => $paymentType) {
+        $paramKey = ':filter_payment_type_' . $index;
+        $paymentTypePlaceholders[] = $paramKey;
+        $params[$paramKey] = (int)$paymentType;
+    }
+
+    if (!empty($paymentTypePlaceholders)) {
+        $paymentTypeFilter = ' AND COALESCE(e.payment_type, 1) IN (' . implode(', ', $paymentTypePlaceholders) . ')';
+    }
+}
+
 $companies = [];
 if ($applyAssignedScopeFilter && !empty($assignedFinanceCompanyIds)) {
     $companyListPlaceholders = [];
@@ -463,6 +503,9 @@ if ($isMainFinanceManager) {
     }
     if ($selectedFeedbackStatus !== '') {
         $toggleParams['feedback_status'] = $selectedFeedbackStatus;
+    }
+    if (!empty($selectedPaymentTypes)) {
+        $toggleParams['payment_type'] = $selectedPaymentTypes;
     }
     $toggleParams['assigned_scope'] = $assignedScopeOnly ? '0' : '1';
     $assignedScopeToggleUrl = 'payroll_checklist_report.php?' . http_build_query($toggleParams);
@@ -504,7 +547,7 @@ $sql = "SELECT
     LEFT JOIN companies c ON e.comp_no = c.comp_id
     LEFT JOIN bank_list bl ON bl.bnk_id = e.bank_name
     LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
-    WHERE gp.month_year = :month_year_param" . $deptFilter . $companyFilter . $departmentFilter . $sponsorFilter . "
+    WHERE gp.month_year = :month_year_param" . $deptFilter . $companyFilter . $departmentFilter . $sponsorFilter . $paymentTypeFilter . "
     ORDER BY c.comp_name ASC, d.dep_nme ASC, e.name ASC";
 
 $stmt = $pdo->prepare($sql);
@@ -791,6 +834,7 @@ foreach ($employees as $employee) {
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body { background: #f4f7fb; }
@@ -842,6 +886,21 @@ foreach ($employees as $employee) {
             justify-content: center;
             width: 100%;
             font-weight: 600;
+        }
+        .filter-card .select2-container {
+            width: 100% !important;
+        }
+        .filter-card .select2-container--default .select2-selection--multiple {
+            min-height: 42px;
+            border: 1px solid #ced4da;
+            border-radius: 10px;
+            padding: 3px 6px;
+        }
+        .filter-card .select2-container--default.select2-container--focus .select2-selection--multiple {
+            border-color: #80bdff;
+        }
+        .filter-card .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            margin-top: 4px;
         }
         .checklist-nav-footer {
             text-align: center;
@@ -1177,7 +1236,7 @@ foreach ($employees as $employee) {
                         <input type="hidden" name="assigned_scope" value="1">
                     <?php endif; ?>
 
-                    <div class="col-md-3 col-sm-6">
+                    <div class="col-md-2 col-sm-6">
                         <div class="form-group">
                             <label for="filterCompany"><?= __('company', 'Company') ?></label>
                             <select class="form-control" id="filterCompany" name="company">
@@ -1232,7 +1291,19 @@ foreach ($employees as $employee) {
                         </div>
                     </div>
 
-                    <div class="col-md-3 col-sm-6">
+                    <div class="col-md-2 col-sm-6">
+                        <div class="form-group">
+                            <label for="filterPaymentType"><?= __('salary_payment_type_label', 'Payment Type') ?></label>
+                            <?php $selectedPaymentTypeMap = array_flip($selectedPaymentTypes); ?>
+                            <select class="form-control" id="filterPaymentType" name="payment_type[]" multiple size="3">
+                                <option value="1" <?= isset($selectedPaymentTypeMap[1]) ? 'selected' : '' ?>><?= __('bank_option', 'Bank') ?></option>
+                                <option value="2" <?= isset($selectedPaymentTypeMap[2]) ? 'selected' : '' ?>><?= __('cash_option', 'Cash') ?></option>
+                                <option value="3" <?= isset($selectedPaymentTypeMap[3]) ? 'selected' : '' ?>><?= __('hold_option', 'Hold') ?></option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="col-md-2 col-sm-6">
                         <div class="form-group filter-action-wrap">
                             <span class="filter-action-spacer"><?= __('feedback_status', 'Feedback Status') ?></span>
                             <a href="payroll_checklist_report.php?month=<?= urlencode($monthYear) ?><?= $requestInvNo !== '' ? '&request_inv_no=' . urlencode($requestInvNo) : '' ?><?= $assignedScopeOnly ? '&assigned_scope=1' : '' ?>" class="btn btn-outline-secondary filter-reset-btn"><i class="fas fa-undo mr-2"></i> <?= __('reset_filters', 'Reset Filters') ?></a>
@@ -1248,7 +1319,7 @@ foreach ($employees as $employee) {
             <div class="summary-card"><div class="summary-label"><?= __('benefits_total', 'Benefits Total') ?></div><div class="summary-value" id="summaryBenefitsValue"><?= number_format($summary['benefits'], 2) ?></div></div>
             <div class="summary-card"><div class="summary-label"><?= __('deductions_total', 'Deductions Total') ?></div><div class="summary-value" id="summaryDeductionsValue"><?= number_format($summary['deductions'], 2) ?></div></div>
             <div class="summary-card"><div class="summary-label"><?= __('net_salary_label', 'Net Total') ?></div><div class="summary-value" id="summaryNetValue"><?= number_format($summary['net'], 2) ?></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('calculation_conflicts', 'Calculation Conflicts') ?></div><div class="summary-value" id="summaryMismatchValue" style="color: <?= $summary['mismatch_count'] > 0 ? '#c43636' : '#1f8b3c' ?>;"><?= (int)$summary['mismatch_count'] ?></div></div>
+            <div class="summary-card"><div class="summary-label"><?= __('calculation_conflicts', 'Calculation Conflicts') ?><i class="fas fa-info-circle text-muted ml-1" data-toggle="tooltip" data-placement="top" title="<?= htmlspecialchars(__('calculation_conflicts_tooltip', 'Employees where Net Salary does not match (Gross + Benefits - Deductions).'), ENT_QUOTES) ?>" style="cursor: help;"></i></div><div class="summary-value" id="summaryMismatchValue" style="color: <?= $summary['mismatch_count'] > 0 ? '#c43636' : '#1f8b3c' ?>;"><?= (int)$summary['mismatch_count'] ?></div></div>
             <?php if ($canManageChecklistReview): ?>
                 <div class="summary-card"><div class="summary-label"><?= __('checked_by_me', 'Checked By Me') ?></div><div class="summary-value" id="checkedEmployeesValue"><?= (int)$checkedEmployeesCount ?> / <?= (int)$summary['employees'] ?></div></div>
                 <div class="summary-card"><div class="summary-label"><?= __('remaining_to_check', 'Remaining To Check') ?></div><div class="summary-value" id="remainingEmployeesValue" style="color: <?= ((int)$summary['employees'] - (int)$checkedEmployeesCount) > 0 ? '#ad7b00' : '#1f8b3c' ?>;"><?= max(0, (int)$summary['employees'] - (int)$checkedEmployeesCount) ?></div></div>
@@ -1275,7 +1346,7 @@ foreach ($employees as $employee) {
                                 <th><?= __('total_gross_salary_label', 'Total Gross Salary') ?></th>
                                 <th><?= __('benefits_total', 'Total Benefits') ?></th>
                                 <th><?= __('deductions_total', 'Total Deductions') ?></th>
-                                <th><?= __('net_salary_label', 'Net Salary') ?></th>
+                                <th><?= __('net_salary_label', 'Total Net Salary') ?></th>
                                 <th><?= __('difference', 'Difference') ?></th>
                                 <th class="print-hide-status"><?= __('status') ?></th>
                                 <th class="print-hide-status\"><?= __('actions') ?></th>
@@ -1366,6 +1437,7 @@ foreach ($employees as $employee) {
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script src="plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="plugins/datatables/dataTables.bootstrap4.min.js"></script>
+    <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script>
@@ -1421,6 +1493,15 @@ foreach ($employees as $employee) {
                 return;
             }
 
+            const submitFilterForm = function() {
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <?= addslashes(__('loading', 'Loading')) ?>';
+                }
+                form.submit();
+            };
+
             const filterSelectors = ['filterCompany', 'filterDepartment', 'filterSponsor', 'filterFeedbackStatus'];
             filterSelectors.forEach(id => {
                 const field = document.getElementById(id);
@@ -1429,13 +1510,49 @@ foreach ($employees as $employee) {
                 }
 
                 field.addEventListener('change', function() {
-                    const submitButton = form.querySelector('button[type="submit"]');
-                    if (submitButton) {
-                        submitButton.disabled = true;
-                        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <?= addslashes(__('loading', 'Loading')) ?>';
-                    }
-                    form.submit();
+                    submitFilterForm();
                 });
+            });
+
+            const paymentTypeField = document.getElementById('filterPaymentType');
+            if (paymentTypeField) {
+                paymentTypeField.addEventListener('change', function() {
+                    // For native multiple select fallback, submit immediately.
+                    if (!(window.jQuery && typeof jQuery.fn.select2 === 'function')) {
+                        submitFilterForm();
+                    }
+                });
+
+                if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                    let hasSelectionChange = false;
+                    $('#filterPaymentType').on('select2:select select2:unselect', function() {
+                        hasSelectionChange = true;
+                    });
+                    $('#filterPaymentType').on('select2:close', function() {
+                        if (hasSelectionChange) {
+                            hasSelectionChange = false;
+                            submitFilterForm();
+                        }
+                    });
+                }
+            }
+        }
+
+        function initPaymentTypeSelect2() {
+            if (!(window.jQuery && typeof jQuery.fn.select2 === 'function')) {
+                return;
+            }
+
+            const paymentTypeField = document.getElementById('filterPaymentType');
+            if (!paymentTypeField) {
+                return;
+            }
+
+            $('#filterPaymentType').select2({
+                width: '100%',
+                closeOnSelect: false,
+                allowClear: true,
+                placeholder: '<?= addslashes(__('select_payment_types', 'Select payment type(s)')) ?>'
             });
         }
 
@@ -2546,26 +2663,31 @@ foreach ($employees as $employee) {
 
         function normalizePayrollImportBenefitType(value) {
             const normalized = String(value || '').trim().toLowerCase();
-            if (normalized === 'overtime_basic' || normalized === 'overtime_total' || normalized === 'by_hours' || normalized === 'fixed') {
+            if (normalized === 'overtime_basic' || normalized === 'overtime_total' || normalized === 'by_hours' || normalized === 'fixed' || normalized === 'by_hours_and_minutes') {
                 return normalized;
             }
-            if (normalized === 'hourly' || normalized === 'calculated' || normalized === 'hours') {
+
+            if (normalized === 'hourly' || normalized === 'calculated' || normalized === 'hours' || normalized === 'by_hours_and_minutes') {
                 return 'by_hours';
             }
+
             return 'fixed';
         }
 
         function normalizePayrollImportDeductionType(value) {
             const normalized = String(value || '').trim().toLowerCase();
-            if (normalized === 'fixed' || normalized === 'hourly_deduction' || normalized === 'daily_deduction') {
+            if (normalized === 'fixed' || normalized === 'hourly_deduction' || normalized === 'daily_deduction' || normalized === 'by_hours_and_minutes') {
                 return normalized;
             }
-            if (normalized === 'hourly' || normalized === 'hours') {
+
+            if (normalized === 'hourly' || normalized === 'hours' || normalized === 'by_hours_and_minutes') {
                 return 'hourly_deduction';
             }
+
             if (normalized === 'daily' || normalized === 'days') {
                 return 'daily_deduction';
             }
+
             return 'fixed';
         }
 
@@ -2618,10 +2740,25 @@ foreach ($employees as $employee) {
             return numeric.toFixed(2);
         }
 
-        function computePayrollImportBenefitValue(empId, benefitType, hours) {
-            const normalizedType = normalizePayrollImportBenefitType(benefitType || '');
+        function normalizePayrollImportDurationHours(hours, minutes) {
             const parsedHours = Number(hours);
-            if (!Number.isFinite(parsedHours) || parsedHours <= 0) {
+            const parsedMinutes = Number(minutes);
+            let totalHours = 0;
+
+            if (Number.isFinite(parsedHours)) {
+                totalHours += parsedHours;
+            }
+
+            if (Number.isFinite(parsedMinutes)) {
+                totalHours += Math.max(parsedMinutes, 0) / 60;
+            }
+
+            return totalHours;
+        }
+
+        function computePayrollImportBenefitValue(empId, hours, minutes) {
+            const totalHours = normalizePayrollImportDurationHours(hours, minutes);
+            if (!Number.isFinite(totalHours) || totalHours <= 0) {
                 return '';
             }
 
@@ -2630,22 +2767,16 @@ foreach ($employees as $employee) {
                 return '';
             }
 
-            let amount = 0;
-            if (normalizedType === 'overtime_basic' || normalizedType === 'by_hours') {
-                amount = (((comp.basic / 240) / 2) + (comp.totalGross / 240)) * parsedHours;
-            } else if (normalizedType === 'overtime_total') {
-                amount = (comp.totalGross / 240) * parsedHours;
-            } else {
-                return '';
-            }
-
+            const amount = (((comp.basic / 240) / 2) + (comp.totalGross / 240)) * totalHours;
             return formatPayrollImportComputedValue(amount);
         }
 
-        function computePayrollImportDeductionValue(empId, deductionType, hours, days) {
-            const normalizedType = normalizePayrollImportDeductionType(deductionType || '');
-            const parsedHours = Number(hours);
-            const parsedDays = Number(days);
+        function computePayrollImportDeductionValue(empId, hours, minutes) {
+            const totalHours = normalizePayrollImportDurationHours(hours, minutes);
+            if (!Number.isFinite(totalHours) || totalHours <= 0) {
+                return '';
+            }
+
             const comp = getPayrollImportEmployeeCompensation(empId);
             const deductibleSalary = Math.max(comp.totalGross - comp.food, 0);
 
@@ -2654,22 +2785,7 @@ foreach ($employees as $employee) {
             }
 
             const hourlyRate = deductibleSalary / 240;
-            let effectiveHours = 0;
-
-            if (normalizedType === 'hourly_deduction') {
-                effectiveHours = Number.isFinite(parsedHours) && parsedHours > 0 ? parsedHours : 0;
-            } else if (normalizedType === 'daily_deduction') {
-                const dayCount = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 0;
-                effectiveHours = dayCount * 8;
-            } else {
-                return '';
-            }
-
-            if (effectiveHours <= 0) {
-                return '';
-            }
-
-            return formatPayrollImportComputedValue(hourlyRate * effectiveHours);
+            return formatPayrollImportComputedValue(hourlyRate * totalHours);
         }
 
         function normalizeReviewedPayrollImportRow(row) {
@@ -2677,102 +2793,54 @@ foreach ($employees as $employee) {
                 checkpoint_code: String((row && row.checkpoint_code) || '').trim(),
                 emp_id: String((row && row.emp_id) || '').trim(),
                 month: String((row && row.month) || '').trim(),
-                benefit_type: String((row && row.benefit_type) || (row && row.overtime_type) || '').trim() === ''
-                    ? ''
-                    : normalizePayrollImportBenefitType((row && row.benefit_type) || (row && row.overtime_type) || ''),
+                benefit_type: 'by_hours',
                 overtime_value: String((row && row.overtime_value) || '').trim(),
-                overtime_hours: String((row && row.overtime_hours) || '').trim(),
-                overtime_reason: String((row && row.overtime_reason) || '').trim(),
-                deduction_type: String((row && row.deduction_type) || '').trim() === ''
-                    ? ''
-                    : normalizePayrollImportDeductionType((row && row.deduction_type) || ''),
+                overtime_hours: String((row && row.overtime_hours) || (row && row.benefit_hours) || '').trim(),
+                overtime_minutes: String((row && row.overtime_minutes) || (row && row.benefit_minutes) || '').trim(),
+                overtime_reason: String((row && row.overtime_reason) || (row && row.benefit_reason) || '').trim(),
+                deduction_type: 'hourly_deduction',
                 deduction_value: String((row && row.deduction_value) || '').trim(),
                 deduction_hours: String((row && row.deduction_hours) || '').trim(),
-                deduction_days: String((row && row.deduction_days) || '').trim(),
+                deduction_minutes: String((row && row.deduction_minutes) || '').trim(),
                 deduction_reason: String((row && row.deduction_reason) || '').trim(),
             };
 
             if (isPayrollImportGosiReason(normalizedRow.deduction_reason)) {
-                normalizedRow.deduction_type = 'fixed';
+                normalizedRow.deduction_type = 'hourly_deduction';
                 normalizedRow.deduction_value = '';
                 normalizedRow.deduction_hours = '';
-                normalizedRow.deduction_days = '';
+                normalizedRow.deduction_minutes = '';
                 normalizedRow.deduction_reason = '';
             }
 
-            if (normalizedRow.benefit_type === '') {
+            const benefitDurationHours = normalizePayrollImportDurationHours(normalizedRow.overtime_hours, normalizedRow.overtime_minutes);
+            if (benefitDurationHours <= 0 || normalizedRow.overtime_reason === '') {
                 normalizedRow.overtime_value = '';
                 normalizedRow.overtime_hours = '';
+                normalizedRow.overtime_minutes = '';
                 normalizedRow.overtime_reason = '';
-            } else if (normalizedRow.benefit_type === 'fixed') {
-                if (!normalizedRow.overtime_value || Number(normalizedRow.overtime_value) <= 0 || normalizedRow.overtime_reason === '') {
-                    normalizedRow.overtime_value = '';
-                    normalizedRow.overtime_hours = '';
-                    normalizedRow.overtime_reason = '';
-                }
-                normalizedRow.overtime_hours = '';
             } else {
                 normalizedRow.overtime_value = Number(normalizedRow.overtime_value) > 0 ? normalizedRow.overtime_value : '';
-                if (!normalizedRow.overtime_hours || Number(normalizedRow.overtime_hours) <= 0 || normalizedRow.overtime_reason === '') {
-                    normalizedRow.overtime_value = '';
-                    normalizedRow.overtime_hours = '';
-                    normalizedRow.overtime_reason = '';
-                }
             }
 
-            if (normalizedRow.deduction_type === '') {
+            const deductionDurationHours = normalizePayrollImportDurationHours(normalizedRow.deduction_hours, normalizedRow.deduction_minutes);
+            if (deductionDurationHours <= 0 || normalizedRow.deduction_reason === '') {
                 normalizedRow.deduction_value = '';
                 normalizedRow.deduction_hours = '';
-                normalizedRow.deduction_days = '';
+                normalizedRow.deduction_minutes = '';
                 normalizedRow.deduction_reason = '';
-            } else if (normalizedRow.deduction_type === 'fixed') {
-                if (!normalizedRow.deduction_value || Number(normalizedRow.deduction_value) <= 0 || normalizedRow.deduction_reason === '') {
-                    normalizedRow.deduction_value = '';
-                    normalizedRow.deduction_hours = '';
-                    normalizedRow.deduction_days = '';
-                    normalizedRow.deduction_reason = '';
-                }
-                normalizedRow.deduction_hours = '';
-                normalizedRow.deduction_days = '';
-            } else if (normalizedRow.deduction_type === 'hourly_deduction') {
-                normalizedRow.deduction_value = Number(normalizedRow.deduction_value) > 0 ? normalizedRow.deduction_value : '';
-                if (!normalizedRow.deduction_hours || Number(normalizedRow.deduction_hours) <= 0 || normalizedRow.deduction_reason === '') {
-                    normalizedRow.deduction_value = '';
-                    normalizedRow.deduction_hours = '';
-                    normalizedRow.deduction_days = '';
-                    normalizedRow.deduction_reason = '';
-                }
-                normalizedRow.deduction_days = '';
             } else {
                 normalizedRow.deduction_value = Number(normalizedRow.deduction_value) > 0 ? normalizedRow.deduction_value : '';
-                if (!normalizedRow.deduction_days || Number(normalizedRow.deduction_days) <= 0 || normalizedRow.deduction_reason === '') {
-                    normalizedRow.deduction_value = '';
-                    normalizedRow.deduction_hours = '';
-                    normalizedRow.deduction_days = '';
-                    normalizedRow.deduction_reason = '';
-                }
-                normalizedRow.deduction_hours = '';
-            }
-
-            if (normalizedRow.deduction_hours !== '' && normalizedRow.deduction_days !== '') {
-                normalizedRow.deduction_hours = '';
-                normalizedRow.deduction_days = '';
             }
 
             return normalizedRow;
         }
 
         function rowHasReviewedPayrollImportEntry(row) {
-            const hasBenefitEntry = row.benefit_type === 'fixed'
-                ? (!!row.overtime_value && Number(row.overtime_value) > 0)
-                : (!!row.overtime_hours && Number(row.overtime_hours) > 0);
-
-            const hasDeductionEntry = row.deduction_type === 'fixed'
-                ? (!!row.deduction_value && Number(row.deduction_value) > 0)
-                : row.deduction_type === 'hourly_deduction'
-                    ? (!!row.deduction_hours && Number(row.deduction_hours) > 0)
-                    : (!!row.deduction_days && Number(row.deduction_days) > 0);
-
+            const benefitDurationHours = normalizePayrollImportDurationHours(row.overtime_hours, row.overtime_minutes);
+            const deductionDurationHours = normalizePayrollImportDurationHours(row.deduction_hours, row.deduction_minutes);
+            const hasBenefitEntry = benefitDurationHours > 0 || (Number(row.overtime_value) > 0);
+            const hasDeductionEntry = deductionDurationHours > 0 || (Number(row.deduction_value) > 0);
             return hasBenefitEntry || hasDeductionEntry;
         }
 
@@ -2790,17 +2858,9 @@ foreach ($employees as $employee) {
                         <input type="hidden" class="payroll-import-review-input" data-field="emp_id" value="${escapePayrollImportHtml(row.emp_id || '')}">
                         <input type="hidden" class="payroll-import-review-input" data-field="month" value="${escapePayrollImportHtml(row.month || '')}">
                     </td>
-                    <td>
-                        <select class="form-control form-control-sm payroll-import-review-input" data-field="benefit_type">
-                            <option value="" ${String(row.benefit_type || '').trim() === '' ? 'selected' : ''}>Select Type</option>
-                            <option value="fixed" ${String(row.benefit_type || '') === 'fixed' ? 'selected' : ''}>Fixed</option>
-                            <option value="by_hours" ${String(row.benefit_type || '') === 'by_hours' ? 'selected' : ''}>By Hour</option>
-                            <option value="overtime_total" ${String(row.benefit_type || '') === 'overtime_total' ? 'selected' : ''}>Overtime (Total)</option>
-                            <option value="overtime_basic" ${String(row.benefit_type || '') === 'overtime_basic' ? 'selected' : ''}>Overtime (Basic)</option>
-                        </select>
-                    </td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_hours" value="${escapePayrollImportHtml(row.overtime_hours || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_value" value="${escapePayrollImportHtml(row.overtime_value || '')}"></td>
+                    <td><input type="hidden" class="payroll-import-review-input" data-field="benefit_type" value="${escapePayrollImportHtml(normalizePayrollImportBenefitType(row.benefit_type || ''))}"><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_hours" value="${escapePayrollImportHtml(row.overtime_hours || '')}"></td>
+                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_minutes" value="${escapePayrollImportHtml(row.overtime_minutes || '')}"></td>
+                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_value" value="${escapePayrollImportHtml(row.overtime_value || '')}" readonly></td>
                     <td>
                         <div class="input-group input-group-sm">
                             <input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_reason" value="${escapePayrollImportHtml(row.overtime_reason || '')}">
@@ -2809,17 +2869,9 @@ foreach ($employees as $employee) {
                             </div>
                         </div>
                     </td>
-                    <td>
-                        <select class="form-control form-control-sm payroll-import-review-input" data-field="deduction_type">
-                            <option value="" ${String(row.deduction_type || '').trim() === '' ? 'selected' : ''}>Select Type</option>
-                            <option value="fixed" ${String(row.deduction_type || '') === 'fixed' ? 'selected' : ''}>Fixed</option>
-                            <option value="hourly_deduction" ${String(row.deduction_type || '') === 'hourly_deduction' ? 'selected' : ''}>By Hour</option>
-                            <option value="daily_deduction" ${String(row.deduction_type || '') === 'daily_deduction' ? 'selected' : ''}>By Day</option>
-                        </select>
-                    </td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_hours" value="${escapePayrollImportHtml(row.deduction_hours || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_days" value="${escapePayrollImportHtml(row.deduction_days || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_value" value="${escapePayrollImportHtml(row.deduction_value || '')}"></td>
+                    <td><input type="hidden" class="payroll-import-review-input" data-field="deduction_type" value="${escapePayrollImportHtml(normalizePayrollImportDeductionType(row.deduction_type || ''))}"><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_hours" value="${escapePayrollImportHtml(row.deduction_hours || '')}"></td>
+                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_minutes" value="${escapePayrollImportHtml(row.deduction_minutes || '')}"></td>
+                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_value" value="${escapePayrollImportHtml(row.deduction_value || '')}" readonly></td>
                     <td>
                         <div class="input-group input-group-sm">
                             <input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_reason" value="${escapePayrollImportHtml(row.deduction_reason || '')}">
@@ -2845,13 +2897,12 @@ foreach ($employees as $employee) {
                                 <tr>
                                     <th style="width:60px;">#</th>
                                     <th style="width:190px;">Employee</th>
-                                    <th style="width:170px;">Type</th>
-                                    <th style="width:95px;">hours</th>
+                                    <th style="width:95px;">Hours</th>
+                                    <th style="width:95px;">Minutes</th>
                                     <th style="width:150px;">Benefits</th>
                                     <th style="width:260px;">Overtime Reason</th>
-                                    <th style="width:170px;">Type</th>
-                                    <th style="width:95px;">hours</th>
-                                    <th style="width:95px;">Days</th>
+                                    <th style="width:95px;">Hours</th>
+                                    <th style="width:95px;">Minutes</th>
                                     <th style="width:150px;">Deduction</th>
                                     <th style="width:260px;">Deduction Reason</th>
                                 </tr>
@@ -2882,11 +2933,12 @@ foreach ($employees as $employee) {
                     benefit_type: getFieldValue('benefit_type'),
                     overtime_value: getFieldValue('overtime_value'),
                     overtime_hours: getFieldValue('overtime_hours'),
+                    overtime_minutes: getFieldValue('overtime_minutes'),
                     overtime_reason: getFieldValue('overtime_reason'),
                     deduction_type: getFieldValue('deduction_type'),
                     deduction_value: getFieldValue('deduction_value'),
                     deduction_hours: getFieldValue('deduction_hours'),
-                    deduction_days: getFieldValue('deduction_days'),
+                    deduction_minutes: getFieldValue('deduction_minutes'),
                     deduction_reason: getFieldValue('deduction_reason'),
                 });
             });
@@ -2901,171 +2953,88 @@ foreach ($employees as $employee) {
             const empIdInput = getInput('emp_id');
             const empId = empIdInput ? String(empIdInput.value || '').trim() : '';
 
-            const benefitTypeInput = getInput('benefit_type');
-            const overtimeValueInput = getInput('overtime_value');
             const overtimeHoursInput = getInput('overtime_hours');
+            const overtimeMinutesInput = getInput('overtime_minutes');
+            const overtimeValueInput = getInput('overtime_value');
             const overtimeReasonInput = getInput('overtime_reason');
-            const benefitTypeRaw = benefitTypeInput ? String(benefitTypeInput.value || '').trim() : '';
-            const benefitType = benefitTypeRaw === '' ? '' : normalizePayrollImportBenefitType(benefitTypeRaw);
+            const benefitDurationHours = normalizePayrollImportDurationHours(
+                overtimeHoursInput ? overtimeHoursInput.value : '',
+                overtimeMinutesInput ? overtimeMinutesInput.value : ''
+            );
 
-            if (overtimeValueInput && overtimeHoursInput) {
-                if (benefitType === '') {
-                    overtimeHoursInput.value = '';
+            if (overtimeHoursInput) {
+                overtimeHoursInput.readOnly = false;
+                overtimeHoursInput.classList.remove('bg-light');
+            }
+            if (overtimeMinutesInput) {
+                overtimeMinutesInput.readOnly = false;
+                overtimeMinutesInput.classList.remove('bg-light');
+            }
+            if (overtimeValueInput) {
+                overtimeValueInput.readOnly = true;
+                overtimeValueInput.classList.add('bg-light');
+            }
+
+            if (overtimeReasonInput) {
+                overtimeReasonInput.readOnly = false;
+                overtimeReasonInput.classList.remove('bg-light');
+            }
+
+            if (Number.isFinite(benefitDurationHours) && benefitDurationHours > 0) {
+                if (overtimeValueInput) {
+                    overtimeValueInput.value = computePayrollImportBenefitValue(empId, overtimeHoursInput ? overtimeHoursInput.value : '', overtimeMinutesInput ? overtimeMinutesInput.value : '');
+                }
+                if (overtimeReasonInput && overtimeReasonInput.value === '') {
+                    overtimeReasonInput.value = 'Hourly benefit';
+                }
+            } else {
+                if (overtimeValueInput) {
                     overtimeValueInput.value = '';
-                    overtimeHoursInput.readOnly = true;
-                    overtimeValueInput.readOnly = true;
-                    overtimeHoursInput.classList.add('bg-light');
-                    overtimeValueInput.classList.add('bg-light');
-                    if (overtimeReasonInput) {
-                        overtimeReasonInput.value = '';
-                        overtimeReasonInput.readOnly = true;
-                        overtimeReasonInput.classList.add('bg-light');
-                    }
-                } else if (benefitType === 'fixed') {
-                    overtimeHoursInput.value = '';
-                    overtimeHoursInput.readOnly = true;
-                    overtimeValueInput.readOnly = false;
-                    overtimeHoursInput.classList.add('bg-light');
-                    overtimeValueInput.classList.remove('bg-light');
-                    if (overtimeReasonInput) {
-                        const hasOvertimeValue = Number(overtimeValueInput.value || 0) > 0;
-                        overtimeReasonInput.readOnly = !hasOvertimeValue;
-                        overtimeReasonInput.classList.toggle('bg-light', !hasOvertimeValue);
-                        if (!hasOvertimeValue) {
-                            overtimeReasonInput.value = '';
-                        }
-                    }
-                } else {
-                    overtimeHoursInput.readOnly = false;
-                    overtimeValueInput.readOnly = true;
-                    overtimeHoursInput.classList.remove('bg-light');
-                    overtimeValueInput.classList.add('bg-light');
-                    const enteredHours = parseFloat(overtimeHoursInput.value || 0);
-                    if (Number.isFinite(enteredHours) && enteredHours > 0) {
-                        overtimeValueInput.value = computePayrollImportBenefitValue(empId, benefitType, overtimeHoursInput.value);
-                        if (overtimeReasonInput) {
-                            overtimeReasonInput.value = `Calculated benefit (${enteredHours} hours)`;
-                        }
-                    } else {
-                        overtimeValueInput.value = '';
-                        if (overtimeReasonInput) {
-                            overtimeReasonInput.value = '';
-                        }
-                    }
-                    if (overtimeReasonInput) {
-                        overtimeReasonInput.readOnly = true;
-                        overtimeReasonInput.classList.add('bg-light');
-                    }
+                }
+                if (overtimeReasonInput) {
+                    overtimeReasonInput.value = '';
                 }
             }
 
-            const deductionTypeInput = getInput('deduction_type');
-            const deductionValueInput = getInput('deduction_value');
             const deductionHoursInput = getInput('deduction_hours');
-            const deductionDaysInput = getInput('deduction_days');
+            const deductionMinutesInput = getInput('deduction_minutes');
+            const deductionValueInput = getInput('deduction_value');
             const deductionReasonInput = getInput('deduction_reason');
-            const deductionTypeRaw = deductionTypeInput ? String(deductionTypeInput.value || '').trim() : '';
-            const deductionType = deductionTypeRaw === '' ? '' : normalizePayrollImportDeductionType(deductionTypeRaw);
+            const deductionDurationHours = normalizePayrollImportDurationHours(
+                deductionHoursInput ? deductionHoursInput.value : '',
+                deductionMinutesInput ? deductionMinutesInput.value : ''
+            );
 
-            if (deductionType === '') {
-                if (deductionHoursInput) {
-                    deductionHoursInput.value = '';
-                    deductionHoursInput.readOnly = true;
-                    deductionHoursInput.classList.add('bg-light');
+            if (deductionHoursInput) {
+                deductionHoursInput.readOnly = false;
+                deductionHoursInput.classList.remove('bg-light');
+            }
+            if (deductionMinutesInput) {
+                deductionMinutesInput.readOnly = false;
+                deductionMinutesInput.classList.remove('bg-light');
+            }
+            if (deductionValueInput) {
+                deductionValueInput.readOnly = true;
+                deductionValueInput.classList.add('bg-light');
+            }
+            if (deductionReasonInput) {
+                deductionReasonInput.readOnly = false;
+                deductionReasonInput.classList.remove('bg-light');
+            }
+
+            if (Number.isFinite(deductionDurationHours) && deductionDurationHours > 0) {
+                if (deductionValueInput) {
+                    deductionValueInput.value = computePayrollImportDeductionValue(empId, deductionHoursInput ? deductionHoursInput.value : '', deductionMinutesInput ? deductionMinutesInput.value : '');
                 }
-                if (deductionDaysInput) {
-                    deductionDaysInput.value = '';
-                    deductionDaysInput.readOnly = true;
-                    deductionDaysInput.classList.add('bg-light');
+                if (deductionReasonInput && deductionReasonInput.value === '') {
+                    deductionReasonInput.value = 'Hourly deduction';
                 }
+            } else {
                 if (deductionValueInput) {
                     deductionValueInput.value = '';
-                    deductionValueInput.readOnly = true;
-                    deductionValueInput.classList.add('bg-light');
                 }
                 if (deductionReasonInput) {
                     deductionReasonInput.value = '';
-                    deductionReasonInput.readOnly = true;
-                    deductionReasonInput.classList.add('bg-light');
-                }
-            } else if (deductionType === 'fixed') {
-                if (deductionHoursInput) {
-                    deductionHoursInput.value = '';
-                    deductionHoursInput.readOnly = true;
-                    deductionHoursInput.classList.add('bg-light');
-                }
-                if (deductionDaysInput) {
-                    deductionDaysInput.value = '';
-                    deductionDaysInput.readOnly = true;
-                    deductionDaysInput.classList.add('bg-light');
-                }
-                if (deductionValueInput) {
-                    deductionValueInput.readOnly = false;
-                    deductionValueInput.classList.remove('bg-light');
-                }
-                if (deductionReasonInput) {
-                    deductionReasonInput.readOnly = false;
-                    deductionReasonInput.classList.remove('bg-light');
-                }
-            } else if (deductionType === 'hourly_deduction') {
-                if (deductionHoursInput) {
-                    deductionHoursInput.readOnly = false;
-                    deductionHoursInput.classList.remove('bg-light');
-                }
-                if (deductionDaysInput) {
-                    deductionDaysInput.value = '';
-                    deductionDaysInput.readOnly = true;
-                    deductionDaysInput.classList.add('bg-light');
-                }
-                if (deductionValueInput) {
-                    deductionValueInput.readOnly = true;
-                    deductionValueInput.classList.add('bg-light');
-                    const enteredHours = parseFloat((deductionHoursInput && deductionHoursInput.value) || 0);
-                    if (Number.isFinite(enteredHours) && enteredHours > 0) {
-                        deductionValueInput.value = computePayrollImportDeductionValue(empId, deductionType, deductionHoursInput.value, '');
-                        if (deductionReasonInput) {
-                            deductionReasonInput.value = `Hourly deduction (${enteredHours} hours)`;
-                        }
-                    } else {
-                        deductionValueInput.value = '';
-                        if (deductionReasonInput) {
-                            deductionReasonInput.value = '';
-                        }
-                    }
-                }
-                if (deductionReasonInput) {
-                    deductionReasonInput.readOnly = true;
-                    deductionReasonInput.classList.add('bg-light');
-                }
-            } else {
-                if (deductionHoursInput) {
-                    deductionHoursInput.value = '';
-                    deductionHoursInput.readOnly = true;
-                    deductionHoursInput.classList.add('bg-light');
-                }
-                if (deductionDaysInput) {
-                    deductionDaysInput.readOnly = false;
-                    deductionDaysInput.classList.remove('bg-light');
-                }
-                if (deductionValueInput) {
-                    deductionValueInput.readOnly = true;
-                    deductionValueInput.classList.add('bg-light');
-                    const enteredDays = parseFloat((deductionDaysInput && deductionDaysInput.value) || 0);
-                    if (Number.isFinite(enteredDays) && enteredDays > 0) {
-                        deductionValueInput.value = computePayrollImportDeductionValue(empId, deductionType, '', deductionDaysInput.value);
-                        if (deductionReasonInput) {
-                            deductionReasonInput.value = `Daily deduction (${enteredDays} days)`;
-                        }
-                    } else {
-                        deductionValueInput.value = '';
-                        if (deductionReasonInput) {
-                            deductionReasonInput.value = '';
-                        }
-                    }
-                }
-                if (deductionReasonInput) {
-                    deductionReasonInput.readOnly = true;
-                    deductionReasonInput.classList.add('bg-light');
                 }
             }
         }
@@ -3093,23 +3062,20 @@ foreach ($employees as $employee) {
 
                         const valueInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_value"]`);
                         const hoursInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_hours"]`);
-                        const daysInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_days"]`);
+                        const minutesInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_minutes"]`);
                         const reasonInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_reason"]`);
-                        const typeField = entryType === 'overtime' ? 'benefit_type' : `${entryType}_type`;
-                        const typeInput = row.querySelector(`.payroll-import-review-input[data-field="${typeField}"]`);
 
                         if (valueInput) valueInput.value = '';
                         if (hoursInput) hoursInput.value = '';
-                        if (daysInput) daysInput.value = '';
+                        if (minutesInput) minutesInput.value = '';
                         if (reasonInput) reasonInput.value = '';
-                        if (typeInput) typeInput.value = '';
 
                         applyPayrollImportRowTypeRules(row);
                     });
 
                     reviewTableElement
-                        .off('input change', '.payroll-import-review-input[data-field="overtime_reason"], .payroll-import-review-input[data-field="deduction_reason"], .payroll-import-review-input[data-field="benefit_type"], .payroll-import-review-input[data-field="deduction_type"], .payroll-import-review-input[data-field="overtime_hours"], .payroll-import-review-input[data-field="deduction_hours"], .payroll-import-review-input[data-field="deduction_days"], .payroll-import-review-input[data-field="overtime_value"], .payroll-import-review-input[data-field="deduction_value"]')
-                        .on('input change', '.payroll-import-review-input[data-field="overtime_reason"], .payroll-import-review-input[data-field="deduction_reason"], .payroll-import-review-input[data-field="benefit_type"], .payroll-import-review-input[data-field="deduction_type"], .payroll-import-review-input[data-field="overtime_hours"], .payroll-import-review-input[data-field="deduction_hours"], .payroll-import-review-input[data-field="deduction_days"], .payroll-import-review-input[data-field="overtime_value"], .payroll-import-review-input[data-field="deduction_value"]', function() {
+                        .off('input change', '.payroll-import-review-input[data-field="overtime_reason"], .payroll-import-review-input[data-field="deduction_reason"], .payroll-import-review-input[data-field="overtime_hours"], .payroll-import-review-input[data-field="overtime_minutes"], .payroll-import-review-input[data-field="deduction_hours"], .payroll-import-review-input[data-field="deduction_minutes"], .payroll-import-review-input[data-field="overtime_value"], .payroll-import-review-input[data-field="deduction_value"]')
+                        .on('input change', '.payroll-import-review-input[data-field="overtime_reason"], .payroll-import-review-input[data-field="deduction_reason"], .payroll-import-review-input[data-field="overtime_hours"], .payroll-import-review-input[data-field="overtime_minutes"], .payroll-import-review-input[data-field="deduction_hours"], .payroll-import-review-input[data-field="deduction_minutes"], .payroll-import-review-input[data-field="overtime_value"], .payroll-import-review-input[data-field="deduction_value"]', function() {
                             const row = this.closest('tr');
                             applyPayrollImportRowTypeRules(row);
                         });
@@ -3181,7 +3147,7 @@ foreach ($employees as $employee) {
 
         async function reviewManagerUploadedPayrollExcel() {
             if (!managerPayrollExcelState.canReview) {
-                Swal.fire('<?= addslashes(__('error', 'Error')) ?>', 'Only HR Payroll can review and import manager files.', 'error');
+                Swal.fire('<?= addslashes(__('error', 'Error')) ?>', 'Only HR Payroll and HR Senior BP can review and import manager files.', 'error');
                 return;
             }
 
@@ -3337,14 +3303,15 @@ foreach ($employees as $employee) {
             const reviewRows = fetched.rows.map((row) => {
                 const overtimeValue = String((row && row.benefit_value) || (row && row.overtime_value) || '').trim();
                 const overtimeHours = String((row && row.benefit_hours) || (row && row.overtime_hours) || '').trim();
+                const overtimeMinutes = String((row && row.benefit_minutes) || (row && row.overtime_minutes) || '').trim();
                 const overtimeReason = String((row && row.benefit_reason) || (row && row.overtime_reason) || '').trim();
                 const deductionValue = String((row && row.deduction_value) || '').trim();
                 const deductionHours = String((row && row.deduction_hours) || '').trim();
-                const deductionDays = String((row && row.deduction_days) || '').trim();
+                const deductionMinutes = String((row && row.deduction_minutes) || '').trim();
                 const deductionReason = String((row && row.deduction_reason) || '').trim();
 
-                const hasBenefitData = Number(overtimeValue || 0) > 0 || Number(overtimeHours || 0) > 0 || overtimeReason !== '';
-                const hasDeductionData = Number(deductionValue || 0) > 0 || Number(deductionHours || 0) > 0 || Number(deductionDays || 0) > 0 || deductionReason !== '';
+                const hasBenefitData = Number(overtimeValue || 0) > 0 || Number(overtimeHours || 0) > 0 || Number(overtimeMinutes || 0) > 0 || overtimeReason !== '';
+                const hasDeductionData = Number(deductionValue || 0) > 0 || Number(deductionHours || 0) > 0 || Number(deductionMinutes || 0) > 0 || deductionReason !== '';
 
                 return {
                     checkpoint_code: String((row && row.checkpoint_code) || '').trim(),
@@ -3353,11 +3320,12 @@ foreach ($employees as $employee) {
                     benefit_type: hasBenefitData ? normalizePayrollImportBenefitType((row && row.benefit_type) || '') : '',
                     overtime_value: overtimeValue,
                     overtime_hours: overtimeHours,
+                    overtime_minutes: overtimeMinutes,
                     overtime_reason: overtimeReason,
                     deduction_type: hasDeductionData ? normalizePayrollImportDeductionType((row && row.deduction_type) || '') : '',
                     deduction_value: deductionValue,
                     deduction_hours: deductionHours,
-                    deduction_days: deductionDays,
+                    deduction_minutes: deductionMinutes,
                     deduction_reason: deductionReason
                 };
             });
@@ -3389,11 +3357,12 @@ foreach ($employees as $employee) {
                     benefit_type: normalizePayrollImportBenefitType(row.benefit_type || ''),
                     benefit_value: String(row.overtime_value || '').trim(),
                     benefit_hours: String(row.overtime_hours || '').trim(),
+                    benefit_minutes: String(row.overtime_minutes || '').trim(),
                     benefit_reason: String(row.overtime_reason || '').trim(),
                     deduction_type: normalizePayrollImportDeductionType(row.deduction_type || ''),
                     deduction_value: String(row.deduction_value || '').trim(),
                     deduction_hours: String(row.deduction_hours || '').trim(),
-                    deduction_days: String(row.deduction_days || '').trim(),
+                    deduction_minutes: String(row.deduction_minutes || '').trim(),
                     deduction_reason: String(row.deduction_reason || '').trim()
                 }));
 
@@ -3442,8 +3411,10 @@ foreach ($employees as $employee) {
         }
 
         $(function() {
+            initPaymentTypeSelect2();
             bindAutoFilterSubmit();
             refreshManagerReviewButtonCount();
+            $('[data-toggle="tooltip"]').tooltip();
 
             checklistDataTable = $('#checklistTable').DataTable({
                 pageLength: 25,

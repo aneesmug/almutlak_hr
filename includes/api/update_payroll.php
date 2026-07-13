@@ -12,6 +12,44 @@ header('Content-Type: application/json');
 // Include the database connection file
 require_once("./../../includes/db.php");
 
+function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
+    $monthStart = $monthYear . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+
+    $stmt = $pdo->prepare("SELECT v.id
+        FROM emp_vacation v
+        INNER JOIN employees e ON e.emp_id = v.emp_id
+        WHERE v.emp_id = :emp_id
+          AND e.country = 191
+          AND COALESCE(v.auto_gosi_deduction, 1) = 1
+          AND v.review = 'A'
+          AND v.current_status IN ('approved', 'completed')
+          AND v.start_date <= :month_end
+          AND COALESCE(v.return_date, v.start_date) >= :month_start
+          AND (
+                (
+                    LOWER(COALESCE(v.vac_type, '')) = 'fly'
+                    AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
+                    AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
+                )
+                OR
+                (
+                    LOWER(COALESCE(v.vac_type, '')) = 'local vacation'
+                    AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
+                    AND COALESCE(v.vacdays, 0) > 20
+                    AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
+                )
+          )
+        LIMIT 1");
+    $stmt->execute([
+        ':emp_id' => $empId,
+        ':month_start' => $monthStart,
+        ':month_end' => $monthEnd
+    ]);
+
+    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 // Decode the incoming JSON payload from the request body
 $input = json_decode(file_get_contents('php://input'), true);
 
@@ -33,6 +71,14 @@ $pdo = getDbConnection();
 try {
     // Begin a database transaction for atomic operations
     $pdo->beginTransaction();
+
+    $skipAutoGosiDueToVacation = hasVacationGosiDeductedForMonth($pdo, $empId, $monthYear);
+
+    if ($skipAutoGosiDueToVacation) {
+        $stmtDeleteAutoGosi = $pdo->prepare("DELETE FROM payroll_deductions
+            WHERE emp_id = :emp_id AND month = :month_year AND deduction = 'GOSI'");
+        $stmtDeleteAutoGosi->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    }
 
     // --- LOGIC TO HANDLE DELETED BENEFITS ---
     $stmtExistingIds = $pdo->prepare("SELECT id FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year");
@@ -122,17 +168,28 @@ try {
         }
     }
 
-    if (!$joinedThisPayrollMonth) {
-                $stmtVacationReturn = $pdo->prepare("SELECT return_date
-            FROM emp_vacation
-            WHERE emp_id = :emp_id
-              AND current_status = 'approved'
-              AND is_deductible = 1
-                            AND start_date <= :month_start_upper
-                            AND return_date >= :month_start_lower
-              AND return_date <= :month_end
-            ORDER BY return_date DESC
-            LIMIT 1");
+        if (!$joinedThisPayrollMonth) {
+                                $stmtVacationReturn = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
+                        FROM emp_vacation v
+                        LEFT JOIN (
+                                SELECT rr1.vacation_id, rr1.final_approved_date
+                                FROM rejoin_requests rr1
+                                INNER JOIN (
+                                        SELECT vacation_id, MAX(id) AS latest_id
+                                        FROM rejoin_requests
+                                        WHERE status = 'approved'
+                                            AND final_approved_date IS NOT NULL
+                                        GROUP BY vacation_id
+                                ) rr_latest ON rr_latest.latest_id = rr1.id
+                        ) rr ON rr.vacation_id = v.id
+                        WHERE v.emp_id = :emp_id
+                            AND v.current_status = 'approved'
+                            AND v.is_deductible = 1
+                            AND v.start_date <= :month_start_upper
+                            AND COALESCE(rr.final_approved_date, v.return_date) >= :month_start_lower
+                            AND COALESCE(rr.final_approved_date, v.return_date) <= :month_end
+                        ORDER BY COALESCE(rr.final_approved_date, v.return_date) DESC
+                        LIMIT 1");
         $stmtVacationReturn->execute([
             ':emp_id' => $empId,
                         ':month_start_upper' => $monthYear . '-01',
@@ -141,8 +198,8 @@ try {
         ]);
         $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
 
-        if ($vacationReturn) {
-            $returnDate = new DateTime($vacationReturn['return_date']);
+        if ($vacationReturn && !empty($vacationReturn['effective_return_date'])) {
+            $returnDate = new DateTime($vacationReturn['effective_return_date']);
             $returnDate->setTime(0, 0, 0);
             if ($returnDate > $payableStartDate) {
                 $payableStartDate = clone $returnDate;
@@ -215,6 +272,9 @@ try {
         }
 
         if (strtoupper($deductionName) === 'GOSI') {
+            if ($skipAutoGosiDueToVacation) {
+                continue;
+            }
             if ($deductionId) {
                 $stmt = $pdo->prepare("UPDATE payroll_deductions SET note = :deduction_amount WHERE id = :id");
                 $stmt->execute([':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':id' => $deductionId]);

@@ -6132,6 +6132,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     return;
                 }
 
+                // Local annual must always show explicit vacation salary payment choice.
+                $('#salaryTypeSection').removeClass('d-none');
+
                 const startDate = $('#start_date').datepicker('getDate') || ($('#start_date').val() ? new Date($('#start_date').val()) : null);
                 const endDate = $('#end_date').datepicker('getDate') || ($('#end_date').val() ? new Date($('#end_date').val()) : null);
 
@@ -6140,12 +6143,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     localVacationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
                 }
 
-                if (localVacationDays > 5) {
-                    $('#salaryTypeSection').removeClass('d-none');
-                } else {
-                    $('#salaryTypeSection').addClass('d-none');
+                if (localVacationDays > 0 && localVacationDays <= 5) {
                     $('#salary_with_payroll').prop('checked', true);
-                    $('#salary_with_eos').prop('checked', false);
+                    $('#salary_with_eos').prop('checked', false).prop('disabled', true);
+                } else {
+                    $('#salary_with_eos').prop('disabled', false);
                 }
             }
 
@@ -6827,6 +6829,17 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                                 </div>
                             </div>
                         </div>
+
+                        <!-- AUTO GOSI DEDUCTION SECTION -->
+                        <div style="padding: 12px; background-color: #d1ecf1; border: 2px solid #17a2b8; border-radius: 6px; margin-bottom: 20px;">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="adj_auto_gosi_deduction" checked>
+                                <label class="custom-control-label" for="adj_auto_gosi_deduction">
+                                    <strong><i class="fa fa-dollar-sign"></i> ${__('auto_gosi_deduction') || 'Auto GOSI Deduction'}</strong>
+                                    <small class="d-block mt-1">${__('auto_gosi_deduction_help') || 'If checked, GOSI will be automatically deducted from the vacation payment. Uncheck to exclude GOSI deduction.'}</small>
+                                </label>
+                            </div>
+                        </div>
                         
                         <hr style="display: none;" id="payroll_summary_hr_top">
                         
@@ -7028,6 +7041,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                     const other_earnings = parseFloat(document.getElementById('adj_other_earnings').value) || 0;
                     const other_deductions = parseFloat(document.getElementById('adj_other_deductions').value) || 0;
                     const payroll_note = document.getElementById('adj_payroll_note').value || '';
+                    const auto_gosi_deduction = document.getElementById('adj_auto_gosi_deduction').checked;
 
                     // Allow saving if "No modifications" is checked OR if there are actual values
                     if (!no_modifications && overtime_hours === 0 && deduction_hours === 0 && deduction_days === 0 && other_earnings === 0 && other_deductions === 0 && !payroll_note) {
@@ -7046,7 +7060,8 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         deduction_days, 
                         other_earnings, 
                         other_deductions, 
-                        payroll_note 
+                        payroll_note,
+                        auto_gosi_deduction
                     };
                 }
             }).then((result) => {
@@ -7064,7 +7079,8 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                             deduction_days: result.value.deduction_days,
                             other_earnings: result.value.other_earnings,
                             other_deductions: result.value.other_deductions,
-                            payroll_note: result.value.payroll_note
+                            payroll_note: result.value.payroll_note,
+                            auto_gosi_deduction: result.value.auto_gosi_deduction ? 1 : 0
                         },
                     })
                     .done(function(response){

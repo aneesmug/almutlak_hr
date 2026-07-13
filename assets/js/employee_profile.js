@@ -370,6 +370,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     return;
                 }
 
+                // Local annual must always show explicit vacation salary payment choice.
+                $('#salaryTypeSection').removeClass('d-none');
+
                 const startDate = $('#start_date').datepicker('getDate') || ($('#start_date').val() ? new Date($('#start_date').val()) : null);
                 const endDate = $('#end_date').datepicker('getDate') || ($('#end_date').val() ? new Date($('#end_date').val()) : null);
 
@@ -378,12 +381,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     localVacationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
                 }
 
-                if (localVacationDays > 5) {
-                    $('#salaryTypeSection').removeClass('d-none');
-                } else {
-                    $('#salaryTypeSection').addClass('d-none');
+                if (localVacationDays > 0 && localVacationDays <= 5) {
                     $('#salary_with_payroll').prop('checked', true);
-                    $('#salary_with_eos').prop('checked', false);
+                    $('#salary_with_eos').prop('checked', false).prop('disabled', true);
+                } else {
+                    $('#salary_with_eos').prop('disabled', false);
                 }
             }
 

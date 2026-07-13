@@ -3,6 +3,7 @@
     ============================================ -->
 <div class="col-lg-3 col-md-6 mb-4">
     <div class="employee-card-modern <?= $status_class ?>">
+        <div class="employee-card-top-line"></div>
         <!-- Card Header with Background -->
         <div class="employee-card-header">
             <div class="header-gradient"></div>

@@ -75,10 +75,16 @@ if($ajaxType == 'sub_type') {
         $fetch_stmt->execute([':itemid' => $_POST['itemid']]);
         $old_line = $fetch_stmt->fetch(PDO::FETCH_ASSOC);
         
-        $stmt = $pdo->prepare("UPDATE `smart_request` SET `item_name` = :item_name, `location` = :location, `quantity` = :quantity, `product_price` = :product_price, `itmvalue` = :itmvalue, `vat_rate` = :vat_rate, `vat_val` = :vat_val, `amount` = :amount, `idiscount` = :idiscount, `total_cost` = :total_cost 
+        if (!$old_line) {
+            send_json_response("Error", "Record with ID " . $_POST['itemid'] . " not found.", "error");
+            return;
+        }
+        
+        $stmt = $pdo->prepare("UPDATE `smart_request` SET `item_name` = :item_name, `reference` = :reference, `location` = :location, `quantity` = :quantity, `product_price` = :product_price, `itmvalue` = :itmvalue, `vat_rate` = :vat_rate, `vat_val` = :vat_val, `amount` = :amount, `idiscount` = :idiscount, `total_cost` = :total_cost 
                 WHERE `id` = :itemid");
-        $stmt->execute([
+        $result = $stmt->execute([
             ':item_name'     => $_POST['item_name'],
+            ':reference'     => $_POST['reference'] ?? '',
             ':location'      => $_POST['location'],
             ':quantity'      => $_POST['quantity'],
             ':product_price' => $_POST['product_price'],
@@ -90,20 +96,18 @@ if($ajaxType == 'sub_type') {
             ':total_cost'    => $_POST['total_cost'],
             ':itemid'        => $_POST['itemid']
         ]);
-        if ($stmt->rowCount() > 0) {
-            // Log request line update
-            ActivityLogger::logUpdate('Request', 'ajaxSmartRequest.php', $_POST['itemid'], $old_line, [
-                'item_name' => $_POST['item_name'],
-                'location' => $_POST['location'],
-                'quantity' => $_POST['quantity'],
-                'product_price' => $_POST['product_price'],
-                'total_cost' => $_POST['total_cost']
-            ], "Updated request line item via AJAX", 'smart_request');
-            
-            send_json_response("Updated!", "This line has been updated successfully.", "success");
-        } else {
-            send_json_response("No Changes", "The record was not found or the submitted data was identical.", "info");
-        }
+        
+        // Log request line update (always log after successful execution)
+        ActivityLogger::logUpdate('Request', 'ajaxSmartRequest.php', $_POST['itemid'], $old_line, [
+            'item_name' => $_POST['item_name'],
+            'reference' => $_POST['reference'] ?? '',
+            'location' => $_POST['location'],
+            'quantity' => $_POST['quantity'],
+            'product_price' => $_POST['product_price'],
+            'total_cost' => $_POST['total_cost']
+        ], "Updated request line item via AJAX", 'smart_request');
+
+        send_json_response("Updated!", "This line has been updated successfully.", "success");
     } catch (PDOException $e) {
         send_json_response("Database Error", "The catch block is working. The error was: " . $e->getMessage(), "error");
     }

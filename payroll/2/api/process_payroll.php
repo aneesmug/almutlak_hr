@@ -2,6 +2,44 @@
 header('Content-Type: application/json');
 require_once("./../../../includes/db.php"); // Adjust path as necessary
 
+function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
+    $monthStart = $monthYear . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+
+    $stmt = $pdo->prepare("SELECT v.id
+        FROM emp_vacation v
+        INNER JOIN employees e ON e.emp_id = v.emp_id
+        WHERE v.emp_id = :emp_id
+          AND e.country = 191
+          AND COALESCE(v.auto_gosi_deduction, 1) = 1
+          AND v.review = 'A'
+          AND v.current_status IN ('approved', 'completed')
+          AND v.start_date <= :month_end
+          AND COALESCE(v.return_date, v.start_date) >= :month_start
+          AND (
+                (
+                    LOWER(COALESCE(v.vac_type, '')) = 'fly'
+                    AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
+                    AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
+                )
+                OR
+                (
+                    LOWER(COALESCE(v.vac_type, '')) = 'local vacation'
+                    AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
+                    AND COALESCE(v.vacdays, 0) > 20
+                    AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
+                )
+          )
+        LIMIT 1");
+    $stmt->execute([
+        ':emp_id' => $empId,
+        ':month_start' => $monthStart,
+        ':month_end' => $monthEnd
+    ]);
+
+    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 $input = json_decode(file_get_contents('php://input'), true);
 
 $employeeIds = $input['employee_ids'] ?? [];
@@ -96,6 +134,12 @@ try {
                 ]);
                 error_log("Inserted new GOSI deduction for emp_id=$empId, month=$monthYear, amount=$gosiAmount");
             }
+                $vacationHasGosi = hasVacationGosiDeductedForMonth($pdo, $empId, $monthYear);
+                if ($vacationHasGosi) {
+                    $stmtDeleteGosi = $pdo->prepare("DELETE FROM payroll_deductions
+                        WHERE emp_id = :emp_id AND deduction = 'GOSI' AND month = :month_year");
+                    $stmtDeleteGosi->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+                }
         }
         // --- End GOSI Automatic Deduction Logic ---
 

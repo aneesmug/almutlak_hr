@@ -4374,7 +4374,7 @@ if ($can_see_all_depts) {
                     </div>
                 `;
             } else {
-                // Annual Fly vacation breakdown
+                // Payable vacation breakdown (Fly Annual or Local Annual removed from payroll)
                 breakdownHtml = `
                     <div class="alert alert-info" style="font-size: 0.85rem;">
                         <strong><i class="fa fa-calculator"></i> ${__('settlement_breakdown')}:</strong>

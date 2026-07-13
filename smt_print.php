@@ -275,6 +275,7 @@ MODIFICATION SUMMARY (001-smt_print.php):
                                                     <thead>
                                                     <tr><th width="70">#</th>
                                                         <th><?=__('description_item_name_invoice_num')?></th>
+                                                        <th width="120"><?=__('reference', 'Reference')?></th>
                                                         <th width="120"><?=__('location')?></th>
                                                         <th width="80"><?=__('quantity')?></th>
                                                         <th width="120"><?=__('unit_cost')?></th>
@@ -295,6 +296,7 @@ MODIFICATION SUMMARY (001-smt_print.php):
                                                     <tr class="set">
                                                         <th scope="row"><?= $x++ ?></th>
                                                         <td><?= htmlspecialchars($rec["item_name"]); ?></td>
+                                                        <td><?= htmlspecialchars($rec["reference"] ?? ''); ?></td>
                                                         <td><?= htmlspecialchars($rec["location"]); ?></td>
                                                         <td class="text-center"><?= $rec["quantity"]; ?></td>
                                                         <td class="text-center"><?= number_format($rec["product_price"], 2); ?></td>

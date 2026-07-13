@@ -9,6 +9,44 @@ require_once("./../../includes/db.php"); // Include your database connection fil
 require_once("./../../includes/session_check.php");
 require_once("./../../includes/payroll_approval_helpers.php");
 
+function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
+    $monthStart = $monthYear . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+
+    $stmt = $pdo->prepare("SELECT v.id
+        FROM emp_vacation v
+        INNER JOIN employees e ON e.emp_id = v.emp_id
+        WHERE v.emp_id = :emp_id
+          AND e.country = 191
+          AND COALESCE(v.auto_gosi_deduction, 1) = 1
+          AND v.review = 'A'
+          AND v.current_status IN ('approved', 'completed')
+          AND v.start_date <= :month_end
+          AND COALESCE(v.return_date, v.start_date) >= :month_start
+          AND (
+                (
+                    LOWER(COALESCE(v.vac_type, '')) = 'fly'
+                    AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
+                    AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
+                )
+                OR
+                (
+                    LOWER(COALESCE(v.vac_type, '')) = 'local vacation'
+                    AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
+                    AND COALESCE(v.vacdays, 0) > 20
+                    AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
+                )
+          )
+        LIMIT 1");
+    $stmt->execute([
+        ':emp_id' => $empId,
+        ':month_start' => $monthStart,
+        ':month_end' => $monthEnd
+    ]);
+
+    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 $empId = $_GET['emp_id'] ?? '';
 $monthYear = $_GET['month'] ?? ''; // Expected format: YYYY-MM
 $requestInvNo = trim((string)($_GET['request_inv_no'] ?? $_GET['inv_no'] ?? ''));
@@ -63,6 +101,8 @@ try {
         echo json_encode(['status' => 'error', 'message' => 'Employee not found.']);
         exit();
     }
+
+    $skipAutoGosiDueToVacation = hasVacationGosiDeductedForMonth($pdo, $empId, $monthYear);
 
     if (($isFinanceOfficerChecklistUser || $isFinanceManagerChecklistUser) && $currentApproverId !== '' && $requestInvNo !== '') {
         $assignedFinanceCompanyIds = [];
@@ -345,6 +385,7 @@ try {
         'deductions' => $deductions,
         'benefit_types' => $benefitTypes,
         'feedbacks' => $feedbacks,
+        'skip_auto_gosi_due_to_vacation' => $skipAutoGosiDueToVacation,
     ]);
 
 } catch (PDOException $e) {

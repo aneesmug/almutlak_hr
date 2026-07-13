@@ -539,7 +539,7 @@ function approveSettlement($settlementManager, $currentUserId) {
             SELECT s.*, 
                    e.gosi, e.country as country_id,
                     v.vac_type, v.fly_type, v.vacdays, v.start_date, v.return_date, v.vacation_salary_type, v.is_deductible,
-                    v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions,
+                    v.overtime_hours, v.deduction_hours, v.deduction_days, v.other_earnings, v.other_deductions, v.auto_gosi_deduction,
                    sal.basic, sal.housing, sal.transport, sal.food, sal.misc, sal.cashier,
                    sal.fuel, sal.tel, sal.other, sal.guard
             FROM settlement_records s
@@ -590,14 +590,16 @@ function approveSettlement($settlementManager, $currentUserId) {
                     $fly_type,
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
-                    $settlementData['is_deductible'] ?? 0
+                    $settlementData['is_deductible'] ?? 0,
+                    $vacation_salary_type
                 );
                 $is_settlement_payable_vacation = isSettlementPayableVacation(
                     $vac_type,
                     $fly_type,
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
-                    $settlementData['is_deductible'] ?? 0 
+                    $settlementData['is_deductible'] ?? 0,
+                    $vacation_salary_type
                 );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
@@ -641,9 +643,9 @@ function approveSettlement($settlementManager, $currentUserId) {
                                 $start_day = (int)$start_date_obj->format('d');
 
                                 // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
-                                // Special case: if vacation starts on day 1, employee completed the previous month in full.
+                                // If vacation starts on day 1, there are zero working days in the same month.
                                 if ($start_day === 1) {
-                                    $working_days_salary = round($total_monthly_salary);
+                                    $working_days_salary = 0;
                                 } else {
                                     // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
                                     $working_days = $start_day - 1;
@@ -678,11 +680,14 @@ function approveSettlement($settlementManager, $currentUserId) {
                             $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_ded);
                         }
                         
-                        if ($settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
+                        // Check auto_gosi_deduction flag: if 1 (enabled), apply GOSI; if 0 (disabled), skip
+                        $auto_gosi_deduction = (int)($settlementData['auto_gosi_deduction'] ?? 1);  // Default to 1 for backward compatibility
+                        
+                        if ($auto_gosi_deduction && $settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
                             $gosi_percentage = (float)$settlementData['gosi'];
-                            if ($is_settlement_payable_vacation) {
-                                $gosi_base = $working_days_salary + $vacation_salary;
-                                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                            if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
+                                $gosi_base = (float)$basic_salary + (float)($settlementData['housing'] ?? 0);
+                                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
                             }
                         }
                         
@@ -1292,14 +1297,16 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                     $fly_type,
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
-                    $settlementData['is_deductible'] ?? 0
+                    $settlementData['is_deductible'] ?? 0,
+                    $vacation_salary_type
                 );
                 $is_settlement_payable_vacation = isSettlementPayableVacation(
                     $vac_type,
                     $fly_type,
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
-                    $settlementData['is_deductible'] ?? 0
+                    $settlementData['is_deductible'] ?? 0,
+                    $vacation_salary_type
                 );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
@@ -1343,9 +1350,9 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                                 $start_day = (int)$start_date_obj->format('d');
 
                                 // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
-                                // Special case: if vacation starts on day 1, employee completed the previous month in full.
+                                // If vacation starts on day 1, there are zero working days in the same month.
                                 if ($start_day === 1) {
-                                    $working_days_salary = round($total_monthly_salary);
+                                    $working_days_salary = 0;
                                 } else {
                                     // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
                                     $working_days = $start_day - 1;
@@ -1380,11 +1387,14 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                             $deduction_amount = round($deduction_hours_amount + $deduction_days_amount + $other_ded);
                         }
                         
-                        if ($settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
+                        // Check auto_gosi_deduction flag: if 1 (enabled), apply GOSI; if 0 (disabled), skip
+                        $auto_gosi_deduction = (int)($settlementData['auto_gosi_deduction'] ?? 1);  // Default to 1 for backward compatibility
+                        
+                        if ($auto_gosi_deduction && $settlementData['country_id'] == 191 && !empty($settlementData['gosi']) && is_numeric($settlementData['gosi'])) {
                             $gosi_percentage = (float)$settlementData['gosi'];
-                            if ($is_settlement_payable_vacation) {
-                                $gosi_base = $working_days_salary + $vacation_salary;
-                                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                            if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
+                                $gosi_base = (float)$basic_salary + (float)($settlementData['housing'] ?? 0);
+                                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
                             }
                         }
                         
@@ -1839,14 +1849,16 @@ function getSettlementDetails($settlementManager) {
                     $fly_type,
                     $vacation['country_id'] ?? 0,
                     $approved_days,
-                    $vacation['is_deductible'] ?? 0
+                    $vacation['is_deductible'] ?? 0,
+                    $vacation_salary_type
                 );
                 $is_settlement_payable_vacation = isSettlementPayableVacation(
                     $vac_type,
                     $fly_type,
                     $vacation['country_id'] ?? 0,
                     $approved_days,
-                    $vacation['is_deductible'] ?? 0
+                    $vacation['is_deductible'] ?? 0,
+                    $vacation_salary_type
                 );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
@@ -1883,15 +1895,15 @@ function getSettlementDetails($settlementManager) {
                     $overtime_amount = 0;
                     $deduction_amount = 0;
                     
-                    // Calculate working days salary for vacations removed from active payroll.
-                    if ($is_settlement_payable_vacation && !empty($vacation['start_date'])) {
+                    // Calculate working days salary for vacations removed from payroll.
+                    if (($is_fly_annual || $is_local_annual_removed_from_payroll) && !empty($vacation['start_date'])) {
                         $start_date_obj = new DateTime($vacation['start_date']);
                         $start_day = (int)$start_date_obj->format('d');
 
                         // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
-                        // Special case: if vacation starts on day 1, employee completed the previous month in full.
+                        // If vacation starts on day 1, there are zero working days in the same month.
                         if ($start_day === 1) {
-                            $working_days_salary = round($total_monthly_salary);
+                            $working_days_salary = 0;
                         } else {
                             // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
                             $working_days = $start_day - 1;
@@ -1921,20 +1933,24 @@ function getSettlementDetails($settlementManager) {
                     }
                     
                     // Calculate GOSI
-                    if ($vacation['country_id'] == 191 && isset($vacation['gosi']) && is_numeric($vacation['gosi'])) {
+                    // Check auto_gosi_deduction flag: if 1 (enabled), apply GOSI; if 0 (disabled), skip
+                    $auto_gosi_deduction = (int)($vacation['auto_gosi_deduction'] ?? 1);  // Default to 1 for backward compatibility
+                    
+                    if ($auto_gosi_deduction && $vacation['country_id'] == 191 && isset($vacation['gosi']) && is_numeric($vacation['gosi'])) {
                         $gosi_percentage = (float)$vacation['gosi'];
-                        if ($is_settlement_payable_vacation) {
-                            $gosi_base = $working_days_salary + $vacation_salary;
-                            $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100);
+                        if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
+                            // Match payroll config: GOSI is based on basic + housing salary components.
+                            $gosi_base = (float)$basic_salary + (float)($vacation['housing'] ?? 0);
+                            $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
                         }
                     }
                     
-                    // Calculate total payable
+                    // Calculate total payable - MUST MATCH vacation_report_details.php exactly.
                     if ($is_encashment) {
                         $calculatedPayableAmount = 0; // Handled in encashment section
                     } elseif ($is_settlement_payable_vacation) {
-                        // Deductible payable vacations: Working days + vacation salary + overtime + other earnings - deductions - GOSI
-                        $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
+                        $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll) ? $working_days_salary : 0;
+                        $calculatedPayableAmount = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                     } else {
                         // Local Vacation + Annual or other
                         $calculatedPayableAmount = 0;

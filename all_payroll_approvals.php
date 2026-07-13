@@ -174,6 +174,7 @@ if ($totalItems > 0) {
             p_months.month_year AS payroll_month,
             p_months.employee_count,
             p_months.total_net_salary,
+            p_months.bank_total_net_salary,
             pr.id AS approval_id,
             pr.request_inv_no,
             pr.status AS approval_status,
@@ -193,8 +194,14 @@ if ($totalItems > 0) {
             fin_verify.finance_officer_emp_id AS finance_verification_officer,
             COALESCE(hr_checks.checked_employees, 0) AS hr_checked_count
         FROM (
-            SELECT month_year, COUNT(emp_id) AS employee_count, SUM(net_salary) AS total_net_salary
-            FROM payrolls GROUP BY month_year
+            SELECT
+                p.month_year,
+                COUNT(p.emp_id) AS employee_count,
+                SUM(p.net_salary) AS total_net_salary,
+                SUM(CASE WHEN COALESCE(e.payment_type, 1) = 1 THEN p.net_salary ELSE 0 END) AS bank_total_net_salary
+            FROM payrolls p
+            INNER JOIN employees e ON e.emp_id = p.emp_id
+            GROUP BY p.month_year
         ) p_months
         $joins
         $whereSql
@@ -238,6 +245,7 @@ if ($unfilteredRes && ($tmp = mysqli_fetch_assoc($unfilteredRes))) {
     $unfilteredTotalItems = (int)$tmp['total'];
 }
 $isHrPayrollUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_payroll';
+$isHrSeniorBpUser = strtolower(trim((string)($user_type ?? ''))) === 'hr_senior_bp';
 $isHeadOfficeFinanceManager = strtolower(trim((string)($user_type ?? ''))) === 'finance'
     && strtolower(trim((string)($emp_type ?? ''))) === 'manager'
     && (int)($user_dept ?? 0) === 2;
@@ -983,10 +991,9 @@ if (!empty($requests)) {
                                         $showFinanceVerificationSetupAction = $isHeadOfficeFinancePending && !$allCompaniesAssigned;
                                         $hrCheckedCount = (int)($request['hr_checked_count'] ?? 0);
                                         $monthEmployeeCount = (int)($request['employee_count'] ?? 0);
-                                        $canSendCompanyPayrollReport = $isHrPayrollUser
+                                        $canSendCompanyPayrollReport = ($isHrPayrollUser || $isHrSeniorBpUser)
                                             && !empty($request['request_inv_no'])
                                             && $approvalStatus === 'pending_approval'
-                                            && $isPendingWithMe
                                             && $monthEmployeeCount > 0
                                             && $hrCheckedCount < $monthEmployeeCount;
                                         $statusClass = 'secondary';
@@ -1040,7 +1047,7 @@ if (!empty($requests)) {
                                                     <div class="request-details-grid">
                                                         <div class="detail-item"><i class="fad fa-calendar"></i><strong><?= __('month') ?>:</strong> <?= htmlspecialchars($request['payroll_month']) ?></div>
                                                         <div class="detail-item"><i class="fad fa-users"></i><strong><?= __('employees', 'Employees') ?>:</strong> <?= (int)($request['employee_count'] ?? 0) ?></div>
-                                                        <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <?= number_format((float)($request['total_net_salary'] ?? 0), 2) ?> SAR</div>
+                                                        <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <?= number_format((float)($request['bank_total_net_salary'] ?? $request['total_net_salary'] ?? 0), 2) ?> SAR</div>
                                                         <?php if ($isHrPayrollUser): ?>
                                                         <div class="detail-item"><i class="fad fa-user-check"></i><strong><?= __('checked_by_me', 'Checked By Me') ?>:</strong> <?= $hrCheckedCount ?> / <?= $monthEmployeeCount ?></div>
                                                         <?php endif; ?>

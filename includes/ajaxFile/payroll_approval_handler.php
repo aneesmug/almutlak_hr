@@ -1505,8 +1505,8 @@ function getCompanyManagerOptionsForPayroll(PDO $pdo, string $currentUserId): vo
         ensurePayrollCompanyReportDispatchTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if ($currentUserRole !== 'hr_payroll') {
-            throw new Exception('Only HR Payroll can access this action.');
+        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can access this action.');
         }
 
         if ($requestInvNo === '' || $monthYear === '') {
@@ -2045,21 +2045,47 @@ function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): voi
         saveManagerPayrollUploadMeta($requestInvNo, $monthYear, $meta);
 
         if (function_exists('create_and_show_notification')) {
-            $hrStmt = $pdo->prepare("SELECT DISTINCT emp_id FROM admin_login WHERE LOWER(TRIM(COALESCE(user_type, ''))) = 'hr_payroll'");
-            $hrStmt->execute();
-            foreach ($hrStmt->fetchAll(PDO::FETCH_COLUMN) as $hrEmpId) {
-                $hrEmpId = trim((string)$hrEmpId);
+            // Notify both HR Payroll and HR Senior BP user groups
+            $notifyStmt = $pdo->prepare("SELECT DISTINCT emp_id, LOWER(TRIM(COALESCE(user_type,''))) AS ut FROM admin_login WHERE LOWER(TRIM(COALESCE(user_type,''))) IN ('hr_payroll','hr_senior_bp')");
+            $notifyStmt->execute();
+            $rows = $notifyStmt->fetchAll(PDO::FETCH_ASSOC);
+            $subject = 'Manager Payroll Excel Uploaded: ' . $monthYear . ' (' . $requestInvNo . ')';
+            $requestUrl = 'payroll_checklist_report.php?month=' . urlencode($monthYear) . '&request_inv_no=' . urlencode($requestInvNo);
+            foreach ($rows as $r) {
+                $hrEmpId = trim((string)($r['emp_id'] ?? ''));
                 if ($hrEmpId === '') {
                     continue;
                 }
+
                 create_and_show_notification(
                     $conDB,
                     $hrEmpId,
                     'Manager Payroll Excel Uploaded',
                     'Manager uploaded payroll Excel for ' . $monthYear . ' (' . $requestInvNo . '). Please review and import.',
-                    'payroll_checklist_report.php?month=' . urlencode($monthYear) . '&request_inv_no=' . urlencode($requestInvNo),
+                    $requestUrl,
                     'info'
                 );
+
+                // Attempt to send an email if address exists in admin_login or employees
+                try {
+                    $emailStmt = $pdo->prepare("SELECT COALESCE(NULLIF(TRIM(al.email),''), NULLIF(TRIM(e.email),'')) AS email, COALESCE(NULLIF(TRIM(e.name),''), NULLIF(TRIM(al.display_name),''), '') AS name FROM admin_login al LEFT JOIN employees e ON e.emp_id = al.emp_id WHERE al.emp_id = :emp_id LIMIT 1");
+                    $emailStmt->execute([':emp_id' => $hrEmpId]);
+                    $emailRow = $emailStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $toEmail = trim((string)($emailRow['email'] ?? ''));
+                    $toName = trim((string)($emailRow['name'] ?? '')) ?: $hrEmpId;
+                    if ($toEmail !== '' && function_exists('send_approval_email')) {
+                        $templateData = [
+                            'REQUEST_ID' => $requestInvNo,
+                            'REQUEST_TYPE' => 'Payroll Excel Upload',
+                            'EMAIL_MESSAGE' => 'Manager ' . $uploaderName . ' uploaded payroll Excel for ' . $monthYear . '. Please review and import.',
+                            'REQUEST_URL' => get_base_url() . '/' . $requestUrl
+                        ];
+                        // send_approval_email expects mysqli connection as first param
+                        @send_approval_email($conDB, $toEmail, $toName, $subject, 'payroll_request', $templateData);
+                    }
+                } catch (Exception $e) {
+                    // swallow email errors to avoid breaking upload flow
+                }
             }
         }
 
@@ -2081,8 +2107,8 @@ function getManagerUploadedPayrollExcelRows(PDO $pdo, string $currentUserId): vo
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if ($currentUserType !== 'hr_payroll') {
-            throw new Exception('Only HR Payroll can review manager uploaded payroll Excel.');
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can review manager uploaded payroll Excel.');
         }
 
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
@@ -2152,8 +2178,8 @@ function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): 
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if ($currentUserType !== 'hr_payroll') {
-            throw new Exception('Only HR Payroll can review manager uploaded payroll Excel.');
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can review manager uploaded payroll Excel.');
         }
 
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
@@ -2222,8 +2248,8 @@ function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if ($currentUserType !== 'hr_payroll') {
-            throw new Exception('Only HR Payroll can update manager upload review records.');
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can update manager upload review records.');
         }
 
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear) || $fileId === '') {
@@ -2293,8 +2319,8 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
         ensurePayrollCompanyReportDispatchTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if ($currentUserRole !== 'hr_payroll') {
-            throw new Exception('Only HR Payroll can send this report.');
+        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can send this report.');
         }
 
         if ($requestInvNo === '' || $monthYear === '' || empty($companyIds) || $managerEmpId === '') {
@@ -2469,23 +2495,23 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $mainSheet->fromArray($mainHeaders, null, 'A1');
 
             $benefitsSheet->fromArray(
-                ['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_reason'],
+                ['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_minutes', 'benefit_reason'],
                 null,
                 'A1'
             );
             $benefitsSheet->fromArray(
-                ['1001', 'fixed', '250.00', '', 'Project Support Benefit'],
+                ['1001', 'by_hours_and_minutes', '', '0', '0', 'Project Support Benefit'],
                 null,
                 'A2'
             );
 
             $deductionsSheet->fromArray(
-                ['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_days', 'deduction_reason'],
+                ['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_minutes', 'deduction_reason'],
                 null,
                 'A1'
             );
             $deductionsSheet->fromArray(
-                ['1001', 'hourly_deduction', '', '3', '', 'Late Arrival Deduction'],
+                ['1001', 'hourly_deduction', '', '0', '0', 'Late Arrival Deduction'],
                 null,
                 'A2'
             );
@@ -2495,10 +2521,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
                 null,
                 'A1'
             );
-            $typeListSheet->fromArray(['fixed', 'fixed'], null, 'A2');
-            $typeListSheet->fromArray(['by_hours', 'hourly_deduction'], null, 'A3');
-            $typeListSheet->fromArray(['overtime_total', 'daily_deduction'], null, 'A4');
-            $typeListSheet->fromArray(['overtime_basic', ''], null, 'A5');
+            $typeListSheet->fromArray(['by_hours', 'hourly_deduction'], null, 'A2');
 
             $metaSheet->fromArray([$checkpointCode, $monthValue], null, 'A1');
 
@@ -2509,7 +2532,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $benefitTypeValidation->setShowInputMessage(true);
             $benefitTypeValidation->setShowErrorMessage(true);
             $benefitTypeValidation->setShowDropDown(true);
-            $benefitTypeValidation->setFormula1('"fixed,by_hours,overtime_total,overtime_basic"');
+            $benefitTypeValidation->setFormula1('"by_hours,by_hours_and_minutes"');
 
             $deductionTypeValidation = new \PhpOffice\PhpSpreadsheet\Cell\DataValidation();
             $deductionTypeValidation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
@@ -2518,7 +2541,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $deductionTypeValidation->setShowInputMessage(true);
             $deductionTypeValidation->setShowErrorMessage(true);
             $deductionTypeValidation->setShowDropDown(true);
-            $deductionTypeValidation->setFormula1('"fixed,hourly_deduction,daily_deduction"');
+            $deductionTypeValidation->setFormula1('"hourly_deduction,by_hours_and_minutes"');
 
             for ($validationRow = 2; $validationRow <= 5000; $validationRow++) {
                 $benefitsSheet->getCell('B' . $validationRow)->setDataValidation(clone $benefitTypeValidation);

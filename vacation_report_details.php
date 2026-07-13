@@ -164,6 +164,8 @@ if (mysqli_num_rows($query) == 1) {
     
     // Determine vacation salary type
     $vacation_salary_type = $request['vacation_salary_type'] ?? 'payroll';
+    $local_annual_rule = getLocalAnnualPayrollRemovalRuleConfig();
+    $local_annual_min_days_exclusive = (float)($local_annual_rule['minimum_days_exclusive'] ?? 20);
     $vacation_salary_payment_yes = ($vacation_salary_type === 'payroll');
     $vacation_salary_payment_no = ($vacation_salary_type === 'end_of_service');
     $vac_type = $request['vac_type'] ?? '';
@@ -171,9 +173,9 @@ if (mysqli_num_rows($query) == 1) {
     
     // === PAYROLL LOGIC RULES ===
     // 1. Fly + Annual: Employee EXCLUDED from payroll → Show vacation salary (if vacation_salary_type = payroll)
-    // 2. Local Vacation + Annual:
-    //    - is_deductible = 0: Employee ACTIVE in payroll → NO vacation salary, only deduct days
-    //    - is_deductible = 1 (rule match): Removed from payroll → payable vacation salary is shown
+    // 2. Local Vacation + Annual (Saudi):
+    //    - vacation_salary_type = payroll: Removed from payroll → payable amounts are shown
+    //    - vacation_salary_type = end_of_service: Employee ACTIVE in payroll → no vacation payout now
     // 3. Encashment: Show ONLY encashment amount (no working days salary)
     // 4. Emergency: Not payable
     // 5. Other leave types: Not payable
@@ -186,14 +188,16 @@ if (mysqli_num_rows($query) == 1) {
         $vac_type,
         $fly_type,
         $request['country_id'] ?? 0,
-        $approved_days
+        $approved_days,
+        $vacation_salary_type
     );
     $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
         $vac_type,
         $fly_type,
         $request['country_id'] ?? 0,
         $approved_days,
-        $request['is_deductible'] ?? 0
+        $request['is_deductible'] ?? 0,
+        $vacation_salary_type
     );
     
     // Non-payable leave types
@@ -244,26 +248,19 @@ if (mysqli_num_rows($query) == 1) {
         }
 
         // === WORKING DAYS SALARY ===
-        // Only for Fly + Annual (employee excluded from payroll)
-        // NOT for Encashment or Local Vacation + Annual
-        if ($is_fly_annual && !empty($request['start_date'])) {
+        // For vacations removed from payroll, pay salary for worked days before departure.
+        if (($is_fly_annual || $is_local_annual_removed_from_payroll) && !empty($request['start_date'])) {
             $start_date_obj = new DateTime($request['start_date']);
             $start_day = (int)$start_date_obj->format('d');
 
             // Business rule: exclude the start day from working-days salary (working days BEFORE departure).
-            // Special case: if vacation starts on day 1, employee completed the previous month in full.
+            // If vacation starts on day 1, there are zero working days in the same month.
             if ($start_day === 1) {
-                $previous_month_obj = clone $start_date_obj;
-                $previous_month_obj->modify('first day of previous month');
-                $previous_month_days = (int)$previous_month_obj->format('t');
-
-                $working_days = $previous_month_days;
-                $working_days_divisor_display = $previous_month_days;
-                $working_days_daily_rate_display = ($previous_month_days > 0)
-                    ? round($total_monthly_salary / $previous_month_days, 2)
-                    : 0;
-                $working_days_salary = round($total_monthly_salary);
-                $is_full_working_month = true;
+                $working_days = 0;
+                $working_days_divisor_display = 30;
+                $working_days_daily_rate_display = round($total_monthly_salary / 30, 2);
+                $working_days_salary = 0;
+                $is_full_working_month = false;
             } else {
                 // Example: start on March 11 => 10 working days (days 1-10 before departure on 11th)
                 $working_days = $start_day - 1;
@@ -315,16 +312,15 @@ if (mysqli_num_rows($query) == 1) {
         }
 
         // === GOSI DEDUCTION ===
-        if (isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
+        // Check auto_gosi_deduction flag: if 1 (enabled), apply GOSI; if 0 (disabled), skip
+        $auto_gosi_deduction = (int)($request['auto_gosi_deduction'] ?? 1);  // Default to 1 for backward compatibility
+        
+        if ($auto_gosi_deduction && isset($request['country_id']) && $request['country_id'] == 191 && isset($request['gosi']) && is_numeric($request['gosi'])) {
             $gosi_percentage = (float)$request['gosi'];
-            if ($is_fly_annual) {
-                // For Fly + Annual: Apply GOSI on working days + vacation salary
-                $gosi_base = $working_days_salary + $vacation_salary;
-                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 0);
-            } elseif ($is_local_annual_removed_from_payroll && $vacation_salary_type === 'payroll') {
-                // For Local Annual removed from payroll: apply GOSI on payable vacation salary
-                $gosi_base = $vacation_salary;
-                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 0);
+            if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') {
+                // Match payroll config: GOSI is based on basic + housing salary components.
+                $gosi_base = (float)$basic_salary + (float)($salary['housing'] ?? 0);
+                $gosi_deduction = round(($gosi_base * $gosi_percentage) / 100, 2);
             } elseif ($is_encashment) {
                 // For Encashment: GOSI calculated separately in encashment section
                 $gosi_deduction = 0;
@@ -347,7 +343,7 @@ if (mysqli_num_rows($query) == 1) {
         // Payable vacations (Fly + Annual OR Local Annual removed from payroll):
         // Working days component applies to Fly only.
         // $deduction_amount already includes $other_deductions from the calculation above
-        $working_component = $is_fly_annual ? $working_days_salary : 0;
+        $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll) ? $working_days_salary : 0;
         $total_payable = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
@@ -840,7 +836,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <div class="alert alert-warning mb-0">
                                         <i class="fa fa-exclamation-circle"></i>
                                         <strong><?= __('employee_removed_from_active_payroll') ?? 'Employee Removed from Active Payroll' ?></strong>
-                                        <p class="mb-2 mt-2"><?= __('local_annual_saudi_long_leave_payroll_message') ?? 'This is a Local Annual vacation for a Saudi employee with more than 20 days. The employee is removed from active payroll for this period.' ?></p>
+                                        <p class="mb-2 mt-2"><?= __('local_annual_saudi_long_leave_payroll_message') ?? ('This is a Saudi Local Annual vacation with Vacation Salary Payment set to Yes and vacation days above ' . (int)$local_annual_min_days_exclusive . '. The employee is removed from active payroll for this period.') ?></p>
                                         <ul class="mb-0 pl-4">
                                             <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
                                             <li><?= __('payroll_status') ?>: <strong><?= __('removed_from_active_payroll') ?? 'Removed from Active Payroll' ?></strong></li>
@@ -871,7 +867,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?? 'Payment Details' ?></h5>
                                     <div class="payment-summary">
                                         <ul>
-                                            <?php if ($is_fly_annual): ?>
+                                            <?php if ($is_fly_annual || $is_local_annual_removed_from_payroll): ?>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>

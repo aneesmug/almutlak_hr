@@ -23,7 +23,7 @@ if ($request_inv_no === '') {
 // Vacation details
 $vacation = null;
 $sql = "SELECT v.*, 
-               e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp,
+               e.name AS employee_name, e.avatar, e.dept, e.country AS country_id, e.passport_number, e.passport_exp,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
                b.remaining_balance, b.available_balance,
@@ -341,7 +341,8 @@ if ($vacation['fly_type'] === 'annual') {
 
                 <?php 
                 // Show payment information for Fly vacations OR if any payment-related fields have values
-                $has_payment_info = ($vacation['vac_type'] == 'Fly') || 
+                $has_payment_info = ($vacation['vac_type'] == 'Fly') ||
+                                   ($vacation['vac_type'] == 'Local Vacation' && $vacation['fly_type'] == 'annual') ||
                                    !empty($vacation['ticket_pay']) || 
                                    !empty($vacation['permit_fee']) ||
                                    !empty($vacation['overtime_hours']) ||
@@ -360,6 +361,16 @@ if ($vacation['fly_type'] === 'annual') {
                     $working_days_salary = 0;
                     $vacation_salary = 0;
                     $is_fly_annual = ($vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual');
+                    $vacation_salary_type = $vacation['vacation_salary_type'] ?? 'payroll';
+                    $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
+                        $vacation['vac_type'] ?? '',
+                        $vacation['fly_type'] ?? '',
+                        $vacation['country_id'] ?? 0,
+                        (float)($vacation['vacdays'] ?? 0),
+                        $vacation['is_deductible'] ?? 0,
+                        $vacation_salary_type
+                    );
+                    $is_payable_vacation = ($is_fly_annual || $is_local_annual_removed_from_payroll);
                     $other_earnings = (float)($vacation['other_earnings'] ?? 0);
                     
                     $days_in_month = 30; // Fixed 30 days for all calculations
@@ -387,8 +398,8 @@ if ($vacation['fly_type'] === 'annual') {
                         
                         $daily_rate = $total_monthly_salary / $days_in_month;
                         
-                        // Working days salary (days before vacation starts) - Only for Fly Annual
-                        if ($is_fly_annual && !empty($vacation['start_date'])) {
+                        // Working days salary (days before vacation starts) for payable vacations.
+                        if ($is_payable_vacation && !empty($vacation['start_date'])) {
                             $start_date_obj = new DateTime($vacation['start_date']);
                             // Exclude the start day from working-days salary (working days BEFORE departure)
                             $working_days = (int)$start_date_obj->format('d') - 1;
@@ -401,14 +412,11 @@ if ($vacation['fly_type'] === 'annual') {
                             }
                         }
                         
-                        // Vacation salary (approved days) - Only for Fly Annual with vacation_salary_type = payroll
-                        if ($is_fly_annual) {
-                            $vacation_salary_type = $vacation['vacation_salary_type'] ?? 'payroll';
-                            if ($vacation_salary_type === 'payroll') {
-                                $approved_days = (float)($vacation['vacdays'] ?? 0);
-                                if ($approved_days > 0) {
-                                    $vacation_salary = $daily_rate * $approved_days;
-                                }
+                        // Vacation salary (approved days) for payable vacations with payroll type.
+                        if ($is_payable_vacation && $vacation_salary_type === 'payroll') {
+                            $approved_days = (float)($vacation['vacdays'] ?? 0);
+                            if ($approved_days > 0) {
+                                $vacation_salary = $daily_rate * $approved_days;
                             }
                         }
                     }
@@ -448,13 +456,6 @@ if ($vacation['fly_type'] === 'annual') {
                         }
                     }
                     
-                    // Debug information (remove after testing)
-                    echo "<!-- DEBUG: vac_type={$vacation['vac_type']}, fly_type={$vacation['fly_type']}, ";
-                    echo "salary_basic={$vacation['salary_basic']}, total_monthly_salary=$total_monthly_salary, ";
-                    echo "vacation_salary_type={$vacation['vacation_salary_type']}, ";
-                    echo "start_date={$vacation['start_date']}, vacdays={$vacation['vacdays']}, ";
-                    echo "other_earnings={$vacation['other_earnings']}, ";
-                    echo "working_days_salary=$working_days_salary, vacation_salary=$vacation_salary -->";
                     ?>
                     
                     <!-- Ticket and Permit Fees -->

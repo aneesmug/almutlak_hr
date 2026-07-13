@@ -3,6 +3,19 @@
     "month": "2026-06",
     "uploads": [
         {
+            "file_id": "a68db56a3ee2b77d54e8",
+            "checkpoint_code": "PAYIMP-202606-BD781CBEEB5A",
+            "original_name": "Copy of payroll_2026-06_AMLAK.xlsx",
+            "stored_name": "PAY-202606__2026-06__20260708_161207__a07771be.xlsx",
+            "uploaded_by": "5430",
+            "uploaded_by_name": "ANEES AFZAL",
+            "uploaded_at": "2026-07-08 16:12:07",
+            "reviewed_by": "",
+            "reviewed_by_name": "",
+            "reviewed_at": "",
+            "review_note": ""
+        },
+        {
             "file_id": "c828ce4854f5f8a133a2",
             "checkpoint_code": "PAYIMP-202606-7157FE21C3A0",
             "original_name": "payroll_2026-06_HEAD_OFFICE (003).xlsx",

@@ -118,28 +118,22 @@ if ($selected_company > 0) {
             box-shadow: 0 2px 12px rgba(0,0,0,0.08);
             padding: 24px 18px 18px 18px;
             transition: box-shadow 0.2s, transform 0.2s;
-            border: none;
+            border: 1px solid #dbe4ee;
             position: relative;
             min-height: 180px;
             display: flex;
             flex-direction: row;
             align-items: center;
-            background: var(--card-gradient, linear-gradient(90deg,#2196f3 0%,#21cbf3 100%));
-            color: #fff;
+            background: #fff;
+            color: #1f2d3d;
             overflow: hidden;
         }
-        .stats-card[data-color="primary"] { --card-gradient: linear-gradient(90deg,#556ee6 0%,#50a5f1 100%); }
-        .stats-card[data-color="success"] { --card-gradient: linear-gradient(90deg,#34c38f 0%,#43e97b 100%); }
-        .stats-card[data-color="info"] { --card-gradient: linear-gradient(90deg,#50a5f1 0%,#2196f3 100%); }
-        .stats-card[data-color="danger"] { --card-gradient: linear-gradient(90deg,#f46a6a 0%,#ff6a88 100%); }
-        .stats-card[data-color="warning"] { --card-gradient: linear-gradient(90deg,#f1b44c 0%,#ffde7d 100%); }
-        .stats-card[data-color="dark"] { --card-gradient: linear-gradient(90deg,#343a40 0%,#232526 100%); }
         .stats-card:hover {
             box-shadow: 0 8px 32px rgba(0,0,0,0.18);
             transform: translateY(-4px) scale(1.02);
         }
         .stats-card.active {
-            outline: 2px solid rgba(255,255,255,0.7);
+            outline: 2px solid rgba(85,110,230,0.28);
             outline-offset: -2px;
         }
         .stats-card-icon {
@@ -159,7 +153,7 @@ if ($selected_company > 0) {
         }
         .stats-card-count-circle {
             background: #fff;
-            color: #2196f3;
+            color: var(--icon-fg, #355A84);
             border-radius: 50%;
             width: 34px;
             height: 34px;
@@ -172,19 +166,13 @@ if ($selected_company > 0) {
         }
         .stats-card-icon i {
             font-size: 24px;
-            color: #2196f3;
+            color: var(--icon-fg, #355A84);
         }
-        .stats-card-icon[data-color="primary"] i { color: #556ee6; }
-        .stats-card-icon[data-color="success"] i { color: #34c38f; }
-        .stats-card-icon[data-color="info"] i { color: #50a5f1; }
-        .stats-card-icon[data-color="danger"] i { color: #f46a6a; }
-        .stats-card-icon[data-color="warning"] i { color: #f1b44c; }
-        .stats-card-icon[data-color="dark"] i { color: #343a40; }
         .stats-card-content { flex: 1; }
         .stats-card-label {
             font-size: 16px;
             font-weight: 700;
-            color: #fff;
+            color: #1f2d3d;
             margin-bottom: 8px;
             line-height: 1.3;
         }
@@ -261,9 +249,9 @@ if ($selected_company > 0) {
                                 $dept_link_params = ['comp' => $selected_company, 'dept' => $deptId, 'page' => 1];
                                 ?>
                                 <div class="col-sm-6 col-lg-4 mb-3">
-                                    <a href="filter_employee_by_comp.php?<?= htmlspecialchars(http_build_query($dept_link_params)) ?>" class="text-white" style="text-decoration:none;">
-                                        <div class="stats-card <?= $selected_dept === $deptId ? 'active' : '' ?>" data-color="<?= $cardColor ?>">
-                                            <div class="stats-card-icon" data-color="<?= $cardColor ?>">
+                                    <a href="filter_employee_by_comp.php?<?= htmlspecialchars(http_build_query($dept_link_params)) ?>" class="text-reset" style="text-decoration:none;">
+                                        <div class="stats-card professional-theme <?= $selected_dept === $deptId ? 'active' : '' ?>" data-color="<?= $cardColor ?>">
+                                            <div class="stats-card-icon professional-theme" data-color="<?= $cardColor ?>">
                                                 <div class="stats-card-count-circle"><?= $deptCount ?></div>
                                                 <i class="fa fa-building"></i>
                                             </div>

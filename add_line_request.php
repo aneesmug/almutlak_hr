@@ -47,6 +47,7 @@ if(isset($_POST['submit'])){
             $location_array = $_POST['location'];
             $sub_type_po = $_POST['sub_type'];
             $item_name_array = $_POST['item_name'];
+            $reference_array = $_POST['reference'] ?? [];
             $quantity_array = $_POST['quantity'];
             $product_price_array = $_POST['product_price'];
             $itmvalue_array = $_POST['itmvalue'];
@@ -60,8 +61,9 @@ if(isset($_POST['submit'])){
 
         for ($i = 0; $i < count($item_name_array); $i++) {
 
-            $item_name_po = escape_string(/*$conDB,*/ $item_name_array[$i]);
-            $location_po = escape_string(/*$conDB,*/ $location_array[$i]);
+            $item_name_po = escape_string($item_name_array[$i]);
+            $reference_po = escape_string($reference_array[$i] ?? '');
+            $location_po = escape_string($location_array[$i]);
             $quantity_po = escape_string(/*$conDB,*/ $quantity_array[$i]);
             $product_price_po = escape_string(/*$conDB,*/ $product_price_array[$i]);
             $itmvalue_po = escape_string(/*$conDB,*/ $itmvalue_array[$i]);
@@ -71,7 +73,7 @@ if(isset($_POST['submit'])){
             $idiscount_po = escape_string(/*$conDB,*/ $idiscount_array[$i]);
             $total_cost_po = escape_string(/*$conDB,*/ $total_cost_array[$i]);
 
-            mysqli_query($conDB, "INSERT INTO `smart_request` (`inv_no`,`tally_id`,`injazat_id`,`location`, `sub_type`, `item_name`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by`, `submitted_by_emp_id` ) VALUES ('".$inv_no_get."','".$tally_id_po."','".$injazat_id_po."','".$location_po."','".$sub_type_po."','".$item_name_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."', '".(int)$empid."' )");
+            mysqli_query($conDB, "INSERT INTO `smart_request` (`inv_no`,`tally_id`,`injazat_id`,`location`, `sub_type`, `item_name`, `reference`, `quantity`, `product_price`, `itmvalue`, `vat_rate`, `vat_val`, `amount`, `idiscount`, `total_cost`, `discount`, `department`, `prep_by`, `submitted_by_emp_id` ) VALUES ('".$inv_no_get."','".$tally_id_po."','".$injazat_id_po."','".$location_po."','".$sub_type_po."','".$item_name_po."','".$reference_po."','".$quantity_po."','".$product_price_po."','".$itmvalue_po."','".$vat_rate_po."','".$vat_val_po."','".$amount_po."','".$idiscount_po."','".$total_cost_po."','".$discount_po."','".$user_dept."','".$userwel."', '".(int)$empid."' )");
 
         } 
 
@@ -252,6 +254,7 @@ if(isset($_POST['submit'])){
                                                     <thead>
                                                     <tr><th width="70">#</th>
                                                         <th>Description/Item Name/Invoice Num.</th>
+                                                        <th width="150">Reference</th>
                                                         <th width="150">Location</th>
                                                         <th width="80">Quantity</th>
                                                         <th width="120">Unit Cost <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
@@ -529,6 +532,7 @@ if(isset($_POST['submit'])){
             <tr id="row${rowId}">
                 <td><input type="text" class="form-control rowid" value="${rowId}" readonly></td>
                 <td><input type="text" name="item_name[]" class="form-control" required autocomplete="off"></td>
+                <td><input type="text" name="reference[]" class="form-control" autocomplete="off" placeholder="Reference"></td>
                 <td><select class="form-control" name="location[]" required>${generateLocationOptions()}</select></td>
                 <td><input class="form-control quantity" type="text" min="0" name="quantity[]" value="${DEFAULT_QTY}" required></td>
                 <td><input class="form-control product_price" type="text" min="0" step="0.01" name="product_price[]" value="${DEFAULT_PRICE}" required></td>

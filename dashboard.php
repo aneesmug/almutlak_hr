@@ -329,35 +329,6 @@ if(isset($_POST['submit'])){
 				color: #fff;
 				overflow: hidden;
 			}
-			/* Gradient backgrounds for each color */
-			.stats-card[data-color="primary"] {
-				--card-gradient: linear-gradient(90deg,#556ee6 0%,#50a5f1 100%);
-			}
-			.stats-card[data-color="success"] {
-				--card-gradient: linear-gradient(90deg,#34c38f 0%,#43e97b 100%);
-			}
-			.stats-card[data-color="info"] {
-				--card-gradient: linear-gradient(90deg,#50a5f1 0%,#2196f3 100%);
-			}
-			.stats-card[data-color="danger"] {
-				--card-gradient: linear-gradient(90deg,#f46a6a 0%,#ff6a88 100%);
-			}
-			.stats-card[data-color="warning"] {
-				--card-gradient: linear-gradient(90deg,#f1b44c 0%,#ffde7d 100%);
-			}
-			.stats-card[data-color="secondary"] {
-				--card-gradient: linear-gradient(90deg,#6c757d 0%,#343a40 100%);
-			}
-			.stats-card[data-color="dark"] {
-				--card-gradient: linear-gradient(90deg,#343a40 0%,#232526 100%);
-			}
-			/* Dashboard-specific colors */
-			.stats-card[data-color="custom"] {
-				--card-gradient: linear-gradient(90deg,#0097a7 0%,#26c6da 100%);
-			}
-			.stats-card[data-color="purple"] {
-				--card-gradient: linear-gradient(90deg,#6f42c1 0%,#8e6be8 100%);
-			}
 			.stats-card:hover {
 				box-shadow: 0 8px 32px rgba(0,0,0,0.18);
 				transform: translateY(-4px) scale(1.02);
@@ -395,15 +366,6 @@ if(isset($_POST['submit'])){
 				font-size: 28px;
 				color: #2196f3;
 			}
-			.stats-card-icon[data-color="primary"] i { color: #556ee6; }
-			.stats-card-icon[data-color="success"] i { color: #34c38f; }
-			.stats-card-icon[data-color="info"] i { color: #50a5f1; }
-			.stats-card-icon[data-color="danger"] i { color: #f46a6a; }
-			.stats-card-icon[data-color="warning"] i { color: #f1b44c; }
-			.stats-card-icon[data-color="secondary"] i { color: #6c757d; }
-			.stats-card-icon[data-color="dark"] i { color: #343a40; }
-			.stats-card-icon[data-color="custom"] i { color: #0097a7; }
-			.stats-card-icon[data-color="purple"] i { color: #6f42c1; }
 			.stats-card-icon:hover {
 				transform: scale(1.10) rotate(-6deg);
 			}
@@ -633,8 +595,8 @@ if(isset($_POST['submit'])){
 						?>
 						<div class="row text-center">
 							<div class="col-sm-4 col-xl-4" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">
-							<div class="stats-card" data-color="custom">
-								<div class="stats-card-icon" data-color="custom">
+							<div class="stats-card professional-theme theme-custom" data-color="custom">
+								<div class="stats-card-icon professional-theme theme-custom" data-color="custom">
 									<div class="stats-card-count-circle"><?=$status_cont_active ?></div>
 									<span class="stats-card-tooltip">Active Employees</span>
 									<i class="fa fa-house-chimney-user"></i>
@@ -658,8 +620,8 @@ if(isset($_POST['submit'])){
 							</div>
 							</div>
 							<div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee.php?page=1&status=1&fly=no&emp_sup_type=man_power'" style="cursor: pointer;">
-							<div class="stats-card" data-color="purple">
-								<div class="stats-card-icon" data-color="purple">
+							<div class="stats-card professional-theme theme-purple" data-color="purple">
+								<div class="stats-card-icon professional-theme theme-purple" data-color="purple">
 									<div class="stats-card-count-circle"><?php if($status_cont_man_power > 0){ echo $status_cont_man_power;}else{echo "0";} ?></div>
 									<span class="stats-card-tooltip">Man Power</span>
 									<i class="fa fa-users-rays"></i>
@@ -683,8 +645,8 @@ if(isset($_POST['submit'])){
 							</div>
 							</div>
 							<div class="col-sm-4 col-xl-4" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;" <?php } ?> >
-							<div class="stats-card" data-color="primary">
-								<div class="stats-card-icon" data-color="primary">
+							<div class="stats-card professional-theme theme-primary" data-color="primary">
+								<div class="stats-card-icon professional-theme theme-primary" data-color="primary">
 									<div class="stats-card-count-circle"><?=$status_cont_man_power + $status_cont_active ?></div>
 									<span class="stats-card-tooltip">Total On Job</span>
 									<i class="fa fa-plane-departure"></i>
@@ -708,8 +670,8 @@ if(isset($_POST['submit'])){
 							</div>
 							</div>
 							<div class="col-sm-3 col-xl-3" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&departed=1'" style="cursor: pointer;" <?php } ?> >
-							<div class="stats-card" data-color="warning">
-								<div class="stats-card-icon" data-color="warning">
+							<div class="stats-card professional-theme" data-color="warning">
+								<div class="stats-card-icon professional-theme" data-color="warning">
 									<div class="stats-card-count-circle"><?=$status_cont_fly ?></div>
 									<span class="stats-card-tooltip">Departed Employees</span>
 									<i class="fa fa-plane-departure"></i>
@@ -733,8 +695,8 @@ if(isset($_POST['submit'])){
 							</div>
 							</div>
 							<div class="col-sm-3 col-xl-3" <?php if(($status_cont_local_vac ?? 0) > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&local_vac=1'" style="cursor: pointer;" <?php } ?> >
-							<div class="stats-card" data-color="info">
-								<div class="stats-card-icon" data-color="info">
+							<div class="stats-card professional-theme" data-color="info">
+								<div class="stats-card-icon professional-theme" data-color="info">
 									<div class="stats-card-count-circle"><?=$status_cont_local_vac ?? 0 ?></div>
 									<span class="stats-card-tooltip">Local Vacation</span>
 									<i class="fa fa-umbrella-beach"></i>
@@ -758,8 +720,8 @@ if(isset($_POST['submit'])){
 							</div>
 							</div>
 							<div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0'" style="cursor: pointer;">
-							<div class="stats-card" data-color="danger">
-								<div class="stats-card-icon" data-color="danger">
+							<div class="stats-card professional-theme" data-color="danger">
+								<div class="stats-card-icon professional-theme" data-color="danger">
 									<div class="stats-card-count-circle"><?=$status_cont_ter ?></div>
 									<span class="stats-card-tooltip">Terminated Employees</span>
 									<i class="fa fa-users-slash"></i>
@@ -783,8 +745,8 @@ if(isset($_POST['submit'])){
 							</div>
 							</div>
 							<div class="col-sm-3 col-xl-3" onclick="window.location.href='reg_employee.php'" style="cursor: pointer;">
-							<div class="stats-card" data-color="success">
-								<div class="stats-card-icon" data-color="success">
+							<div class="stats-card professional-theme theme-success" data-color="success">
+								<div class="stats-card-icon professional-theme theme-success" data-color="success">
 									<div class="stats-card-count-circle"><?=$status_cont_tot ?></div>
 									<span class="stats-card-tooltip">Total Employees</span>
 									<i class="fa fa-users-viewfinder"></i>
@@ -815,8 +777,8 @@ if(isset($_POST['submit'])){
 								<h4 class="m-t-0 header-title"><?= getDisplayName('Document Expiry Alerts') ?></h4>
 								<div class="row text-center">
 									<div class="col-sm-4 col-xl-4">
-										<div class="stats-card doc-expiry-card" data-color="info" data-level="info">
-											<div class="stats-card-icon" data-color="info">
+										<div class="stats-card professional-theme doc-expiry-card" data-color="info" data-level="info">
+											<div class="stats-card-icon professional-theme" data-color="info">
 												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['info'] ?></div>
 												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 21-30 days range') ?></span>
 												<i class="fa fa-circle-info"></i>
@@ -830,8 +792,8 @@ if(isset($_POST['submit'])){
 									</div>
 
 									<div class="col-sm-4 col-xl-4">
-										<div class="stats-card doc-expiry-card" data-color="warning" data-level="warning">
-											<div class="stats-card-icon" data-color="warning">
+										<div class="stats-card professional-theme doc-expiry-card" data-color="warning" data-level="warning">
+											<div class="stats-card-icon professional-theme" data-color="warning">
 												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['warning'] ?></div>
 												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 11-20 days range') ?></span>
 												<i class="fa fa-triangle-exclamation"></i>
@@ -845,8 +807,8 @@ if(isset($_POST['submit'])){
 									</div>
 
 									<div class="col-sm-4 col-xl-4">
-										<div class="stats-card doc-expiry-card" data-color="danger" data-level="danger">
-											<div class="stats-card-icon" data-color="danger">
+										<div class="stats-card professional-theme doc-expiry-card" data-color="danger" data-level="danger">
+											<div class="stats-card-icon professional-theme" data-color="danger">
 												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['danger'] ?></div>
 												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 0-10 days or expired range') ?></span>
 												<i class="fa fa-skull-crossbones"></i>
