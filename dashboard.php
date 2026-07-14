@@ -610,7 +610,7 @@ if(isset($_POST['submit'])){
 									</div>
 									<div style="width:100%;margin-top:18px;">
 										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div style="height:12px;border-radius:8px;width:<?=$pct_active ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_active ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_active ?>% <?=__('of_total_employees') ?>
@@ -635,7 +635,7 @@ if(isset($_POST['submit'])){
 									</div>
 									<div style="width:100%;margin-top:18px;">
 										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div style="height:12px;border-radius:8px;width:<?=$pct_man_power ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_man_power ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_man_power ?>% <?=__('of_total_employees') ?>
@@ -660,7 +660,7 @@ if(isset($_POST['submit'])){
 									</div>
 									<div style="width:100%;margin-top:18px;">
 										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div style="height:12px;border-radius:8px;width:<?=$pct_on_job ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_on_job ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_on_job ?>% <?=__('of_total_employees') ?>
@@ -685,7 +685,7 @@ if(isset($_POST['submit'])){
 									</div>
 									<div style="width:100%;margin-top:18px;">
 										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div style="height:12px;border-radius:8px;width:<?=$pct_fly ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_fly ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_fly ?>% <?=__('of_total_employees') ?>
@@ -710,7 +710,7 @@ if(isset($_POST['submit'])){
 									</div>
 									<div style="width:100%;margin-top:18px;">
 										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div style="height:12px;border-radius:8px;width:<?=$pct_local_vac ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_local_vac ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_local_vac ?>% <?=__('of_total_employees') ?>
@@ -735,7 +735,7 @@ if(isset($_POST['submit'])){
 									</div>
 									<div style="width:100%;margin-top:18px;">
 										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div style="height:12px;border-radius:8px;width:<?=$pct_terminated ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_terminated ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_terminated ?>% <?=__('of_total_employees') ?>
@@ -760,7 +760,7 @@ if(isset($_POST['submit'])){
 									</div>
 									<div style="width:100%;margin-top:18px;">
 										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div style="height:12px;border-radius:8px;width:<?=$pct_total ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_total ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_total ?>% <?=__('of_total_employees') ?>

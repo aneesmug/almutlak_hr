@@ -259,7 +259,7 @@ if ($selected_company > 0) {
                                                 <div class="stats-card-label"><?= htmlspecialchars($deptLabel ?: ('Department #' . $deptId)) ?></div>
                                                 <div style="width:100%;margin-top:10px;">
                                                     <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:10px;overflow:hidden;">
-                                                        <div style="height:10px;border-radius:8px;width:<?= $percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);"></div>
+                                                        <div class="progress-bar-fill-animated" style="height:10px;border-radius:8px;width:<?= $percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);"></div>
                                                     </div>
                                                     <div style="font-size:12px;color:#fff;opacity:0.9;margin-top:4px;">
                                                         <?= $percentage ?>% <?= __('of_total_employees') ?>

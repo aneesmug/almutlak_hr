@@ -8113,6 +8113,21 @@ input[name^="idiscount"]:read-only {
   box-shadow: none !important;
 }
 
+/* Animated fill-in for dashboard progress bars */
+.progress-bar-fill-animated {
+  transform-origin: left center;
+  animation: statsProgressGrow 1.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes statsProgressGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .stats-card-icon[data-color="primary"] i { color: #355A84; }
 .stats-card-icon[data-color="success"] i { color: #2F6F61; }
 .stats-card-icon[data-color="info"] i { color: #3A6A90; }

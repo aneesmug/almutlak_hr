@@ -476,7 +476,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                             <!-- Progress from department share of total employees -->
                                                             <div style="width:100%;margin-top:18px;">
                                                                 <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-                                                                    <div style="height:12px;border-radius:8px;width:<?= $percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+                                                                    <div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?= $percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
                                                                 </div>
                                                                 <div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
                                                                     <?= $percentage ?>% <?=__('of_total_employees') ?>
@@ -552,7 +552,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                             <!-- Progress from company share of total employees -->
                                                             <div style="width:100%;margin-top:18px;">
                                                                 <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-                                                                    <div style="height:12px;border-radius:8px;width:<?=$percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+                                                                    <div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
                                                                 </div>
                                                                 <div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
                                                                     <?= $percentage ?>% of total employees
