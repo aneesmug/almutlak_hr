@@ -10,6 +10,7 @@
  ****************************************************************/
 
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
 // Restrict access: Employees cannot view this detailed report page
 // if (isset($isEmployee) && $isEmployee === true) {
@@ -63,8 +64,9 @@ if (mysqli_num_rows($query) == 1) {
                 re.name AS `replacement_person_name`,
                 cp.vac_period AS contract_vacation_days,
                 cp.period AS contract_period,
-                CASE 
-                    WHEN `v`.`fly_type` = 'annual' THEN 'Annual Vacation' 
+                canceller_emp.name AS `cancelled_by_name`,
+                CASE
+                    WHEN `v`.`fly_type` = 'annual' THEN 'Annual Vacation'
                     WHEN `v`.`fly_type` = 'emergency' THEN 'Emergency Vacation'
                     ELSE ''
                 END AS `fly_type`
@@ -72,6 +74,7 @@ if (mysqli_num_rows($query) == 1) {
             JOIN employees e ON v.emp_id = e.emp_id
             LEFT JOIN bank_list bl ON e.bank_name = bl.bnk_id
             LEFT JOIN employees re ON v.replacement_person = re.emp_id
+            LEFT JOIN employees canceller_emp ON v.cancelled_by = canceller_emp.emp_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN section s ON e.sectin_nme = s.id
             LEFT JOIN countries c ON e.country = c.id
@@ -88,7 +91,23 @@ if (mysqli_num_rows($query) == 1) {
     if (!$request) {
         die("Vacation request not found.");
     }
-    
+
+    // Determine whether to show the employee's remaining vacation balance:
+    // the employee viewing their own record, admin/HR, or someone explicitly granted this special access.
+    $can_view_remaining_balance = (
+        (string)$emp_id === (string)($empid ?? '')
+        || !empty($is_system_admin)
+        || ($user_type ?? '') === 'hr'
+        || user_has_special_access($conDB, $empid ?? '', 'view_remaining_balance_in_report', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    );
+    $remaining_vacation_balance = null;
+    if ($can_view_remaining_balance) {
+        $remaining_vacation_balance = get_live_vacation_balance($conDB, $emp_id);
+        if ($remaining_vacation_balance === null) {
+            $remaining_vacation_balance = get_employee_vacation_balance_from_db($conDB, $emp_id);
+        }
+    }
+
     // 3. Fetch Salary Details
     $salary_sql = "SELECT * FROM `emp_salary` WHERE `emp_id`= ? ORDER BY id DESC LIMIT 1";
     $stmt_salary = $conDB->prepare($salary_sql);
@@ -355,7 +374,15 @@ if (mysqli_num_rows($query) == 1) {
     $request_inv_no = $request['request_inv_no'] ?? '';
     $current_status = $request['current_status'] ?? 'pending_approval';
     $is_cancelled_by_employee = ($current_status === 'cancelled');
-    
+
+    // Determine who actually cancelled the request (self vs HR/admin on their behalf).
+    $cancelled_by_emp_id = trim((string)($request['cancelled_by'] ?? ''));
+    $cancelled_request_owner_id = trim((string)($request['emp_id'] ?? ''));
+    $cancelled_by_someone_else = ($is_cancelled_by_employee && $cancelled_by_emp_id !== '' && $cancelled_by_emp_id !== $cancelled_request_owner_id);
+    $cancelled_by_label = $cancelled_by_someone_else
+        ? __('cancelled_by', 'Cancelled by') . ' ' . htmlspecialchars((!empty($request['cancelled_by_name'])) ? parseName($request['cancelled_by_name']) : $cancelled_by_emp_id)
+        : __('cancelled_by_employee');
+
     // Initialize approval chain array
     $approval_chain = [];
 
@@ -591,7 +618,10 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="detail-item"><span class="label"><?= __('return_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['return_date']) ? date('d M Y', strtotime($request['return_date'])) : null); ?></small></span></div>
                                         <?php endif; ?>
                                         <div class="detail-item"><span class="label"><?= __('vacation_days') ?></span> <span class="value highlight"><small><?= display_or_na($applied_days); ?> <?= __('days') ?></small></span></div>
-                                        <?php 
+                                        <?php if ($can_view_remaining_balance && $remaining_vacation_balance !== null): ?>
+                                        <div class="detail-item"><span class="label"><?= __('remaining_vacation_balance', 'Remaining Vacation Balance') ?></span> <span class="value highlight"><small><?= number_format((float)$remaining_vacation_balance, 2); ?> <?= __('days') ?></small></span></div>
+                                        <?php endif; ?>
+                                        <?php
                                         // Calculate flight days if both departure and arrival dates exist
                                         $flight_days = 0;
                                         if (!empty($request['departure_date']) && !empty($request['arrival_date'])) {
@@ -978,11 +1008,15 @@ if (mysqli_num_rows($query) == 1) {
                                                 <?php if ($is_cancelled_by_employee): ?>
                                                     <div class="timeline-item cancelled">
                                                         <div class="icon"><i class="fa fa-ban"></i></div>
-                                                        <span class="status ml-3"><strong><?= __('cancelled_by_employee') ?></strong></span>
+                                                        <span class="status ml-3"><strong><?= $cancelled_by_label ?></strong></span>
                                                     </div>
                                                     <div class="alert alert-secondary mt-3 mb-0">
                                                         <i class="fa fa-info-circle"></i>
-                                                        No active approvers. This request was cancelled by the employee.
+                                                        <?php if ($cancelled_by_someone_else): ?>
+                                                            No active approvers. This request was cancelled on the employee's behalf.
+                                                        <?php else: ?>
+                                                            No active approvers. This request was cancelled by the employee.
+                                                        <?php endif; ?>
                                                     </div>
                                                 <?php elseif ($current_status == 'rejected'): ?>
                                                     <div class="timeline-item rejected">

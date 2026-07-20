@@ -1769,29 +1769,24 @@ elseif($ajaxType == 'unassign_asset') {
                 (float)($row['other'] ?? 0) + 
                 (float)($row['guard'] ?? 0);
             
-            // Get employee's contract vacation days (critical fix: use contract days, not hardcoded 30)
-            $contract_stmt = mysqli_query($conDB, "SELECT e.vac_period, cp.vac_period AS contract_days, cp.period 
-                                                   FROM employees e 
-                                                   JOIN contract_period cp ON e.vac_period = cp.id 
-                                                   WHERE e.emp_id = {$empid} LIMIT 1");
-            
-            $contract_days = 30; // Default fallback (should not be needed)
-            if ($contract_stmt && mysqli_num_rows($contract_stmt) > 0) {
-                $contract_row = mysqli_fetch_assoc($contract_stmt);
-                mysqli_free_result($contract_stmt);
-                $contract_days = (float)($contract_row['contract_days'] ?? 30);
-            }
-            
-            // Calculate daily rate: monthly_salary / contract_vacation_days (not hardcoded 30)
-            // This ensures employees with 21-day, 30-day, or 42-day contracts use the correct rate
-            $daily_rate = $total_monthly_salary / $contract_days;
-            $encash_amount = $daily_rate * $days;
-            
+            // Daily rate must match the actual encashment calculation applied on submission
+            // (leaveHandler.php, applyVacation: $encashment_daily_rate = $total_monthly_salary / 30).
+            // Dividing by the employee's contract vacation-period days here instead of a fixed 30
+            // silently halved (or otherwise skewed) this preview vs. the real amount charged.
+            $daily_rate = $total_monthly_salary / 30;
+            // Round to whole SAR (no decimals) here - vacation_report_details.php displays
+            // round($request['encashment_amount']) with no precision arg, i.e. whole SAR too.
+            // Rounding to 2dp here would show cents the final report never shows (e.g. 11,733.33
+            // vs the report's 11,733.00), so match its 0-decimal rounding to keep the two in sync.
+            $encash_amount = round($daily_rate * $days);
+
             echo json_encode([
                 'status' => 200,
-                'salary' => number_format($encash_amount, 2, '.', ''),
-                'daily_rate' => number_format($daily_rate, 2, '.', ''),
-                'total_monthly_salary' => number_format($total_monthly_salary, 2, '.', '')
+                // Same number_format($x, 2) as vacation_report_details.php - comma thousands
+                // separator - so the modal preview reads identically to the final report.
+                'salary' => number_format($encash_amount, 2),
+                'daily_rate' => number_format($daily_rate, 2),
+                'total_monthly_salary' => number_format($total_monthly_salary, 2)
             ]);
         } else {
             if ($stmt) mysqli_free_result($stmt);

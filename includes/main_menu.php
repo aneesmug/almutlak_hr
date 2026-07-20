@@ -106,16 +106,44 @@ $page_roles = [
     'vacation_balance_history.php' => ['Administrator'],
     'diagnose_double_deduction.php' => ['Administrator'],
     'fix_double_deduction.php' => ['Administrator'],
+    'app_settings.php' => ['Administrator'],
 ];
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
 
 $is_employee_user_type = (strtolower((string)$user_type) === 'employee');
 
-if ($user_type != 'administrator') { 
+require_once __DIR__ . '/special_access_helper.php';
+
+// Sidebar navigation entries hidden entirely when their request type is globally blocked
+// (or individually blocked for the current logged-in user).
+$isSmartRequestMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'smart_request')['blocked'];
+$isGeneralRequestMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'general_request')['blocked'];
+
+// Pages whose page_roles restriction can be bypassed by an explicit special-access grant.
+// Value can be a single access key, or an array of keys where any one grants access.
+$page_special_access_bypass = [
+    'vacation_balance_history.php' => 'view_vacation_balance_history',
+    'app_settings.php' => ['manage_department_settings', 'manage_job_title_settings', 'manage_global_request_blocks'],
+];
+
+$has_page_special_access_bypass = false;
+if (isset($page_special_access_bypass[$current_page_name])) {
+    $bypassKeys = (array)$page_special_access_bypass[$current_page_name];
+    foreach ($bypassKeys as $bypassKey) {
+        if (user_has_special_access($conDB, $empid ?? '', $bypassKey, $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+            $has_page_special_access_bypass = true;
+            break;
+        }
+    }
+}
+
+if ($user_type != 'administrator') {
     // Allow reports page for all non-employee user types.
     if ($current_page_name === 'reports.php' && !$is_employee_user_type) {
         // intentionally bypass role-based restriction
+    } elseif ($has_page_special_access_bypass) {
+        // intentionally bypass role-based restriction: explicit special-access grant
     } elseif (isset($page_roles[$current_page_name])) {
         if (!in_array($user_role, $page_roles[$current_page_name])) {
             header("Location: dashboard.php");
@@ -882,14 +910,14 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php endif; ?>
 
         <!-- Requests Menu (Smart Request + General Request) -->
-        <?php if ((in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)) || (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page)) || (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page))): ?>
+        <?php if ((!$isSmartRequestMenuBlocked && (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page))) || (!$isGeneralRequestMenuBlocked && (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page))) || (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page))): ?>
         <li class="<?=((strpos($current_page_name, 'request') !== false || $current_page_name === 'vouchers.php') ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa fa-ticket"></i><span><?=__('requests', 'Requests')?></span><?= ($requests_total_count > 0) ? "<span class='badgez badge-danger'>$requests_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= ((strpos($current_page_name, 'request') !== false || $current_page_name === 'vouchers.php') ? 'true' : 'false') ?>">
-                <?php if (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page)): ?>
+                <?php if (!$isSmartRequestMenuBlocked && (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page))): ?>
                 <li><a href="<?= $smartRequestsLink ?>"><i class="fa fa-layer-group"></i> <span> <?=__('smart_requests', 'Smart Request') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page)): ?>
+                <?php if (!$isGeneralRequestMenuBlocked && (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page))): ?>
                 <li><a href="<?= $generalRequestsLink ?>"><i class="fa fa-file-alt"></i> <span><?=__('general_request', 'General Request')?></span> <?= ($general_request_count > 0) ? "<span class='badgez badge-danger'>$general_request_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page)): ?>
@@ -908,19 +936,33 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             <li><a href="<?= $assetInventoryLink ?>"><i class="fa fa-box"></i><span><?=__('asset_inventory', 'Asset Inventory') ?></span></a></li>
         <?php endif; ?>
 
-        <?php if ($is_system_admin || $user_role === 'HR_Senior_BP'): ?>
+        <?php
+        $can_view_vac_balance_history = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'view_vacation_balance_history', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        $can_access_app_settings = $is_system_admin
+            || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+            || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+            || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        ?>
+        <?php if ($is_system_admin || $user_role === 'HR_Senior_BP' || $can_view_vac_balance_history || $can_access_app_settings): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'true' : 'false') ?>">
                 <?php if ($is_system_admin): ?>
                 <li><a href="<?= $announcementLink ?>"><i class="fa fa-bullhorn"></i><span><?=__('announcement', 'Announcement')?></span></a></li>
                 <?php endif; ?>
+                <?php if ($is_system_admin || $user_role === 'HR_Senior_BP'): ?>
                 <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>
+                <?php endif; ?>
                 <?php if ($is_system_admin || $user_role === 'HR_Senior_BP'): ?>
                 <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa fa-users-gear"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
                 <?php endif; ?>
-                <?php if ($is_system_admin): ?>
+                <?php if ($can_view_vac_balance_history): ?>
                 <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa fa-clock-rotate-left"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
+                <?php endif; ?>
+                <?php if ($can_access_app_settings && !$is_system_admin): ?>
+                <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa fa-gear"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
+                <?php endif; ?>
+                <?php if ($is_system_admin): ?>
                 <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa fa-solid fa-square-shekel"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
                 <li><a href="<?= $tableJsonApiLink ?>" target="_blank"><i class="fa fa-database"></i><span><?=__('table_json_api', 'Table JSON API') ?></span></a></li>
                 <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa fa-stethoscope"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>

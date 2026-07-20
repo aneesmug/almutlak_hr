@@ -9,13 +9,27 @@
  * - Updated the "Goto Back" button's icon from `fa-angle-double-left` to `fa-angle-double-right` to correctly indicate direction in an RTL context.
  *
  **************************************************************************************************/
+require_once __DIR__ . '/special_access_helper.php';
+
 $current_page_name = basename($_SERVER['PHP_SELF']);
 
 // Calculate employee modification permission
 $can_modify_employee = (
-	$is_system_admin || 
+	$is_system_admin ||
 	$isDeptHr
 );
+
+// Effective request-block status for this employee (global block XOR employee override),
+// used to hide "More Actions" menu items for request types this employee cannot submit.
+$empIdForBlockCheck = $emprow['empid'] ?? $emprow['emp_id'] ?? '';
+$isLoanBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'loan_request')['blocked'];
+$isExcuseLeaveBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'excuse_leave')['blocked'];
+$isResignationBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'resignation_request')['blocked'];
+$isVacationAnnualBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_annual')['blocked'];
+$isVacationEmergencyBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_emergency')['blocked'];
+$isVacationLocalBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_local')['blocked'];
+$isVacationEncashedBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_encashed')['blocked'];
+$isAllVacationBlocked = ($isVacationAnnualBlocked && $isVacationEmergencyBlocked && $isVacationLocalBlocked && $isVacationEncashedBlocked);
 
 // Get available vacation balance for modal actions
 $displayBalance = 0;
@@ -41,7 +55,7 @@ if ($emprow['status'] == 1) {
 	}
 	
 	// Apply Loan (HR/Admin only, if no active loan)
-	if (empty($emprow['has_active_regular_loan']) /*&& ($is_system_admin || $isDeptHr || $isHR)*/) {
+	if (empty($emprow['has_active_regular_loan']) && !$isLoanBlocked /*&& ($is_system_admin || $isDeptHr || $isHR)*/) {
 		$hr_actions .= "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
 	}
 	
@@ -58,15 +72,18 @@ if ($emprow['status'] == 1) {
 	if ($user_dept == $emprow['dept'] || $is_system_admin || $isDeptHr || $isHR) {
 		if ($emprow['emp_sup_type'] != "man_power") {
 			// Annual Vacation
-			if ($emprow['apd_status'] != 'approve' /*&& $emprow["fly"] == 0*/ ) {
-				$moreActionsHtml .= "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
+			if ($emprow['apd_status'] != 'approve' && !$isAllVacationBlocked /*&& $emprow["fly"] == 0*/ ) {
+				$allowEmergencyVacation = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 1 : 0;
+				$moreActionsHtml .= "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
 			}
 			
 			// Business Trip Request
 			// $moreActionsHtml .= "<div class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['dept']) . "', '" . htmlspecialchars($emprow['country']) . "')\" role=\"button\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></div>";
 			
 			// Excuse Leave
-			$moreActionsHtml .= "<div class=\"menu-item text-success applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
+			if (!$isExcuseLeaveBlocked) {
+				$moreActionsHtml .= "<div class=\"menu-item text-success applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
+			}
 			
 			// Vacation arrival/departure
 			if ($emprow["fly"] == 1) {
@@ -87,9 +104,9 @@ if ($emprow['status'] == 1) {
 			}
 			
 			// Add Manual Vacation (HR/Admin only)
-			if ($isHR || $is_system_admin || $isDeptHr) {
+			/* if ($isHR || $is_system_admin || $isDeptHr) {
 				$moreActionsHtml .= "<div class=\"menu-item text-info\" onclick=\"addManualVacationHistory(" . (int)$emprow['empid'] . ", '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', " . (int)$emprow['country'] . ");\" role=\"button\"><i class=\"fa fa-plus-circle\"></i><span>" . __('add_manual_vacation', 'Add Manual Vacation') . "</span></div>";
-			}
+			} */
 		}
 	}
 	
@@ -121,7 +138,9 @@ if ($emprow['status'] == 1) {
 		}
 	}
 	// Apply Resignation
-	$moreActionsHtml .= "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
+	if (!$isResignationBlocked) {
+		$moreActionsHtml .= "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
+	}
 } else {
 	$moreActionsHtml = '<div style="padding:24px; text-align:center; color: #6c757d;"><p>' . __('employee_is_inactive') . '</p></div>';
 }

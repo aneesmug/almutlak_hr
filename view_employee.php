@@ -1,6 +1,7 @@
 ﻿<?php
 
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
@@ -59,6 +60,15 @@ if (mysqli_num_rows($query) == 1) {
 			exit;
 		}
 		// If we get here, access is granted
+
+		// --- START: Temporary Role Transfer (vacation replacement coverage) ---
+		// Only HR Senior BP / HR Payroll (their own real role, not any borrowed temp role)
+		// may grant/revoke coverage, matching includes/ajaxFile/tempRoleHandler.php.
+		$can_manage_temp_roles = ($is_system_admin || in_array($actual_user_type ?? $user_type, ['hr_senior_bp', 'hr_payroll'], true));
+		$tempRoleCandidate = $can_manage_temp_roles
+			? getReplacementTempRoleCandidate($conDB, $emprow['emp_id'] ?? $emprow['empid'])
+			: null;
+		// --- END: Temporary Role Transfer ---
 
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
@@ -152,6 +162,30 @@ if (mysqli_num_rows($query) == 1) {
 	$overtimeEligibilityText = ((string)($emprow['is_overtime_eligible'] ?? '0') === '1')
 		? __('yes', 'Yes')
 		: __('no', 'No');
+
+	$allowEmergencyVacationText = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1')
+		? __('yes', 'Yes')
+		: __('no', 'No');
+
+	$requestsBlockedText = ((string)($emprow['requests_blocked'] ?? '0') === '1')
+		? __('yes', 'Yes')
+		: __('no', 'No');
+	// Effective per-type block status = globally_blocked XOR this employee's override checkbox,
+	// matching the logic in is_employee_request_blocked() (includes/special_access_helper.php).
+	$blockedRequestTypeLabels = get_blockable_request_type_labels();
+	$globallyBlockedRequestTypes = get_global_blocked_request_types($conDB);
+	$employeeOverrideTypes = decode_blocked_request_types((string)($emprow['blocked_request_types'] ?? ''));
+	$effectiveBlockedTypeParts = [];
+	foreach ($blockedRequestTypeLabels as $key => $label) {
+		$isGlobal = in_array($key, $globallyBlockedRequestTypes, true);
+		$isOverride = in_array($key, $employeeOverrideTypes, true);
+		if ($isGlobal xor $isOverride) {
+			$effectiveBlockedTypeParts[] = $label . ($isGlobal ? ' (' . __('global', 'Global') . ')' : ' (' . __('individual', 'Individual') . ')');
+		}
+	}
+	$blockedRequestTypesText = empty($effectiveBlockedTypeParts)
+		? __('none', 'None')
+		: implode(', ', $effectiveBlockedTypeParts);
 
 	$all_statuses = [
 		'apply' => __('new_request'),
@@ -907,6 +941,22 @@ if (mysqli_num_rows($query) == 1) {
 									<div class="d-flex justify-content-between align-items-center mb-3">
 										<h4 class="header-title m-t-0"><?= __('employee_information') ?></h4>
 										<div class="btn-group" role="group">
+											<?php if ($tempRoleCandidate) : ?>
+												<?php if (($tempRoleCandidate['assignment_status'] ?? null) === 'active') : ?>
+													<button type="button" class="btn btn-sm btn-outline-danger waves-effect"
+														onclick="revokeTempRole(<?= (int)$tempRoleCandidate['vacation_id'] ?>)">
+														<i class="mdi mdi-account-remove"></i>
+														<?= __('revoke_temp_role', 'Revoke Temp Role') ?>
+														(<?= htmlspecialchars(getRoleLabel($tempRoleCandidate['granted_role']), ENT_QUOTES) ?>)
+													</button>
+												<?php else : ?>
+													<button type="button" class="btn btn-sm btn-outline-primary waves-effect"
+														onclick="grantTempRole(<?= (int)$tempRoleCandidate['vacation_id'] ?>, '<?= htmlspecialchars($tempRoleCandidate['employee_name'] ?? $tempRoleCandidate['employee_emp_id'], ENT_QUOTES) ?>', '<?= htmlspecialchars($tempRoleCandidate['start_date'], ENT_QUOTES) ?>', '<?= htmlspecialchars($tempRoleCandidate['return_date'], ENT_QUOTES) ?>')">
+														<i class="mdi mdi-account-switch"></i>
+														<?= __('transfer_role_temp', 'Transfer Role (Temp)') ?>
+													</button>
+												<?php endif; ?>
+											<?php endif; ?>
 											<?php /*if (empty($emprow['has_active_regular_loan'])) : ?>
 											    <button type="button" class="btn btn-success waves-effect waves-light applyLoan" data-emp_id="<?= $emprow['empid'] ?>">
 												    <i class="mdi mdi-cash-plus"></i> Apply for Loan<?=__('flys') ?>
@@ -1137,6 +1187,18 @@ if (mysqli_num_rows($query) == 1) {
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('eligible_for_overtime', 'Eligible For Overtime') ?></div>
 																<div class="profile-field-value"><?= $overtimeEligibilityText ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('allow_emergency_vacation', 'Allow Emergency Vacation') ?></div>
+																<div class="profile-field-value"><?= $allowEmergencyVacationText ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('blocked_from_all_requests', 'Blocked From All Requests') ?></div>
+																<div class="profile-field-value"><?= $requestsBlockedText ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('blocked_request_types', 'Blocked Request Types') ?></div>
+																<div class="profile-field-value"><?= htmlspecialchars($blockedRequestTypesText) ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('sponsorship_label') ?></div>
@@ -1431,6 +1493,139 @@ if (mysqli_num_rows($query) == 1) {
 													</tbody>
 												</table>
 											</div>
+
+											<?php if ($isHR || $is_system_admin || $isDeptHr) { ?>
+												<div class="card border-secondary border mb-4">
+													<div class="card-header bg-secondary text-white font-weight-bold">
+														<i class="mdi mdi-history mr-1"></i><?= __('vacation_activity_log', 'Vacation Activity Log') ?>
+													</div>
+													<div class="card-body table-responsive">
+														<table id="employee_vac_activity_log" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+															<thead>
+																<tr>
+																	<th><?= __('date') ?></th>
+																	<th><?= __('event', 'Event') ?></th>
+																	<th><?= __('available_balance') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
+																	<th><?= __('used_days') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
+																	<th><?= __('remaining_balance', 'Remaining') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
+																	<th><?= __('performed_by', 'Performed By') ?></th>
+																	<th><?= __('notes') ?></th>
+																</tr>
+															</thead>
+															<tbody>
+																<?php
+																$activity_log_reasons = [
+																	'VACATION_APPLIED' => ['label' => __('applied', 'Applied'), 'badge' => 'info'],
+																	'VACATION_APPROVED' => ['label' => __('approved', 'Approved'), 'badge' => 'success'],
+																	'VACATION_REJECTED' => ['label' => __('rejected', 'Rejected'), 'badge' => 'danger'],
+																	'VACATION_CANCELLED' => ['label' => __('cancelled', 'Cancelled'), 'badge' => 'warning'],
+																	'VACATION_CANCELLED_ADMIN' => ['label' => __('cancelled', 'Cancelled') . ' (' . __('admin', 'Admin') . ')', 'badge' => 'warning'],
+																	'VACATION_RETURN_EXTRA_DAYS' => ['label' => __('return_extra_days', 'Return - Extra Days'), 'badge' => 'dark'],
+																	'VACATION_REJOIN_ADJUST_EXTRA_DAYS' => ['label' => __('rejoin_adjustment', 'Rejoin Adjustment'), 'badge' => 'dark'],
+																	'MANUAL_VACATION_ENTRY' => ['label' => __('manual_entry', 'Manual Entry'), 'badge' => 'primary'],
+																];
+
+																// Dedicated table (sql/create_emp_vacation_activity_log.sql) - one row per
+																// real vacation event (applied/approved/rejected/cancelled/returned/rejoin
+																// adjustment/manual entry), tracked independently of the daily cron
+																// balance snapshot (emp_vacation_balance_history), which is never queried here.
+																$sql_activity_log = "SELECT l.*, pb.name AS performed_by_name
+																                      FROM `emp_vacation_activity_log` l
+																                      LEFT JOIN `employees` pb ON pb.emp_id = l.performed_by_emp_id
+																                      WHERE l.emp_id = ?
+																                      ORDER BY l.created_at DESC, l.id DESC LIMIT 200";
+																$stmt_activity_log = mysqli_prepare($conDB, $sql_activity_log);
+																if ($stmt_activity_log) {
+																	mysqli_stmt_bind_param($stmt_activity_log, "s", $emprow['empid']);
+																	mysqli_stmt_execute($stmt_activity_log);
+																	$res_activity_log = mysqli_stmt_get_result($stmt_activity_log);
+																	while ($log_row = mysqli_fetch_assoc($res_activity_log)) {
+																		$reason_key = $log_row['action_type'] ?? '';
+																		$reason_meta = $activity_log_reasons[$reason_key] ?? ['label' => $reason_key ?: '-', 'badge' => 'secondary'];
+																		?>
+																		<tr>
+																			<td><?= $log_row['created_at'] ? date('d M Y H:i', strtotime($log_row['created_at'])) : '-'; ?></td>
+																			<td><span class="badge badge-<?= $reason_meta['badge'] ?>"><?= htmlspecialchars($reason_meta['label']) ?></span></td>
+																			<td><?= number_format((float)$log_row['old_available_balance'], 2) ?> &rarr; <?= number_format((float)$log_row['new_available_balance'], 2) ?></td>
+																			<td><?= number_format((float)$log_row['old_used_days'], 2) ?> &rarr; <?= number_format((float)$log_row['new_used_days'], 2) ?></td>
+																			<td><?= number_format((float)$log_row['old_remaining_balance'], 2) ?> &rarr; <?= number_format((float)$log_row['new_remaining_balance'], 2) ?></td>
+																			<td><?= htmlspecialchars($log_row['performed_by_name'] ?? $log_row['performed_by_emp_id'] ?? '-') ?></td>
+																			<td><?= htmlspecialchars($log_row['notes'] ?? '') ?></td>
+																		</tr>
+																		<?php
+																	}
+																	mysqli_free_result($res_activity_log);
+																	mysqli_stmt_close($stmt_activity_log);
+																	// No manual "no rows" placeholder row here on purpose - a colspan row
+																	// has fewer <td> than the 7 <th> in the header, which breaks DataTables'
+																	// column count check. DataTables shows its own emptyTable message
+																	// (configured below in JS) automatically when tbody has zero rows.
+																}
+																?>
+															</tbody>
+														</table>
+													</div>
+												</div>
+
+												<div class="card border-dark border mb-4">
+													<div class="card-header bg-dark text-white font-weight-bold">
+														<i class="mdi mdi-calendar-clock mr-1"></i><?= __('vacation_daily_balance_snapshot', 'Vacation Daily Balance Snapshot (Cron)') ?>
+													</div>
+													<div class="card-body table-responsive">
+														<table id="employee_vac_cron_snapshot" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+															<thead>
+																<tr>
+														<th><?= __('last_updated', 'Last Updated') ?></th>
+																	<th><?= __('available_balance') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
+																	<th><?= __('used_days') ?></th>
+																	<th><?= __('remaining_balance', 'Remaining') ?></th>
+																	<th><?= __('status') ?></th>
+																	<th><?= __('notes') ?></th>
+																</tr>
+															</thead>
+															<tbody>
+																<?php
+																$sql_cron_snapshot = "SELECT * FROM `emp_vacation_balance_history`
+																                       WHERE `emp_id` = ? AND `change_reason` IN ('CRON_DAILY_UPDATE', 'CRON_FORCE_UPDATE')
+																                       ORDER BY `snapshot_time` DESC, `id` DESC LIMIT 200";
+																$stmt_cron_snapshot = mysqli_prepare($conDB, $sql_cron_snapshot);
+																if ($stmt_cron_snapshot) {
+																	mysqli_stmt_bind_param($stmt_cron_snapshot, "s", $emprow['empid']);
+																	mysqli_stmt_execute($stmt_cron_snapshot);
+																	$res_cron_snapshot = mysqli_stmt_get_result($stmt_cron_snapshot);
+																	while ($cron_row = mysqli_fetch_assoc($res_cron_snapshot)) {
+																		$cron_changed = (int)($cron_row['balance_changed'] ?? 0) === 1;
+																		$cron_last_updated = $cron_row['snapshot_time'] ?: $cron_row['snapshot_date'];
+																		?>
+																		<tr>
+															<td><?= $cron_last_updated ? date('d M Y H:i', strtotime($cron_last_updated)) : '-'; ?></td>
+																			<td><?= number_format((float)$cron_row['old_available_balance'], 2) ?> &rarr; <?= number_format((float)$cron_row['new_available_balance'], 2) ?></td>
+																			<td><?= number_format((float)$cron_row['new_used_days'], 2) ?></td>
+																			<td><?= number_format((float)$cron_row['new_remaining_balance'], 2) ?></td>
+																			<td>
+																				<?php if ((float)$cron_row['new_available_balance'] < 0): ?>
+																					<span class="badge badge-danger"><?= __('negative', 'Negative') ?></span>
+																				<?php elseif ($cron_changed): ?>
+																					<span class="badge badge-warning"><?= __('changed', 'Changed') ?></span>
+																				<?php else: ?>
+																					<span class="badge badge-secondary"><?= __('refreshed', 'Refreshed') ?></span>
+																				<?php endif; ?>
+																			</td>
+																			<td><?= htmlspecialchars($cron_row['notes'] ?? '') ?></td>
+																		</tr>
+																		<?php
+																	}
+																		mysqli_free_result($res_cron_snapshot);
+																		mysqli_stmt_close($stmt_cron_snapshot);
+																		// No manual "no rows" placeholder row - see comment on the activity log
+																		// table above; DataTables' own emptyTable message covers this instead.
+																	}
+																	?>
+															</tbody>
+														</table>
+													</div>
+												</div>
+											<?php } ?>
 										</div>
 
 										<div class="tab-pane" id="loan1">
@@ -2348,6 +2543,99 @@ if (mysqli_num_rows($query) == 1) {
 				});
 			}
 
+			function grantTempRole(vacationId, employeeName, startDate, returnDate) {
+				Swal.fire({
+					title: __('transfer_role_temp', 'Transfer Role (Temp)'),
+					html: `<p>${__('confirm_transfer_role_temp', 'Grant this employee') + ' ' + employeeName + '\'s role, valid ' + startDate + ' to ' + returnDate + '?'}</p>`,
+					icon: 'question',
+					showCancelButton: true,
+					confirmButtonText: __('yes_transfer', 'Yes, transfer'),
+					cancelButtonText: __('cancel', 'Cancel'),
+					allowOutsideClick: false,
+					allowEscapeKey: false
+				}).then((result) => {
+					if (!result.isConfirmed) {
+						return;
+					}
+					$.ajax({
+						url: './includes/ajaxFile/tempRoleHandler.php',
+						type: 'POST',
+						dataType: 'JSON',
+						data: {
+							ajaxType: 'grantTempRole',
+							vacation_id: vacationId
+						},
+						success: function(response) {
+							Swal.fire({
+								title: response.title || (response.type === 'success' ? __('success') : __('error_title', 'Error')),
+								text: response.message,
+								icon: response.type || 'error',
+								confirmButtonText: __('ok')
+							}).then(() => {
+								if (response.type === 'success') {
+									location.reload();
+								}
+							});
+						},
+						error: function(jqXHR, textStatus) {
+							Swal.fire({
+								title: __('error_title', 'Error'),
+								text: __('request_failed_text', 'Request failed') + ': ' + textStatus,
+								icon: 'error',
+								confirmButtonText: __('ok')
+							});
+						}
+					});
+				});
+			}
+
+			function revokeTempRole(vacationId) {
+				Swal.fire({
+					title: __('revoke_temp_role', 'Revoke Temp Role'),
+					text: __('are_you_sure_revoke_temp_role', 'This will immediately remove the replacement\'s temporary access.'),
+					icon: 'warning',
+					showCancelButton: true,
+					confirmButtonColor: '#dc3545',
+					confirmButtonText: __('yes_revoke', 'Yes, revoke'),
+					cancelButtonText: __('cancel', 'Cancel'),
+					allowOutsideClick: false,
+					allowEscapeKey: false
+				}).then((result) => {
+					if (!result.isConfirmed) {
+						return;
+					}
+					$.ajax({
+						url: './includes/ajaxFile/tempRoleHandler.php',
+						type: 'POST',
+						dataType: 'JSON',
+						data: {
+							ajaxType: 'revokeTempRole',
+							vacation_id: vacationId
+						},
+						success: function(response) {
+							Swal.fire({
+								title: response.title || (response.type === 'success' ? __('success') : __('error_title', 'Error')),
+								text: response.message,
+								icon: response.type || 'error',
+								confirmButtonText: __('ok')
+							}).then(() => {
+								if (response.type === 'success') {
+									location.reload();
+								}
+							});
+						},
+						error: function(jqXHR, textStatus) {
+							Swal.fire({
+								title: __('error_title', 'Error'),
+								text: __('request_failed_text', 'Request failed') + ': ' + textStatus,
+								icon: 'error',
+								confirmButtonText: __('ok')
+							});
+						}
+					});
+				});
+			}
+
 			function cancelVacationRequest(vacationId, vacType, startDate) {
 				Swal.fire({
 					title: __('cancel_vacation_request'),
@@ -2921,6 +3209,58 @@ if (mysqli_num_rows($query) == 1) {
 						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
 					}
 				});
+
+				if ($('#employee_vac_activity_log').length) {
+					$('#employee_vac_activity_log').DataTable({
+						order: [
+							[0, "desc"]
+						],
+						"responsive": true,
+						language: {
+							search: `<span>${__('search')}:</span> _INPUT_`,
+							searchPlaceholder: `${__('search')}...`,
+							lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+							info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+							infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+							infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+							paginate: {
+								first: __('first'),
+								last: __('last'),
+								next: __('next'),
+								previous: __('previous')
+							},
+							emptyTable: __('no_data_available_in_table'),
+							zeroRecords: __('no_matching_records_found'),
+							processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+						}
+					});
+				}
+
+				if ($('#employee_vac_cron_snapshot').length) {
+					$('#employee_vac_cron_snapshot').DataTable({
+						order: [
+							[0, "desc"]
+						],
+						"responsive": true,
+						language: {
+							search: `<span>${__('search')}:</span> _INPUT_`,
+							searchPlaceholder: `${__('search')}...`,
+							lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+							info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+							infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+							infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+							paginate: {
+								first: __('first'),
+								last: __('last'),
+								next: __('next'),
+								previous: __('previous')
+							},
+							emptyTable: __('no_data_available_in_table'),
+							zeroRecords: __('no_matching_records_found'),
+							processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+						}
+					});
+				}
 
 			});
 			jQuery(function($) {

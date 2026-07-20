@@ -445,7 +445,7 @@ try {
         $deductionValue = parseImportAmount($row['deduction_value'] ?? '');
         $deductionHours = parseImportAmount($row['deduction_hours'] ?? '');
         $deductionMinutes = parseImportAmount($row['deduction_minutes'] ?? '');
-        $deductionDays = 0.0;
+        $deductionDays = parseImportAmount($row['deduction_day'] ?? $row['deduction_days'] ?? '');
         $deductionReason = trim((string)($row['deduction_reason'] ?? ''));
         $gosiDeductionSkipped = false;
         $missingOvertimePair = false;
@@ -468,16 +468,17 @@ try {
             $overtimeReason = '';
         }
 
-        if (($deductionValue > 0 || $deductionHours > 0 || $deductionMinutes > 0) && isGosiDeductionName($deductionReason)) {
+        if (($deductionValue > 0 || $deductionHours > 0 || $deductionMinutes > 0 || $deductionDays > 0) && isGosiDeductionName($deductionReason)) {
             $deductionType = 'hourly_deduction';
             $deductionValue = 0.0;
             $deductionHours = 0.0;
             $deductionMinutes = 0.0;
+            $deductionDays = 0.0;
             $deductionReason = '';
             $gosiDeductionSkipped = true;
         }
 
-        $deductionDurationHours = $deductionHours + ($deductionMinutes / 60);
+        $deductionDurationHours = $deductionHours + ($deductionMinutes / 60) + ($deductionDays * 8);
         if ($deductionDurationHours > 0) {
             if (!$gosiDeductionSkipped && $deductionReason === '') {
                 $missingDeductionPair = true;
@@ -490,10 +491,11 @@ try {
             $deductionValue = 0.0;
             $deductionHours = 0.0;
             $deductionMinutes = 0.0;
+            $deductionDays = 0.0;
             $deductionReason = '';
         }
 
-        if ($empId === '' && $monthYear === null && $overtimeValue === 0.0 && $overtimeHours === 0.0 && $overtimeMinutes === 0.0 && $overtimeReason === '' && $deductionValue === 0.0 && $deductionHours === 0.0 && $deductionMinutes === 0.0 && $deductionReason === '') {
+        if ($empId === '' && $monthYear === null && $overtimeValue === 0.0 && $overtimeHours === 0.0 && $overtimeMinutes === 0.0 && $overtimeReason === '' && $deductionValue === 0.0 && $deductionHours === 0.0 && $deductionMinutes === 0.0 && $deductionDays === 0.0 && $deductionReason === '') {
             addPayrollImportSkip($summary, $rowNumber, 'Row is empty.', $empId, false);
             continue;
         }
@@ -524,7 +526,7 @@ try {
         }
 
         $hasBenefitEntry = $overtimeHours > 0 || $overtimeMinutes > 0 || $overtimeValue > 0;
-        $hasDeductionEntry = $deductionHours > 0 || $deductionMinutes > 0 || $deductionValue > 0;
+        $hasDeductionEntry = $deductionHours > 0 || $deductionMinutes > 0 || $deductionDays > 0 || $deductionValue > 0;
 
         if ($hasBenefitEntry && $overtimeStatus === null) {
             addPayrollImportSkip($summary, $rowNumber, 'Overtime status must be Active/Inactive or 1/0.', $empId);
@@ -536,8 +538,8 @@ try {
             continue;
         }
 
-        if ($overtimeValue < 0 || $overtimeHours < 0 || $overtimeMinutes < 0 || $deductionValue < 0 || $deductionHours < 0 || $deductionMinutes < 0) {
-            addPayrollImportSkip($summary, $rowNumber, 'Overtime and deduction values/hours/minutes cannot be negative.', $empId);
+        if ($overtimeValue < 0 || $overtimeHours < 0 || $overtimeMinutes < 0 || $deductionValue < 0 || $deductionHours < 0 || $deductionMinutes < 0 || $deductionDays < 0) {
+            addPayrollImportSkip($summary, $rowNumber, 'Overtime and deduction values/hours/minutes/days cannot be negative.', $empId);
             continue;
         }
 
@@ -589,7 +591,7 @@ try {
         }
 
         if ($missingDeductionPair) {
-            addPayrollImportSkip($summary, $rowNumber, $deductionType === 'fixed' ? 'Fixed deduction was skipped because both value and reason are required.' : ($deductionType === 'hourly_deduction' ? 'Hourly deduction was skipped because hours and reason are required.' : 'Daily deduction was skipped because days and reason are required.'), $empId, false);
+            addPayrollImportSkip($summary, $rowNumber, $deductionType === 'fixed' ? 'Fixed deduction was skipped because both value and reason are required.' : 'Deduction was skipped because days/hours/minutes and reason are required.', $empId, false);
         }
 
         $rowImported = false;
@@ -607,11 +609,13 @@ try {
         }
 
         if ($hasDeductionEntry) {
+            $deductionHours = $deductionDurationHours;
+            $deductionMinutes = 0.0;
+
             if ($deductionValue <= 0) {
-                $calculatedDeduction = calculateImportedDeductionAmount($payrollRecord, $deductionHours + ($deductionMinutes / 60));
+                $calculatedDeduction = calculateImportedDeductionAmount($payrollRecord, $deductionHours);
                 $deductionValue = $calculatedDeduction['amount'];
                 $deductionHours = $calculatedDeduction['hours'];
-                $deductionMinutes = 0.0;
             }
 
             $deductionName = normalizeDeductionName($deductionReason !== '' ? $deductionReason : 'Imported Deduction');

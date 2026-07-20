@@ -747,6 +747,7 @@ if (!empty($requests)) {
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
@@ -1112,7 +1113,7 @@ if (!empty($requests)) {
                                                             <?php if ($canSendCompanyPayrollReport): ?>
                                                                 <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item" href="javascript:void(0);" onclick="openCompanyPayrollReportModal('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>')">
-                                                                    <i class="fa fa-envelope-open-text text-primary"></i> <?= __('send_company_payroll_report', 'Send Company Payroll Report') ?>
+                                                                    <i class="fa fa-envelope-open-text text-primary"></i> <?= __('send_supervisor_payroll_report', 'Send Payroll Report by Direct Supervisor') ?>
                                                                 </a>
                                                             <?php endif; ?>
                                                             
@@ -1150,6 +1151,8 @@ if (!empty($requests)) {
 <script src="assets/js/metisMenu.min.js"></script>
 <script src="assets/js/waves.js"></script>
 <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
+<script src="./plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="assets/js/jquery.core.js"></script>
 <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
@@ -1902,7 +1905,7 @@ async function openFinanceVerificationSetupModal(requestInvNo, payrollMonth) {
 async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
     try {
         const optionsPayload = new URLSearchParams();
-        optionsPayload.append('action', 'get_company_manager_options');
+        optionsPayload.append('action', 'get_direct_supervisor_options');
         optionsPayload.append('request_inv_no', requestInvNo);
         optionsPayload.append('month', payrollMonth);
 
@@ -1924,151 +1927,172 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
         Swal.close();
 
         if (!optionsResponse.ok || optionsData.status !== 'success') {
-            throw new Error(optionsData.message || 'Failed to load company/manager options.');
+            throw new Error(optionsData.message || 'Failed to load direct supervisor options.');
         }
 
-        const companies = Array.isArray(optionsData.companies) ? optionsData.companies : [];
-        const managers = Array.isArray(optionsData.managers) ? optionsData.managers : [];
+        const supervisors = Array.isArray(optionsData.supervisors) ? optionsData.supervisors : [];
 
-        if (companies.length === 0) {
-            throw new Error('<?= __('no_data_available_in_table', 'No data available in table') ?>');
+        if (supervisors.length === 0) {
+            throw new Error('<?= __('no_supervisor_with_email_found', 'No direct supervisor with registered email found.') ?>');
         }
 
-        if (managers.length === 0) {
-            throw new Error('<?= __('no_manager_with_email_found', 'No manager with registered email found.') ?>');
-        }
-
-        const companyOptionsList = companies.map(c => {
-            const isSent = Number(c.is_sent || 0) === 1 || c.is_sent === true;
-            const disabledAttr = isSent ? ' disabled="disabled"' : '';
+        // A supervisor is only unselectable as primary when their team was merged into
+        // someone else's report (merged_into set) - they never got their own email.
+        // A supervisor who was themselves already sent a report stays selectable so
+        // HR Payroll / HR Senior BP can resend (e.g. figures changed after the first send).
+        const supervisorOptionsList = supervisors.map(s => {
+            const isSent = Number(s.is_sent || 0) === 1 || s.is_sent === true;
+            const isMergedElsewhere = String(s.merged_into || '').trim() !== '';
+            const disabledAttr = isMergedElsewhere ? ' disabled="disabled"' : '';
             const sentAttr = isSent ? '1' : '0';
-            return `<option value="${String(c.comp_id || '').replace(/"/g, '&quot;')}" data-is-sent="${sentAttr}"${disabledAttr}>${String(c.comp_name || 'N/A')} (${Number(c.employee_count || 0)} <?= __('employees', 'Employees') ?>)</option>`;
+            const mergedAttr = isMergedElsewhere ? '1' : '0';
+            const empId = String(s.supervisor_emp_id || '');
+            return `<option value="${empId.replace(/"/g, '&quot;')}" data-is-sent="${sentAttr}" data-is-merged="${mergedAttr}" data-email="${String(s.supervisor_email || '').replace(/"/g, '&quot;')}"${disabledAttr}>${String(s.supervisor_name || 'N/A')} (${empId}) - ${Number(s.employee_count || 0)} <?= __('employees', 'Employees') ?></option>`;
         }).join('');
-        const companyOptions = `<option value="" selected><?= __('select_company', 'Select Company') ?></option>${companyOptionsList}`;
-        const hasAvailableCompany = companies.some(c => !(Number(c.is_sent || 0) === 1 || c.is_sent === true));
-        if (!hasAvailableCompany) {
-            throw new Error('<?= __('all_company_batch_emails_sent', 'Batch email already sent for all companies.') ?>');
+        const hasAvailableSupervisor = supervisors.some(s => String(s.merged_into || '').trim() === '');
+        if (!hasAvailableSupervisor) {
+            throw new Error('<?= __('all_supervisor_batch_emails_sent', 'Batch email already sent for all direct supervisors.') ?>');
         }
 
-        const modalResult = await Swal.fire({
-            title: '<?= __('send_company_payroll_report', 'Send Company Payroll Report') ?>',
-            html: `
-                <div class="text-left">
-                    <label for="companyReportSelect" class="font-weight-bold"><?= __('company', 'Company') ?></label>
-                    <select id="companyReportSelect" class="form-control mb-3" multiple>${companyOptionsList}</select>
-                    <div class="small text-info mb-2"><?= __('batch_email_sent_hint', 'Companies marked as Batch Email Sent are already processed and cannot be selected again.') ?></div>
+        async function showEmployeesPreviewModal(supervisorId) {
+            const previewPayload = new URLSearchParams();
+            previewPayload.append('action', 'get_supervisor_employees_preview');
+            previewPayload.append('request_inv_no', requestInvNo);
+            previewPayload.append('month', payrollMonth);
+            previewPayload.append('supervisor_emp_id', supervisorId);
 
-                    <label for="managerReportSelect" class="font-weight-bold"><?= __('manager', 'Manager') ?></label>
-                    <select id="managerReportSelect" class="form-control mb-2" disabled>
-                        <option value="" selected><?= __('select_company_first', 'Select company first') ?></option>
-                    </select>
+            try {
+                Swal.fire({
+                    title: '<?= __('loading', 'Loading') ?>',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
+                });
 
-                    <div class="small text-success mb-1" id="managerSuggestionText"></div>
+                const previewResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                    body: previewPayload.toString()
+                });
+                const previewData = await previewResponse.json();
 
-                    <div class="small text-muted" id="selectedManagerEmail"></div>
-                </div>
-            `,
-            showCancelButton: true,
-            confirmButtonColor: '#28a745',
-            confirmButtonText: '<?= __('send_email', 'Send Email') ?>',
-            cancelButtonText: '<?= __('cancel', 'Cancel') ?>',
-            allowOutsideClick: false,
-            didOpen: () => {
-                const managerSelect = document.getElementById('managerReportSelect');
-                const companySelect = document.getElementById('companyReportSelect');
-                const emailText = document.getElementById('selectedManagerEmail');
-                const suggestionText = document.getElementById('managerSuggestionText');
-                const normalizeCompanyId = (value) => String(value || '').trim().toLowerCase();
-                const getSelectedCompanyIds = () => {
-                    if (!companySelect) {
-                        return [];
-                    }
-                    return Array.from(companySelect.selectedOptions || [])
-                        .map(option => normalizeCompanyId(option.value || ''))
-                        .filter(value => value !== '');
-                };
-                const populateManagerOptions = () => {
-                    if (!companySelect || !managerSelect) {
-                        return;
-                    }
+                if (!previewResponse.ok || previewData.status !== 'success') {
+                    throw new Error(previewData.message || 'Failed to load employees preview.');
+                }
 
-                    const selectedCompanyIds = getSelectedCompanyIds();
+                const employees = Array.isArray(previewData.employees) ? previewData.employees : [];
+                const escapeHtml = (value) => jQuery ? jQuery('<div>').text(value || '').html() : String(value || '');
+                const rowsHtml = employees.map((emp, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(emp.emp_id)}</td><td>${escapeHtml(emp.name)}</td><td>${escapeHtml(emp.department)}</td><td>${escapeHtml(emp.company)}</td></tr>`).join('');
 
-                    managerSelect.innerHTML = '';
-                    managerSelect.disabled = true;
-                    emailText.textContent = '';
-
-                    if (selectedCompanyIds.length === 0) {
-                        managerSelect.innerHTML = `<option value="" selected><?= __('select_company_first', 'Select company first') ?></option>`;
-                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                            jQuery(managerSelect).trigger('change');
+                await Swal.fire({
+                    title: `<?= __('preview_employees', 'Preview Employees') ?> - ${escapeHtml(previewData.supervisor_name)} (${Number(previewData.employee_count || 0)})`,
+                    html: `
+                        <div class="table-responsive" style="text-align:left;">
+                            <table id="supervisorEmployeesPreviewTable" class="table table-sm table-bordered table-hover mb-0" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th><?= __('emp_id', 'Emp ID') ?></th>
+                                        <th><?= __('name', 'Name') ?></th>
+                                        <th><?= __('department', 'Department') ?></th>
+                                        <th><?= __('company', 'Company') ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rowsHtml}</tbody>
+                            </table>
+                        </div>
+                    `,
+                    width: '60%',
+                    allowOutsideClick: false,
+                    confirmButtonText: '<?= __('back', 'Back') ?>',
+                    didOpen: () => {
+                        if (window.jQuery && typeof jQuery.fn.DataTable === 'function') {
+                            jQuery('#supervisorEmployeesPreviewTable').DataTable({
+                                pageLength: 10,
+                                lengthChange: false,
+                                order: [[2, 'asc']],
+                                language: {
+                                    search: '<?= __('search', 'Search') ?>:',
+                                    emptyTable: '<?= __('no_data_available_in_table', 'No data available in table') ?>',
+                                    zeroRecords: '<?= __('no_matching_records_found', 'No matching records found') ?>'
+                                }
+                            });
                         }
-                        if (suggestionText) {
-                            suggestionText.textContent = '';
-                        }
-                        return;
                     }
+                });
+            } catch (previewError) {
+                await Swal.fire('<?= __('error', 'Error') ?>', previewError.message || 'Failed to load employees preview.', 'error');
+            }
+        }
 
-                    const matchingManagers = managers.filter(m => selectedCompanyIds.includes(normalizeCompanyId(m.company_id || '')));
-                    const optionsHtml = managers.map(m => `<option value="${String(m.emp_id || '').replace(/"/g, '&quot;')}" data-email="${String(m.email || '').replace(/"/g, '&quot;')}" data-company-id="${String(m.company_id || '').replace(/"/g, '&quot;')}">${String(m.name || m.emp_id || 'N/A')}</option>`).join('');
+        // Every supervisor is shown in the "also include" list, except whichever one is
+        // currently chosen as the primary recipient (can't include yourself). Already
+        // sent/merged supervisors stay selectable too - HR may need to reassign their
+        // team to a different reviewer - they just carry a warning badge (see select2
+        // templateResult below) so it's clear they were already handled once.
+        const buildAdditionalOptionsList = (primaryId) => {
+            return supervisors
+                .filter(s => String(s.supervisor_emp_id || '') !== String(primaryId || ''))
+                .map(s => {
+                    const isSent = Number(s.is_sent || 0) === 1 || s.is_sent === true;
+                    const isMerged = String(s.merged_into || '').trim() !== '';
+                    const empId = String(s.supervisor_emp_id || '');
+                    return `<option value="${empId.replace(/"/g, '&quot;')}" data-is-sent="${isSent ? '1' : '0'}" data-is-merged="${isMerged ? '1' : '0'}">${String(s.supervisor_name || 'N/A')} (${empId}) - ${Number(s.employee_count || 0)} <?= __('employees', 'Employees') ?></option>`;
+                })
+                .join('');
+        };
 
-                    managerSelect.innerHTML = optionsHtml;
-                    managerSelect.disabled = managers.length === 0;
+        // Supervisors already merged into a given primary, so re-selecting that primary
+        // (e.g. for a resend) automatically shows them as still included by default.
+        const getDefaultAdditionalIdsForPrimary = (primaryId) => {
+            if (!primaryId) {
+                return [];
+            }
+            return supervisors
+                .filter(s => String(s.merged_into || '').trim() === String(primaryId))
+                .map(s => String(s.supervisor_emp_id || ''));
+        };
 
-                    if (matchingManagers.length > 0 && suggestionText) {
-                        suggestionText.textContent = `<?= __('suggested_manager_by_company', 'Suggested manager selected for this company. You can change it manually.') ?>`;
-                    } else if (suggestionText) {
-                        suggestionText.textContent = `<?= __('no_company_manager_suggestion', 'No exact manager match for this company. Please select manually.') ?>`;
-                    }
+        // The select-supervisor modal can be reopened with the previous selection preserved
+        // after "Preview Employees" is used, instead of forcing the user to start over.
+        let preselectedSupervisorId = '';
+        let preselectedAdditionalIds = [];
+        let modalResult;
+        while (true) {
+            let cameFromPreview = false;
 
-                    if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                        jQuery(managerSelect).trigger('change');
-                    }
-                    refreshEmail();
-                };
-                const refreshEmail = () => {
-                    const selectedOption = managerSelect && managerSelect.options[managerSelect.selectedIndex];
-                    emailText.textContent = selectedOption
-                        ? `<?= __('email', 'Email') ?>: ${selectedOption.getAttribute('data-email') || ''}`
-                        : '';
-                };
-                const suggestManagerForCompany = () => {
-                    if (!companySelect || !managerSelect) {
-                        return;
-                    }
-
-                    const selectedCompanyIds = getSelectedCompanyIds();
-                    if (selectedCompanyIds.length === 0) {
-                        populateManagerOptions();
-                        return;
-                    }
-
-                    const suggestedOption = Array.from(managerSelect.options).find(option => {
-                        const optionCompanyId = normalizeCompanyId(option.getAttribute('data-company-id') || '');
-                        return optionCompanyId !== '' && selectedCompanyIds.includes(optionCompanyId);
-                    });
-
-                    if (suggestedOption) {
-                        managerSelect.value = suggestedOption.value;
-                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                            jQuery(managerSelect).trigger('change');
-                        }
-                        refreshEmail();
-                        if (suggestionText) {
-                            suggestionText.textContent = `<?= __('suggested_manager_by_company', 'Suggested manager selected for this company. You can change it manually.') ?>`;
-                        }
-                    } else if (suggestionText) {
-                        suggestionText.textContent = `<?= __('no_company_manager_suggestion', 'No exact manager match for this company. Please select manually.') ?>`;
-                    }
-                };
-                if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                    const $popup = jQuery('.swal2-popup');
-                    if (companySelect) {
-                        jQuery(companySelect).select2({
+            modalResult = await Swal.fire({
+                title: '<?= __('send_supervisor_payroll_report', 'Send Payroll Report by Direct Supervisor') ?>',
+                html: `
+                    <div class="text-left">
+                        <label for="supervisorReportSelect" class="font-weight-bold"><?= __('direct_supervisor', 'Direct Supervisor') ?></label>
+                        <select id="supervisorReportSelect" class="form-control mb-2"><option value="" selected><?= __('select_direct_supervisor', 'Select Direct Supervisor') ?></option>${supervisorOptionsList}</select>
+                        <button type="button" id="previewSupervisorEmployeesBtn" class="btn btn-outline-primary btn-sm mb-2" style="display:none;">
+                            <i class="fa fa-users"></i> <?= __('preview_employees', 'Preview Employees') ?>
+                        </button>
+                        <div class="small text-info mb-2"><?= __('batch_email_sent_hint_supervisor', 'Supervisors already sent a report can be selected again to resend (e.g. figures changed). Supervisors marked Assigned Elsewhere already had their employees merged into another supervisor\'s report and can\'t be selected here.') ?></div>
+                        <hr class="my-2">
+                        <label for="supervisorAdditionalSelect" class="font-weight-bold"><?= __('include_other_supervisors', 'Also Assign Other Supervisor\'s Employees') ?> <span class="text-muted font-weight-normal">(<?= __('optional', 'optional') ?>)</span></label>
+                        <select id="supervisorAdditionalSelect" class="form-control mb-2" multiple>${buildAdditionalOptionsList('')}</select>
+                        <div class="small text-muted mb-2"><?= __('include_other_supervisors_hint', 'Their employees are added into the same excel sent to the Direct Supervisor selected above. They will not receive a separate email. Supervisors marked Already Sent / Assigned Elsewhere were already handled once - selecting them here reassigns their employees to this report instead.') ?></div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonColor: '#28a745',
+                confirmButtonText: '<?= __('send_email', 'Send Email') ?>',
+                cancelButtonText: '<?= __('cancel', 'Cancel') ?>',
+                allowOutsideClick: false,
+                width: '45%',
+                didOpen: () => {
+                    const supervisorSelect = document.getElementById('supervisorReportSelect');
+                    const additionalSelect = document.getElementById('supervisorAdditionalSelect');
+                    if (window.jQuery && typeof jQuery.fn.select2 === 'function' && supervisorSelect) {
+                        const $popup = jQuery('.swal2-popup');
+                        jQuery(supervisorSelect).select2({
                             width: '100%',
                             dropdownParent: $popup,
-                            placeholder: '<?= __('select_company', 'Select Company') ?>',
-                            closeOnSelect: false,
+                            placeholder: '<?= __('select_direct_supervisor', 'Select Direct Supervisor') ?>',
                             escapeMarkup: function(markup) {
                                 return markup;
                             },
@@ -2079,10 +2103,13 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
 
                                 const optionEl = state.element || null;
                                 const isSent = optionEl && optionEl.getAttribute('data-is-sent') === '1';
+                                const isMerged = optionEl && optionEl.getAttribute('data-is-merged') === '1';
                                 const safeText = jQuery('<div>').text(state.text || '').html();
-                                const badgeHtml = isSent
-                                    ? '<span class="badge badge-primary float-right"><?= __('batch_email_sent', 'Email Sent') ?></span>'
-                                    : '';
+                                const badgeHtml = isMerged
+                                    ? '<span class="badge badge-secondary float-right"><?= __('assigned_to_other_supervisor', 'Assigned Elsewhere') ?></span>'
+                                    : (isSent
+                                        ? '<span class="badge badge-warning float-right"><?= __('batch_email_sent_resend', 'Sent - Click to Resend') ?></span>'
+                                        : '');
 
                                 return '<span class="d-flex justify-content-between align-items-center w-100"><span>' + safeText + '</span>' + badgeHtml + '</span>';
                             },
@@ -2093,64 +2120,158 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
 
                                 const optionEl = state.element || null;
                                 const isSent = optionEl && optionEl.getAttribute('data-is-sent') === '1';
+                                const isMerged = optionEl && optionEl.getAttribute('data-is-merged') === '1';
                                 const safeText = jQuery('<div>').text(state.text || '').html();
-                                const badgeHtml = isSent
-                                    ? ' <span class="badge badge-info"><?= __('batch_email_sent', 'Batch Email Sent') ?></span>'
-                                    : '';
+                                const badgeHtml = isMerged
+                                    ? ' <span class="badge badge-secondary"><?= __('assigned_to_other_supervisor', 'Assigned Elsewhere') ?></span>'
+                                    : (isSent
+                                        ? ' <span class="badge badge-warning"><?= __('batch_email_sent_resend', 'Will Resend') ?></span>'
+                                        : '');
 
                                 return '<span>' + safeText + badgeHtml + '</span>';
                             }
                         });
                     }
-                    if (managerSelect) {
-                        jQuery(managerSelect).select2({
+
+                    if (window.jQuery && typeof jQuery.fn.select2 === 'function' && additionalSelect) {
+                        const $popup = jQuery('.swal2-popup');
+                        jQuery(additionalSelect).select2({
                             width: '100%',
                             dropdownParent: $popup,
-                            placeholder: '<?= __('select_manager', 'Select Manager') ?>'
+                            placeholder: '<?= __('select_supervisors_optional', 'Select supervisor(s)') ?>',
+                            closeOnSelect: false,
+                            escapeMarkup: function(markup) {
+                                return markup;
+                            },
+                            templateResult: function(state) {
+                                if (!state.id) {
+                                    return state.text;
+                                }
+
+                                const optionEl = state.element || null;
+                                const isMerged = optionEl && optionEl.getAttribute('data-is-merged') === '1';
+                                const isSent = optionEl && optionEl.getAttribute('data-is-sent') === '1';
+                                const safeText = jQuery('<div>').text(state.text || '').html();
+                                const badgeHtml = isMerged
+                                    ? '<span class="badge badge-warning float-right"><?= __('assigned_to_other_supervisor', 'Assigned Elsewhere') ?></span>'
+                                    : (isSent
+                                        ? '<span class="badge badge-warning float-right"><?= __('batch_email_sent', 'Already Sent') ?></span>'
+                                        : '');
+
+                                return '<span class="d-flex justify-content-between align-items-center w-100"><span>' + safeText + '</span>' + badgeHtml + '</span>';
+                            }
                         });
                     }
-                }
-                if (companySelect) {
-                    companySelect.addEventListener('change', () => {
-                        populateManagerOptions();
-                        suggestManagerForCompany();
-                    });
-                    if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                        jQuery(companySelect).on('change.selectCompanySuggest', () => {
-                            populateManagerOptions();
-                            suggestManagerForCompany();
+
+                    // Rebuild the "also include" list whenever the primary supervisor changes,
+                    // so the primary can never also be picked as an "also include" entry, and
+                    // restore whichever additional selections are still valid.
+                    const refreshAdditionalOptions = () => {
+                        if (!additionalSelect) {
+                            return;
+                        }
+                        const currentlySelected = window.jQuery
+                            ? (jQuery(additionalSelect).val() || [])
+                            : Array.from(additionalSelect.selectedOptions).map(o => o.value);
+                        const primaryId = supervisorSelect ? String(supervisorSelect.value || '').trim() : '';
+                        additionalSelect.innerHTML = buildAdditionalOptionsList(primaryId);
+                        const validIds = Array.from(additionalSelect.options).map(o => o.value);
+                        const keepSelected = currentlySelected.filter(v => validIds.includes(v));
+                        const defaultForPrimary = getDefaultAdditionalIdsForPrimary(primaryId);
+                        const finalSelected = Array.from(new Set([...keepSelected, ...defaultForPrimary]));
+                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                            jQuery(additionalSelect).val(finalSelected).trigger('change');
+                        } else {
+                            Array.from(additionalSelect.options).forEach(o => {
+                                o.selected = finalSelected.includes(o.value);
+                            });
+                        }
+                    };
+
+                    if (supervisorSelect) {
+                        supervisorSelect.addEventListener('change', refreshAdditionalOptions);
+                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                            jQuery(supervisorSelect).on('change.refreshAdditional', refreshAdditionalOptions);
+                        }
+                    }
+
+                    if (supervisorSelect && preselectedSupervisorId) {
+                        supervisorSelect.value = preselectedSupervisorId;
+                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                            jQuery(supervisorSelect).trigger('change');
+                        }
+                    }
+
+                    if (additionalSelect && preselectedAdditionalIds.length > 0) {
+                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                            jQuery(additionalSelect).val(preselectedAdditionalIds).trigger('change');
+                        } else {
+                            Array.from(additionalSelect.options).forEach(o => {
+                                o.selected = preselectedAdditionalIds.includes(o.value);
+                            });
+                        }
+                    }
+
+                    const previewBtn = document.getElementById('previewSupervisorEmployeesBtn');
+                    const togglePreviewButton = () => {
+                        if (!previewBtn || !supervisorSelect) {
+                            return;
+                        }
+                        previewBtn.style.display = String(supervisorSelect.value || '').trim() !== '' ? 'inline-block' : 'none';
+                    };
+                    togglePreviewButton();
+                    if (supervisorSelect) {
+                        supervisorSelect.addEventListener('change', togglePreviewButton);
+                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+                            jQuery(supervisorSelect).on('change.previewToggle', togglePreviewButton);
+                        }
+                    }
+
+                    if (previewBtn) {
+                        previewBtn.addEventListener('click', () => {
+                            const supervisorId = supervisorSelect ? String(supervisorSelect.value || '').trim() : '';
+                            if (supervisorId === '') {
+                                return;
+                            }
+
+                            // Close the select modal first (sequential, not nested) so the preview
+                            // modal shows cleanly, then the loop below reopens the select modal
+                            // afterwards with the same selection restored.
+                            preselectedSupervisorId = supervisorId;
+                            preselectedAdditionalIds = additionalSelect
+                                ? (window.jQuery ? (jQuery(additionalSelect).val() || []) : Array.from(additionalSelect.selectedOptions).map(o => o.value))
+                                : [];
+                            cameFromPreview = true;
+                            Swal.close();
                         });
                     }
+                },
+                preConfirm: () => {
+                    const supervisorSelect = document.getElementById('supervisorReportSelect');
+                    const additionalSelect = document.getElementById('supervisorAdditionalSelect');
+                    const supervisorId = supervisorSelect ? String(supervisorSelect.value || '').trim() : '';
+                    if (supervisorId === '') {
+                        Swal.showValidationMessage('<?= __('direct_supervisor_required', 'Direct supervisor is required.') ?>');
+                        return false;
+                    }
+                    const selectedOption = supervisorSelect.options[supervisorSelect.selectedIndex];
+                    if (selectedOption && selectedOption.disabled) {
+                        Swal.showValidationMessage('<?= addslashes(__('supervisor_assigned_elsewhere', 'This supervisor employees were already assigned to another supervisor report. Please select another supervisor.')) ?>');
+                        return false;
+                    }
+                    const additionalIds = additionalSelect
+                        ? (window.jQuery ? (jQuery(additionalSelect).val() || []) : Array.from(additionalSelect.selectedOptions).map(o => o.value))
+                        : [];
+                    return { supervisorIds: [supervisorId], includedSupervisorIds: additionalIds.filter(v => String(v) !== supervisorId) };
                 }
-                if (managerSelect) {
-                    managerSelect.addEventListener('change', refreshEmail);
-                    refreshEmail();
-                }
-            },
-            preConfirm: () => {
-                const companySelect = document.getElementById('companyReportSelect');
-                const companyIds = companySelect
-                    ? Array.from(companySelect.selectedOptions || []).map(option => String(option.value || '').trim()).filter(value => value !== '')
-                    : [];
-                const managerEmpId = (document.getElementById('managerReportSelect') || {}).value || '';
-                if (companyIds.length === 0) {
-                    Swal.showValidationMessage('<?= __('company_required', 'Company is required.') ?>');
-                    return false;
-                }
-                const hasDisabledSelectedCompany = companySelect
-                    ? Array.from(companySelect.selectedOptions || []).some(option => option.disabled)
-                    : false;
-                if (hasDisabledSelectedCompany) {
-                    Swal.showValidationMessage('<?= __('company_already_sent', 'Batch email already sent for this company. Please select another company.') ?>');
-                    return false;
-                }
-                if (!managerEmpId) {
-                    Swal.showValidationMessage('<?= __('manager_required', 'Manager selection is required.') ?>');
-                    return false;
-                }
-                return { companyIds, managerEmpId };
+            });
+
+            if (cameFromPreview) {
+                await showEmployeesPreviewModal(preselectedSupervisorId);
+                continue;
             }
-        });
+            break;
+        }
 
         if (!modalResult.isConfirmed) {
             return;
@@ -2166,11 +2287,11 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
         });
 
         const sendPayload = new URLSearchParams();
-        sendPayload.append('action', 'send_company_manager_payroll_report');
+        sendPayload.append('action', 'send_supervisor_payroll_report');
         sendPayload.append('request_inv_no', requestInvNo);
         sendPayload.append('month', payrollMonth);
-        sendPayload.append('company_ids', JSON.stringify(modalResult.value.companyIds || []));
-        sendPayload.append('manager_emp_id', modalResult.value.managerEmpId);
+        sendPayload.append('supervisor_ids', JSON.stringify(modalResult.value.supervisorIds || []));
+        sendPayload.append('included_supervisor_ids', JSON.stringify(modalResult.value.includedSupervisorIds || []));
 
         const sendResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
             method: 'POST',
@@ -2181,18 +2302,18 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
         Swal.close();
 
         if (!sendResponse.ok || sendData.status !== 'success') {
-            throw new Error(sendData.message || 'Failed to send company payroll report email.');
+            throw new Error(sendData.message || 'Failed to send supervisor payroll report email.');
         }
 
         await Swal.fire({
             icon: 'success',
             title: '<?= __('success', 'Success') ?>',
-            text: sendData.message || 'Company payroll report email sent successfully.',
+            text: sendData.message || 'Supervisor payroll report email sent successfully.',
             allowOutsideClick: false
         });
     } catch (error) {
         Swal.close();
-        Swal.fire('<?= __('error', 'Error') ?>', error.message || 'Failed to send company payroll report email.', 'error');
+        Swal.fire('<?= __('error', 'Error') ?>', error.message || 'Failed to send supervisor payroll report email.', 'error');
     }
 }
 </script>

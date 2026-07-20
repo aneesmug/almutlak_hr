@@ -6,9 +6,15 @@
  * Helps identify calculation issues and mismatches
  */
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
-// Allow: System admin, administrator, HR
-$can_view_history = ($is_system_admin || $user_type == 'administrator' || $user_type == 'hr');
+// Allow: System admin, administrator, HR, or anyone explicitly granted this special access
+$can_view_history = (
+    $is_system_admin
+    || $user_type == 'administrator'
+    || $user_type == 'hr'
+    || user_has_special_access($conDB, $empid ?? '', 'view_vacation_balance_history', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
 
 if (!$can_view_history) {
     http_response_code(403);
@@ -21,9 +27,14 @@ ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Riyadh');
 
 // Get filter parameters
+// NOTE: date range defaults to empty (no restriction) rather than "today" -- the balance
+// snapshot cron does not necessarily run every single day, so defaulting to today's date
+// could show zero rows even though history exists. The query below already limits to the
+// latest 500 rows ordered by snapshot_date DESC, so an empty default still shows the most
+// recent activity instead of an empty table.
 $filter_emp_id = isset($_GET['emp_id']) ? trim($_GET['emp_id']) : '';
-$filter_date_from = isset($_GET['date_from']) ? $_GET['date_from'] : date('Y-m-d'); // Default: current day
-$filter_date_to = isset($_GET['date_to']) ? $_GET['date_to'] : date('Y-m-d');
+$filter_date_from = isset($_GET['date_from']) ? trim($_GET['date_from']) : '';
+$filter_date_to = isset($_GET['date_to']) ? trim($_GET['date_to']) : '';
 $filter_balance_changed = isset($_GET['balance_changed']) ? (int)$_GET['balance_changed'] : 1; // Default: 1 = changed balances only
 $show_errors = isset($_GET['show_errors']) ? (int)$_GET['show_errors'] : 0;
 

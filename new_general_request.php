@@ -1,9 +1,16 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
 // Restrict access to non-employee users only
 if ($user_type == 'employee') {
+    header('Location: dashboard.php');
+    exit;
+}
+
+// General requests are globally blocked - hide this page entirely (matches sidebar link hiding).
+if (is_employee_request_blocked($conDB, $empid ?? '', 'general_request')['blocked']) {
     header('Location: dashboard.php');
     exit;
 }

@@ -789,8 +789,22 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
         }
         $is_rtl = getIsRtlFlag();
         $cityColumn = $is_rtl ? 'name_ar' : 'name_en';
-        // Validate supervisor assignment FIRST
         $emp_id = (int)($_POST['emp_id'] ?? 0);
+
+        // Block-check: employee may be restricted from submitting business trip requests
+        require_once __DIR__ . '/../special_access_helper.php';
+        $block_status = is_employee_request_blocked($conDB, $emp_id, 'business_trip');
+        if ($block_status['blocked']) {
+            echo json_encode([
+                'status' => 'error',
+                'title' => 'Request Blocked',
+                'message' => $block_status['reason'],
+                'type' => 'error'
+            ]);
+            exit;
+        }
+
+        // Validate supervisor assignment FIRST
         $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
         if (!$supervisor_check['valid']) {
             echo json_encode([

@@ -43,7 +43,16 @@ file_put_contents($debugLog, "==================== AJAX REQUEST END ============
 try {
     // Create General Request
     if (isset($_POST['action']) && $_POST['action'] == 'create_general_request') {
-        
+
+        // Block-check: employee may be restricted from submitting general requests
+        require_once __DIR__ . '/../special_access_helper.php';
+        $block_status = is_employee_request_blocked($conDB, $emp_id, 'general_request');
+        if ($block_status['blocked']) {
+            $response['message'] = $block_status['reason'];
+            echo json_encode($response);
+            exit;
+        }
+
         // Validate required fields
         if (empty($_POST['inv_no']) || empty($_POST['request_title']) || empty($_POST['department_to']) || empty($_POST['request_category']) || empty($_POST['priority'])) {
             $response['message'] = __('fill_out_form_error', 'Please fill all required fields');

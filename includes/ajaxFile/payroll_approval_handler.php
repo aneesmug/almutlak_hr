@@ -44,12 +44,16 @@ switch ($action) {
         notifyPayrollFeedbackFollowup($pdo, $conDB, $currentUserId, $requestTypeId);
         break;
 
-    case 'get_company_manager_options':
-        getCompanyManagerOptionsForPayroll($pdo, $currentUserId);
+    case 'get_direct_supervisor_options':
+        getDirectSupervisorOptionsForPayroll($pdo, $currentUserId);
         break;
 
-    case 'send_company_manager_payroll_report':
-        sendCompanyManagerPayrollReport($pdo, $conDB, $currentUserId);
+    case 'get_supervisor_employees_preview':
+        getSupervisorEmployeesPreviewForPayroll($pdo, $currentUserId);
+        break;
+
+    case 'send_supervisor_payroll_report':
+        sendSupervisorPayrollReport($pdo, $conDB, $currentUserId);
         break;
 
     case 'upload_manager_payroll_excel':
@@ -60,12 +64,20 @@ switch ($action) {
         getManagerUploadedPayrollExcelRows($pdo, $currentUserId);
         break;
 
+    case 'get_payroll_compensation_for_employees':
+        getPayrollCompensationForEmployees($pdo, $currentUserId);
+        break;
+
     case 'list_manager_uploaded_payroll_excel_files':
         listManagerUploadedPayrollExcelFiles($pdo, $currentUserId);
         break;
 
     case 'mark_manager_uploaded_payroll_excel_reviewed':
         markManagerUploadedPayrollExcelReviewed($pdo, $currentUserId);
+        break;
+
+    case 'delete_manager_uploaded_payroll_excel_file':
+        deleteManagerUploadedPayrollExcelFile($pdo, $currentUserId);
         break;
 
     case 'get_finance_verification_setup':
@@ -1496,13 +1508,13 @@ function submitFinanceVerificationSetup(PDO $pdo, $conDB, string $currentUserId,
     }
 }
 
-function getCompanyManagerOptionsForPayroll(PDO $pdo, string $currentUserId): void
+function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): void
 {
     $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
     $monthYear = trim((string)($_POST['month'] ?? ''));
 
     try {
-        ensurePayrollCompanyReportDispatchTable($pdo);
+        ensurePayrollSupervisorReportDispatchTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
         if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
@@ -1522,62 +1534,195 @@ function getCompanyManagerOptionsForPayroll(PDO $pdo, string $currentUserId): vo
 
         $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
 
-        $companiesStmt = $pdo->prepare("SELECT
-                c.comp_id AS comp_id,
-                c.comp_name AS comp_name,
+        $supervisorsStmt = $pdo->prepare("SELECT
+                e.supervisor_id AS supervisor_emp_id,
+                sup.name AS supervisor_name,
+                al.email AS supervisor_email,
                 COUNT(DISTINCT p.emp_id) AS employee_count,
                 COALESCE(SUM(p.net_salary), 0) AS total_net_salary,
-                MAX(dispatch.sent_at) AS sent_at
+                MAX(dispatch.sent_at) AS sent_at,
+                MAX(dispatch.merged_into_supervisor_emp_id) AS merged_into_supervisor_emp_id
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
-            INNER JOIN companies c ON c.comp_id = e.comp_no
-            LEFT JOIN payroll_company_report_dispatch dispatch
+            INNER JOIN employees sup ON sup.emp_id = e.supervisor_id
+            INNER JOIN admin_login al ON al.emp_id = e.supervisor_id
+            LEFT JOIN payroll_supervisor_report_dispatch dispatch
                 ON dispatch.request_inv_no = :request_inv_no
                AND dispatch.payroll_month = :dispatch_month
-               AND dispatch.company_id = CAST(c.comp_id AS CHAR)
+               AND dispatch.supervisor_emp_id = e.supervisor_id
             WHERE p.month_year = :month_year
-            GROUP BY c.comp_id, c.comp_name
-            ORDER BY c.comp_name ASC");
-        $companiesStmt->execute([
+              AND e.supervisor_id IS NOT NULL
+              AND TRIM(e.supervisor_id) <> ''
+              AND al.email IS NOT NULL
+              AND TRIM(al.email) <> ''
+              AND sup.status = 1
+            GROUP BY e.supervisor_id, sup.name, al.email
+            ORDER BY sup.name ASC");
+        $supervisorsStmt->execute([
             ':request_inv_no' => $requestInvNo,
             ':dispatch_month' => $monthValue,
             ':month_year' => $monthValue
         ]);
-        $companies = $companiesStmt->fetchAll(PDO::FETCH_ASSOC);
+        $supervisors = $supervisorsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                                $managerStmt = $pdo->prepare("SELECT al.emp_id, al.user_type, al.email, e.name, e.comp_no AS company_id
+        // Any admin_login account on the company domain (@almutlak.com) should always
+        // be selectable as a Direct Supervisor / "also include" target - not only
+        // employees who already happen to be someone's supervisor_id this month (e.g.
+        // HR Payroll/HR Senior BP staff who directly supervise their own team, or any
+        // manager with zero direct reports this particular month). Add whoever the
+        // main query above missed, using their own direct-report count (may be 0).
+        $knownSupervisorIds = array_map(static function ($row) {
+            return (string)($row['supervisor_emp_id'] ?? '');
+        }, $supervisors);
+
+        $companyEmailCandidatesStmt = $pdo->prepare("SELECT al.emp_id AS supervisor_emp_id, e.name AS supervisor_name, al.email AS supervisor_email
             FROM admin_login al
             INNER JOIN employees e ON e.emp_id = al.emp_id
             WHERE al.email IS NOT NULL
               AND TRIM(al.email) <> ''
-                            AND LOWER(TRIM(COALESCE(al.user_type, ''))) <> 'employee'
-                            AND LOWER(TRIM(COALESCE(al.emp_type, ''))) = 'manager'
-            ORDER BY e.name ASC");
-        $managerStmt->execute();
-        $managers = $managerStmt->fetchAll(PDO::FETCH_ASSOC);
+              AND LOWER(TRIM(al.email)) LIKE '%@almutlak.com'
+              AND e.status = 1");
+        $companyEmailCandidatesStmt->execute();
+        $companyEmailCandidates = $companyEmailCandidatesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $teamStmt = $pdo->prepare("SELECT COUNT(DISTINCT p.emp_id) AS employee_count, COALESCE(SUM(p.net_salary), 0) AS total_net_salary
+            FROM payrolls p
+            INNER JOIN employees e ON e.emp_id = p.emp_id
+            WHERE p.month_year = :month_year
+              AND e.supervisor_id = :supervisor_emp_id");
+        $candidateDispatchStmt = $pdo->prepare("SELECT sent_at, merged_into_supervisor_emp_id
+            FROM payroll_supervisor_report_dispatch
+            WHERE request_inv_no = :request_inv_no
+              AND payroll_month = :payroll_month
+              AND supervisor_emp_id = :supervisor_emp_id
+            LIMIT 1");
+
+        foreach ($companyEmailCandidates as $candidate) {
+            $candidateEmpId = (string)($candidate['supervisor_emp_id'] ?? '');
+            if ($candidateEmpId === '' || in_array($candidateEmpId, $knownSupervisorIds, true)) {
+                continue;
+            }
+
+            $teamStmt->execute([':month_year' => $monthValue, ':supervisor_emp_id' => $candidateEmpId]);
+            $teamRow = $teamStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $candidateDispatchStmt->execute([
+                ':request_inv_no' => $requestInvNo,
+                ':payroll_month' => $monthValue,
+                ':supervisor_emp_id' => $candidateEmpId
+            ]);
+            $candidateDispatchRow = $candidateDispatchStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+            $supervisors[] = [
+                'supervisor_emp_id' => $candidateEmpId,
+                'supervisor_name' => (string)($candidate['supervisor_name'] ?? 'N/A'),
+                'supervisor_email' => (string)($candidate['supervisor_email'] ?? ''),
+                'employee_count' => (int)($teamRow['employee_count'] ?? 0),
+                'total_net_salary' => (float)($teamRow['total_net_salary'] ?? 0),
+                'sent_at' => (string)($candidateDispatchRow['sent_at'] ?? ''),
+                'merged_into_supervisor_emp_id' => (string)($candidateDispatchRow['merged_into_supervisor_emp_id'] ?? '')
+            ];
+            $knownSupervisorIds[] = $candidateEmpId;
+        }
+
+        usort($supervisors, static function ($a, $b) {
+            return strcasecmp((string)($a['supervisor_name'] ?? ''), (string)($b['supervisor_name'] ?? ''));
+        });
 
         echo json_encode([
             'status' => 'success',
-            'companies' => array_map(static function ($row) {
+            'supervisors' => array_map(static function ($row) {
                 $sentAt = (string)($row['sent_at'] ?? '');
+                // A supervisor whose team was merged into someone else's report never
+                // received their own email, so they can't be (re)selected as primary -
+                // resend that other supervisor's report instead. A supervisor who WAS
+                // themselves a primary recipient can be resent to (e.g. figures changed).
+                $mergedInto = trim((string)($row['merged_into_supervisor_emp_id'] ?? ''));
                 return [
-                    'comp_id' => (string)($row['comp_id'] ?? ''),
-                    'comp_name' => (string)($row['comp_name'] ?? 'N/A'),
+                    'supervisor_emp_id' => (string)($row['supervisor_emp_id'] ?? ''),
+                    'supervisor_name' => (string)($row['supervisor_name'] ?? 'N/A'),
+                    'supervisor_email' => (string)($row['supervisor_email'] ?? ''),
                     'employee_count' => (int)($row['employee_count'] ?? 0),
                     'total_net_salary' => (float)($row['total_net_salary'] ?? 0),
                     'is_sent' => $sentAt !== '',
-                    'sent_at' => $sentAt
+                    'sent_at' => $sentAt,
+                    'merged_into' => $mergedInto
                 ];
-            }, $companies),
-            'managers' => array_map(static function ($row) {
+            }, $supervisors)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+    $supervisorEmpId = trim((string)($_POST['supervisor_emp_id'] ?? ''));
+
+    try {
+        $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can access this action.');
+        }
+
+        if ($requestInvNo === '' || $monthYear === '' || $supervisorEmpId === '') {
+            throw new Exception('Missing request number, month or supervisor.');
+        }
+
+        $requestStmt = $pdo->prepare("SELECT payroll_month FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1");
+        $requestStmt->execute([':inv_no' => $requestInvNo]);
+        $requestRow = $requestStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$requestRow) {
+            throw new Exception('Payroll request not found.');
+        }
+
+        $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
+
+        $supervisorStmt = $pdo->prepare("SELECT al.emp_id, al.email, e.name
+            FROM admin_login al
+            INNER JOIN employees e ON e.emp_id = al.emp_id
+            WHERE al.emp_id = :emp_id
+              AND al.email IS NOT NULL
+              AND TRIM(al.email) <> ''
+            LIMIT 1");
+        $supervisorStmt->execute([':emp_id' => $supervisorEmpId]);
+        $supervisor = $supervisorStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$supervisor) {
+            throw new Exception('Selected supervisor has no registered email.');
+        }
+
+        $employeesStmt = $pdo->prepare("SELECT
+                p.emp_id,
+                e.name AS employee_name,
+                COALESCE(d.dep_nme, '') AS department_name,
+                COALESCE(c.comp_name, '') AS company_name
+            FROM payrolls p
+            INNER JOIN employees e ON e.emp_id = p.emp_id
+            LEFT JOIN department d ON d.id = e.dept
+            LEFT JOIN companies c ON c.comp_id = e.comp_no
+            WHERE p.month_year = :month_year
+              AND e.supervisor_id = :supervisor_emp_id
+            ORDER BY e.name ASC");
+        $employeesStmt->execute([
+            ':month_year' => $monthValue,
+            ':supervisor_emp_id' => $supervisorEmpId
+        ]);
+        $employees = $employeesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'status' => 'success',
+            'supervisor_name' => (string)($supervisor['name'] ?? ''),
+            'employee_count' => count($employees),
+            'employees' => array_map(static function ($row) {
                 return [
                     'emp_id' => (string)($row['emp_id'] ?? ''),
-                    'name' => (string)($row['name'] ?? ''),
-                    'email' => (string)($row['email'] ?? ''),
-                    'user_type' => (string)($row['user_type'] ?? ''),
-                    'company_id' => (string)($row['company_id'] ?? '')
+                    'name' => (string)($row['employee_name'] ?? ''),
+                    'department' => (string)($row['department_name'] ?? ''),
+                    'company' => (string)($row['company_name'] ?? '')
                 ];
-            }, $managers)
+            }, $employees)
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
@@ -1825,12 +1970,11 @@ function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpo
         }
 
         if ($isBenefitsSheet) {
-            $benefitType = strtolower($getCell($row, $headerMap, ['benefit_type', 'overtime_type']));
-            $benefitValue = $getCell($row, $headerMap, ['benefit_value', 'overtime_value']);
             $benefitHours = $getCell($row, $headerMap, ['benefit_hours', 'overtime_hours']);
+            $benefitMinutes = $getCell($row, $headerMap, ['benefit_minutes', 'overtime_minutes']);
             $benefitReason = $getCell($row, $headerMap, ['benefit_reason', 'overtime_reason']);
 
-            if ($benefitType === '' && $benefitValue === '' && $benefitHours === '' && $benefitReason === '') {
+            if ($benefitHours === '' && $benefitMinutes === '' && $benefitReason === '') {
                 continue;
             }
 
@@ -1838,24 +1982,25 @@ function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpo
                 'checkpoint_code' => $checkpointCode,
                 'emp_id' => $empId,
                 'month' => $monthYear,
-                'benefit_type' => $benefitType === '' ? 'fixed' : $benefitType,
-                'benefit_value' => $benefitValue,
+                'benefit_type' => 'by_hours',
+                'benefit_value' => '',
                 'benefit_hours' => $benefitHours,
+                'benefit_minutes' => $benefitMinutes,
                 'benefit_reason' => $benefitReason,
                 'deduction_type' => 'fixed',
                 'deduction_value' => '',
                 'deduction_hours' => '',
+                'deduction_minutes' => '',
                 'deduction_days' => '',
                 'deduction_reason' => ''
             ];
         } else {
-            $deductionType = strtolower($getCell($row, $headerMap, ['deduction_type']));
-            $deductionValue = $getCell($row, $headerMap, ['deduction_value']);
+            $deductionDays = $getCell($row, $headerMap, ['deduction_day', 'deduction_days']);
             $deductionHours = $getCell($row, $headerMap, ['deduction_hours']);
-            $deductionDays = $getCell($row, $headerMap, ['deduction_days']);
+            $deductionMinutes = $getCell($row, $headerMap, ['deduction_minutes']);
             $deductionReason = $getCell($row, $headerMap, ['deduction_reason']);
 
-            if ($deductionType === '' && $deductionValue === '' && $deductionHours === '' && $deductionDays === '' && $deductionReason === '') {
+            if ($deductionDays === '' && $deductionHours === '' && $deductionMinutes === '' && $deductionReason === '') {
                 continue;
             }
 
@@ -1866,10 +2011,12 @@ function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpo
                 'benefit_type' => 'fixed',
                 'benefit_value' => '',
                 'benefit_hours' => '',
+                'benefit_minutes' => '',
                 'benefit_reason' => '',
-                'deduction_type' => $deductionType === '' ? 'fixed' : $deductionType,
-                'deduction_value' => $deductionValue,
+                'deduction_type' => 'hourly_deduction',
+                'deduction_value' => '',
                 'deduction_hours' => $deductionHours,
+                'deduction_minutes' => $deductionMinutes,
                 'deduction_days' => $deductionDays,
                 'deduction_reason' => $deductionReason
             ];
@@ -1930,12 +2077,21 @@ function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): voi
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
         $currentEmpType = strtolower(trim((string)($GLOBALS['emp_type'] ?? '')));
-        if ($currentEmpType !== 'manager' || $currentUserType === 'employee') {
-            throw new Exception('Only manager users can upload this payroll Excel file.');
-        }
 
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
             throw new Exception('Missing request number or valid month.');
+        }
+
+        // Allow: a manager-flagged account, a Direct Supervisor who actually received
+        // this specific "Send Payroll Report by Direct Supervisor" email (covers
+        // supervisors whose admin account isn't flagged emp_type = 'Manager'), or
+        // HR Payroll / HR Senior BP uploading on behalf of any manager.
+        $isManagerAccount = ($currentEmpType === 'manager' && $currentUserType !== 'employee');
+        $isReportRecipient = $currentUserType !== 'employee'
+            && payrollSupervisorHasReportAccess($pdo, $requestInvNo, $monthYear, $currentUserId);
+        $isHrChecklistApproverUploader = in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true);
+        if (!$isManagerAccount && !$isReportRecipient && !$isHrChecklistApproverUploader) {
+            throw new Exception('Only manager users can upload this payroll Excel file.');
         }
 
         if (!isset($_FILES['payroll_excel']) || !is_array($_FILES['payroll_excel'])) {
@@ -2044,55 +2200,118 @@ function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): voi
         $meta = normalizeManagerPayrollUploadMeta($existingMeta, $requestInvNo, $monthYear);
         saveManagerPayrollUploadMeta($requestInvNo, $monthYear, $meta);
 
-        if (function_exists('create_and_show_notification')) {
-            // Notify both HR Payroll and HR Senior BP user groups
-            $notifyStmt = $pdo->prepare("SELECT DISTINCT emp_id, LOWER(TRIM(COALESCE(user_type,''))) AS ut FROM admin_login WHERE LOWER(TRIM(COALESCE(user_type,''))) IN ('hr_payroll','hr_senior_bp')");
-            $notifyStmt->execute();
-            $rows = $notifyStmt->fetchAll(PDO::FETCH_ASSOC);
-            $subject = 'Manager Payroll Excel Uploaded: ' . $monthYear . ' (' . $requestInvNo . ')';
-            $requestUrl = 'payroll_checklist_report.php?month=' . urlencode($monthYear) . '&request_inv_no=' . urlencode($requestInvNo);
-            foreach ($rows as $r) {
-                $hrEmpId = trim((string)($r['emp_id'] ?? ''));
-                if ($hrEmpId === '') {
-                    continue;
-                }
+        // Summary figures for the HR notification email (matches the level of detail
+        // the "Send Payroll Report by Direct Supervisor" email already shows).
+        $uploadedEmpIdsForSummary = array_values(array_unique(array_filter(array_map(static function ($row) {
+            return trim((string)($row['emp_id'] ?? ''));
+        }, isset($parsedUpload['rows']) && is_array($parsedUpload['rows']) ? $parsedUpload['rows'] : []))));
+        $uploadedEmployeeCount = count($uploadedEmpIdsForSummary);
+        $uploadedTotalNetSalary = 0.0;
+        if (!empty($uploadedEmpIdsForSummary)) {
+            $summaryPlaceholders = implode(',', array_fill(0, count($uploadedEmpIdsForSummary), '?'));
+            $summaryStmt = $pdo->prepare("SELECT COALESCE(SUM(net_salary), 0) FROM payrolls WHERE month_year = ? AND emp_id IN ($summaryPlaceholders)");
+            $summaryStmt->execute(array_merge([$monthYear], $uploadedEmpIdsForSummary));
+            $uploadedTotalNetSalary = (float)$summaryStmt->fetchColumn();
+        }
 
-                create_and_show_notification(
-                    $conDB,
-                    $hrEmpId,
-                    'Manager Payroll Excel Uploaded',
-                    'Manager uploaded payroll Excel for ' . $monthYear . ' (' . $requestInvNo . '). Please review and import.',
-                    $requestUrl,
-                    'info'
-                );
+        $hrNotifiedCount = 0;
+        $hrEmailedCount = 0;
+        $hrRecipientCount = 0;
 
-                // Attempt to send an email if address exists in admin_login or employees
+        // Notify both HR Payroll and HR Senior BP user groups. Every step below is
+        // logged with a "PAYROLL_UPLOAD_NOTIFY" prefix (greppable in the PHP error
+        // log) and wrapped defensively so one bad recipient (missing email, DB hiccup,
+        // etc.) can never silently swallow the rest or abort the whole loop.
+        $notifyStmt = $pdo->prepare("SELECT DISTINCT emp_id FROM admin_login WHERE LOWER(TRIM(COALESCE(user_type,''))) IN ('hr_payroll','hr_senior_bp')");
+        $notifyStmt->execute();
+        $rows = $notifyStmt->fetchAll(PDO::FETCH_ASSOC);
+        $hrRecipientCount = count($rows);
+        error_log('PAYROLL_UPLOAD_NOTIFY: request=' . $requestInvNo . ' month=' . $monthYear . ' hr_recipients_found=' . $hrRecipientCount);
+
+        if ($hrRecipientCount === 0) {
+            error_log('PAYROLL_UPLOAD_NOTIFY: no admin_login accounts with user_type hr_payroll/hr_senior_bp were found - nobody to notify.');
+        }
+
+        $subject = 'Manager Payroll Excel Uploaded: ' . $monthYear . ' (' . $requestInvNo . ')';
+        $requestUrl = 'payroll_checklist_report.php?month=' . urlencode($monthYear) . '&request_inv_no=' . urlencode($requestInvNo);
+
+        foreach ($rows as $r) {
+            $hrEmpId = trim((string)($r['emp_id'] ?? ''));
+            if ($hrEmpId === '') {
+                continue;
+            }
+
+            if (function_exists('create_and_show_notification')) {
                 try {
-                    $emailStmt = $pdo->prepare("SELECT COALESCE(NULLIF(TRIM(al.email),''), NULLIF(TRIM(e.email),'')) AS email, COALESCE(NULLIF(TRIM(e.name),''), NULLIF(TRIM(al.display_name),''), '') AS name FROM admin_login al LEFT JOIN employees e ON e.emp_id = al.emp_id WHERE al.emp_id = :emp_id LIMIT 1");
-                    $emailStmt->execute([':emp_id' => $hrEmpId]);
-                    $emailRow = $emailStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-                    $toEmail = trim((string)($emailRow['email'] ?? ''));
-                    $toName = trim((string)($emailRow['name'] ?? '')) ?: $hrEmpId;
-                    if ($toEmail !== '' && function_exists('send_approval_email')) {
-                        $templateData = [
-                            'REQUEST_ID' => $requestInvNo,
-                            'REQUEST_TYPE' => 'Payroll Excel Upload',
-                            'EMAIL_MESSAGE' => 'Manager ' . $uploaderName . ' uploaded payroll Excel for ' . $monthYear . '. Please review and import.',
-                            'REQUEST_URL' => get_base_url() . '/' . $requestUrl
-                        ];
-                        // send_approval_email expects mysqli connection as first param
-                        @send_approval_email($conDB, $toEmail, $toName, $subject, 'payroll_request', $templateData);
+                    $notifyResult = create_and_show_notification(
+                        $conDB,
+                        $hrEmpId,
+                        'Manager Payroll Excel Uploaded',
+                        'Manager uploaded payroll Excel for ' . $monthYear . ' (' . $requestInvNo . '). Please review and import.',
+                        $requestUrl,
+                        'info'
+                    );
+                    $dbSaved = is_array($notifyResult) ? ($notifyResult['db_saved'] ?? false) : false;
+                    if ($dbSaved) {
+                        $hrNotifiedCount++;
+                    } else {
+                        error_log('PAYROLL_UPLOAD_NOTIFY: in-app notification NOT saved for emp_id=' . $hrEmpId . ' (create_browser_notification returned false - check that admin_login.emp_id is a valid positive numeric value and user_notifications table exists).');
                     }
-                } catch (Exception $e) {
-                    // swallow email errors to avoid breaking upload flow
+                } catch (Throwable $notifyError) {
+                    error_log('PAYROLL_UPLOAD_NOTIFY: exception creating notification for emp_id=' . $hrEmpId . ': ' . $notifyError->getMessage());
                 }
+            } else {
+                error_log('PAYROLL_UPLOAD_NOTIFY: create_and_show_notification() function not available.');
+            }
+
+            // Attempt to send an email if address exists in admin_login or employees
+            try {
+                $emailStmt = $pdo->prepare("SELECT COALESCE(NULLIF(TRIM(al.email),''), NULLIF(TRIM(e.email),'')) AS email, COALESCE(NULLIF(TRIM(e.name),''), NULLIF(TRIM(al.fullname),''), '') AS name FROM admin_login al LEFT JOIN employees e ON e.emp_id = al.emp_id WHERE al.emp_id = :emp_id LIMIT 1");
+                $emailStmt->execute([':emp_id' => $hrEmpId]);
+                $emailRow = $emailStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $toEmail = trim((string)($emailRow['email'] ?? ''));
+                $toName = trim((string)($emailRow['name'] ?? '')) ?: $hrEmpId;
+
+                if ($toEmail === '') {
+                    error_log('PAYROLL_UPLOAD_NOTIFY: no email address on file for emp_id=' . $hrEmpId . ' - skipping email.');
+                } elseif (!function_exists('send_approval_email')) {
+                    error_log('PAYROLL_UPLOAD_NOTIFY: send_approval_email() function not available.');
+                } else {
+                    $templateData = [
+                        'APPROVER_NAME' => $toName,
+                        'REQUEST_ID' => $requestInvNo,
+                        'REQUEST_TYPE' => 'Manager Payroll Excel Upload',
+                        'PAYROLL_MONTH' => $monthYear,
+                        'EMPLOYEE_COUNT' => (string)$uploadedEmployeeCount,
+                        'TOTAL_NET_SALARY' => number_format($uploadedTotalNetSalary, 2),
+                        'PAYROLL_STATUS' => 'Manager Reviewed - Pending HR Import',
+                        'EMAIL_MESSAGE' => 'Manager ' . $uploaderName . ' uploaded payroll Excel for ' . $monthYear
+                            . ' (' . $uploadedEmployeeCount . ' employees). Please review and import.',
+                        'REQUEST_URL' => (function_exists('get_base_url') ? get_base_url() : '') . '/' . $requestUrl,
+                        'ACTION_BUTTON_TEXT' => 'Review Uploaded Payroll Excel'
+                    ];
+                    // send_approval_email expects mysqli connection as first param
+                    $emailSentOk = send_approval_email($conDB, $toEmail, $toName, $subject, 'payroll_request', $templateData);
+                    if ($emailSentOk) {
+                        $hrEmailedCount++;
+                    } else {
+                        error_log('PAYROLL_UPLOAD_NOTIFY: send_approval_email() returned false for emp_id=' . $hrEmpId . ' <' . $toEmail . '> - check SMTP settings in app_settings and the SEND_EMAIL_DEBUG log lines above this one.');
+                    }
+                }
+            } catch (Throwable $emailError) {
+                error_log('PAYROLL_UPLOAD_NOTIFY: exception sending email for emp_id=' . $hrEmpId . ': ' . $emailError->getMessage());
             }
         }
+
+        error_log('PAYROLL_UPLOAD_NOTIFY: done - hr_recipients_found=' . $hrRecipientCount . ' notified=' . $hrNotifiedCount . ' emailed=' . $hrEmailedCount);
 
         echo json_encode([
             'status' => 'success',
             'message' => 'Payroll Excel uploaded successfully and sent to HR Payroll for review.',
-            'meta' => $meta
+            'meta' => $meta,
+            'hr_recipients_found' => $hrRecipientCount,
+            'hr_notified_count' => $hrNotifiedCount,
+            'hr_emailed_count' => $hrEmailedCount
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
@@ -2143,6 +2362,23 @@ function getManagerUploadedPayrollExcelRows(PDO $pdo, string $currentUserId): vo
             throw new Exception('Uploaded file contains no importable rows in Benefits Import or Deductions Import sheets.');
         }
 
+        $uploadedEmpIds = array_values(array_unique(array_filter(array_map(static function ($row) {
+            return trim((string)($row['emp_id'] ?? ''));
+        }, $rows))));
+
+        if (!empty($uploadedEmpIds)) {
+            $empPlaceholders = implode(',', array_fill(0, count($uploadedEmpIds), '?'));
+            $empStmt = $pdo->prepare("SELECT emp_id FROM employees WHERE emp_id IN ($empPlaceholders)");
+            $empStmt->execute($uploadedEmpIds);
+            $validEmpIds = array_flip(array_map('strval', $empStmt->fetchAll(PDO::FETCH_COLUMN)));
+
+            $rows = array_values(array_filter($rows, static function ($row) use ($validEmpIds) {
+                return isset($validEmpIds[trim((string)($row['emp_id'] ?? ''))]);
+            }));
+        }
+
+        // Do not block here when none of the uploaded rows match an existing employee -
+        // let the review modal open and show "no records available" instead of a hard error.
         $checkpointCode = strtoupper(trim((string)($parsed['checkpoint_code'] ?? '')));
         if ($checkpointCode === '') {
             throw new Exception('The uploaded file is not valid.');
@@ -2166,6 +2402,61 @@ function getManagerUploadedPayrollExcelRows(PDO $pdo, string $currentUserId): vo
             'checkpoint_code' => $checkpointCode,
             'rows' => $rows
         ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function getPayrollCompensationForEmployees(PDO $pdo, string $currentUserId): void
+{
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+    $empIdsRaw = $_POST['emp_ids'] ?? '';
+
+    try {
+        $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can look up payroll compensation.');
+        }
+
+        if ($monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+            throw new Exception('Missing or invalid month.');
+        }
+
+        if (is_array($empIdsRaw)) {
+            $empIds = $empIdsRaw;
+        } else {
+            $empIds = explode(',', (string)$empIdsRaw);
+        }
+
+        $empIds = array_values(array_unique(array_filter(array_map(static function ($empId) {
+            return trim((string)$empId);
+        }, $empIds), static function ($empId) {
+            return $empId !== '';
+        })));
+
+        if (empty($empIds)) {
+            echo json_encode(['status' => 'success', 'compensation' => []]);
+            return;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($empIds), '?'));
+        $stmt = $pdo->prepare("SELECT emp_id, basic_salary, housing_allowance, food_allowance, transport_allowance, total_gross_salary
+            FROM payrolls
+            WHERE month_year = ? AND emp_id IN ($placeholders)");
+        $stmt->execute(array_merge([$monthYear], $empIds));
+
+        $compensation = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $compensation[(string)$row['emp_id']] = [
+                'basic_salary' => (float)($row['basic_salary'] ?? 0),
+                'housing_allowance' => (float)($row['housing_allowance'] ?? 0),
+                'food_allowance' => (float)($row['food_allowance'] ?? 0),
+                'transport_allowance' => (float)($row['transport_allowance'] ?? 0),
+                'total_gross_salary' => (float)($row['total_gross_salary'] ?? 0),
+            ];
+        }
+
+        echo json_encode(['status' => 'success', 'compensation' => $compensation]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
@@ -2283,48 +2574,128 @@ function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId
     }
 }
 
-function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId): void
+function deleteManagerUploadedPayrollExcelFile(PDO $pdo, string $currentUserId): void
 {
     $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
     $monthYear = trim((string)($_POST['month'] ?? ''));
-    $companyIdsInput = $_POST['company_ids'] ?? ($_POST['company_id'] ?? '');
-    $managerEmpId = trim((string)($_POST['manager_emp_id'] ?? ''));
+    $fileId = trim((string)($_POST['file_id'] ?? ''));
 
-    $companyIds = [];
-    if (is_array($companyIdsInput)) {
-        $companyIds = $companyIdsInput;
-    } elseif (is_string($companyIdsInput)) {
-        $raw = trim($companyIdsInput);
+    try {
+        $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+            throw new Exception('Only HR Payroll and HR Senior BP can delete manager uploaded payroll Excel.');
+        }
+
+        if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear) || $fileId === '') {
+            throw new Exception('Missing file selection, request number, or valid month.');
+        }
+
+        $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+        $found = findManagerPayrollUploadByFileId($meta, $fileId);
+        if ($found['index'] < 0 || empty($found['upload'])) {
+            throw new Exception('Selected manager uploaded file was not found.');
+        }
+
+        if (!empty($found['upload']['reviewed_at'])) {
+            throw new Exception('A reviewed file cannot be deleted.');
+        }
+
+        $storedName = trim((string)($found['upload']['stored_name'] ?? ''));
+        if ($storedName !== '') {
+            $filePath = getManagerPayrollUploadStorageDir() . DIRECTORY_SEPARATOR . basename($storedName);
+            if (is_file($filePath)) {
+                @unlink($filePath);
+            }
+        }
+
+        array_splice($meta['uploads'], $found['index'], 1);
+        saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Uploaded file deleted successfully.'
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+    $supervisorIdsInput = $_POST['supervisor_ids'] ?? ($_POST['supervisor_id'] ?? '');
+
+    $supervisorIds = [];
+    if (is_array($supervisorIdsInput)) {
+        $supervisorIds = $supervisorIdsInput;
+    } elseif (is_string($supervisorIdsInput)) {
+        $raw = trim($supervisorIdsInput);
         if ($raw !== '') {
             if ($raw[0] === '[') {
                 $decoded = json_decode($raw, true);
                 if (is_array($decoded)) {
-                    $companyIds = $decoded;
+                    $supervisorIds = $decoded;
                 }
             }
-            if (empty($companyIds)) {
-                $companyIds = explode(',', $raw);
+            if (empty($supervisorIds)) {
+                $supervisorIds = explode(',', $raw);
             }
         }
     }
-    $companyIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+    $supervisorIds = array_values(array_unique(array_filter(array_map(static function ($value) {
         return trim((string)$value);
-    }, $companyIds), static function ($value) {
+    }, $supervisorIds), static function ($value) {
+        return $value !== '';
+    })));
+
+    // Optional: other Direct Supervisors whose employees should be merged into the
+    // single primary supervisor's report/excel (they still review as one team, but
+    // only the primary supervisor receives the email and upload rights).
+    $includedSupervisorIdsInput = $_POST['included_supervisor_ids'] ?? '';
+    $includedSupervisorIds = [];
+    if (is_array($includedSupervisorIdsInput)) {
+        $includedSupervisorIds = $includedSupervisorIdsInput;
+    } elseif (is_string($includedSupervisorIdsInput)) {
+        $raw = trim($includedSupervisorIdsInput);
+        if ($raw !== '') {
+            if ($raw[0] === '[') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $includedSupervisorIds = $decoded;
+                }
+            }
+            if (empty($includedSupervisorIds)) {
+                $includedSupervisorIds = explode(',', $raw);
+            }
+        }
+    }
+    $includedSupervisorIds = array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $includedSupervisorIds), static function ($value) {
         return $value !== '';
     })));
 
     $tempFilePath = '';
 
     try {
-        ensurePayrollCompanyReportDispatchTable($pdo);
+        ensurePayrollSupervisorReportDispatchTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
         if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
             throw new Exception('Only HR Payroll and HR Senior BP can send this report.');
         }
 
-        if ($requestInvNo === '' || $monthYear === '' || empty($companyIds) || $managerEmpId === '') {
+        if ($requestInvNo === '' || $monthYear === '' || empty($supervisorIds)) {
             throw new Exception('Missing required data to send payroll report.');
+        }
+
+        // Merging other supervisors' employees into one report only makes sense for a
+        // single primary recipient; drop the primary itself out of the included list.
+        if (count($supervisorIds) !== 1) {
+            $includedSupervisorIds = [];
+        } else {
+            $includedSupervisorIds = array_values(array_diff($includedSupervisorIds, $supervisorIds));
         }
 
         $requestStmt = $pdo->prepare("SELECT payroll_month, status FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1");
@@ -2336,7 +2707,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
 
         $requestStatus = strtolower(trim((string)($requestRow['status'] ?? '')));
         if ($requestStatus !== 'pending_approval') {
-            throw new Exception('Company reports can be sent only when payroll is pending with HR Payroll.');
+            throw new Exception('Supervisor reports can be sent only when payroll is pending with HR Payroll.');
         }
 
         $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
@@ -2363,22 +2734,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
         }
 
         if ($checkedEmployees >= $totalEmployees) {
-            throw new Exception('All employees are already marked checked. Send the company report before completing Mark Checked.');
-        }
-
-                $managerStmt = $pdo->prepare("SELECT al.emp_id, al.email, e.name
-            FROM admin_login al
-            INNER JOIN employees e ON e.emp_id = al.emp_id
-            WHERE al.emp_id = :emp_id
-              AND al.email IS NOT NULL
-              AND TRIM(al.email) <> ''
-                            AND LOWER(TRIM(COALESCE(al.user_type, ''))) <> 'employee'
-                                                        AND LOWER(TRIM(COALESCE(al.emp_type, ''))) = 'manager'
-            LIMIT 1");
-        $managerStmt->execute([':emp_id' => $managerEmpId]);
-        $manager = $managerStmt->fetch(PDO::FETCH_ASSOC);
-        if (!$manager) {
-            throw new Exception('Selected manager has no registered email.');
+            throw new Exception('All employees are already marked checked. Send the supervisor report before completing Mark Checked.');
         }
 
         if (!class_exists('PhpOffice\\PhpSpreadsheet\\Spreadsheet')) {
@@ -2399,28 +2755,39 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             throw new Exception('Spreadsheet library is not available on server.');
         }
 
-        $alreadySentStmt = $pdo->prepare("SELECT id
-            FROM payroll_company_report_dispatch
+        $alreadySentStmt = $pdo->prepare("SELECT id, merged_into_supervisor_emp_id
+            FROM payroll_supervisor_report_dispatch
             WHERE request_inv_no = :request_inv_no
               AND payroll_month = :payroll_month
-              AND company_id = :company_id
+              AND supervisor_emp_id = :supervisor_emp_id
             LIMIT 1");
-        $companyStmt = $pdo->prepare("SELECT comp_id, comp_name FROM companies WHERE comp_id = :comp_id LIMIT 1");
-        $payrollStmt = $pdo->prepare("SELECT
-                p.emp_id,
-                e.name AS employee_name,
-                COALESCE(d.dep_nme, '') AS department_name,
-                p.basic_salary,
-                p.total_benefits,
-                p.total_deductions,
-                p.net_salary,
-                p.status
-            FROM payrolls p
-            INNER JOIN employees e ON e.emp_id = p.emp_id
-            LEFT JOIN department d ON d.id = e.dept
-            WHERE p.month_year = :month_year
-              AND e.comp_no = :company_id
-            ORDER BY e.name ASC");
+        $supervisorStmt = $pdo->prepare("SELECT al.emp_id, al.email, e.name
+            FROM admin_login al
+            INNER JOIN employees e ON e.emp_id = al.emp_id
+            WHERE al.emp_id = :emp_id
+              AND al.email IS NOT NULL
+              AND TRIM(al.email) <> ''
+            LIMIT 1");
+        $buildPayrollStmtForSupervisorIds = static function (PDO $pdo, array $supervisorIdsForQuery) {
+            $placeholders = implode(',', array_fill(0, count($supervisorIdsForQuery), '?'));
+            return $pdo->prepare("SELECT
+                    p.emp_id,
+                    e.name AS employee_name,
+                    COALESCE(d.dep_nme, '') AS department_name,
+                    COALESCE(c.comp_name, '') AS company_name,
+                    p.basic_salary,
+                    p.total_benefits,
+                    p.total_deductions,
+                    p.net_salary,
+                    p.status
+                FROM payrolls p
+                INNER JOIN employees e ON e.emp_id = p.emp_id
+                LEFT JOIN department d ON d.id = e.dept
+                LEFT JOIN companies c ON c.comp_id = e.comp_no
+                WHERE p.month_year = ?
+                  AND e.supervisor_id IN ($placeholders)
+                ORDER BY e.name ASC");
+        };
                 $benefitsStmt = $pdo->prepare("SELECT
                                 CASE
                                         WHEN pb.type_id IS NOT NULL AND bt.name IS NOT NULL THEN bt.name
@@ -2440,37 +2807,59 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
                     WHERE pd.emp_id = :emp_id
                         AND pd.month = :month_year
                         AND pd.status = 1");
-        $dispatchInsert = $pdo->prepare("INSERT INTO payroll_company_report_dispatch
-            (request_inv_no, payroll_month, company_id, manager_emp_id, manager_email, sent_by)
+        // ON DUPLICATE KEY UPDATE lets HR resend to a supervisor who already received a
+        // report - the row is refreshed in place (new sent_at/checkpoint-bearing file)
+        // instead of being blocked by the unique key.
+        $dispatchInsert = $pdo->prepare("INSERT INTO payroll_supervisor_report_dispatch
+            (request_inv_no, payroll_month, supervisor_emp_id, supervisor_email, sent_by, included_supervisor_ids, merged_into_supervisor_emp_id)
             VALUES
-            (:request_inv_no, :payroll_month, :company_id, :manager_emp_id, :manager_email, :sent_by)");
+            (:request_inv_no, :payroll_month, :supervisor_emp_id, :supervisor_email, :sent_by, :included_supervisor_ids, :merged_into_supervisor_emp_id)
+            ON DUPLICATE KEY UPDATE
+                supervisor_email = VALUES(supervisor_email),
+                sent_by = VALUES(sent_by),
+                sent_at = CURRENT_TIMESTAMP,
+                included_supervisor_ids = VALUES(included_supervisor_ids),
+                merged_into_supervisor_emp_id = VALUES(merged_into_supervisor_emp_id)");
 
-        $sentCompanyNames = [];
+        $sentSupervisorNames = [];
 
-        foreach ($companyIds as $companyId) {
+        // A supervisor already covered elsewhere (their own prior report, or merged
+        // into a different primary) can still be reassigned as "also include" here -
+        // HR may need to move their team to a different reviewer. The dispatch upsert
+        // below simply repoints their row's merged_into_supervisor_emp_id to the new
+        // primary, which also revokes their own direct upload access for that team.
+
+        foreach ($supervisorIds as $supervisorEmpId) {
             $alreadySentStmt->execute([
                 ':request_inv_no' => $requestInvNo,
                 ':payroll_month' => $monthValue,
-                ':company_id' => $companyId
+                ':supervisor_emp_id' => $supervisorEmpId
             ]);
-            if ($alreadySentStmt->fetch(PDO::FETCH_ASSOC)) {
-                throw new Exception('Batch email already sent for one of the selected companies. Please refresh and select unsent companies only.');
+            $existingDispatchRow = $alreadySentStmt->fetch(PDO::FETCH_ASSOC);
+            // A supervisor whose team was merged into someone else's report can't be
+            // picked as primary - resend to that other primary supervisor instead. A
+            // supervisor who was themselves already a primary recipient CAN be resent
+            // to (e.g. figures changed); the dispatch row/checkpoint is simply refreshed.
+            if ($existingDispatchRow && trim((string)($existingDispatchRow['merged_into_supervisor_emp_id'] ?? '')) !== '') {
+                throw new Exception('One of the selected supervisors\' employees were already merged into another supervisor\'s payroll report. Resend to that supervisor instead.');
             }
 
-            $companyStmt->execute([':comp_id' => $companyId]);
-            $company = $companyStmt->fetch(PDO::FETCH_ASSOC);
-            if (!$company) {
-                throw new Exception('One selected company was not found.');
+            $supervisorStmt->execute([':emp_id' => $supervisorEmpId]);
+            $supervisor = $supervisorStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$supervisor) {
+                throw new Exception('One selected supervisor has no registered email.');
             }
 
-            $payrollStmt->execute([
-                ':month_year' => $monthValue,
-                ':company_id' => $companyId
-            ]);
+            // Merge in employees of the additional supervisors (if any) selected for
+            // this primary recipient, so a single email/excel covers every team.
+            $effectiveSupervisorIdsForRows = array_values(array_unique(array_merge([$supervisorEmpId], $includedSupervisorIds)));
+
+            $payrollStmt = $buildPayrollStmtForSupervisorIds($pdo, $effectiveSupervisorIdsForRows);
+            $payrollStmt->execute(array_merge([$monthValue], $effectiveSupervisorIdsForRows));
             $rows = $payrollStmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (empty($rows)) {
-                throw new Exception('No payroll records found for one selected company in this month.');
+                throw new Exception('No payroll records found for one selected supervisor in this month.');
             }
 
             $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
@@ -2485,70 +2874,36 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $deductionsSheet = $spreadsheet->createSheet();
             $deductionsSheet->setTitle('Deductions Import');
 
-            $typeListSheet = $spreadsheet->createSheet();
-            $typeListSheet->setTitle('__PAYROLL_IMPORT_TYPE_LISTS');
-
             $metaSheet = $spreadsheet->createSheet();
             $metaSheet->setTitle('__PAYROLL_IMPORT_META');
 
-            $mainHeaders = ['#', 'Emp ID', 'Employee Name', 'Department', 'Basic Salary', 'Benefits', 'Benefits Reason', 'Deductions', 'Deduction Reason', 'Net Salary', 'Status'];
+            $mainHeaders = ['#', 'Emp ID', 'Employee Name', 'Department', 'Company', 'Basic Salary', 'Benefits', 'Benefits Reason', 'Deductions', 'Deduction Reason', 'Net Salary', 'Status'];
             $mainSheet->fromArray($mainHeaders, null, 'A1');
 
             $benefitsSheet->fromArray(
-                ['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_minutes', 'benefit_reason'],
+                ['emp_id', 'benefit_hours', 'benefit_minutes', 'benefit_reason'],
                 null,
                 'A1'
             );
             $benefitsSheet->fromArray(
-                ['1001', 'by_hours_and_minutes', '', '0', '0', 'Project Support Benefit'],
+                ['1001', '6', '0', 'Project Support Benefit'],
                 null,
                 'A2'
             );
 
             $deductionsSheet->fromArray(
-                ['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_minutes', 'deduction_reason'],
+                ['emp_id', 'deduction_days', 'deduction_hours', 'deduction_minutes', 'deduction_reason'],
                 null,
                 'A1'
             );
             $deductionsSheet->fromArray(
-                ['1001', 'hourly_deduction', '', '0', '0', 'Late Arrival Deduction'],
+                ['1001', '0', '7', '0', 'Late Arrival Deduction'],
                 null,
                 'A2'
             );
-
-            $typeListSheet->fromArray(
-                ['benefit_type_options', 'deduction_type_options'],
-                null,
-                'A1'
-            );
-            $typeListSheet->fromArray(['by_hours', 'hourly_deduction'], null, 'A2');
 
             $metaSheet->fromArray([$checkpointCode, $monthValue], null, 'A1');
 
-            $benefitTypeValidation = new \PhpOffice\PhpSpreadsheet\Cell\DataValidation();
-            $benefitTypeValidation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
-            $benefitTypeValidation->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
-            $benefitTypeValidation->setAllowBlank(true);
-            $benefitTypeValidation->setShowInputMessage(true);
-            $benefitTypeValidation->setShowErrorMessage(true);
-            $benefitTypeValidation->setShowDropDown(true);
-            $benefitTypeValidation->setFormula1('"by_hours,by_hours_and_minutes"');
-
-            $deductionTypeValidation = new \PhpOffice\PhpSpreadsheet\Cell\DataValidation();
-            $deductionTypeValidation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
-            $deductionTypeValidation->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_STOP);
-            $deductionTypeValidation->setAllowBlank(true);
-            $deductionTypeValidation->setShowInputMessage(true);
-            $deductionTypeValidation->setShowErrorMessage(true);
-            $deductionTypeValidation->setShowDropDown(true);
-            $deductionTypeValidation->setFormula1('"hourly_deduction,by_hours_and_minutes"');
-
-            for ($validationRow = 2; $validationRow <= 5000; $validationRow++) {
-                $benefitsSheet->getCell('B' . $validationRow)->setDataValidation(clone $benefitTypeValidation);
-                $deductionsSheet->getCell('B' . $validationRow)->setDataValidation(clone $deductionTypeValidation);
-            }
-
-            $typeListSheet->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
             $metaSheet->setSheetState(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet::SHEETSTATE_VERYHIDDEN);
 
             $mainRowIndex = 2;
@@ -2582,15 +2937,6 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
                     }
 
                     $hoursValue = (float)($benefitRow['hours'] ?? 0);
-                    $amountValue = (float)($benefitRow['note'] ?? 0);
-                    $rawCalcType = strtolower(trim((string)($benefitRow['calculation_type'] ?? 'fixed')));
-                    $benefitType = $rawCalcType;
-                    if ($benefitType === 'hourly' || $benefitType === 'calculated' || $benefitType === 'hours') {
-                        $benefitType = 'by_hours';
-                    }
-                    if (!in_array($benefitType, ['fixed', 'by_hours', 'overtime_total', 'overtime_basic'], true)) {
-                        $benefitType = 'fixed';
-                    }
 
                     $reasonText = $benefitName;
                     if ($hoursValue > 0) {
@@ -2603,9 +2949,8 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
 
                     $benefitsSheet->fromArray([
                         (string)($row['emp_id'] ?? ''),
-                        $benefitType,
-                        $amountValue,
                         $hoursValue,
+                        0,
                         $benefitName
                     ], null, 'A' . $benefitRowIndex);
                     $benefitRowIndex++;
@@ -2661,10 +3006,9 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
 
                     $deductionsSheet->fromArray([
                         (string)($row['emp_id'] ?? ''),
-                        $deductionType,
-                        $amountValue,
-                        $hoursValue,
                         $daysValue,
+                        $hoursValue,
+                        0,
                         $deductionName
                     ], null, 'A' . $deductionRowIndex);
                     $deductionRowIndex++;
@@ -2675,6 +3019,7 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
                     (string)($row['emp_id'] ?? ''),
                     (string)($row['employee_name'] ?? ''),
                     (string)($row['department_name'] ?? ''),
+                    (string)($row['company_name'] ?? ''),
                     $basicSalary,
                     $totalBenefits,
                     implode('; ', $benefitReasons),
@@ -2687,19 +3032,19 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             }
 
             if ($mainRowIndex > 2) {
-                foreach (['E', 'F', 'H', 'J'] as $column) {
+                foreach (['F', 'G', 'I', 'K'] as $column) {
                     $mainSheet->getStyle($column . '2:' . $column . ($mainRowIndex - 1))
                         ->getNumberFormat()
                         ->setFormatCode('#,##0.00');
                 }
             }
 
-            foreach (range('A', 'K') as $column) {
+            foreach (range('A', 'L') as $column) {
                 $mainSheet->getColumnDimension($column)->setAutoSize(true);
             }
 
             if ($benefitRowIndex > 2) {
-                foreach (['C', 'D'] as $column) {
+                foreach (['B', 'C'] as $column) {
                     $benefitsSheet->getStyle($column . '2:' . $column . ($benefitRowIndex - 1))
                         ->getNumberFormat()
                         ->setFormatCode('#,##0.00');
@@ -2707,39 +3052,51 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             }
 
             if ($deductionRowIndex > 2) {
-                foreach (['C', 'D', 'E'] as $column) {
+                foreach (['B', 'C', 'D'] as $column) {
                     $deductionsSheet->getStyle($column . '2:' . $column . ($deductionRowIndex - 1))
                         ->getNumberFormat()
                         ->setFormatCode('#,##0.00');
                 }
             }
 
-            foreach (range('A', 'E') as $column) {
+            foreach (range('A', 'D') as $column) {
                 $benefitsSheet->getColumnDimension($column)->setAutoSize(true);
             }
 
-            foreach (range('A', 'F') as $column) {
+            foreach (range('A', 'E') as $column) {
                 $deductionsSheet->getColumnDimension($column)->setAutoSize(true);
             }
 
             $safeMonth = preg_replace('/[^0-9A-Za-z_-]+/', '_', $monthValue);
-            $safeCompany = preg_replace('/[^0-9A-Za-z_-]+/', '_', (string)($company['comp_name'] ?? 'company'));
-            $attachmentName = 'payroll_' . $safeMonth . '_' . $safeCompany . '.xlsx';
+            $safeSupervisor = preg_replace('/[^0-9A-Za-z_-]+/', '_', (string)($supervisor['name'] ?? 'supervisor'));
+            $attachmentName = 'payroll_' . $safeMonth . '_' . $safeSupervisor . '.xlsx';
             $tempFilePath = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . uniqid('payroll_report_', true) . '.xlsx';
 
             $spreadsheet->setActiveSheetIndex(0);
             $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
             $writer->save($tempFilePath);
 
-            $emailSubject = 'Company Payroll Verification - ' . $monthValue . ' (' . (string)$company['comp_name'] . ')';
+            $emailSubject = 'Team Payroll Verification - ' . $monthValue . ' (' . (string)$supervisor['name'] . ')';
             $requestUrl = (function_exists('get_base_url') ? get_base_url() : 'https://hr.almutlaksystem.com')
                 . '/payroll_checklist_report.php?month=' . urlencode($monthValue)
                 . '&request_inv_no=' . urlencode($requestInvNo);
             $importantNoteTitle = 'Important Message';
-            $importantNoteText = 'For company ' . (string)$company['comp_name'] . ' and month ' . $monthValue . ', when entering Benefits and Deductions in the attached file, all values must strictly follow BioTime machine records. This file will be rechecked again to make sure there is no discrepancy, so please ensure every entered value is accurate.';
-            $importantNoteArabicText = 'بالنسبة لشركة ' . (string)$company['comp_name'] . ' ولشهر ' . $monthValue . '، عند إدخال قيم البدلات والاستقطاعات في الملف المرفق، يجب أن تتوافق جميع القيم بشكل صارم مع سجلات جهاز BioTime. سيتم إعادة التحقق من هذا الملف مرة أخرى للتأكد من عدم وجود أي اختلافات، لذا يرجى التأكد من دقة كل قيمة يتم إدخالها.';
-            $emailMessage = 'Please review the attached payroll report for company ' . (string)$company['comp_name']
-                . ' (' . count($rows) . ' employees) for month ' . $monthValue . '.';
+            $importantNoteText = 'For your team and month ' . $monthValue . ', when entering Benefits and Deductions in the attached file, all values must strictly follow BioTime machine records. This file will be rechecked again to make sure there is no discrepancy, so please ensure every entered value is accurate.';
+            $importantNoteArabicText = 'بالنسبة لفريقك ولشهر ' . $monthValue . '، عند إدخال قيم البدلات والاستقطاعات في الملف المرفق، يجب أن تتوافق جميع القيم بشكل صارم مع سجلات جهاز BioTime. سيتم إعادة التحقق من هذا الملف مرة أخرى للتأكد من عدم وجود أي اختلافات، لذا يرجى التأكد من دقة كل قيمة يتم إدخالها.';
+            $mergedSupervisorNames = [];
+            if (!empty($includedSupervisorIds)) {
+                $mergedNamePlaceholders = implode(',', array_fill(0, count($includedSupervisorIds), '?'));
+                $mergedNameStmt = $pdo->prepare("SELECT name FROM employees WHERE emp_id IN ($mergedNamePlaceholders) ORDER BY name ASC");
+                $mergedNameStmt->execute($includedSupervisorIds);
+                $mergedSupervisorNames = array_map('strval', $mergedNameStmt->fetchAll(PDO::FETCH_COLUMN));
+            }
+
+            $emailMessage = 'Please review the attached payroll report for your team'
+                . ' (' . count($rows) . ' employees) for month ' . $monthValue . '.'
+                . (!empty($mergedSupervisorNames)
+                    ? ' This report also includes the team(s) of: ' . implode(', ', $mergedSupervisorNames) . '.'
+                    : '')
+                . ' You can also open the Payroll Check List page below to review your team and upload the completed Excel file directly.';
             $emailMessageHtml = '<div style="margin:0; color:#e0e0e0; line-height:1.7;">'
                 . htmlspecialchars($emailMessage, ENT_QUOTES, 'UTF-8')
                 . '<br><br><strong>Request ID:</strong> ' . htmlspecialchars($requestInvNo, ENT_QUOTES, 'UTF-8')
@@ -2756,20 +3113,21 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
 
             $emailSent = sendPayrollEmailWithAttachment(
                 $conDB,
-                (string)$manager['email'],
-                (string)($manager['name'] ?? 'Manager'),
+                (string)$supervisor['email'],
+                (string)($supervisor['name'] ?? 'Supervisor'),
                 $emailSubject,
                 [
-                    'APPROVER_NAME' => (string)($manager['name'] ?? 'Manager'),
+                    'APPROVER_NAME' => (string)($supervisor['name'] ?? 'Supervisor'),
                     'REQUEST_ID' => $requestInvNo,
-                    'REQUEST_TYPE' => 'Company Payroll Verification',
+                    'REQUEST_TYPE' => 'Team Payroll Verification',
                     'PAYROLL_MONTH' => $monthValue,
                     'EMPLOYEE_COUNT' => (string)count($rows),
                     'TOTAL_NET_SALARY' => number_format($totalNetSalary, 2),
                     'PAYROLL_STATUS' => 'Ready for Verification',
                     'EMAIL_MESSAGE' => $emailMessage,
                     'EMAIL_MESSAGE_HTML' => $emailMessageHtml,
-                    'REQUEST_URL' => $requestUrl
+                    'REQUEST_URL' => $requestUrl,
+                    'ACTION_BUTTON_TEXT' => 'Open Payroll Check List'
                 ],
                 $tempFilePath,
                 $attachmentName
@@ -2787,13 +3145,31 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
             $dispatchInsert->execute([
                 ':request_inv_no' => $requestInvNo,
                 ':payroll_month' => $monthValue,
-                ':company_id' => $companyId,
-                ':manager_emp_id' => $managerEmpId,
-                ':manager_email' => (string)$manager['email'],
-                ':sent_by' => $currentUserId
+                ':supervisor_emp_id' => $supervisorEmpId,
+                ':supervisor_email' => (string)$supervisor['email'],
+                ':sent_by' => $currentUserId,
+                ':included_supervisor_ids' => !empty($includedSupervisorIds) ? json_encode(array_values($includedSupervisorIds)) : null,
+                ':merged_into_supervisor_emp_id' => null
             ]);
 
-            $sentCompanyNames[] = (string)($company['comp_name'] ?? $companyId);
+            // Mark each merged-in supervisor as covered by this dispatch too, so they
+            // can't be independently selected/re-sent later and their own login (if
+            // any) is not treated as having received this email.
+            foreach ($includedSupervisorIds as $includedSupervisorEmpId) {
+                $supervisorStmt->execute([':emp_id' => $includedSupervisorEmpId]);
+                $includedSupervisorInfo = $supervisorStmt->fetch(PDO::FETCH_ASSOC);
+                $dispatchInsert->execute([
+                    ':request_inv_no' => $requestInvNo,
+                    ':payroll_month' => $monthValue,
+                    ':supervisor_emp_id' => $includedSupervisorEmpId,
+                    ':supervisor_email' => (string)($includedSupervisorInfo['email'] ?? ''),
+                    ':sent_by' => $currentUserId,
+                    ':included_supervisor_ids' => null,
+                    ':merged_into_supervisor_emp_id' => $supervisorEmpId
+                ]);
+            }
+
+            $sentSupervisorNames[] = (string)($supervisor['name'] ?? $supervisorEmpId);
 
             if (!empty($tempFilePath) && file_exists($tempFilePath)) {
                 @unlink($tempFilePath);
@@ -2803,9 +3179,8 @@ function sendCompanyManagerPayrollReport(PDO $pdo, $conDB, string $currentUserId
 
         echo json_encode([
             'status' => 'success',
-            'message' => 'Payroll report email sent successfully to ' . (string)($manager['name'] ?? 'Manager') . ' for ' . count($sentCompanyNames) . ' compan' . (count($sentCompanyNames) === 1 ? 'y' : 'ies') . '.',
-            'recipient_email' => (string)$manager['email'],
-            'sent_companies' => $sentCompanyNames
+            'message' => 'Payroll report email sent successfully to ' . count($sentSupervisorNames) . ' supervisor' . (count($sentSupervisorNames) === 1 ? '' : 's') . '.',
+            'sent_supervisors' => $sentSupervisorNames
         ]);
     } catch (Exception $e) {
         if (!empty($tempFilePath) && file_exists($tempFilePath)) {

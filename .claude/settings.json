@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -r ' *)",
+      "Bash(php -l app_settings.php)",
+      "Bash(php -l new_request.php)",
+      "Bash(php -l includes/ajaxFile/ajaxLoan.php)",
+      "Bash(php -l includes/ajaxFile/leaveHandler.php)",
+      "Bash(php -l includes/ajaxFile/ajaxResignation.php)",
+      "Bash(php -l includes/ajaxFile/ajaxGeneralRequest.php)",
+      "Bash(php -l includes/ajaxFile/ajaxBusinessTrip.php)",
+      "Bash(php -l edit_employee.php)",
+      "Bash(php -l view_employee.php)",
+      "Bash(php -l vacation_report_details.php)",
+      "Bash(php -l vacation_balance_history.php)"
+    ]
+  }
+}

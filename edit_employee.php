@@ -1,6 +1,12 @@
 <?php
 // require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
+
+// Request-blocking fields are only writable/visible by admins or employees with the matching special access grant.
+$canManageRequestBlock = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_employee_request_block', $user_role ?? '', $user_type ?? '', $is_system_admin));
+$canManageRequestTypeBlock = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_employee_request_type_block', $user_role ?? '', $user_type ?? '', $is_system_admin));
+$globallyBlockedRequestTypes = get_global_blocked_request_types($conDB);
 
 // ============================================================
 // HANDLE POST REQUEST FIRST (BEFORE ANY OUTPUT)
@@ -49,9 +55,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'insurance_class',
 			'probation',
 			'payment_type',
-			'is_overtime_eligible'
+			'is_overtime_eligible',
+			'allow_emergency_vacation',
+			'requests_blocked',
+			'blocked_request_types'
 		];
-		
+
+		if (!$canManageRequestBlock) {
+			unset($formData['requests_blocked']);
+		}
+		if (!$canManageRequestTypeBlock) {
+			unset($formData['blocked_request_types']);
+		} elseif (isset($formData['blocked_request_types'])) {
+			// Submitted via a hidden input as a JSON array string (see the checkbox group JS on this page).
+			$formData['blocked_request_types'] = json_encode(decode_blocked_request_types((string)$formData['blocked_request_types']));
+		}
+
 		// FETCH OLD VALUES BEFORE UPDATE
 		$employee_id_from_form = $formData['emp_id'];
 		$old_stmt = $pdo->prepare("SELECT * FROM employees WHERE emp_id = :emp_id");
@@ -695,6 +714,76 @@ if (mysqli_num_rows($query) == 1) {
 													<label for="overtimeEligibleNo" class="atch"><?= __('no', 'No') ?></label>
 												</div>
 											</div>
+
+											<div class="form-group col-md-4">
+												<label class="col-form-label d-block"><?= __('allow_emergency_vacation', 'Allow Emergency Vacation') ?></label>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="allowEmergencyVacationYes" name="allow_emergency_vacation" value="1" <?= ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 'checked' : '' ?>>
+													<label for="allowEmergencyVacationYes" class="atch"><?= __('yes', 'Yes') ?></label>
+												</div>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="allowEmergencyVacationNo" name="allow_emergency_vacation" value="0" <?= ((string)($emprow['allow_emergency_vacation'] ?? '0') !== '1') ? 'checked' : '' ?>>
+													<label for="allowEmergencyVacationNo" class="atch"><?= __('no', 'No') ?></label>
+												</div>
+												<small class="form-text text-muted"><?= __('allow_emergency_vacation_hint', 'When Yes, this employee can apply for Emergency Vacation even with a healthy balance (>1 day)') ?></small>
+											</div>
+
+											<?php if ($canManageRequestBlock || $canManageRequestTypeBlock): ?>
+											<div class="form-group col-md-12">
+												<hr>
+												<label class="col-form-label d-block"><strong><?= __('request_restrictions', 'Request Restrictions') ?></strong></label>
+											</div>
+
+											<?php if ($canManageRequestBlock): ?>
+											<div class="form-group col-md-4">
+												<label class="col-form-label d-block"><?= __('block_from_all_requests', 'Block From All Requests') ?></label>
+												<div class="radio radio-danger form-check-inline">
+													<input type="radio" id="requestsBlockedYes" name="requests_blocked" value="1" <?= ((string)($emprow['requests_blocked'] ?? '0') === '1') ? 'checked' : '' ?>>
+													<label for="requestsBlockedYes" class="atch"><?= __('yes', 'Yes') ?></label>
+												</div>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="requestsBlockedNo" name="requests_blocked" value="0" <?= ((string)($emprow['requests_blocked'] ?? '0') !== '1') ? 'checked' : '' ?>>
+													<label for="requestsBlockedNo" class="atch"><?= __('no', 'No') ?></label>
+												</div>
+											</div>
+											<?php endif; ?>
+
+											<?php if ($canManageRequestTypeBlock): ?>
+											<div class="form-group col-md-8">
+												<label class="col-form-label d-block"><?= __('block_specific_request_types', 'Block Specific Request Types') ?></label>
+												<small class="form-text text-muted mb-2"><?= __('block_specific_request_types_hint', 'Some request types may already be blocked for all employees (see Manage Request Type Blocks). Checking one of those here exempts this employee; checking a type that is not globally blocked blocks it for this employee only.') ?></small>
+												<div id="blockedRequestTypesContainer">
+													<?php
+													$blockedTypesRaw = (string)($emprow['blocked_request_types'] ?? '');
+													$blockedTypesSelected = decode_blocked_request_types($blockedTypesRaw);
+													foreach (get_blockable_request_type_labels() as $typeKey => $typeLabel):
+														$isGloballyBlocked = in_array($typeKey, $globallyBlockedRequestTypes, true);
+														$checkboxLabel = $isGloballyBlocked
+															? '🔒 ' . $typeLabel . ' — ' . __('globally_blocked_check_to_allow', 'globally blocked; check to allow this employee anyway')
+															: $typeLabel;
+													?>
+													<div class="checkbox checkbox-danger form-check-inline">
+														<input type="checkbox" id="blockType_<?= htmlspecialchars($typeKey) ?>" class="blocked-request-type-checkbox" value="<?= htmlspecialchars($typeKey) ?>" <?= in_array($typeKey, $blockedTypesSelected, true) ? 'checked' : '' ?>>
+														<label for="blockType_<?= htmlspecialchars($typeKey) ?>" class="atch"><?= htmlspecialchars($checkboxLabel) ?></label>
+													</div>
+													<?php endforeach; ?>
+												</div>
+												<input type="hidden" name="blocked_request_types" id="blockedRequestTypesHidden" value="<?= htmlspecialchars(json_encode($blockedTypesSelected)) ?>">
+											</div>
+											<script>
+												document.addEventListener('DOMContentLoaded', function() {
+													var hidden = document.getElementById('blockedRequestTypesHidden');
+													var boxes = document.querySelectorAll('.blocked-request-type-checkbox');
+													function syncHidden() {
+														var values = Array.prototype.filter.call(boxes, function(b) { return b.checked; })
+															.map(function(b) { return b.value; });
+														hidden.value = JSON.stringify(values);
+													}
+													boxes.forEach(function(b) { b.addEventListener('change', syncHidden); });
+												});
+											</script>
+											<?php endif; ?>
+											<?php endif; ?>
 
 											<div class="form-group col-md-12">
 												<div class="btn-group" role="group" aria-label="Edit Button">

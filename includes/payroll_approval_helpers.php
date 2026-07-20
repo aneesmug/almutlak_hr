@@ -97,6 +97,63 @@ if (!function_exists('ensurePayrollCompanyReportDispatchTable')) {
     }
 }
 
+if (!function_exists('ensurePayrollSupervisorReportDispatchTable')) {
+    function ensurePayrollSupervisorReportDispatchTable(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_supervisor_report_dispatch (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            request_inv_no VARCHAR(255) NOT NULL,
+            payroll_month VARCHAR(7) NOT NULL,
+            supervisor_emp_id VARCHAR(50) NOT NULL,
+            supervisor_email VARCHAR(255) NOT NULL,
+            sent_by VARCHAR(50) NOT NULL,
+            sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            included_supervisor_ids LONGTEXT DEFAULT NULL,
+            merged_into_supervisor_emp_id VARCHAR(50) DEFAULT NULL,
+            UNIQUE KEY uniq_supervisor_dispatch (request_inv_no, payroll_month, supervisor_emp_id),
+            INDEX idx_request_month (request_inv_no, payroll_month),
+            INDEX idx_supervisor_emp_id (supervisor_emp_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        $includedColumnStmt = $pdo->query("SHOW COLUMNS FROM payroll_supervisor_report_dispatch LIKE 'included_supervisor_ids'");
+        $hasIncludedColumn = $includedColumnStmt && $includedColumnStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$hasIncludedColumn) {
+            $pdo->exec("ALTER TABLE payroll_supervisor_report_dispatch
+                ADD COLUMN included_supervisor_ids LONGTEXT DEFAULT NULL AFTER sent_at,
+                ADD COLUMN merged_into_supervisor_emp_id VARCHAR(50) DEFAULT NULL AFTER included_supervisor_ids");
+        }
+    }
+}
+
+if (!function_exists('payrollSupervisorHasReportAccess')) {
+    // True when this employee is the actual recipient of a "Send Payroll Report by
+    // Direct Supervisor" batch for this request/month (either as the selected primary
+    // supervisor, or as a supervisor whose employees were merged into another
+    // supervisor's report - see sendSupervisorPayrollReport()). Rows merged into
+    // someone else's batch (merged_into_supervisor_emp_id IS NOT NULL) never received
+    // the email/attachment themselves, so they are excluded here.
+    function payrollSupervisorHasReportAccess(PDO $pdo, string $requestInvNo, string $monthYear, string $empId): bool
+    {
+        if ($requestInvNo === '' || $monthYear === '' || $empId === '') {
+            return false;
+        }
+
+        $stmt = $pdo->prepare("SELECT COUNT(*)
+            FROM payroll_supervisor_report_dispatch
+            WHERE request_inv_no = :request_inv_no
+              AND payroll_month = :payroll_month
+              AND supervisor_emp_id = :supervisor_emp_id
+              AND merged_into_supervisor_emp_id IS NULL");
+        $stmt->execute([
+            ':request_inv_no' => $requestInvNo,
+            ':payroll_month' => $monthYear,
+            ':supervisor_emp_id' => $empId
+        ]);
+
+        return ((int)$stmt->fetchColumn() > 0);
+    }
+}
+
 if (!function_exists('ensurePayrollFinanceVerificationTable')) {
     function ensurePayrollFinanceVerificationTable(PDO $pdo): void
     {
@@ -285,6 +342,7 @@ if (!function_exists('ensurePayrollChecklistSupportTables')) {
         ensurePayrollChecklistFeedbackTable($pdo);
         ensurePayrollChecklistReviewTable($pdo);
         ensurePayrollCompanyReportDispatchTable($pdo);
+        ensurePayrollSupervisorReportDispatchTable($pdo);
         ensurePayrollFinanceVerificationTable($pdo);
         ensurePayrollFinanceVerificationHistoryTable($pdo);
         ensurePayrollFinanceOfficerCompanyDefaultsTable($pdo);

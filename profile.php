@@ -1,6 +1,7 @@
 ﻿<?php
 require_once("./includes/init.php");
 require_once("./includes/session_check.php");
+require_once("./includes/special_access_helper.php");
 include('./includes/MainClass.php');
 include("./includes/avatar_select.php");
 include("./includes/Hijri_GregorianConvert.php");
@@ -75,21 +76,43 @@ if (!empty($emprow['empid'])) {
     }
 }
 
+// Effective request-block status for this employee (global block XOR employee override),
+// used to hide "More Actions" menu items for request types this employee cannot submit.
+$empIdForBlockCheck = $emprow['empid'] ?? $emprow['emp_id'] ?? '';
+$isLoanBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'loan_request')['blocked'];
+$isExcuseLeaveBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'excuse_leave')['blocked'];
+$isResignationBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'resignation_request')['blocked'];
+$isRejoinBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'rejoin_request')['blocked'];
+$isVacationAnnualBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_annual')['blocked'];
+$isVacationEmergencyBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_emergency')['blocked'];
+$isVacationLocalBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_local')['blocked'];
+$isVacationEncashedBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_encashed')['blocked'];
+$isAllVacationBlocked = ($isVacationAnnualBlocked && $isVacationEmergencyBlocked && $isVacationLocalBlocked && $isVacationEncashedBlocked);
+
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
 if ($emprow['status'] == 1) {
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-danger\" onclick=\"window.location.href='./system_guide.php'\"><i class=\"fa fa-book-open-lines\"></i><span>" . __('system_guide') . "</span></a>";
     $moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
+    $allowEmergencyVacation = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 1 : 0;
+    if (!$isAllVacationBlocked) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
+    }
     // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('{$emprow['empid']}', '{$emprow['dept']}', '{$emprow['country']}')\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></a>";
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\" data-selected_reason=\"" . htmlspecialchars($selectedResignationReason, ENT_QUOTES, 'UTF-8') . "\" data-selected_reason_text=\"" . htmlspecialchars($selectedResignationReasonText, ENT_QUOTES, 'UTF-8') . "\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
-    if ($activeFlyVacCount > 0) {
+    if (!$isExcuseLeaveBlocked) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
+    }
+    if (!$isResignationBlocked) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\" data-selected_reason=\"" . htmlspecialchars($selectedResignationReason, ENT_QUOTES, 'UTF-8') . "\" data-selected_reason_text=\"" . htmlspecialchars($selectedResignationReasonText, ENT_QUOTES, 'UTF-8') . "\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
+    }
+    if ($activeFlyVacCount > 0 && !$isRejoinBlocked) {
         $badgeText = $activeFlyVacCount > 1 ? " ({$activeFlyVacCount})" : '';
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeFlyVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
     }
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+    if (!$isLoanBlocked) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+    }
 } else {
     $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
 }

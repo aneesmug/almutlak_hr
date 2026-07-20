@@ -2279,8 +2279,6 @@ async function fetchPayrollImportCheckpointCode(defaultMonth) {
 async function downloadPayrollImportTemplate() {
     const defaultMonth = $('#payrollMonth').val() || getCurrentPayrollMonthValue();
     const checkpointCode = await fetchPayrollImportCheckpointCode(defaultMonth);
-    const benefitTypeOptions = ['by_hours'];
-    const deductionTypeOptions = ['hourly_deduction'];
     const benefitsSheetName = getPayrollImportBenefitsSheetName();
     const deductionsSheetName = getPayrollImportDeductionsSheetName();
 
@@ -2288,54 +2286,33 @@ async function downloadPayrollImportTemplate() {
         const workbook = new ExcelJS.Workbook();
         const benefitsWorksheet = workbook.addWorksheet(benefitsSheetName);
         const deductionsWorksheet = workbook.addWorksheet(deductionsSheetName);
-        const typeListSheet = workbook.addWorksheet('__PAYROLL_IMPORT_TYPE_LISTS');
         const minutesListSheet = workbook.addWorksheet('__PAYROLL_IMPORT_MINUTES');
         const metadataSheet = workbook.addWorksheet(getPayrollImportMetadataSheetName());
 
-        benefitsWorksheet.addRow(['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_minutes', 'benefit_reason']);
-        benefitsWorksheet.addRow(['1001', 'by_hours_and_minutes', '', '0', '0', 'Project Support Benefit']);
+        benefitsWorksheet.addRow(['emp_id', 'benefit_hours', 'benefit_minutes', 'benefit_reason']);
+        benefitsWorksheet.addRow(['1001', '6', '0', 'Project Support Benefit']);
 
-        deductionsWorksheet.addRow(['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_minutes', 'deduction_reason']);
-        deductionsWorksheet.addRow(['1001', 'hourly_deduction', '', '0', '0', 'Late Arrival Deduction']);
+        deductionsWorksheet.addRow(['emp_id', 'deduction_days', 'deduction_hours', 'deduction_minutes', 'deduction_reason']);
+        deductionsWorksheet.addRow(['1001', '0', '7', '0', 'Late Arrival Deduction']);
 
-        typeListSheet.addRow(['benefit_type_options', 'deduction_type_options']);
         for (let i = 0; i < 60; i += 1) {
             minutesListSheet.addRow([i]);
-        }
-        const maxRows = Math.max(benefitTypeOptions.length, deductionTypeOptions.length);
-        for (let i = 0; i < maxRows; i += 1) {
-            typeListSheet.addRow([
-                benefitTypeOptions[i] || '',
-                deductionTypeOptions[i] || ''
-            ]);
         }
 
         metadataSheet.addRow([checkpointCode, defaultMonth]);
 
-        benefitsWorksheet.dataValidations.add('B2:B5000', {
-            type: 'list',
-            allowBlank: true,
-            formulae: ['"by_hours,by_hours_and_minutes"']
-        });
-        benefitsWorksheet.dataValidations.add('E2:E5000', {
+        benefitsWorksheet.dataValidations.add('C2:C5000', {
             type: 'list',
             allowBlank: true,
             formulae: ['__PAYROLL_IMPORT_MINUTES!$A$2:$A$61']
         });
-        deductionsWorksheet.dataValidations.add('B2:B5000', {
-            type: 'list',
-            allowBlank: true,
-            formulae: ['"hourly_deduction,by_hours_and_minutes"']
-        });
-        deductionsWorksheet.dataValidations.add('E2:E5000', {
+        deductionsWorksheet.dataValidations.add('D2:D5000', {
             type: 'list',
             allowBlank: true,
             formulae: ['__PAYROLL_IMPORT_MINUTES!$A$2:$A$61']
         });
 
         benefitsWorksheet.columns = [
-            { width: 16 },
-            { width: 20 },
             { width: 16 },
             { width: 16 },
             { width: 16 },
@@ -2344,14 +2321,12 @@ async function downloadPayrollImportTemplate() {
 
         deductionsWorksheet.columns = [
             { width: 16 },
-            { width: 24 },
-            { width: 18 },
-            { width: 18 },
+            { width: 16 },
+            { width: 16 },
             { width: 16 },
             { width: 30 }
         ];
 
-        typeListSheet.state = 'veryHidden';
         minutesListSheet.state = 'veryHidden';
         metadataSheet.state = 'veryHidden';
 
@@ -2381,13 +2356,13 @@ async function downloadPayrollImportTemplate() {
 
     // Fallback in case ExcelJS CDN is blocked; keeps template download available.
     const benefitsWorksheet = XLSX.utils.aoa_to_sheet([
-        ['emp_id', 'benefit_type', 'benefit_value', 'benefit_hours', 'benefit_minutes', 'benefit_reason'],
-        ['1001', 'fixed', '250.00', '', '', 'Project Support Benefit']
+        ['emp_id', 'benefit_hours', 'benefit_minutes', 'benefit_reason'],
+        ['1001', '6', '0', 'Project Support Benefit']
     ]);
 
     const deductionsWorksheet = XLSX.utils.aoa_to_sheet([
-        ['emp_id', 'deduction_type', 'deduction_value', 'deduction_hours', 'deduction_minutes', 'deduction_reason'],
-        ['1001', 'hourly_deduction', '', '3', '', 'Late Arrival Deduction']
+        ['emp_id', 'deduction_days', 'deduction_hours', 'deduction_minutes', 'deduction_reason'],
+        ['1001', '0', '7', '0', 'Late Arrival Deduction']
     ]);
 
     const minutesWorksheet = XLSX.utils.aoa_to_sheet(
@@ -3560,8 +3535,7 @@ async function openPayrollExcelImportModal() {
             <div style="text-align:left;">
                 <p class="mb-2">${__('payroll_import_modal_hint') || 'Upload one Excel file to import benefits and deductions into generated payroll records.'}</p>
                 <ol class="pl-3 mb-3 text-danger" style="font-size:13px;">
-                    <li>${__('payroll_import_required_columns') || 'Required columns from row 1: emp_id, benefit type, benefit value, benefit hours, benefit minutes, benefit reason, deduction type, deduction value, deduction hours, deduction minutes, deduction reason.'}</li>
-                    <li>${__('payroll_import_type_options_hint') || 'Type options: benefit_type = by_hours, deduction_type = hourly_deduction.'}</li>
+                    <li>${__('payroll_import_required_columns') || 'Benefits Import columns: emp_id, benefit_hours, benefit_minutes, benefit_reason. Deductions Import columns: emp_id, deduction_day, deduction_hours, deduction_minutes, deduction_reason.'}</li>
                     <li>${__('payroll_import_file_reuse_hint') || 'Each downloaded template stores the month with hidden one-time validation data. After one successful upload, the same file cannot be uploaded again.'}</li>
                     <li>${__('payroll_import_generate_first_hint') || 'Payroll must already be generated for the employee and month before import.'}</li>
                 </ol>

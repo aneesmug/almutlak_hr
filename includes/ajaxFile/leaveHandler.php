@@ -402,15 +402,26 @@ elseif ($ajaxType == 'applyVacation') {
     try {
         // 1. Sanitize all inputs
         $emp_id = (int)($_POST['emp_id'] ?? 0);
-        
+        $vac_type = escape_string($_POST['vac_type'] ?? '');
+        $fly_type = escape_string($_POST['fly_type'] ?? '');
+
+        // 1.0 Block-check: employee may be restricted from submitting this vacation sub-type
+        require_once __DIR__ . '/../special_access_helper.php';
+        $vac_block_type_key = resolve_vacation_block_type_key($vac_type, $fly_type);
+        $block_status = is_employee_request_blocked($conDB, $emp_id, $vac_block_type_key);
+        if ($block_status['blocked']) {
+            http_response_code(200);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'title' => 'Request Blocked', 'message' => $block_status['reason'], 'type' => 'error']);
+            exit;
+        }
+
         // 1.1 Validate supervisor assignment FIRST
         $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
         if (!$supervisor_check['valid']) {
             send_supervisor_validation_error($supervisor_check['message']);
         }
         $first_approver_id = (int)($_POST['first_approver_id'] ?? 0);
-        $vac_type = escape_string($_POST['vac_type'] ?? '');
-        $fly_type = escape_string($_POST['fly_type'] ?? '');
         // Normalize replacement_per BEFORE escaping: treat placeholder text and indicators as no replacement
         $replacement_per_raw = trim($_POST['replacement_per'] ?? '');
         
@@ -1014,9 +1025,23 @@ elseif ($ajaxType == 'applyVacation') {
             $effective_remaining = 0.0;
         }
 
+        // Management override: some employees are explicitly allowed to apply for emergency
+        // vacation even with a healthy balance (employees.allow_emergency_vacation).
+        $allow_emergency_override = false;
+        $override_stmt = mysqli_prepare($conDB, "SELECT allow_emergency_vacation FROM employees WHERE emp_id = ? LIMIT 1");
+        if ($override_stmt) {
+            mysqli_stmt_bind_param($override_stmt, "s", $emp_id);
+            mysqli_stmt_execute($override_stmt);
+            $override_result = mysqli_stmt_get_result($override_stmt);
+            $override_row = $override_result ? mysqli_fetch_assoc($override_result) : null;
+            mysqli_stmt_close($override_stmt);
+            $allow_emergency_override = $override_row && (string)($override_row['allow_emergency_vacation'] ?? '0') === '1';
+        }
+
         // [NEW VALIDATION] Emergency Vacation can ONLY be applied when available_balance < 1
         // Emergency Vacation is a PAID leave for employees with no balance remaining
-        if ($is_emergency_vacation) {
+        // EXCEPTION: employees with the allow_emergency_vacation override can bypass this.
+        if ($is_emergency_vacation && !$allow_emergency_override) {
             if ($effective_remaining >= 1) {
                 // Employee has sufficient balance - they cannot use emergency vacation
                 send_json_response(
@@ -1273,6 +1298,30 @@ elseif ($ajaxType == 'applyVacation') {
         
         // Log vacation request submission
         ActivityLogger::logSubmit('Vacation', 'leaveHandler.php', $inserted_id, "Submitted vacation request: {$request_inv_no}, Days: {$vacdays}", 'emp_vacation');
+
+        // Track vacation day activity: before-apply balance snapshot.
+        // Balance itself is NOT deducted here (deduction happens only on final approval,
+        // see update_vacation_balance_on_approval()), so old/new balance match; the requested
+        // days for this specific application are recorded in the notes for full traceability.
+        $vac_snapshot = get_vacation_balance_snapshot($conDB, $emp_id);
+        log_vacation_activity(
+            $conDB,
+            $emp_id,
+            $inserted_id,
+            'VACATION_APPLIED',
+            "Applied {$vacdays} day(s) - {$vac_type}/{$fly_type} - Request {$request_inv_no} ({$start_date} to {$end_date}). Balance unchanged; deducted only on final approval.",
+            $vac_snapshot['available_balance'],
+            $vac_snapshot['used_days'],
+            $vac_snapshot['remaining_balance'],
+            $vac_snapshot['available_balance'],
+            $vac_snapshot['used_days'],
+            $vac_snapshot['remaining_balance'],
+            $vac_snapshot['carryover_days'],
+            $vac_snapshot['total_days'],
+            $vac_snapshot['period_start'],
+            $vac_snapshot['period_end'],
+            $current_user_id
+        );
 
         // === NEW: Notify employee when someone else applies vacation on their behalf ===
         // Check if the person applying (submitted_by) is different from the employee
@@ -2701,10 +2750,29 @@ elseif ($ajaxType == 'rejectVacation') {
         $old_vacation = mysqli_fetch_assoc($vacation_details);
         if ($old_vacation) {
             ActivityLogger::logApproval('Vacation', 'leaveHandler.php', $vacation_id, 'rejected', "Rejected vacation request: {$request_inv_no}, Reason: {$rejection_note}", 'emp_vacation');
-            
+
             // NOTE: DO NOT REFUND/RESTORE VACATION BALANCE ON REJECTION
             // Days are only deducted at FINAL APPROVAL, not at submission or rejection
             // Therefore, rejection should not update the balance
+            $vac_snapshot = get_vacation_balance_snapshot($conDB, $old_vacation['emp_id']);
+            log_vacation_activity(
+                $conDB,
+                $old_vacation['emp_id'],
+                $vacation_id,
+                'VACATION_REJECTED',
+                "Rejected request {$request_inv_no}, Days: {$old_vacation['vacdays']}, Reason: {$rejection_note}. Balance unchanged (never deducted before final approval).",
+                $vac_snapshot['available_balance'],
+                $vac_snapshot['used_days'],
+                $vac_snapshot['remaining_balance'],
+                $vac_snapshot['available_balance'],
+                $vac_snapshot['used_days'],
+                $vac_snapshot['remaining_balance'],
+                $vac_snapshot['carryover_days'],
+                $vac_snapshot['total_days'],
+                $vac_snapshot['period_start'],
+                $vac_snapshot['period_end'],
+                $current_user_id
+            );
         }
         if ($vacation_details) mysqli_free_result($vacation_details);
 
@@ -2813,7 +2881,7 @@ elseif ($ajaxType == 'returnVacation') {
         // If there are extra days, deduct from vacation balance
         if ($extra_days > 0) {
             // Get the current balance record for this vacation
-            $sql_balance = "SELECT `id`, `remaining_balance` FROM `emp_vacation_balance` WHERE `vac_id` = ? LIMIT 1";
+            $sql_balance = "SELECT `id`, `remaining_balance`, `available_balance`, `used_days`, `carryover_days`, `total_days`, `period_start`, `period_end` FROM `emp_vacation_balance` WHERE `vac_id` = ? LIMIT 1";
             $stmt_balance = mysqli_prepare($conDB, $sql_balance);
             if ($stmt_balance) {
                 mysqli_stmt_bind_param($stmt_balance, "i", $vac_id_for_balance);
@@ -2834,6 +2902,25 @@ elseif ($ajaxType == 'returnVacation') {
                         mysqli_stmt_execute($stmt_update_balance);
                         mysqli_stmt_close($stmt_update_balance);
                     }
+
+                    log_vacation_activity(
+                        $conDB,
+                        $emp_id,
+                        $vacation_id,
+                        'VACATION_RETURN_EXTRA_DAYS',
+                        "Late return on {$request_inv_no}: {$extra_days} extra day(s) past planned return date {$planned_return_date}, deducted from remaining balance.",
+                        (float)$row_balance['available_balance'],
+                        (float)$row_balance['used_days'],
+                        $current_remaining,
+                        (float)$row_balance['available_balance'],
+                        (float)$row_balance['used_days'],
+                        $new_remaining,
+                        (float)$row_balance['carryover_days'],
+                        (float)$row_balance['total_days'],
+                        $row_balance['period_start'],
+                        $row_balance['period_end'],
+                        $current_user_id
+                    );
                 }
 
                 if ($res_balance) mysqli_free_result($res_balance);
@@ -2877,10 +2964,10 @@ elseif ($ajaxType == 'returnVacation') {
         }
         mysqli_stmt_close($stmt_complete_vac);
 
-        // Restore replacement employee original role (if temporary role assignment exists)
-        $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, $vacation_id, $current_user_id);
-        if (!$restoreResult['success']) {
-            error_log('Vacation ' . $request_inv_no . ': temporary role restore failed - ' . $restoreResult['message']);
+        // Close any active temporary role assignment (employee returned before/at return_date)
+        $closeResult = closeTemporaryRoleAssignment($conDB, $vacation_id, $current_user_id, 'expired');
+        if (!$closeResult['success']) {
+            error_log('Vacation ' . $request_inv_no . ': temporary role close failed - ' . $closeResult['message']);
         }
 
         $message = __("employee_marked_as_returned");
@@ -3471,16 +3558,16 @@ elseif ($ajaxType == 'cancelVacationRequest') {
 
         // No date restrictions - allow cancellation anytime during approval workflow
 
-        // Update vacation status to 'cancelled'
-        $update_sql = "UPDATE `emp_vacation` 
-                       SET `current_status` = 'cancelled'
+        // Update vacation status to 'cancelled', recording who cancelled it
+        $update_sql = "UPDATE `emp_vacation`
+                       SET `current_status` = 'cancelled', `cancelled_by` = ?, `cancelled_at` = NOW()
                        WHERE `id` = ?";
         $update_stmt = mysqli_prepare($conDB, $update_sql);
         if (!$update_stmt) {
             throw new Exception(__('database_prepare_error'));
         }
 
-        mysqli_stmt_bind_param($update_stmt, "i", $vacation_id);
+        mysqli_stmt_bind_param($update_stmt, "si", $current_user_id, $vacation_id);
         if (!mysqli_stmt_execute($update_stmt)) {
             throw new Exception(__('database_execute_error'));
         }
@@ -3494,12 +3581,12 @@ elseif ($ajaxType == 'cancelVacationRequest') {
 
         // Log the cancellation action
         $log_status = 'cancelled';
-        $log_note = sprintf('Vacation request cancelled by employee. Type: %s, Dates: %s to %s', 
+        $log_note = sprintf('Vacation request cancelled by employee. Type: %s, Dates: %s to %s',
                             $vacation['vac_type'],
                             date('d M Y', strtotime($vacation['start_date'])),
                             date('d M Y', strtotime($vacation['return_date'])));
         
-        $log_sql = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`) 
+        $log_sql = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`)
                     VALUES (?, ?, ?, ?, ?, NOW())";
         $log_stmt = mysqli_prepare($conDB, $log_sql);
         if ($log_stmt) {
@@ -3508,7 +3595,158 @@ elseif ($ajaxType == 'cancelVacationRequest') {
             $log_stmt->close();
         }
 
+        $vac_snapshot = get_vacation_balance_snapshot($conDB, $vacation['emp_id']);
+        $was_approved_note = ($vacation['current_status'] === 'approved')
+            ? ' NOTE: request was already approved - balance was NOT auto-refunded, review manually if a refund is due.'
+            : '';
+        log_vacation_activity(
+            $conDB,
+            $vacation['emp_id'],
+            $vacation_id,
+            'VACATION_CANCELLED',
+            "Cancelled by employee - {$log_note}." . $was_approved_note,
+            $vac_snapshot['available_balance'],
+            $vac_snapshot['used_days'],
+            $vac_snapshot['remaining_balance'],
+            $vac_snapshot['available_balance'],
+            $vac_snapshot['used_days'],
+            $vac_snapshot['remaining_balance'],
+            $vac_snapshot['carryover_days'],
+            $vac_snapshot['total_days'],
+            $vac_snapshot['period_start'],
+            $vac_snapshot['period_end'],
+            $current_user_id
+        );
+
         // Send success response
+        send_json_response(
+            __("success"),
+            sprintf(__("vacation_request_cancelled_successfully"), $vacation['request_inv_no']),
+            "success"
+        );
+
+    } catch (Exception $e) {
+        send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+
+// ================================================================
+// Purpose: Allow HR/approvers with the 'cancel_vacation_requests' special
+// access grant (or admins) to cancel ANY employee's vacation request.
+// ================================================================
+elseif ($ajaxType == 'cancelVacationRequestAdmin') {
+    try {
+        require_once __DIR__ . '/../special_access_helper.php';
+
+        $can_cancel_any = (
+            !empty($is_system_admin)
+            || user_has_special_access($conDB, $current_user_id, 'cancel_vacation_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+        );
+        if (!$can_cancel_any) {
+            throw new Exception(__('access_denied', 'Access denied'));
+        }
+
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+
+        if (empty($vacation_id)) {
+            throw new Exception(__("vacation_id_is_missing"));
+        }
+
+        // Fetch vacation details
+        $sql = "SELECT `id`, `emp_id`, `current_status`, `request_inv_no`, `vac_type`, `start_date`, `return_date`
+                FROM `emp_vacation`
+                WHERE `id` = ?";
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            throw new Exception(__('database_prepare_error'));
+        }
+
+        mysqli_stmt_bind_param($stmt, "i", $vacation_id);
+        if (!mysqli_stmt_execute($stmt)) {
+            throw new Exception(__('database_execute_error'));
+        }
+
+        $result = mysqli_stmt_get_result($stmt);
+        $vacation = mysqli_fetch_assoc($result);
+        mysqli_stmt_close($stmt);
+
+        if (!$vacation) {
+            throw new Exception(__("vacation_record_not_found"));
+        }
+
+        // Same cancellable-status gate as the employee self-service cancel action.
+        $cancellable_statuses = ['apply', 'pending_approval', 'pending', 'hr_assistant_approved', 'hr_manager_approved', 'gm_approved', 'approved'];
+        if (!in_array($vacation['current_status'], $cancellable_statuses)) {
+            throw new Exception(sprintf(__("vacation_cannot_be_cancelled_current_status_is"), $vacation['current_status']));
+        }
+
+        // Update vacation status to 'cancelled', recording the admin/HR user who cancelled it
+        $update_sql = "UPDATE `emp_vacation`
+                       SET `current_status` = 'cancelled', `cancelled_by` = ?, `cancelled_at` = NOW()
+                       WHERE `id` = ?";
+        $update_stmt = mysqli_prepare($conDB, $update_sql);
+        if (!$update_stmt) {
+            throw new Exception(__('database_prepare_error'));
+        }
+
+        mysqli_stmt_bind_param($update_stmt, "si", $current_user_id, $vacation_id);
+        if (!mysqli_stmt_execute($update_stmt)) {
+            throw new Exception(__('database_execute_error'));
+        }
+
+        $affected_rows = mysqli_stmt_affected_rows($update_stmt);
+        mysqli_stmt_close($update_stmt);
+
+        if ($affected_rows === 0) {
+            throw new Exception(__("failed_to_update_vacation_status"));
+        }
+
+        // Log the cancellation action, noting who cancelled it on the employee's behalf.
+        $log_status = 'cancelled';
+        $log_note = sprintf(
+            'Vacation request cancelled by %s (emp_id %s) on behalf of employee %s. Type: %s, Dates: %s to %s',
+            $userwel,
+            $current_user_id,
+            $vacation['emp_id'],
+            $vacation['vac_type'],
+            date('d M Y', strtotime($vacation['start_date'])),
+            date('d M Y', strtotime($vacation['return_date']))
+        );
+
+        $log_sql = "INSERT INTO `smt_request_status` (`emp_id`, `inv_no`, `emp_name`, `status`, `note`, `created_at`)
+                    VALUES (?, ?, ?, ?, ?, NOW())";
+        $log_stmt = mysqli_prepare($conDB, $log_sql);
+        if ($log_stmt) {
+            $log_stmt->bind_param('issss', $vacation['emp_id'], $vacation['request_inv_no'], $userwel, $log_status, $log_note);
+            $log_stmt->execute();
+            $log_stmt->close();
+        }
+
+        $vac_snapshot = get_vacation_balance_snapshot($conDB, $vacation['emp_id']);
+        $was_approved_note = ($vacation['current_status'] === 'approved')
+            ? ' NOTE: request was already approved - balance was NOT auto-refunded, review manually if a refund is due.'
+            : '';
+        log_vacation_activity(
+            $conDB,
+            $vacation['emp_id'],
+            $vacation_id,
+            'VACATION_CANCELLED_ADMIN',
+            "{$log_note}." . $was_approved_note,
+            $vac_snapshot['available_balance'],
+            $vac_snapshot['used_days'],
+            $vac_snapshot['remaining_balance'],
+            $vac_snapshot['available_balance'],
+            $vac_snapshot['used_days'],
+            $vac_snapshot['remaining_balance'],
+            $vac_snapshot['carryover_days'],
+            $vac_snapshot['total_days'],
+            $vac_snapshot['period_start'],
+            $vac_snapshot['period_end'],
+            $current_user_id
+        );
+
         send_json_response(
             __("success"),
             sprintf(__("vacation_request_cancelled_successfully"), $vacation['request_inv_no']),
@@ -5264,7 +5502,7 @@ elseif ($ajaxType == 'addManualVacationHistory') {
         $vacation_id = $pdo->lastInsertId();
 
         // Deduct vacation days from employee's balance
-        $sql_balance = "SELECT `id`, `available_balance`, `remaining_balance` FROM `emp_vacation_balance` 
+        $sql_balance = "SELECT `id`, `available_balance`, `remaining_balance`, `used_days`, `carryover_days`, `total_days`, `period_start`, `period_end` FROM `emp_vacation_balance`
                        WHERE `emp_id` = :emp_id ORDER BY `last_updated` DESC LIMIT 1";
         $stmt_balance = $pdo->prepare($sql_balance);
         $stmt_balance->execute([':emp_id' => $emp_id]);
@@ -5274,13 +5512,14 @@ elseif ($ajaxType == 'addManualVacationHistory') {
             // Calculate new balance after deducting vacation days
             $new_available_balance = max(0, (float)$balance_record['available_balance'] - $vacdays);
             $new_remaining_balance = max(0, (float)$balance_record['remaining_balance'] - $vacdays);
+            $new_used_days = (float)$balance_record['used_days'] + $vacdays;
 
             // Update the balance
-            $sql_update_balance = "UPDATE `emp_vacation_balance` 
-                                 SET `available_balance` = :available_balance, 
-                                     `remaining_balance` = :remaining_balance, 
+            $sql_update_balance = "UPDATE `emp_vacation_balance`
+                                 SET `available_balance` = :available_balance,
+                                     `remaining_balance` = :remaining_balance,
                                      `used_days` = `used_days` + :vacdays,
-                                     `last_updated` = NOW() 
+                                     `last_updated` = NOW()
                                  WHERE `id` = :balance_id";
             $stmt_update_balance = $pdo->prepare($sql_update_balance);
             $stmt_update_balance->execute([
@@ -5289,11 +5528,30 @@ elseif ($ajaxType == 'addManualVacationHistory') {
                 ':vacdays' => $vacdays,
                 ':balance_id' => $balance_record['id']
             ]);
+
+            log_vacation_activity(
+                $conDB,
+                $emp_id,
+                $vacation_id,
+                'MANUAL_VACATION_ENTRY',
+                "Manual vacation entry added by {$userwel}: {$request_inv_no}, Type: {$vac_type}, Days: {$vacdays}, Period: {$start_date} to {$return_date}",
+                (float)$balance_record['available_balance'],
+                (float)$balance_record['used_days'],
+                (float)$balance_record['remaining_balance'],
+                $new_available_balance,
+                $new_used_days,
+                $new_remaining_balance,
+                (float)$balance_record['carryover_days'],
+                (float)$balance_record['total_days'],
+                $balance_record['period_start'],
+                $balance_record['period_end'],
+                $current_user_id
+            );
         }
 
         // Log the manual vacation entry
-        ActivityLogger::logSubmit('Vacation-Manual', 'leaveHandler.php', $vacation_id, 
-            "Manual vacation entry added: {$request_inv_no}, Type: {$vac_type}, Days: {$vacdays}, Period: {$start_date} to {$return_date}", 
+        ActivityLogger::logSubmit('Vacation-Manual', 'leaveHandler.php', $vacation_id,
+            "Manual vacation entry added: {$request_inv_no}, Type: {$vac_type}, Days: {$vacdays}, Period: {$start_date} to {$return_date}",
             'emp_vacation');
 
         send_json_response(__('success'), __('manual_vacation_history_saved_successfully'), 'success');
@@ -5311,13 +5569,20 @@ elseif ($ajaxType == 'addManualVacationHistory') {
 elseif ($ajaxType == 'applyLeave') {
     try {
         $empid = (int)($_POST['empid'] ?? 0);
-        
+
+        // Block-check: employee may be restricted from submitting leave/excuse requests
+        require_once __DIR__ . '/../special_access_helper.php';
+        $block_status = is_employee_request_blocked($conDB, $empid, 'excuse_leave');
+        if ($block_status['blocked']) {
+            send_json_response('Request Blocked', $block_status['reason'], 'error', 200);
+        }
+
         // Validate supervisor assignment FIRST
         $supervisor_check = validate_employee_supervisor($conDB, $empid);
         if (!$supervisor_check['valid']) {
             send_supervisor_validation_error($supervisor_check['message']);
         }
-        
+
         $leave_type = trim($_POST['leave_type'] ?? '');
         $start_date = trim($_POST['start_date'] ?? '');
         $end_date = trim($_POST['end_date'] ?? '');
@@ -6190,7 +6455,14 @@ elseif ($ajaxType == 'submitRejoinRequest') {
             
             $emp_id = $emp_row['emp_id'];
         }
-        
+
+        // Block-check: employee may be restricted from submitting rejoin requests
+        require_once __DIR__ . '/../special_access_helper.php';
+        $block_status = is_employee_request_blocked($conDB, $emp_id, 'rejoin_request');
+        if ($block_status['blocked']) {
+            send_json_response('Request Blocked', $block_status['reason'], 'error', 200);
+        }
+
         // Validate supervisor assignment FIRST
         $supervisor_check = validate_employee_supervisor($conDB, $emp_id);
         if (!$supervisor_check['valid']) {
@@ -6617,9 +6889,9 @@ elseif ($ajaxType == 'processRejoinApproval') {
                     ");
                     $stmt->execute([':vacation_id' => $request['vacation_id']]);
 
-                    $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, (int)$request['vacation_id'], $current_user_id);
-                    if (!$restoreResult['success']) {
-                        error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role restore failed - ' . $restoreResult['message']);
+                    $closeResult = closeTemporaryRoleAssignment($conDB, (int)$request['vacation_id'], $current_user_id, 'expired');
+                    if (!$closeResult['success']) {
+                        error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role close failed - ' . $closeResult['message']);
                     }
 
                     // Set employee fly status to 0 ONLY if NO remaining active vacations
@@ -6726,12 +6998,31 @@ elseif ($ajaxType == 'processRejoinApproval') {
                     ]);
                     if (!$is_emergency) {
                         // Deduct from linked balance row if available
-                        $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
+                        $stmtBal = $pdo->prepare("SELECT id, remaining_balance, available_balance, used_days, carryover_days, total_days, period_start, period_end FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
                         $stmtBal->execute([':vac_id' => $request['vacation_id']]);
                         if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
                             $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
                             $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
                             $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+
+                            log_vacation_activity(
+                                $conDB,
+                                $employee_id,
+                                (int)$request['vacation_id'],
+                                'VACATION_REJOIN_ADJUST_EXTRA_DAYS',
+                                "Rejoin adjusted to {$adjustment_date} on {$request['request_inv_no']}: {$extra_days} extra day(s), deducted from remaining balance.",
+                                (float)$balRow['available_balance'],
+                                (float)$balRow['used_days'],
+                                (float)$balRow['remaining_balance'],
+                                (float)$balRow['available_balance'],
+                                (float)$balRow['used_days'],
+                                $newRemaining,
+                                (float)$balRow['carryover_days'],
+                                (float)$balRow['total_days'],
+                                $balRow['period_start'],
+                                $balRow['period_end'],
+                                $current_user_id
+                            );
                         }
                     }
                 }
@@ -6755,9 +7046,9 @@ elseif ($ajaxType == 'processRejoinApproval') {
                 ");
                 $stmt->execute([':vacation_id' => $request['vacation_id']]);
 
-                $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, (int)$request['vacation_id'], $current_user_id);
-                if (!$restoreResult['success']) {
-                    error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role restore failed - ' . $restoreResult['message']);
+                $closeResult = closeTemporaryRoleAssignment($conDB, (int)$request['vacation_id'], $current_user_id, 'expired');
+                if (!$closeResult['success']) {
+                    error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role close failed - ' . $closeResult['message']);
                 }
 
                 // Set employee fly status to 0 ONLY if NO remaining active vacations
@@ -7001,12 +7292,31 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
                 ':vac_id' => $request['vacation_id']
             ]);
             if (!$is_emergency) {
-                $stmtBal = $pdo->prepare("SELECT id, remaining_balance FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
+                $stmtBal = $pdo->prepare("SELECT id, remaining_balance, available_balance, used_days, carryover_days, total_days, period_start, period_end FROM emp_vacation_balance WHERE vac_id = :vac_id LIMIT 1");
                 $stmtBal->execute([':vac_id' => $request['vacation_id']]);
                 if ($balRow = $stmtBal->fetch(PDO::FETCH_ASSOC)) {
                     $newRemaining = max(0, ((float)$balRow['remaining_balance']) - $extra_days);
                     $stmtUpdBal = $pdo->prepare("UPDATE emp_vacation_balance SET remaining_balance = :rem WHERE id = :id");
                     $stmtUpdBal->execute([':rem' => $newRemaining, ':id' => $balRow['id']]);
+
+                    log_vacation_activity(
+                        $conDB,
+                        $emp_id,
+                        (int)$request['vacation_id'],
+                        'VACATION_REJOIN_ADJUST_EXTRA_DAYS',
+                        "Employee self-adjusted rejoin to {$adjusted_date} on {$request['request_inv_no']}: {$extra_days} extra day(s), deducted from remaining balance.",
+                        (float)$balRow['available_balance'],
+                        (float)$balRow['used_days'],
+                        (float)$balRow['remaining_balance'],
+                        (float)$balRow['available_balance'],
+                        (float)$balRow['used_days'],
+                        $newRemaining,
+                        (float)$balRow['carryover_days'],
+                        (float)$balRow['total_days'],
+                        $balRow['period_start'],
+                        $balRow['period_end'],
+                        $emp_id
+                    );
                 }
             }
         }
@@ -7030,9 +7340,9 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
         ");
         $stmt->execute([':vacation_id' => $request['vacation_id']]);
 
-        $restoreResult = restoreTemporaryVacationRoleAssignment($conDB, (int)$request['vacation_id'], $emp_id);
-        if (!$restoreResult['success']) {
-            error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role restore failed - ' . $restoreResult['message']);
+        $closeResult = closeTemporaryRoleAssignment($conDB, (int)$request['vacation_id'], $emp_id, 'expired');
+        if (!$closeResult['success']) {
+            error_log('Rejoin ' . $request['request_inv_no'] . ': temporary role close failed - ' . $closeResult['message']);
         }
 
         // Set employee fly status to 0 ONLY if NO remaining active vacations

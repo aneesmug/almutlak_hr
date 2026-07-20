@@ -3,6 +3,13 @@
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/SettlementManager_Corrected.php'; // Settlement System Integration
+require_once __DIR__ . '/includes/special_access_helper.php';
+
+$can_cancel_vacation_requests = (
+    !empty($is_system_admin)
+    || user_has_special_access($conDB, $empid ?? '', 'cancel_vacation_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+$cancellable_vacation_statuses = ['apply', 'pending_approval', 'pending', 'hr_assistant_approved', 'hr_manager_approved', 'gm_approved', 'approved'];
 // $user_type, $empid, $user_dept, $is_system_admin, $isHR, $isDeptHr are available from session_check.php
 // Restrict access: Employees cannot view this detailed report page
 if (isset($isEmployee) && $isEmployee === true) {
@@ -161,6 +168,39 @@ if (!empty($search_term)) {
     $where_clauses[] = "v.request_inv_no NOT LIKE 'LEGACY-%'";
 }
 
+// --- Additional filters: request type, date range, days ---
+$filter_vac_type = trim($_GET['filter_vac_type'] ?? '');
+$filter_date_from = trim($_GET['filter_date_from'] ?? '');
+$filter_date_to = trim($_GET['filter_date_to'] ?? '');
+$filter_days_min = isset($_GET['filter_days_min']) && $_GET['filter_days_min'] !== '' ? (float)$_GET['filter_days_min'] : null;
+$filter_days_max = isset($_GET['filter_days_max']) && $_GET['filter_days_max'] !== '' ? (float)$_GET['filter_days_max'] : null;
+
+if ($filter_vac_type !== '') {
+    $where_clauses[] = "v.vac_type = ?";
+    $params[] = $filter_vac_type;
+    $types .= "s";
+}
+if ($filter_date_from !== '') {
+    $where_clauses[] = "v.start_date >= ?";
+    $params[] = $filter_date_from;
+    $types .= "s";
+}
+if ($filter_date_to !== '') {
+    $where_clauses[] = "v.start_date <= ?";
+    $params[] = $filter_date_to;
+    $types .= "s";
+}
+if ($filter_days_min !== null) {
+    $where_clauses[] = "v.vacdays >= ?";
+    $params[] = $filter_days_min;
+    $types .= "d";
+}
+if ($filter_days_max !== null) {
+    $where_clauses[] = "v.vacdays <= ?";
+    $params[] = $filter_days_max;
+    $types .= "d";
+}
+
 // Enforce department scoping: Only HR and System Admin can see all departments.
 // Everyone else is restricted to their own department for history views.
 if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending') {
@@ -237,10 +277,12 @@ if ($total_items > 0) {
         supervisor_emp.name as supervisor_name,
         supervisor_emp.emptype as supervisor_type,
         ra_payer.approver_id as payer_emp_id,
-        ra_rejected.note as rejection_note
-    FROM emp_vacation v 
+        ra_rejected.note as rejection_note,
+        canceller_emp.name as cancelled_by_name
+    FROM emp_vacation v
     JOIN employees e ON v.emp_id = e.emp_id
     LEFT JOIN emp_vacation_balance b ON v.id = b.vac_id
+    LEFT JOIN employees canceller_emp ON v.cancelled_by = canceller_emp.emp_id
     
     -- This JOIN finds the current pending approver (for both vacation and excuse leave)
     LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = v.request_inv_no 
@@ -645,6 +687,47 @@ if ($can_see_all_depts) {
                                     </div>
                                 </div>
 
+                                <div class="row filter-controls mx-auto mb-5">
+                                    <div class="col-md-3 mb-3 mb-md-0">
+                                        <div class="form-group mb-0">
+                                            <label for="vacTypeFilter" class="font-weight-bold"><?= __('vacation_type', 'Type') ?></label>
+                                            <select class="form-control" id="vacTypeFilter">
+                                                <option value=""><?= __('all', 'All') ?></option>
+                                                <?php foreach (['Fly', 'Local Vacation', 'Encashed', 'Sick Leave', 'Marriage Leave', 'Death Leave', 'Newborn Leave', 'Hajj Leave', 'Exam Leave', 'Other Leave'] as $type_option): ?>
+                                                    <option value="<?= htmlspecialchars($type_option) ?>" <?= ($filter_vac_type === $type_option) ? 'selected' : '' ?>><?= htmlspecialchars(getDisplayName($type_option)) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2 mb-3 mb-md-0">
+                                        <div class="form-group mb-0">
+                                            <label for="dateFromFilter" class="font-weight-bold"><?= __('from_date', 'From') ?></label>
+                                            <input type="date" class="form-control" id="dateFromFilter" value="<?= htmlspecialchars($filter_date_from) ?>">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2 mb-3 mb-md-0">
+                                        <div class="form-group mb-0">
+                                            <label for="dateToFilter" class="font-weight-bold"><?= __('to_date', 'To') ?></label>
+                                            <input type="date" class="form-control" id="dateToFilter" value="<?= htmlspecialchars($filter_date_to) ?>">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2 mb-3 mb-md-0">
+                                        <div class="form-group mb-0">
+                                            <label for="daysMinFilter" class="font-weight-bold"><?= __('min_days', 'Min Days') ?></label>
+                                            <input type="number" min="0" class="form-control" id="daysMinFilter" value="<?= $filter_days_min !== null ? htmlspecialchars((string)$filter_days_min) : '' ?>">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2 mb-3 mb-md-0">
+                                        <div class="form-group mb-0">
+                                            <label for="daysMaxFilter" class="font-weight-bold"><?= __('max_days', 'Max Days') ?></label>
+                                            <input type="number" min="0" class="form-control" id="daysMaxFilter" value="<?= $filter_days_max !== null ? htmlspecialchars((string)$filter_days_max) : '' ?>">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-1 mb-3 mb-md-0 d-flex align-items-end">
+                                        <button type="button" class="btn btn-primary btn-block" onclick="applyFilters()"><i class="fas fa-filter"></i></button>
+                                    </div>
+                                </div>
+
                                 <div class="d-flex justify-content-between align-items-center mb-4">
                                     <?php
                                     // Replace placeholder {0} in translation with the total count
@@ -724,7 +807,14 @@ if ($can_see_all_depts) {
                                                                     break;
                                                                 case 'cancelled':
                                                                     $badge_class = 'dark';
-                                                                    $status_text = __('cancelled_by_employee');
+                                                                    $cancelled_by_emp_id = trim((string)($req['cancelled_by'] ?? ''));
+                                                                    $cancelled_request_owner_id = trim((string)($req['emp_id'] ?? ''));
+                                                                    if ($cancelled_by_emp_id !== '' && $cancelled_by_emp_id !== $cancelled_request_owner_id) {
+                                                                        $canceller_name = $req['cancelled_by_name'] ?? '';
+                                                                        $status_text = __('cancelled_by', 'Cancelled by') . ' ' . htmlspecialchars($canceller_name !== '' ? parseName($canceller_name) : $cancelled_by_emp_id);
+                                                                    } else {
+                                                                        $status_text = __('cancelled_by_employee');
+                                                                    }
                                                                     $status_icon = "<i class='fa fa-solid fa-ban text-white'></i>";
                                                                     break;
                                                                 default:
@@ -946,6 +1036,12 @@ if ($can_see_all_depts) {
                                                                         <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
                                                                     </a>
                                                                 <?php endif; ?>
+                                                                <?php if ($can_cancel_vacation_requests && in_array($req['current_status'], $cancellable_vacation_statuses, true)): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="cancelVacationRequestAdmin(<?= (int)$req['id']; ?>, '<?= $employee_name_js; ?>', '<?= $req['request_inv_no']; ?>')">
+                                                                        <i class="fa fa-ban text-danger"></i> <?= __('cancel_request', 'Cancel Request') ?>
+                                                                    </a>
+                                                                <?php endif; ?>
 
                                                                 <?php if ($show_travel_email_button || $show_payment_button || $show_adjustments_button): ?>
                                                                     <div class="dropdown-divider"></div>
@@ -1020,6 +1116,11 @@ if ($can_see_all_depts) {
                                     $pagination_params = [];
                                     if (!empty($search_term)) $pagination_params['search'] = $search_term;
                                     if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
+                                    if ($filter_vac_type !== '') $pagination_params['filter_vac_type'] = $filter_vac_type;
+                                    if ($filter_date_from !== '') $pagination_params['filter_date_from'] = $filter_date_from;
+                                    if ($filter_date_to !== '') $pagination_params['filter_date_to'] = $filter_date_to;
+                                    if ($filter_days_min !== null) $pagination_params['filter_days_min'] = $filter_days_min;
+                                    if ($filter_days_max !== null) $pagination_params['filter_days_max'] = $filter_days_max;
                                     echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $unfiltered_total_items);
                                     ?>
                                 <?php else: ?>
@@ -1066,8 +1167,23 @@ if ($can_see_all_depts) {
             const limitElement = document.getElementById('limitFilter');
             const limit = limitElement ? limitElement.value : <?= $perpage ?>;
             const search = document.getElementById('searchFilter').value;
+            const vacType = document.getElementById('vacTypeFilter') ? document.getElementById('vacTypeFilter').value : '';
+            const dateFrom = document.getElementById('dateFromFilter') ? document.getElementById('dateFromFilter').value : '';
+            const dateTo = document.getElementById('dateToFilter') ? document.getElementById('dateToFilter').value : '';
+            const daysMin = document.getElementById('daysMinFilter') ? document.getElementById('daysMinFilter').value : '';
+            const daysMax = document.getElementById('daysMaxFilter') ? document.getElementById('daysMaxFilter').value : '';
             const baseUrl = window.location.href.split('?')[0];
-            window.location.href = `${baseUrl}?status=${status}&limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
+            const params = new URLSearchParams();
+            params.set('status', status);
+            params.set('limit', limit);
+            params.set('search', search);
+            if (vacType) params.set('filter_vac_type', vacType);
+            if (dateFrom) params.set('filter_date_from', dateFrom);
+            if (dateTo) params.set('filter_date_to', dateTo);
+            if (daysMin !== '') params.set('filter_days_min', daysMin);
+            if (daysMax !== '') params.set('filter_days_max', daysMax);
+            params.set('page', '1');
+            window.location.href = `${baseUrl}?${params.toString()}`;
         }
 
         function openVacationDateEditor(vacationId, employeeName) {
@@ -3244,6 +3360,45 @@ if ($can_see_all_depts) {
                         });
                 }
             })
+        }
+
+        /**
+         * cancelVacationRequestAdmin - HR/approver-initiated cancellation (requires special access grant or admin)
+         */
+        function cancelVacationRequestAdmin(vacationId, employeeName, requestInvNo) {
+            Swal.fire({
+                title: __('confirm_cancellation') || 'Confirm Cancellation',
+                html: `<p>${(__('are_you_sure_cancel_request') || 'Are you sure you want to cancel this request?')}</p><strong>${employeeName}</strong> - ${requestInvNo}`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: __('yes_cancel_it') || 'Yes, Cancel It',
+                confirmButtonColor: '#dc3545',
+                cancelButtonText: __('no') || 'No',
+                showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                preConfirm: () => {
+                    return $.ajax({
+                        url: './includes/ajaxFile/leaveHandler.php',
+                        type: 'POST',
+                        dataType: 'JSON',
+                        data: {
+                            ajaxType: 'cancelVacationRequestAdmin',
+                            vacation_id: vacationId
+                        }
+                    }).fail(function(jqXHR, textStatus) {
+                        Swal.showValidationMessage(`${__('request_failed') || 'Request failed'}: ${textStatus}`);
+                    });
+                }
+            }).then((result) => {
+                if (!result.isConfirmed || !result.value) return;
+                const response = result.value;
+                Swal.fire({
+                    title: response.title,
+                    text: response.message,
+                    icon: response.type,
+                    allowOutsideClick: false
+                }).then(() => location.reload());
+            });
         }
 
         /**

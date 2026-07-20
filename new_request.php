@@ -8,15 +8,26 @@ MODIFICATION SUMMARY:
     require_once __DIR__ . '/includes/session_check.php';
     include("./includes/convertNumbersToWords.php");
     require_once __DIR__ . '/includes/validate_supervisor.php';
+    require_once __DIR__ . '/includes/special_access_helper.php';
+
+    // Smart requests are globally blocked - hide this page entirely (matches sidebar link hiding).
+    if (is_employee_request_blocked($conDB, $empid ?? '', 'smart_request')['blocked']) {
+        header('Location: dashboard.php');
+        exit;
+    }
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
         if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
     }
 if(isset($_POST['submit'])){
 
+    // Block-check: employee may be restricted from submitting this request type
+    $block_status = is_employee_request_blocked($conDB, $empid, 'smart_request');
     // Validate supervisor is assigned before processing request
     $supervisor_validation = validate_employee_supervisor($conDB, $empid);
-    if (!$supervisor_validation['valid']) {
+    if ($block_status['blocked']) {
+        $msg = '<div class="alert alert-danger bg-danger text-white border-0" role="alert">' . htmlspecialchars($block_status['reason']) . '</div>';
+    } else if (!$supervisor_validation['valid']) {
         $msg = '<div class="alert alert-danger bg-danger text-white border-0" role="alert">' . $supervisor_validation['message'] . '</div>';
     } else if(
        !empty($_POST['item_name']) && !empty($_POST['quantity']) && !empty($_POST['product_price']) 

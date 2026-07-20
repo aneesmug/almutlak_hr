@@ -91,6 +91,11 @@ $(document).on('click', '.applyvacationAtter', function (e) {
     var deptId = $(this).data('dept');
     var country = $(this).data('country');
     var currentBalance = $(this).data('balance') || 0;
+    var allowEmergencyOverride = $(this).data('allow-emergency') == 1;
+    var blockAnnual = $(this).data('block-annual') == 1;
+    var blockEmergency = $(this).data('block-emergency') == 1;
+    var blockLocal = $(this).data('block-local') == 1;
+    var blockEncashed = $(this).data('block-encashed') == 1;
 
     // Quick pre-check: block opening the modal if there's already a pending request
     // Note: We'll allow emergency vacation even with pending requests
@@ -167,14 +172,14 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     cancelButtonColor: APP_COLORS.secondary
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        openVacationApplyModal(empid, deptId, country, currentBalance, shouldForceEmergency, res.active_return_date, !shouldForceEmergency);
+                        openVacationApplyModal(empid, deptId, country, currentBalance, shouldForceEmergency, res.active_return_date, !shouldForceEmergency, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed);
                     }
                 });
                 return;
             }
 
             // Proceed to open the modal as usual, passing active_return_date if available
-            openVacationApplyModal(empid, deptId, country, currentBalance, false, res.active_return_date || null);
+            openVacationApplyModal(empid, deptId, country, currentBalance, false, res.active_return_date || null, false, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed);
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
@@ -186,11 +191,16 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 });
 
 // Extracted function to open the Apply Vacation modal after eligibility check
-function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate, preferAnotherTitle) {
+function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate, preferAnotherTitle, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed) {
     currentBalance = currentBalance || 0;
     forceEmergency = forceEmergency || false;
     activeReturnDate = activeReturnDate || null;
     preferAnotherTitle = preferAnotherTitle || false;
+    allowEmergencyOverride = allowEmergencyOverride || false;
+    blockAnnual = blockAnnual || false;
+    blockEmergency = blockEmergency || false;
+    blockLocal = blockLocal || false;
+    blockEncashed = blockEncashed || false;
 
     const modalTitleText = forceEmergency
         ? __('apply_emergency_vacation')
@@ -220,8 +230,9 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             // [NEW] Hide/Show vacation options based on balance
             // If balance >= 1: Hide Emergency Vacation, Show Annual Vacation and Encashed
             // If balance < 1: Hide Annual Vacation and Encashed, Show Emergency Vacation
+            // EXCEPTION: allowEmergencyOverride keeps Emergency visible regardless of balance
             if (swalModal) {
-                if (currentBalance >= 1) {
+                if (currentBalance >= 1 && !allowEmergencyOverride) {
                     // Employee has sufficient balance - hide Emergency Vacation, show Annual and Encashed
                     console.log('Current Balance:', currentBalance, '- Hiding Emergency Vacation, showing Annual and Encashed');
                     $(swalModal).find('*').each(function() {
@@ -232,7 +243,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             return false; // break
                         }
                     });
-                } else {
+                } else if (currentBalance < 1) {
                     // Employee has insufficient balance (< 1 day) - hide Annual and Encashed, show Emergency
                     console.log('Current Balance:', currentBalance, '- Hiding Annual Vacation and Encashed, showing Emergency');
                     $(swalModal).find('*').each(function() {
@@ -242,6 +253,25 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             console.log('Hidden:', text);
                         }
                     });
+                }
+
+                // [NEW] Hide vac_type / fly_type options that are blocked (globally or individually)
+                // for this employee, regardless of balance-driven visibility above.
+                if (blockLocal) {
+                    $(swalModal).find('input[name="vac_type"][value="Local Vacation"]').closest('.vac-radio-option').hide();
+                }
+                if (blockEncashed) {
+                    $(swalModal).find('input[name="vac_type"][value="Encashed"]').closest('.vac-radio-option').hide();
+                }
+                if (blockAnnual && blockEmergency) {
+                    $(swalModal).find('input[name="vac_type"][value="Fly"]').closest('.vac-radio-option').hide();
+                } else {
+                    if (blockAnnual) {
+                        $(swalModal).find('input[name="fly_type"][value="annual"]').closest('.vac-radio-option').hide();
+                    }
+                    if (blockEmergency) {
+                        $(swalModal).find('input[name="fly_type"][value="emergency"]').closest('.vac-radio-option').hide();
+                    }
                 }
             }
 
@@ -690,11 +720,22 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 return false;
             }
 
+            // [NEW] Defense-in-depth: block submission of a vac_type that is blocked
+            // (globally or individually) for this employee, even if the option wasn't hidden.
+            if (selectedRadio === 'Local Vacation' && blockLocal) {
+                Swal.showValidationMessage(__('vacation_type_blocked') || 'This vacation type is currently unavailable. Please contact HR.');
+                return false;
+            }
+            if (selectedRadio === 'Encashed' && blockEncashed) {
+                Swal.showValidationMessage(__('vacation_type_blocked') || 'This vacation type is currently unavailable. Please contact HR.');
+                return false;
+            }
+
             const balance = parseFloat(currentBalance) || 0;
             let isEmergencySelection = false;
             if (selectedRadio === 'emergency') {
                 isEmergencySelection = true;
-                if (balance >= 1) {
+                if (balance >= 1 && !allowEmergencyOverride) {
                     Swal.showValidationMessage(__('emergency_vacation_requires_zero_balance') || 'Emergency Vacation is only available when you have insufficient balance. Please use regular vacation.');
                     return false;
                 }
@@ -725,14 +766,22 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     Swal.showValidationMessage(__('select_vacation_type_validation'));
                     return false;
                 }
+                if (flyType === 'annual' && blockAnnual) {
+                    Swal.showValidationMessage(__('vacation_type_blocked') || 'This vacation type is currently unavailable. Please contact HR.');
+                    return false;
+                }
                 if (flyType === 'emergency') {
                     isEmergencySelection = true;
+                    if (blockEmergency) {
+                        Swal.showValidationMessage(__('vacation_type_blocked') || 'This vacation type is currently unavailable. Please contact HR.');
+                        return false;
+                    }
                 }
                 if (balance < 1 && !isEmergencySelection) {
                     Swal.showValidationMessage(__('only_emergency_allowed_when_balance_below_one') || 'Your available balance is below 1 day. Please apply for Emergency Vacation only.');
                     return false;
                 }
-                if (balance >= 1 && isEmergencySelection) {
+                if (balance >= 1 && isEmergencySelection && !allowEmergencyOverride) {
                     Swal.showValidationMessage(__('emergency_vacation_requires_zero_balance') || 'Emergency Vacation is only available when you have insufficient balance. Please use regular vacation.');
                     return false;
                 }

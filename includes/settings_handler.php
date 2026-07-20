@@ -3,8 +3,9 @@ header('Content-Type: application/json');
 
 // --- Database Connection ---
 // Ensure you have a db.php file or similar connection logic.
-require_once(__DIR__ . "/db.php"); 
+require_once(__DIR__ . "/db.php");
 require_once(__DIR__ . "/helper_functions.php");
+require_once(__DIR__ . "/special_access_helper.php");
 
 if ($conDB->connect_error) {
     echo json_encode(['success' => false, 'message' => 'Database connection failed: ' . $conDB->connect_error]);
@@ -48,6 +49,7 @@ $conDB->close();
 function get_all_settings($conDB) {
     ensure_full_access_override_setting($conDB);
     ensure_report_visibility_setting($conDB);
+    ensure_special_access_setting($conDB);
 
     $settings = [];
     $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings ORDER BY setting_group, id";
@@ -69,6 +71,7 @@ function get_all_settings($conDB) {
 function update_all_settings($conDB) {
     ensure_full_access_override_setting($conDB);
     ensure_report_visibility_setting($conDB);
+    ensure_special_access_setting($conDB);
 
     // IMPORTANT: Make sure this path is correct and writable by your web server.
     $upload_dir = __DIR__ . '/../assets/logo/'; // Assumes 'assets/logo/' is one level up from this script's directory.
@@ -199,6 +202,47 @@ function ensure_report_visibility_setting($conDB) {
     }
 
     $insertSql = "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'report_permissions', 'report_visibility_by_user_json_map_emp_id_to_report_type_array', 'text', NULL)";
+    $insertStmt = $conDB->prepare($insertSql);
+    if (!$insertStmt) {
+        return;
+    }
+
+    $insertStmt->bind_param("ss", $settingName, $defaultValue);
+    $insertStmt->execute();
+    $insertStmt->close();
+}
+
+/**
+ * Ensure special access map setting exists in app_settings.
+ */
+function ensure_special_access_setting($conDB) {
+    $settingName = 'special_access_by_user';
+    $defaultValue = '{}';
+
+    $checkSql = "SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1";
+    $checkStmt = $conDB->prepare($checkSql);
+    if (!$checkStmt) {
+        return;
+    }
+
+    $checkStmt->bind_param("s", $settingName);
+    if (!$checkStmt->execute()) {
+        $checkStmt->close();
+        return;
+    }
+
+    $result = $checkStmt->get_result();
+    $exists = ($result && $result->num_rows > 0);
+    if ($result) {
+        $result->free();
+    }
+    $checkStmt->close();
+
+    if ($exists) {
+        return;
+    }
+
+    $insertSql = "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'special_access', 'special_access_by_user_json_map_emp_id_to_access_key_array', 'text', NULL)";
     $insertStmt = $conDB->prepare($insertSql);
     if (!$insertStmt) {
         return;

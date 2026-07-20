@@ -1158,7 +1158,14 @@ function apply_for_loan() {
 
     // Sanitize and validate inputs
     $emp_id = mysqli_real_escape_string($conDB, $_POST['emp_id']);
-    
+
+    require_once __DIR__ . '/../special_access_helper.php';
+    $block_status = is_employee_request_blocked($conDB, $emp_id, 'loan_request');
+    if ($block_status['blocked']) {
+        echo json_encode(['status' => 'error', 'title' => 'Request Blocked', 'message' => $block_status['reason'], 'type' => 'error']);
+        return;
+    }
+
     // CHECK IF EMPLOYEE HAS PENDING OR AWAITING LOAN REQUESTS
     $pending_check = $conDB->prepare("SELECT id, inv_no, loan_type, loan_amount, status, created_at FROM emp_loan WHERE emp_id = ? AND status IN ('pending', 'awaiting')");
     $pending_check->bind_param("s", $emp_id);

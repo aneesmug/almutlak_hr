@@ -177,12 +177,73 @@ if (!function_exists('isSettlementPayableVacation')) {
     }
 }
 
-if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
-    function assignTemporaryVacationRoleToReplacement($conDB, $vacation_id, $request_inv_no, $employee_emp_id, $assigned_by_emp_id)
+if (!function_exists('grantTemporaryRoleAssignment')) {
+    /**
+     * Grants a temporary role to a vacation's replacement employee, scoped to the vacation's
+     * start_date/return_date window. Does NOT touch admin_login.user_type - permission checks
+     * read this table dynamically (see getActiveTempRoleForEmployee()), so access disappears
+     * automatically once return_date passes, with no restore step required.
+     * Only callable by a current hr_senior_bp or hr_payroll user (re-checked here from DB).
+     */
+    function grantTemporaryRoleAssignment($conDB, $vacation_id, $granted_by_emp_id)
     {
         $vacation_id = (int)$vacation_id;
-        $employee_emp_id = trim((string)$employee_emp_id);
-        $request_inv_no = trim((string)$request_inv_no);
+        $granted_by_emp_id = trim((string)$granted_by_emp_id);
+
+        $stmtGranter = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmtGranter, "s", $granted_by_emp_id);
+        mysqli_stmt_execute($stmtGranter);
+        $granterRes = mysqli_stmt_get_result($stmtGranter);
+        $granterRow = $granterRes ? mysqli_fetch_assoc($granterRes) : null;
+        if ($granterRes) mysqli_free_result($granterRes);
+        mysqli_stmt_close($stmtGranter);
+
+        $granter_user_type = strtolower(trim((string)($granterRow['user_type'] ?? '')));
+        if (!in_array($granter_user_type, ['hr_senior_bp', 'hr_payroll'], true)) {
+            return ['success' => false, 'message' => 'Only HR Senior BP or HR Payroll can transfer a temporary role.'];
+        }
+
+        $stmtVac = mysqli_prepare($conDB, "SELECT emp_id, replacement_person, vac_type, start_date, return_date, current_status, request_inv_no FROM emp_vacation WHERE id = ? LIMIT 1");
+        if (!$stmtVac) {
+            return ['success' => false, 'message' => 'Failed to load vacation record.'];
+        }
+        mysqli_stmt_bind_param($stmtVac, "i", $vacation_id);
+        mysqli_stmt_execute($stmtVac);
+        $vacRes = mysqli_stmt_get_result($stmtVac);
+        $vacRow = $vacRes ? mysqli_fetch_assoc($vacRes) : null;
+        if ($vacRes) mysqli_free_result($vacRes);
+        mysqli_stmt_close($stmtVac);
+
+        if (!$vacRow) {
+            return ['success' => false, 'message' => 'Vacation record not found.'];
+        }
+        if (!in_array($vacRow['current_status'], ['approved', 'completed'], true)) {
+            return ['success' => false, 'message' => 'Vacation must be approved before a replacement role can be granted.'];
+        }
+        // Leave/excuse requests (LV-*) don't get role coverage - only regular vacations (VAC-*).
+        if (strpos((string)($vacRow['request_inv_no'] ?? ''), 'VAC-') !== 0) {
+            return ['success' => false, 'message' => 'Only regular vacation requests support temporary role coverage.'];
+        }
+
+        $employee_emp_id = trim((string)$vacRow['emp_id']);
+        $replacement_emp_id = trim((string)($vacRow['replacement_person'] ?? ''));
+        if ($replacement_emp_id === '') {
+            return ['success' => false, 'message' => 'This vacation has no replacement person selected.'];
+        }
+        if ($replacement_emp_id === $employee_emp_id) {
+            return ['success' => false, 'message' => 'Replacement employee cannot be the same employee.'];
+        }
+
+        $stmtActive = mysqli_prepare($conDB, "SELECT id FROM emp_temp_role_assignments WHERE vacation_id = ? AND status = 'active' LIMIT 1");
+        mysqli_stmt_bind_param($stmtActive, "i", $vacation_id);
+        mysqli_stmt_execute($stmtActive);
+        $activeRes = mysqli_stmt_get_result($stmtActive);
+        $alreadyActive = ($activeRes && mysqli_num_rows($activeRes) > 0);
+        if ($activeRes) mysqli_free_result($activeRes);
+        mysqli_stmt_close($stmtActive);
+        if ($alreadyActive) {
+            return ['success' => true, 'skipped' => true, 'message' => 'A temporary role is already active for this vacation.'];
+        }
 
         $stmtEmpRole = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
         mysqli_stmt_bind_param($stmtEmpRole, "s", $employee_emp_id);
@@ -192,178 +253,149 @@ if (!function_exists('assignTemporaryVacationRoleToReplacement')) {
         if ($empRoleRes) mysqli_free_result($empRoleRes);
         mysqli_stmt_close($stmtEmpRole);
 
-        $employee_user_type = trim((string)($empRoleRow['user_type'] ?? ''));
-        if ($employee_user_type === '' || strtolower($employee_user_type) === 'employee') {
-            return ['success' => true, 'skipped' => true, 'message' => 'Employee role is not assignable for temporary coverage.'];
+        $granted_role = trim((string)($empRoleRow['user_type'] ?? ''));
+        if ($granted_role === '' || strtolower($granted_role) === 'employee') {
+            return ['success' => false, 'message' => 'This employee has no elevated role to hand over.'];
         }
 
-        $stmtVac = mysqli_prepare($conDB, "SELECT replacement_person, vac_type FROM emp_vacation WHERE id = ? LIMIT 1");
-        if (!$stmtVac) {
-            return ['success' => false, 'message' => 'Failed to load vacation replacement.'];
+        $valid_from = $vacRow['start_date'];
+        $valid_to = $vacRow['return_date'];
+        $request_inv_no = trim((string)($vacRow['request_inv_no'] ?? ''));
+
+        $stmtInsert = mysqli_prepare($conDB, "INSERT INTO emp_temp_role_assignments (
+                vacation_id, request_inv_no, employee_emp_id, replacement_emp_id,
+                granted_role, valid_from, valid_to, status, granted_by_emp_id, granted_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, NOW())");
+        if (!$stmtInsert) {
+            return ['success' => false, 'message' => 'Failed to prepare temporary role assignment insert.'];
         }
-        mysqli_stmt_bind_param($stmtVac, "i", $vacation_id);
-        mysqli_stmt_execute($stmtVac);
-        $vacRes = mysqli_stmt_get_result($stmtVac);
-        $vacRow = $vacRes ? mysqli_fetch_assoc($vacRes) : null;
-        if ($vacRes) mysqli_free_result($vacRes);
-        mysqli_stmt_close($stmtVac);
-
-        // Excuse leave types should NOT trigger a temporary role swap
-        $excuse_leave_types = ['sick leave', 'exam leave', 'hajj leave', 'maternity leave', 'marriage leave', 'newborn leave', 'death leave', 'business trip'];
-        $vac_type_lower = strtolower(trim((string)($vacRow['vac_type'] ?? '')));
-        if (in_array($vac_type_lower, $excuse_leave_types)) {
-            return ['success' => true, 'skipped' => true, 'message' => 'Excuse leave types do not require a temporary role assignment.'];
-        }
-
-        // Only Fly vacations can temporarily assign replacement role.
-        // Local and other vacation types must not modify admin_login.user_type.
-        if ($vac_type_lower !== 'fly') {
-            return ['success' => true, 'skipped' => true, 'message' => 'Only Fly vacations can assign temporary replacement role.'];
-        }
-
-        $replacement_emp_id = trim((string)($vacRow['replacement_person'] ?? ''));
-        if ($replacement_emp_id === '') {
-            return ['success' => false, 'message' => 'Replacement Person must be selected for non-employee vacation requests.'];
-        }
-        if ($replacement_emp_id === $employee_emp_id) {
-            return ['success' => false, 'message' => 'Replacement employee cannot be the same employee.'];
-        }
-
-        $stmtActive = mysqli_prepare($conDB, "SELECT id FROM temp_vacation_role_assignments WHERE vacation_id = ? AND status = 'active' LIMIT 1");
-        mysqli_stmt_bind_param($stmtActive, "i", $vacation_id);
-        mysqli_stmt_execute($stmtActive);
-        $activeRes = mysqli_stmt_get_result($stmtActive);
-        $alreadyActive = ($activeRes && mysqli_num_rows($activeRes) > 0);
-        if ($activeRes) mysqli_free_result($activeRes);
-        mysqli_stmt_close($stmtActive);
-        if ($alreadyActive) {
-            return ['success' => true, 'skipped' => true, 'message' => 'Temporary role already assigned for this vacation.'];
-        }
-
-        $stmtRepRole = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
-        mysqli_stmt_bind_param($stmtRepRole, "s", $replacement_emp_id);
-        mysqli_stmt_execute($stmtRepRole);
-        $repRoleRes = mysqli_stmt_get_result($stmtRepRole);
-        $repRoleRow = $repRoleRes ? mysqli_fetch_assoc($repRoleRes) : null;
-        if ($repRoleRes) mysqli_free_result($repRoleRes);
-        mysqli_stmt_close($stmtRepRole);
-
-        if (!$repRoleRow) {
-            return ['success' => false, 'message' => 'Replacement employee has no admin role account.'];
-        }
-
-        $replacement_original_user_type = trim((string)$repRoleRow['user_type']);
-
-        // Only perform the temporary role swap if the replacement employee already holds
-        // a special (non-employee) permission. Plain employees are not elevated.
-        $can_swap_role = (strtolower($replacement_original_user_type) !== 'employee' && $replacement_original_user_type !== '');
-
-        mysqli_begin_transaction($conDB);
-        try {
-            // Apply the vacating employee's role to the replacement, but ONLY when the
-            // replacement already has elevated permissions (not a plain employee).
-            if ($can_swap_role) {
-                $stmtUpdateRep = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
-                if (!$stmtUpdateRep) {
-                    throw new Exception('Failed to prepare replacement role update.');
-                }
-                mysqli_stmt_bind_param($stmtUpdateRep, "ss", $employee_user_type, $replacement_emp_id);
-                if (!mysqli_stmt_execute($stmtUpdateRep)) {
-                    throw new Exception('Failed to apply temporary role to replacement.');
-                }
-                mysqli_stmt_close($stmtUpdateRep);
-            }
-            $stmtInsert = mysqli_prepare($conDB, "INSERT INTO temp_vacation_role_assignments (
-                    vacation_id, request_inv_no, employee_emp_id, replacement_emp_id,
-                    employee_user_type, replacement_original_user_type, status,
-                    assigned_by_emp_id, assigned_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NOW())");
-            if (!$stmtInsert) {
-                throw new Exception('Failed to prepare temporary role assignment record insert.');
-            }
-            mysqli_stmt_bind_param(
-                $stmtInsert,
-                "issssss",
-                $vacation_id,
-                $request_inv_no,
-                $employee_emp_id,
-                $replacement_emp_id,
-                $employee_user_type,
-                $replacement_original_user_type,
-                $assigned_by_emp_id
-            );
-            if (!mysqli_stmt_execute($stmtInsert)) {
-                throw new Exception('Failed to save temporary role assignment record.');
-            }
+        mysqli_stmt_bind_param(
+            $stmtInsert,
+            "isssssss",
+            $vacation_id,
+            $request_inv_no,
+            $employee_emp_id,
+            $replacement_emp_id,
+            $granted_role,
+            $valid_from,
+            $valid_to,
+            $granted_by_emp_id
+        );
+        if (!mysqli_stmt_execute($stmtInsert)) {
             mysqli_stmt_close($stmtInsert);
-
-            mysqli_commit($conDB);
-            return ['success' => true, 'replacement_emp_id' => $replacement_emp_id, 'employee_user_type' => $employee_user_type];
-        } catch (Exception $e) {
-            mysqli_rollback($conDB);
-            return ['success' => false, 'message' => $e->getMessage()];
+            return ['success' => false, 'message' => 'Failed to save temporary role assignment.'];
         }
+        mysqli_stmt_close($stmtInsert);
+
+        return [
+            'success' => true,
+            'replacement_emp_id' => $replacement_emp_id,
+            'granted_role' => $granted_role,
+            'valid_from' => $valid_from,
+            'valid_to' => $valid_to,
+        ];
     }
 }
 
-if (!function_exists('restoreTemporaryVacationRoleAssignment')) {
-    function restoreTemporaryVacationRoleAssignment($conDB, $vacation_id, $restored_by_emp_id = null)
+if (!function_exists('closeTemporaryRoleAssignment')) {
+    /**
+     * Ends an active temporary role assignment early - either an HR-initiated manual revoke
+     * ($status = 'revoked') or an automatic close when the covered employee returns/rejoins
+     * before their return_date ($status = 'expired'). Safe to call even when no active
+     * assignment exists (e.g. vacation never had one granted).
+     */
+    function closeTemporaryRoleAssignment($conDB, $vacation_id, $closed_by_emp_id = null, $status = 'expired')
     {
         $vacation_id = (int)$vacation_id;
+        $status = in_array($status, ['expired', 'revoked'], true) ? $status : 'expired';
+        $closed_by_emp_id = ($closed_by_emp_id !== null) ? (string)$closed_by_emp_id : null;
 
-        $stmtActive = mysqli_prepare($conDB, "SELECT id, replacement_emp_id, replacement_original_user_type FROM temp_vacation_role_assignments WHERE vacation_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1");
-        if (!$stmtActive) {
-            return ['success' => false, 'message' => 'Failed to load active temporary role assignment.'];
+        $stmtUpdate = mysqli_prepare($conDB, "UPDATE emp_temp_role_assignments SET status = ?, closed_by_emp_id = ?, closed_at = NOW() WHERE vacation_id = ? AND status = 'active'");
+        if (!$stmtUpdate) {
+            return ['success' => false, 'message' => 'Failed to prepare temporary role assignment close.'];
         }
-        mysqli_stmt_bind_param($stmtActive, "i", $vacation_id);
-        mysqli_stmt_execute($stmtActive);
-        $activeRes = mysqli_stmt_get_result($stmtActive);
-        $activeRow = $activeRes ? mysqli_fetch_assoc($activeRes) : null;
-        if ($activeRes) mysqli_free_result($activeRes);
-        mysqli_stmt_close($stmtActive);
+        mysqli_stmt_bind_param($stmtUpdate, "ssi", $status, $closed_by_emp_id, $vacation_id);
+        if (!mysqli_stmt_execute($stmtUpdate)) {
+            mysqli_stmt_close($stmtUpdate);
+            return ['success' => false, 'message' => 'Failed to close temporary role assignment.'];
+        }
+        $affected = mysqli_stmt_affected_rows($stmtUpdate);
+        mysqli_stmt_close($stmtUpdate);
 
-        if (!$activeRow) {
+        if ($affected === 0) {
             return ['success' => true, 'skipped' => true, 'message' => 'No active temporary role assignment found.'];
         }
 
-        $assignment_id = (int)$activeRow['id'];
-        $replacement_emp_id = trim((string)$activeRow['replacement_emp_id']);
-        $replacement_original_user_type = trim((string)$activeRow['replacement_original_user_type']);
+        return ['success' => true];
+    }
+}
 
-        // NOTE: admin_login.user_type is restored to the replacement's original role only if
-        // the role was actually swapped (i.e., the record has a non-empty replacement_original_user_type
-        // that differs from the current user_type, meaning the swap ran).
-        mysqli_begin_transaction($conDB);
-        try {
-            // Restore the replacement employee's original role when the main employee rejoins.
-            if (!empty($replacement_original_user_type)) {
-                $stmtRestore = mysqli_prepare($conDB, "UPDATE admin_login SET user_type = ? WHERE emp_id = ? LIMIT 1");
-                if (!$stmtRestore) {
-                    throw new Exception('Failed to prepare replacement role restore.');
-                }
-                mysqli_stmt_bind_param($stmtRestore, "ss", $replacement_original_user_type, $replacement_emp_id);
-                if (!mysqli_stmt_execute($stmtRestore)) {
-                    throw new Exception('Failed to restore replacement original role.');
-                }
-                mysqli_stmt_close($stmtRestore);
-            }
-            $restored_by_emp_id = ($restored_by_emp_id !== null) ? (string)$restored_by_emp_id : null;
-            $stmtUpdate = mysqli_prepare($conDB, "UPDATE temp_vacation_role_assignments SET status = 'restored', restored_by_emp_id = ?, restored_at = NOW() WHERE id = ?");
-            if (!$stmtUpdate) {
-                throw new Exception('Failed to prepare temporary assignment status update.');
-            }
-            mysqli_stmt_bind_param($stmtUpdate, "si", $restored_by_emp_id, $assignment_id);
-            if (!mysqli_stmt_execute($stmtUpdate)) {
-                throw new Exception('Failed to update temporary assignment status.');
-            }
-            mysqli_stmt_close($stmtUpdate);
-
-            mysqli_commit($conDB);
-            return ['success' => true, 'replacement_emp_id' => $replacement_emp_id, 'restored_user_type' => $replacement_original_user_type];
-        } catch (Exception $e) {
-            mysqli_rollback($conDB);
-            return ['success' => false, 'message' => $e->getMessage()];
+if (!function_exists('getActiveTempRoleForEmployee')) {
+    /**
+     * Reads the currently-in-effect temporary role for an employee, if any. Effective purely
+     * by date window (valid_from <= today < valid_to), so access disappears automatically the
+     * day the covered employee returns - no restore/cron step needed.
+     */
+    function getActiveTempRoleForEmployee($conDB, $emp_id)
+    {
+        $emp_id = trim((string)$emp_id);
+        if ($emp_id === '') {
+            return null;
         }
+
+        $stmt = mysqli_prepare($conDB, "SELECT id, vacation_id, granted_role, valid_from, valid_to
+            FROM emp_temp_role_assignments
+            WHERE replacement_emp_id = ? AND status = 'active' AND CURDATE() >= valid_from AND CURDATE() < valid_to
+            ORDER BY id DESC LIMIT 1");
+        if (!$stmt) {
+            return null;
+        }
+        mysqli_stmt_bind_param($stmt, "s", $emp_id);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
+        $row = $result ? mysqli_fetch_assoc($result) : null;
+        if ($result) mysqli_free_result($result);
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('getReplacementTempRoleCandidate')) {
+    /**
+     * Finds the vacation (if any) where $emp_id is the selected replacement, is approved, and
+     * hasn't fully returned yet - used to drive the "Transfer Role (Temp)" button on the
+     * employee master page (grant vs. revoke vs. hidden).
+     */
+    function getReplacementTempRoleCandidate($conDB, $emp_id)
+    {
+        $emp_id = trim((string)$emp_id);
+        if ($emp_id === '') {
+            return null;
+        }
+
+        $stmt = mysqli_prepare($conDB, "SELECT v.id AS vacation_id, v.request_inv_no, v.emp_id AS employee_emp_id,
+                e.name AS employee_name, v.start_date, v.return_date, v.vac_type,
+                a.id AS assignment_id, a.status AS assignment_status, a.granted_role
+            FROM emp_vacation v
+            LEFT JOIN employees e ON e.emp_id = v.emp_id
+            LEFT JOIN emp_temp_role_assignments a ON a.vacation_id = v.id AND a.status = 'active'
+            WHERE v.replacement_person = ?
+                AND v.current_status IN ('approved', 'completed')
+                AND v.return_date >= CURDATE()
+                AND v.request_inv_no LIKE 'VAC-%'
+            ORDER BY v.start_date DESC LIMIT 1");
+        if (!$stmt) {
+            return null;
+        }
+        mysqli_stmt_bind_param($stmt, "s", $emp_id);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
+        $row = $result ? mysqli_fetch_assoc($result) : null;
+        if ($result) mysqli_free_result($result);
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
     }
 }
 
@@ -1812,7 +1844,8 @@ if (!function_exists('load_email_template')) {
             'TOTAL_NET_SALARY' => 'N/A',
             'APPROVAL_LEVEL' => '1',
             'PAYROLL_STATUS' => 'Pending',
-            'PAYROLL_ID' => 'N/A'
+            'PAYROLL_ID' => 'N/A',
+            'ACTION_BUTTON_TEXT' => 'View Payroll Request'
         ];
 
         // Merge so passed data overrides defaults
@@ -1883,10 +1916,23 @@ if (!function_exists('get_base_url')) {
     {
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $script_path = dirname($_SERVER['SCRIPT_NAME'] ?? '');
+
+        // Resolve the app root URL from the filesystem location of this file (system/includes/..)
+        // instead of the currently executing script's path. Using SCRIPT_NAME alone breaks links
+        // built from files under includes/ajaxFile (e.g. ".../includes/ajaxFile/xxx.php" instead
+        // of ".../xxx.php") since dirname(SCRIPT_NAME) then points at the ajax subfolder.
+        $appRoot = str_replace('\\', '/', dirname(__DIR__));
+        $documentRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
+
+        $script_path = '';
+        if ($documentRoot !== '' && strpos($appRoot, $documentRoot) === 0) {
+            $script_path = substr($appRoot, strlen($documentRoot));
+        } else {
+            $script_path = dirname($_SERVER['SCRIPT_NAME'] ?? '');
+        }
 
         // Clean up script path
-        if ($script_path === '/' || $script_path === '\\') {
+        if ($script_path === '/' || $script_path === '\\' || $script_path === false) {
             $script_path = '';
         }
 
@@ -3919,7 +3965,10 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         // ✅ CRITICAL FIX: total_days represents OPENING BALANCE for the current period, NOT annual allocation
         // When vacation is applied, total_days DECREASES by the days_to_deduct amount
         // This is the KEY requirement: total_days = current available balance (not fixed)
-        
+
+        // Snapshot the pre-deduction balance for the vacation activity log (before $total_contract_days is reused below)
+        $old_available_balance_for_log = $total_contract_days;
+
         // Deduct the applied vacation days from total_days (opening balance)
         $new_total_days = $total_contract_days - $days_to_deduct;
         
@@ -4017,6 +4066,25 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         if (mysqli_stmt_execute($stmt_insert)) {
             mysqli_stmt_close($stmt_insert);
             error_log("SUCCESS: Inserted balance record for vacation ID {$vac_id_safe} - emp_id={$emp_id}, total_days={$total_contract_days}, used_days={$new_used_days}, remaining_balance={$new_remaining_balance}, available_balance={$new_available_balance}");
+
+            log_vacation_activity(
+                $conDB,
+                $emp_id,
+                $vac_id_safe,
+                'VACATION_APPROVED',
+                "Final approval deducted {$days_to_deduct} day(s) - {$vac_details['vac_type']}/{$vac_details['fly_type']}",
+                $old_available_balance_for_log,
+                $old_used_days,
+                $old_available_balance_for_log,
+                $new_available_balance,
+                $new_used_days,
+                $new_remaining_balance,
+                $carryover_days,
+                $total_contract_days,
+                $period_start,
+                $period_end
+            );
+
             return true;
         } else {
             $error = mysqli_stmt_error($stmt_insert);
@@ -4273,6 +4341,161 @@ if (!function_exists('get_employee_vacation_balance_from_db')) {
         }
 
         return 0.0;
+    }
+}
+
+/**
+ * =================================================================
+ * == VACATION ACTIVITY / DAYS TRACKING LOG
+ * =================================================================
+ * Records a before/after snapshot of an employee's vacation balance for a single
+ * lifecycle event (applied, approved, rejected, cancelled, returned, rejoin-adjusted,
+ * manual entry, ...). Writes to its own dedicated `emp_vacation_activity_log` table
+ * (sql/create_emp_vacation_activity_log.sql) -- kept separate from
+ * `emp_vacation_balance_history`, which is written only by the daily cron balance
+ * snapshot -- so every applicant's day-by-day activity is tracked independently
+ * of the cron job.
+ *
+ * @param mysqli $conDB
+ * @param string|int $emp_id
+ * @param int $vac_id emp_vacation.id this event relates to (0 if not tied to one)
+ * @param string $action_type short machine tag, e.g. 'VACATION_APPLIED'
+ * @param string $notes human-readable detail for the audit trail
+ * @param float $old_available balance before this event
+ * @param float $old_used cumulative used days before this event
+ * @param float $old_remaining remaining balance before this event
+ * @param float $new_available balance after this event
+ * @param float $new_used cumulative used days after this event
+ * @param float $new_remaining remaining balance after this event
+ * @param float $carryover_days
+ * @param float|null $total_days
+ * @param string|null $period_start
+ * @param string|null $period_end
+ * @param string|int|null $performed_by emp_id of the user who triggered this event
+ * @return bool
+ */
+if (!function_exists('log_vacation_activity')) {
+    function log_vacation_activity(
+        $conDB,
+        $emp_id,
+        $vac_id,
+        $action_type,
+        $notes,
+        $old_available,
+        $old_used,
+        $old_remaining,
+        $new_available,
+        $new_used,
+        $new_remaining,
+        $carryover_days = 0,
+        $total_days = null,
+        $period_start = null,
+        $period_end = null,
+        $performed_by = null
+    ) {
+        if (!$conDB || $emp_id === null || $emp_id === '') {
+            return false;
+        }
+
+        $vac_id = (int)($vac_id ?: 0);
+        $total_days = $total_days ?? $new_available;
+        $change_amount = round((float)$new_available - (float)$old_available, 2);
+        $performed_by = ($performed_by !== null && $performed_by !== '') ? (string)$performed_by : null;
+
+        $sql = "INSERT INTO `emp_vacation_activity_log`
+                    (`emp_id`, `vac_id`, `action_type`,
+                     `old_available_balance`, `old_used_days`, `old_remaining_balance`,
+                     `new_available_balance`, `new_used_days`, `new_remaining_balance`,
+                     `change_amount`, `carryover_days`, `total_days`, `period_start`, `period_end`,
+                     `performed_by_emp_id`, `notes`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) {
+            error_log("log_vacation_activity: prepare failed - " . mysqli_error($conDB));
+            return false;
+        }
+
+        mysqli_stmt_bind_param(
+            $stmt,
+            'sisdddddddddssss',
+            $emp_id,
+            $vac_id,
+            $action_type,
+            $old_available,
+            $old_used,
+            $old_remaining,
+            $new_available,
+            $new_used,
+            $new_remaining,
+            $change_amount,
+            $carryover_days,
+            $total_days,
+            $period_start,
+            $period_end,
+            $performed_by,
+            $notes
+        );
+
+        $ok = mysqli_stmt_execute($stmt);
+        if (!$ok) {
+            error_log("log_vacation_activity: insert failed - " . mysqli_stmt_error($stmt));
+        }
+        mysqli_stmt_close($stmt);
+        return $ok;
+    }
+}
+
+/**
+ * Fetch the latest emp_vacation_balance row for an employee, used as the "before"
+ * snapshot when logging a vacation activity event that itself does not change the balance.
+ *
+ * @param mysqli $conDB
+ * @param string|int $emp_id
+ * @return array{available_balance: float, used_days: float, remaining_balance: float, carryover_days: float, total_days: float, period_start: ?string, period_end: ?string}
+ */
+if (!function_exists('get_vacation_balance_snapshot')) {
+    function get_vacation_balance_snapshot($conDB, $emp_id)
+    {
+        $default = [
+            'available_balance' => 0.0,
+            'used_days' => 0.0,
+            'remaining_balance' => 0.0,
+            'carryover_days' => 0.0,
+            'total_days' => 0.0,
+            'period_start' => null,
+            'period_end' => null,
+        ];
+
+        if (empty($emp_id)) {
+            return $default;
+        }
+
+        $stmt = mysqli_prepare($conDB, "SELECT `available_balance`, `used_days`, `remaining_balance`, `carryover_days`, `total_days`, `period_start`, `period_end`
+                                         FROM `emp_vacation_balance` WHERE `emp_id` = ? ORDER BY `id` DESC LIMIT 1");
+        if (!$stmt) {
+            return $default;
+        }
+        mysqli_stmt_bind_param($stmt, 's', $emp_id);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        if ($res) mysqli_free_result($res);
+        mysqli_stmt_close($stmt);
+
+        if (!$row) {
+            return $default;
+        }
+
+        return [
+            'available_balance' => (float)$row['available_balance'],
+            'used_days' => (float)$row['used_days'],
+            'remaining_balance' => (float)$row['remaining_balance'],
+            'carryover_days' => (float)$row['carryover_days'],
+            'total_days' => (float)$row['total_days'],
+            'period_start' => $row['period_start'],
+            'period_end' => $row['period_end'],
+        ];
     }
 }
 

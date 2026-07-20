@@ -344,8 +344,21 @@ if (($isFinanceOfficerChecklistUser || $isFinanceManagerChecklistUser) && $isAss
 // Finance users ALWAYS apply company filter (regardless of toggle state).
 $applyAssignedScopeFilter = $isAssignedFinanceCompanyVerifier;
 
+$canExportChecklistExcel = $isHrPayrollApprover
+    || $isHrSeniorBpApprover
+    || ($is_system_admin ?? false)
+    || (($user_type ?? '') === 'administrator');
 $canManageFeedbackActions = $isHrPayrollApprover;
-$canUploadManagerPayrollExcel = $requestInvNo !== '' && $isCompanyManagerChecklistUser;
+// Upload button shows for: a manager-flagged account, a Direct Supervisor who
+// actually received the "Send Payroll Report by Direct Supervisor" email for this
+// request (covers supervisors whose admin account isn't flagged emp_type = 'Manager'),
+// or HR Payroll / HR Senior BP themselves - who can upload on behalf of any manager
+// (e.g. the manager sent the filled file back some other way).
+$canUploadManagerPayrollExcel = $requestInvNo !== ''
+    && $currentUserType !== 'employee'
+    && ($isCompanyManagerChecklistUser
+        || $isHrChecklistApprover
+        || payrollSupervisorHasReportAccess($pdo, $requestInvNo, $monthYear, $currentApproverId));
 $canReviewManagerUploadedPayrollExcel = $requestInvNo !== '' && $isHrChecklistApprover;
 // HR Payroll / HR Senior BP can mark employees checked both during normal approval
 // (isPendingWithMe) and after final approval for follow-up feedback review.
@@ -382,27 +395,35 @@ if ($isFinanceChecklistUser) {
     // Non-finance approvers in the approval chain should always see all payroll employees.
     if ($isApproverInApprovalChain) {
         $canSeeAllEmployees = true;
+    } elseif ($isHrChecklistApprover) {
+        // HR Payroll / HR Senior BP always see the full employee list on this page.
+        $canSeeAllEmployees = true;
+    } elseif ($isFinanceManagerChecklistUser) {
+        // Finance Manager (dept 2, emp_type Manager) always sees the full employee list here,
+        // even without an active company assignment for this request.
+        $canSeeAllEmployees = true;
     } else {
-        $canSeeAllEmployees = function_exists('canSeeAllPayrollEmployees')
-        ? canSeeAllPayrollEmployees(true)
-        : (
-            ($is_system_admin ?? false) ||
-            (($user_type ?? '') === 'administrator') ||
-            (($user_dept ?? null) == 5) ||
-            ($isHR ?? false) ||
-            ($isDeptHr ?? false)
-        );
+        // Intentionally narrow: full visibility on this page is limited to System Admin,
+        // Finance Manager, HR Payroll and HR Senior BP (handled above). The broader
+        // canSeeAllEmployeesByRole()/canSeeAllPayrollEmployees() helpers also grant full
+        // access to dept 1 (Administration), dept 5 (any HR sub-role), GM, etc., which is
+        // too wide for a Direct Supervisor opening this report from the emailed link.
+        $canSeeAllEmployees = ($is_system_admin ?? false)
+            || (($user_type ?? '') === 'administrator');
     }
-    
+
+    // Anyone left without full access (e.g. a Direct Supervisor opening the report from
+    // the emailed link) may only see the employees who report directly to them - not the
+    // whole department.
     $deptFilter = '';
-    if (!$canSeeAllEmployees && isset($user_dept)) {
-        $deptFilter = ' AND e.dept = :user_dept';
+    if (!$canSeeAllEmployees) {
+        $deptFilter = ' AND e.supervisor_id = :user_supervisor_id';
     }
 }
 
 $params = [':month_year_param' => $monthYear];
 if ($deptFilter !== '') {
-    $params[':user_dept'] = $user_dept;
+    $params[':user_supervisor_id'] = $currentApproverId;
 }
 
 $companyFilter = '';
@@ -1163,6 +1184,22 @@ foreach ($employees as $employee) {
             .employee-card, .summary-card { box-shadow: none; }
             .print-hide-status { display: none !important; }
         }
+        #payrollImportReviewTabs .nav-link#payrollImportBenefitsTab {
+            color: #28a745;
+        }
+        #payrollImportReviewTabs .nav-link#payrollImportBenefitsTab.active {
+            color: #fff;
+            background-color: #28a745;
+            border-color: #28a745 #28a745 #28a745;
+        }
+        #payrollImportReviewTabs .nav-link#payrollImportDeductionsTab {
+            color: #dc3545;
+        }
+        #payrollImportReviewTabs .nav-link#payrollImportDeductionsTab.active {
+            color: #fff;
+            background-color: #dc3545;
+            border-color: #dc3545 #dc3545 #dc3545;
+        }
     </style>
 </head>
 <body>
@@ -1215,7 +1252,9 @@ foreach ($employees as $employee) {
                         <span class="badge badge-light ml-1" id="managerPendingReviewCountBadge" style="display:none;">0</span>
                     </button>
                 <?php endif; ?>
-                <button type="button" class="btn btn-success" onclick="exportChecklistExcel()"><i class="fas fa-file-excel"></i> <?= __('export_excel', 'Export Excel') ?></button>
+                <?php if ($canExportChecklistExcel): ?>
+                    <button type="button" class="btn btn-success" onclick="exportChecklistExcel()"><i class="fas fa-file-excel"></i> <?= __('export_excel', 'Export Excel') ?></button>
+                <?php endif; ?>
                 <button type="button" class="btn btn-outline-light" onclick="printFullChecklistTable()"><i class="fas fa-print"></i> <?= __('print', 'Print') ?></button>
             </div>
         </div>
@@ -2559,7 +2598,7 @@ foreach ($employees as $employee) {
                         });
                     }
                 },
-                preConfirm: async () => {
+                preConfirm: () => {
                     const fileInput = document.getElementById('managerPayrollExcelFile');
                     const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
                     if (!file) {
@@ -2567,23 +2606,7 @@ foreach ($employees as $employee) {
                         return false;
                     }
 
-                    const formData = new FormData();
-                    formData.append('action', 'upload_manager_payroll_excel');
-                    formData.append('request_inv_no', managerPayrollExcelState.requestInvNo);
-                    formData.append('month', managerPayrollExcelState.month);
-                    formData.append('payroll_excel', file);
-
-                    const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const data = await response.json().catch(() => null);
-                    if (!response.ok || !data || data.status !== 'success') {
-                        Swal.showValidationMessage((data && data.message) || 'Failed to upload manager payroll file.');
-                        return false;
-                    }
-
-                    return data;
+                    return file;
                 }
             });
 
@@ -2591,8 +2614,45 @@ foreach ($employees as $employee) {
                 return;
             }
 
-            await Swal.fire('<?= addslashes(__('success', 'Success')) ?>', result.value.message || 'Payroll Excel uploaded successfully.', 'success');
-            refreshManagerReviewButtonCount();
+            const file = result.value;
+
+            // Upload + HR notification/email happen server-side in this same request,
+            // which can take a few seconds - show the same processing loader used
+            // elsewhere (e.g. Send Payroll Report by Direct Supervisor) instead of just
+            // relying on SweetAlert2's small inline confirm-button spinner.
+            Swal.fire({
+                title: '<?= addslashes(__('processing', 'Processing')) ?>',
+                html: '<?= addslashes(__('please_wait_processing', 'Please wait while processing...')) ?>',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            try {
+                const formData = new FormData();
+                formData.append('action', 'upload_manager_payroll_excel');
+                formData.append('request_inv_no', managerPayrollExcelState.requestInvNo);
+                formData.append('month', managerPayrollExcelState.month);
+                formData.append('payroll_excel', file);
+
+                const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json().catch(() => null);
+                Swal.close();
+
+                if (!response.ok || !data || data.status !== 'success') {
+                    throw new Error((data && data.message) || 'Failed to upload manager payroll file.');
+                }
+
+                await Swal.fire('<?= addslashes(__('success', 'Success')) ?>', data.message || 'Payroll Excel uploaded successfully.', 'success');
+                refreshManagerReviewButtonCount();
+            } catch (error) {
+                Swal.close();
+                Swal.fire('<?= addslashes(__('error', 'Error')) ?>', error.message || 'Failed to upload manager payroll file.', 'error');
+            }
         }
 
         async function refreshManagerReviewButtonCount() {
@@ -2639,7 +2699,35 @@ foreach ($employees as $employee) {
             }
         }
 
-        let payrollImportReviewTable = null;
+        let payrollImportBenefitsDataTable = null;
+        let payrollImportDeductionsDataTable = null;
+        let payrollImportCompensationOverrides = {};
+
+        async function loadPayrollImportCompensationOverrides(empIds, monthYear) {
+            const uniqueEmpIds = Array.from(new Set((empIds || []).map((empId) => String(empId || '').trim()).filter(Boolean)));
+            if (uniqueEmpIds.length === 0) {
+                return;
+            }
+
+            try {
+                const payload = new URLSearchParams();
+                payload.append('action', 'get_payroll_compensation_for_employees');
+                payload.append('month', String(monthYear || '').trim());
+                payload.append('emp_ids', uniqueEmpIds.join(','));
+
+                const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: payload.toString()
+                });
+                const data = await response.json().catch(() => null);
+                if (response.ok && data && data.status === 'success' && data.compensation) {
+                    payrollImportCompensationOverrides = data.compensation;
+                }
+            } catch (error) {
+                // Compensation preview is best-effort; final amounts are always computed server-side on save.
+            }
+        }
 
         function escapePayrollImportHtml(value) {
             return String(value == null ? '' : value)
@@ -2693,7 +2781,31 @@ foreach ($employees as $employee) {
 
         function getPayrollImportEmployeeCompensation(empId) {
             const normalizedEmpId = String(empId || '').trim();
-            if (!normalizedEmpId || !Array.isArray(employeesData)) {
+            if (!normalizedEmpId) {
+                return {
+                    basic: 0,
+                    housing: 0,
+                    food: 0,
+                    totalGross: 0
+                };
+            }
+
+            const override = payrollImportCompensationOverrides[normalizedEmpId];
+            if (override) {
+                const basic = parseFloat(override.basic_salary) || 0;
+                const housing = parseFloat(override.housing_allowance) || 0;
+                const food = parseFloat(override.food_allowance) || 0;
+                const transport = parseFloat(override.transport_allowance) || 0;
+                const totalFromPayroll = parseFloat(override.total_gross_salary) || 0;
+                return {
+                    basic,
+                    housing,
+                    food,
+                    totalGross: totalFromPayroll > 0 ? totalFromPayroll : (basic + housing + food + transport)
+                };
+            }
+
+            if (!Array.isArray(employeesData)) {
                 return {
                     basic: 0,
                     housing: 0,
@@ -2771,8 +2883,10 @@ foreach ($employees as $employee) {
             return formatPayrollImportComputedValue(amount);
         }
 
-        function computePayrollImportDeductionValue(empId, hours, minutes) {
-            const totalHours = normalizePayrollImportDurationHours(hours, minutes);
+        function computePayrollImportDeductionValue(empId, hours, minutes, days) {
+            const parsedDays = Number(days);
+            const dayHours = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays * 8 : 0;
+            const totalHours = normalizePayrollImportDurationHours(hours, minutes) + dayHours;
             if (!Number.isFinite(totalHours) || totalHours <= 0) {
                 return '';
             }
@@ -2788,6 +2902,12 @@ foreach ($employees as $employee) {
             return formatPayrollImportComputedValue(hourlyRate * totalHours);
         }
 
+        function normalizePayrollImportDeductionDurationHours(hours, minutes, days) {
+            const parsedDays = Number(days);
+            const dayHours = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays * 8 : 0;
+            return normalizePayrollImportDurationHours(hours, minutes) + dayHours;
+        }
+
         function normalizeReviewedPayrollImportRow(row) {
             const normalizedRow = {
                 checkpoint_code: String((row && row.checkpoint_code) || '').trim(),
@@ -2800,6 +2920,7 @@ foreach ($employees as $employee) {
                 overtime_reason: String((row && row.overtime_reason) || (row && row.benefit_reason) || '').trim(),
                 deduction_type: 'hourly_deduction',
                 deduction_value: String((row && row.deduction_value) || '').trim(),
+                deduction_days: String((row && row.deduction_days) || '').trim(),
                 deduction_hours: String((row && row.deduction_hours) || '').trim(),
                 deduction_minutes: String((row && row.deduction_minutes) || '').trim(),
                 deduction_reason: String((row && row.deduction_reason) || '').trim(),
@@ -2808,6 +2929,7 @@ foreach ($employees as $employee) {
             if (isPayrollImportGosiReason(normalizedRow.deduction_reason)) {
                 normalizedRow.deduction_type = 'hourly_deduction';
                 normalizedRow.deduction_value = '';
+                normalizedRow.deduction_days = '';
                 normalizedRow.deduction_hours = '';
                 normalizedRow.deduction_minutes = '';
                 normalizedRow.deduction_reason = '';
@@ -2823,9 +2945,10 @@ foreach ($employees as $employee) {
                 normalizedRow.overtime_value = Number(normalizedRow.overtime_value) > 0 ? normalizedRow.overtime_value : '';
             }
 
-            const deductionDurationHours = normalizePayrollImportDurationHours(normalizedRow.deduction_hours, normalizedRow.deduction_minutes);
+            const deductionDurationHours = normalizePayrollImportDeductionDurationHours(normalizedRow.deduction_hours, normalizedRow.deduction_minutes, normalizedRow.deduction_days);
             if (deductionDurationHours <= 0 || normalizedRow.deduction_reason === '') {
                 normalizedRow.deduction_value = '';
+                normalizedRow.deduction_days = '';
                 normalizedRow.deduction_hours = '';
                 normalizedRow.deduction_minutes = '';
                 normalizedRow.deduction_reason = '';
@@ -2838,7 +2961,7 @@ foreach ($employees as $employee) {
 
         function rowHasReviewedPayrollImportEntry(row) {
             const benefitDurationHours = normalizePayrollImportDurationHours(row.overtime_hours, row.overtime_minutes);
-            const deductionDurationHours = normalizePayrollImportDurationHours(row.deduction_hours, row.deduction_minutes);
+            const deductionDurationHours = normalizePayrollImportDeductionDurationHours(row.deduction_hours, row.deduction_minutes, row.deduction_days);
             const hasBenefitEntry = benefitDurationHours > 0 || (Number(row.overtime_value) > 0);
             const hasDeductionEntry = deductionDurationHours > 0 || (Number(row.deduction_value) > 0);
             return hasBenefitEntry || hasDeductionEntry;
@@ -2847,17 +2970,27 @@ foreach ($employees as $employee) {
         function buildPayrollImportReviewTable(rows) {
             const monthValue = rows.length > 0 ? String(rows[0].month || '').trim() : '';
 
-            const bodyRows = rows.map((row, index) => `
+            const employeeCell = (row) => `
+                <td>
+                    <input type="hidden" class="payroll-import-review-input" data-field="checkpoint_code" value="${escapePayrollImportHtml(row.checkpoint_code || '')}">
+                    <div class="payroll-import-review-employee-cell">
+                        <span class="payroll-import-review-employee-id">${escapePayrollImportHtml(row.emp_id || '')}</span>
+                    </div>
+                    <input type="hidden" class="payroll-import-review-input" data-field="emp_id" value="${escapePayrollImportHtml(row.emp_id || '')}">
+                    <input type="hidden" class="payroll-import-review-input" data-field="month" value="${escapePayrollImportHtml(row.month || '')}">
+                </td>
+            `;
+
+            const rowHasBenefitEntry = (row) => normalizePayrollImportDurationHours(row.overtime_hours, row.overtime_minutes) > 0 || Number(row.overtime_value || 0) > 0;
+            const rowHasDeductionEntry = (row) => normalizePayrollImportDeductionDurationHours(row.deduction_hours, row.deduction_minutes, row.deduction_days) > 0 || Number(row.deduction_value || 0) > 0;
+
+            const benefitRows = rows
+                .map((row, index) => ({ row, index }))
+                .filter(({ row }) => rowHasBenefitEntry(row))
+                .map(({ row, index }) => `
                 <tr data-row-index="${index}">
                     <td class="text-center">${index + 1}</td>
-                    <td>
-                        <input type="hidden" class="payroll-import-review-input" data-field="checkpoint_code" value="${escapePayrollImportHtml(row.checkpoint_code || '')}">
-                        <div class="payroll-import-review-employee-cell">
-                            <span class="payroll-import-review-employee-id">${escapePayrollImportHtml(row.emp_id || '')}</span>
-                        </div>
-                        <input type="hidden" class="payroll-import-review-input" data-field="emp_id" value="${escapePayrollImportHtml(row.emp_id || '')}">
-                        <input type="hidden" class="payroll-import-review-input" data-field="month" value="${escapePayrollImportHtml(row.month || '')}">
-                    </td>
+                    ${employeeCell(row)}
                     <td><input type="hidden" class="payroll-import-review-input" data-field="benefit_type" value="${escapePayrollImportHtml(normalizePayrollImportBenefitType(row.benefit_type || ''))}"><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_hours" value="${escapePayrollImportHtml(row.overtime_hours || '')}"></td>
                     <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_minutes" value="${escapePayrollImportHtml(row.overtime_minutes || '')}"></td>
                     <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_value" value="${escapePayrollImportHtml(row.overtime_value || '')}" readonly></td>
@@ -2869,7 +3002,18 @@ foreach ($employees as $employee) {
                             </div>
                         </div>
                     </td>
-                    <td><input type="hidden" class="payroll-import-review-input" data-field="deduction_type" value="${escapePayrollImportHtml(normalizePayrollImportDeductionType(row.deduction_type || ''))}"><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_hours" value="${escapePayrollImportHtml(row.deduction_hours || '')}"></td>
+                </tr>
+            `).join('');
+
+            const deductionRows = rows
+                .map((row, index) => ({ row, index }))
+                .filter(({ row }) => rowHasDeductionEntry(row))
+                .map(({ row, index }) => `
+                <tr data-row-index="${index}">
+                    <td class="text-center">${index + 1}</td>
+                    ${employeeCell(row)}
+                    <td><input type="hidden" class="payroll-import-review-input" data-field="deduction_type" value="${escapePayrollImportHtml(normalizePayrollImportDeductionType(row.deduction_type || ''))}"><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_days" value="${escapePayrollImportHtml(row.deduction_days || '')}"></td>
+                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_hours" value="${escapePayrollImportHtml(row.deduction_hours || '')}"></td>
                     <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_minutes" value="${escapePayrollImportHtml(row.deduction_minutes || '')}"></td>
                     <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_value" value="${escapePayrollImportHtml(row.deduction_value || '')}" readonly></td>
                     <td>
@@ -2889,62 +3033,97 @@ foreach ($employees as $employee) {
                         <div><strong>Review Imported Rows</strong></div>
                         <div>Processed Rows: <strong>${rows.length}</strong></div>
                         <div>Month: <strong>${escapePayrollImportHtml(monthValue || '--')}</strong></div>
-                        <div>Review and adjust overtime and deduction values before the final save.</div>
+                        <div>Review and adjust benefit and deduction values before the final save.</div>
                     </div>
-                    <div class="payroll-import-review-table-wrap">
-                        <table id="payrollImportReviewTable" class="table table-bordered table-sm payroll-import-review-table">
-                            <thead>
-                                <tr>
-                                    <th style="width:60px;">#</th>
-                                    <th style="width:190px;">Employee</th>
-                                    <th style="width:95px;">Hours</th>
-                                    <th style="width:95px;">Minutes</th>
-                                    <th style="width:150px;">Benefits</th>
-                                    <th style="width:260px;">Overtime Reason</th>
-                                    <th style="width:95px;">Hours</th>
-                                    <th style="width:95px;">Minutes</th>
-                                    <th style="width:150px;">Deduction</th>
-                                    <th style="width:260px;">Deduction Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody>${bodyRows}</tbody>
-                        </table>
+                    <br />
+                    <ul class="nav nav-tabs" id="payrollImportReviewTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="payrollImportBenefitsTab" data-toggle="tab" href="#payrollImportBenefitsPane" role="tab">Benefits</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="payrollImportDeductionsTab" data-toggle="tab" href="#payrollImportDeductionsPane" role="tab">Deductions</a>
+                        </li>
+                    </ul>
+                    <div class="tab-content" style="margin-top:12px;">
+                        <div class="tab-pane fade show active" id="payrollImportBenefitsPane" role="tabpanel">
+                            <div class="payroll-import-review-table-wrap">
+                                <table id="payrollImportBenefitsTable" class="table table-bordered table-sm payroll-import-review-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:60px;">#</th>
+                                            <th style="width:190px;">Employee</th>
+                                            <th style="width:95px;">Hours</th>
+                                            <th style="width:95px;">Minutes</th>
+                                            <th style="width:150px;">Benefits</th>
+                                            <th style="width:320px;">Overtime Reason</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${benefitRows}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="payrollImportDeductionsPane" role="tabpanel">
+                            <div class="payroll-import-review-table-wrap">
+                                <table id="payrollImportDeductionsTable" class="table table-bordered table-sm payroll-import-review-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:60px;">#</th>
+                                            <th style="width:190px;">Employee</th>
+                                            <th style="width:80px;">Days</th>
+                                            <th style="width:95px;">Hours</th>
+                                            <th style="width:95px;">Minutes</th>
+                                            <th style="width:150px;">Deduction</th>
+                                            <th style="width:320px;">Deduction Reason</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${deductionRows}</tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         }
 
         function collectReviewedPayrollImportRows() {
-            const tableElement = $('#payrollImportReviewTable');
-            const rowElements = payrollImportReviewTable
-                ? payrollImportReviewTable.rows().nodes().toArray()
-                : tableElement.find('tbody tr').toArray();
+            const benefitRowElements = document.querySelectorAll('#payrollImportBenefitsTable tbody tr[data-row-index]');
+            const deductionRowElements = document.querySelectorAll('#payrollImportDeductionsTable tbody tr[data-row-index]');
 
-            return rowElements.map((row) => {
-                const getFieldValue = (field) => {
-                    const input = row.querySelector(`.payroll-import-review-input[data-field="${field}"]`);
-                    return input ? String(input.value || '').trim() : '';
-                };
+            const rowIndexes = Array.from(new Set([
+                ...Array.from(benefitRowElements).map((el) => el.dataset.rowIndex),
+                ...Array.from(deductionRowElements).map((el) => el.dataset.rowIndex)
+            ]));
+
+            const getFieldValue = (row, field) => {
+                if (!row) return '';
+                const input = row.querySelector(`.payroll-import-review-input[data-field="${field}"]`);
+                return input ? String(input.value || '').trim() : '';
+            };
+
+            return rowIndexes.map((rowIndex) => {
+                const benefitRow = document.querySelector(`#payrollImportBenefitsTable tbody tr[data-row-index="${rowIndex}"]`);
+                const deductionRow = document.querySelector(`#payrollImportDeductionsTable tbody tr[data-row-index="${rowIndex}"]`);
 
                 return normalizeReviewedPayrollImportRow({
-                    checkpoint_code: getFieldValue('checkpoint_code'),
-                    emp_id: getFieldValue('emp_id'),
-                    month: getFieldValue('month'),
-                    benefit_type: getFieldValue('benefit_type'),
-                    overtime_value: getFieldValue('overtime_value'),
-                    overtime_hours: getFieldValue('overtime_hours'),
-                    overtime_minutes: getFieldValue('overtime_minutes'),
-                    overtime_reason: getFieldValue('overtime_reason'),
-                    deduction_type: getFieldValue('deduction_type'),
-                    deduction_value: getFieldValue('deduction_value'),
-                    deduction_hours: getFieldValue('deduction_hours'),
-                    deduction_minutes: getFieldValue('deduction_minutes'),
-                    deduction_reason: getFieldValue('deduction_reason'),
+                    checkpoint_code: getFieldValue(benefitRow, 'checkpoint_code') || getFieldValue(deductionRow, 'checkpoint_code'),
+                    emp_id: getFieldValue(benefitRow, 'emp_id') || getFieldValue(deductionRow, 'emp_id'),
+                    month: getFieldValue(benefitRow, 'month') || getFieldValue(deductionRow, 'month'),
+                    benefit_type: getFieldValue(benefitRow, 'benefit_type'),
+                    overtime_value: getFieldValue(benefitRow, 'overtime_value'),
+                    overtime_hours: getFieldValue(benefitRow, 'overtime_hours'),
+                    overtime_minutes: getFieldValue(benefitRow, 'overtime_minutes'),
+                    overtime_reason: getFieldValue(benefitRow, 'overtime_reason'),
+                    deduction_type: getFieldValue(deductionRow, 'deduction_type'),
+                    deduction_value: getFieldValue(deductionRow, 'deduction_value'),
+                    deduction_days: getFieldValue(deductionRow, 'deduction_days'),
+                    deduction_hours: getFieldValue(deductionRow, 'deduction_hours'),
+                    deduction_minutes: getFieldValue(deductionRow, 'deduction_minutes'),
+                    deduction_reason: getFieldValue(deductionRow, 'deduction_reason'),
                 });
             });
         }
 
-        function applyPayrollImportRowTypeRules(row) {
+        function applyBenefitRowRules(row) {
             if (!row) {
                 return;
             }
@@ -2995,16 +3174,32 @@ foreach ($employees as $employee) {
                     overtimeReasonInput.value = '';
                 }
             }
+        }
 
+        function applyDeductionRowRules(row) {
+            if (!row) {
+                return;
+            }
+
+            const getInput = (field) => row.querySelector(`.payroll-import-review-input[data-field="${field}"]`);
+            const empIdInput = getInput('emp_id');
+            const empId = empIdInput ? String(empIdInput.value || '').trim() : '';
+
+            const deductionDaysInput = getInput('deduction_days');
             const deductionHoursInput = getInput('deduction_hours');
             const deductionMinutesInput = getInput('deduction_minutes');
             const deductionValueInput = getInput('deduction_value');
             const deductionReasonInput = getInput('deduction_reason');
-            const deductionDurationHours = normalizePayrollImportDurationHours(
+            const deductionDurationHours = normalizePayrollImportDeductionDurationHours(
                 deductionHoursInput ? deductionHoursInput.value : '',
-                deductionMinutesInput ? deductionMinutesInput.value : ''
+                deductionMinutesInput ? deductionMinutesInput.value : '',
+                deductionDaysInput ? deductionDaysInput.value : ''
             );
 
+            if (deductionDaysInput) {
+                deductionDaysInput.readOnly = false;
+                deductionDaysInput.classList.remove('bg-light');
+            }
             if (deductionHoursInput) {
                 deductionHoursInput.readOnly = false;
                 deductionHoursInput.classList.remove('bg-light');
@@ -3024,7 +3219,7 @@ foreach ($employees as $employee) {
 
             if (Number.isFinite(deductionDurationHours) && deductionDurationHours > 0) {
                 if (deductionValueInput) {
-                    deductionValueInput.value = computePayrollImportDeductionValue(empId, deductionHoursInput ? deductionHoursInput.value : '', deductionMinutesInput ? deductionMinutesInput.value : '');
+                    deductionValueInput.value = computePayrollImportDeductionValue(empId, deductionHoursInput ? deductionHoursInput.value : '', deductionMinutesInput ? deductionMinutesInput.value : '', deductionDaysInput ? deductionDaysInput.value : '');
                 }
                 if (deductionReasonInput && deductionReasonInput.value === '') {
                     deductionReasonInput.value = 'Hourly deduction';
@@ -3051,45 +3246,61 @@ foreach ($employees as $employee) {
                 allowOutsideClick: false,
                 focusConfirm: false,
                 didOpen: () => {
-                    const reviewTableElement = $('#payrollImportReviewTable');
+                    const benefitsTableElement = $('#payrollImportBenefitsTable');
+                    const deductionsTableElement = $('#payrollImportDeductionsTable');
 
-                    reviewTableElement.off('click', '.payroll-import-clear-entry-btn').on('click', '.payroll-import-clear-entry-btn', function() {
-                        const entryType = String(this.dataset.entryType || '').trim();
-                        const row = this.closest('tr');
-                        if (!row || !entryType) {
-                            return;
-                        }
+                    const bindClearButton = (tableElement, applyRules) => {
+                        tableElement.off('click', '.payroll-import-clear-entry-btn').on('click', '.payroll-import-clear-entry-btn', function() {
+                            const entryType = String(this.dataset.entryType || '').trim();
+                            const row = this.closest('tr');
+                            if (!row || !entryType) {
+                                return;
+                            }
 
-                        const valueInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_value"]`);
-                        const hoursInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_hours"]`);
-                        const minutesInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_minutes"]`);
-                        const reasonInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_reason"]`);
+                            const valueInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_value"]`);
+                            const daysInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_days"]`);
+                            const hoursInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_hours"]`);
+                            const minutesInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_minutes"]`);
+                            const reasonInput = row.querySelector(`.payroll-import-review-input[data-field="${entryType}_reason"]`);
 
-                        if (valueInput) valueInput.value = '';
-                        if (hoursInput) hoursInput.value = '';
-                        if (minutesInput) minutesInput.value = '';
-                        if (reasonInput) reasonInput.value = '';
+                            if (valueInput) valueInput.value = '';
+                            if (daysInput) daysInput.value = '';
+                            if (hoursInput) hoursInput.value = '';
+                            if (minutesInput) minutesInput.value = '';
+                            if (reasonInput) reasonInput.value = '';
 
-                        applyPayrollImportRowTypeRules(row);
+                            applyRules(row);
+                        });
+                    };
+
+                    const bindInputListener = (tableElement, applyRules) => {
+                        tableElement
+                            .off('input change', '.payroll-import-review-input')
+                            .on('input change', '.payroll-import-review-input', function() {
+                                applyRules(this.closest('tr'));
+                            });
+                    };
+
+                    bindClearButton(benefitsTableElement, applyBenefitRowRules);
+                    bindClearButton(deductionsTableElement, applyDeductionRowRules);
+                    bindInputListener(benefitsTableElement, applyBenefitRowRules);
+                    bindInputListener(deductionsTableElement, applyDeductionRowRules);
+
+                    benefitsTableElement.find('tbody tr').each(function() {
+                        applyBenefitRowRules(this);
+                    });
+                    deductionsTableElement.find('tbody tr').each(function() {
+                        applyDeductionRowRules(this);
                     });
 
-                    reviewTableElement
-                        .off('input change', '.payroll-import-review-input[data-field="overtime_reason"], .payroll-import-review-input[data-field="deduction_reason"], .payroll-import-review-input[data-field="overtime_hours"], .payroll-import-review-input[data-field="overtime_minutes"], .payroll-import-review-input[data-field="deduction_hours"], .payroll-import-review-input[data-field="deduction_minutes"], .payroll-import-review-input[data-field="overtime_value"], .payroll-import-review-input[data-field="deduction_value"]')
-                        .on('input change', '.payroll-import-review-input[data-field="overtime_reason"], .payroll-import-review-input[data-field="deduction_reason"], .payroll-import-review-input[data-field="overtime_hours"], .payroll-import-review-input[data-field="overtime_minutes"], .payroll-import-review-input[data-field="deduction_hours"], .payroll-import-review-input[data-field="deduction_minutes"], .payroll-import-review-input[data-field="overtime_value"], .payroll-import-review-input[data-field="deduction_value"]', function() {
-                            const row = this.closest('tr');
-                            applyPayrollImportRowTypeRules(row);
+                    if ($.fn.DataTable) {
+                        [benefitsTableElement, deductionsTableElement].forEach((tableElement) => {
+                            if (tableElement.length && $.fn.DataTable.isDataTable(tableElement)) {
+                                tableElement.DataTable().destroy();
+                            }
                         });
 
-                    reviewTableElement.find('tbody tr').each(function() {
-                        applyPayrollImportRowTypeRules(this);
-                    });
-
-                    if ($.fn.DataTable && reviewTableElement.length) {
-                        if ($.fn.DataTable.isDataTable(reviewTableElement)) {
-                            reviewTableElement.DataTable().destroy();
-                        }
-
-                        payrollImportReviewTable = reviewTableElement.DataTable({
+                        const baseDataTableOptions = {
                             pageLength: 10,
                             lengthMenu: [[-1, 10, 25, 50, 100], ['All', 10, 25, 50, 100]],
                             order: [[1, 'asc']],
@@ -3097,15 +3308,33 @@ foreach ($employees as $employee) {
                             responsive: false,
                             scrollX: true,
                             destroy: true
-                        });
+                        };
 
-                        payrollImportReviewTable.columns.adjust().draw(false);
+                        payrollImportBenefitsDataTable = benefitsTableElement.DataTable(Object.assign({}, baseDataTableOptions, {
+                            language: { emptyTable: 'No benefit records available' }
+                        }));
+                        payrollImportDeductionsDataTable = deductionsTableElement.DataTable(Object.assign({}, baseDataTableOptions, {
+                            language: { emptyTable: 'No deduction records available' }
+                        }));
+
+                        payrollImportBenefitsDataTable.columns.adjust().draw(false);
                     }
+
+                    $('#payrollImportReviewTabs a[data-toggle="tab"]').off('shown.bs.tab').on('shown.bs.tab', function(event) {
+                        const targetId = $(event.target).attr('href');
+                        if (targetId === '#payrollImportDeductionsPane' && payrollImportDeductionsDataTable) {
+                            payrollImportDeductionsDataTable.columns.adjust().draw(false);
+                        } else if (targetId === '#payrollImportBenefitsPane' && payrollImportBenefitsDataTable) {
+                            payrollImportBenefitsDataTable.columns.adjust().draw(false);
+                        }
+                    });
                 },
                 willClose: () => {
-                    $('#payrollImportReviewTable').off('click', '.payroll-import-clear-entry-btn');
-                    $('#payrollImportReviewTable').off('input change', '.payroll-import-review-input');
-                    payrollImportReviewTable = null;
+                    $('#payrollImportBenefitsTable').off('click', '.payroll-import-clear-entry-btn').off('input change', '.payroll-import-review-input');
+                    $('#payrollImportDeductionsTable').off('click', '.payroll-import-clear-entry-btn').off('input change', '.payroll-import-review-input');
+                    $('#payrollImportReviewTabs a[data-toggle="tab"]').off('shown.bs.tab');
+                    payrollImportBenefitsDataTable = null;
+                    payrollImportDeductionsDataTable = null;
                 },
                 preConfirm: () => {
                     const reviewedRows = collectReviewedPayrollImportRows();
@@ -3204,7 +3433,7 @@ foreach ($employees as $employee) {
                 }
 
                 return `
-                    <tr ${isReviewed ? 'style="opacity:0.75;"' : ''}>
+                    <tr ${isReviewed ? 'style="opacity:0.75;"' : ''} data-file-id="${escapePayrollImportHtml(String(file.file_id || ''))}">
                         <td class="text-center">
                             <input type="radio" name="managerPayrollReviewFileRow" value="${escapePayrollImportHtml(String(file.file_id || ''))}" ${shouldCheck ? 'checked' : ''} ${canSelect ? '' : 'disabled'}>
                         </td>
@@ -3214,6 +3443,7 @@ foreach ($employees as $employee) {
                         <td>${escapePayrollImportHtml(String(file.uploaded_at || 'N/A'))}</td>
                         <td>${statusBadge}</td>
                         <td>${isReviewed ? escapePayrollImportHtml(String(file.reviewed_at || '')) : '-'}</td>
+                        <td class="text-center">${canSelect ? `<button type="button" class="btn btn-sm btn-outline-danger payroll-delete-uploaded-file-btn" data-file-id="${escapePayrollImportHtml(String(file.file_id || ''))}" title="Delete uploaded file"><i class="fa fa-trash"></i></button>` : ''}</td>
                     </tr>
                 `;
             }).join('');
@@ -3225,7 +3455,7 @@ foreach ($employees as $employee) {
                     <div style="text-align:left;">
                         <p class="mb-2">Only files uploaded for <strong>${escapePayrollImportHtml(String(managerPayrollExcelState.month || ''))}</strong> are shown below.</p>
                         <div style="max-height:340px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px;">
-                            <table class="table table-sm table-bordered mb-0">
+                            <table class="table table-sm table-bordered mb-0" id="managerPayrollFilePickerTable">
                                 <thead class="thead-light">
                                     <tr>
                                         <th style="width:90px;" class="text-center">Select</th>
@@ -3235,6 +3465,7 @@ foreach ($employees as $employee) {
                                         <th>Uploaded At</th>
                                         <th>Status</th>
                                         <th>Reviewed At</th>
+                                        <th style="width:70px;" class="text-center">Delete</th>
                                     </tr>
                                 </thead>
                                 <tbody>${fileTableRows}</tbody>
@@ -3247,6 +3478,44 @@ foreach ($employees as $employee) {
                 cancelButtonText: '<?= addslashes(__('cancel', 'Cancel')) ?>',
                 confirmButtonColor: '#2563eb',
                 allowOutsideClick: false,
+                didOpen: () => {
+                    document.querySelectorAll('#managerPayrollFilePickerTable .payroll-delete-uploaded-file-btn').forEach((btn) => {
+                        btn.addEventListener('click', async function() {
+                            const fileId = String(this.dataset.fileId || '').trim();
+                            if (!fileId || !window.confirm('Delete this uploaded file? This cannot be undone.')) {
+                                return;
+                            }
+
+                            this.disabled = true;
+                            try {
+                                const deletePayload = new URLSearchParams();
+                                deletePayload.append('action', 'delete_manager_uploaded_payroll_excel_file');
+                                deletePayload.append('request_inv_no', managerPayrollExcelState.requestInvNo);
+                                deletePayload.append('month', managerPayrollExcelState.month);
+                                deletePayload.append('file_id', fileId);
+
+                                const deleteResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                    body: deletePayload.toString()
+                                });
+                                const deleteData = await deleteResponse.json().catch(() => null);
+                                if (!deleteResponse.ok || !deleteData || deleteData.status !== 'success') {
+                                    throw new Error((deleteData && deleteData.message) || 'Failed to delete uploaded file.');
+                                }
+
+                                const row = this.closest('tr');
+                                if (row) {
+                                    row.remove();
+                                }
+                                refreshManagerReviewButtonCount();
+                            } catch (error) {
+                                this.disabled = false;
+                                window.alert(error.message || 'Failed to delete uploaded file.');
+                            }
+                        });
+                    });
+                },
                 preConfirm: () => {
                     const selectedRadio = document.querySelector('input[name="managerPayrollReviewFileRow"]:checked');
                     const selectedFileId = selectedRadio ? String(selectedRadio.value || '').trim() : '';
@@ -3291,7 +3560,7 @@ foreach ($employees as $employee) {
                 fetched = await response.json().catch(() => null);
                 Swal.close();
 
-                if (!response.ok || !fetched || fetched.status !== 'success' || !Array.isArray(fetched.rows) || fetched.rows.length === 0) {
+                if (!response.ok || !fetched || fetched.status !== 'success' || !Array.isArray(fetched.rows)) {
                     throw new Error((fetched && fetched.message) || 'No manager uploaded file found for review.');
                 }
             } catch (error) {
@@ -3306,12 +3575,13 @@ foreach ($employees as $employee) {
                 const overtimeMinutes = String((row && row.benefit_minutes) || (row && row.overtime_minutes) || '').trim();
                 const overtimeReason = String((row && row.benefit_reason) || (row && row.overtime_reason) || '').trim();
                 const deductionValue = String((row && row.deduction_value) || '').trim();
+                const deductionDays = String((row && row.deduction_days) || '').trim();
                 const deductionHours = String((row && row.deduction_hours) || '').trim();
                 const deductionMinutes = String((row && row.deduction_minutes) || '').trim();
                 const deductionReason = String((row && row.deduction_reason) || '').trim();
 
                 const hasBenefitData = Number(overtimeValue || 0) > 0 || Number(overtimeHours || 0) > 0 || Number(overtimeMinutes || 0) > 0 || overtimeReason !== '';
-                const hasDeductionData = Number(deductionValue || 0) > 0 || Number(deductionHours || 0) > 0 || Number(deductionMinutes || 0) > 0 || deductionReason !== '';
+                const hasDeductionData = Number(deductionValue || 0) > 0 || Number(deductionDays || 0) > 0 || Number(deductionHours || 0) > 0 || Number(deductionMinutes || 0) > 0 || deductionReason !== '';
 
                 return {
                     checkpoint_code: String((row && row.checkpoint_code) || '').trim(),
@@ -3324,11 +3594,15 @@ foreach ($employees as $employee) {
                     overtime_reason: overtimeReason,
                     deduction_type: hasDeductionData ? normalizePayrollImportDeductionType((row && row.deduction_type) || '') : '',
                     deduction_value: deductionValue,
+                    deduction_days: deductionDays,
                     deduction_hours: deductionHours,
                     deduction_minutes: deductionMinutes,
                     deduction_reason: deductionReason
                 };
-            });
+            }).filter(rowHasReviewedPayrollImportEntry);
+
+            payrollImportCompensationOverrides = {};
+            await loadPayrollImportCompensationOverrides(reviewRows.map((row) => row.emp_id), managerPayrollExcelState.month);
 
             const reviewResult = await openPayrollImportReviewModal(reviewRows, managerPayrollExcelState.month);
 
@@ -3361,6 +3635,7 @@ foreach ($employees as $employee) {
                     benefit_reason: String(row.overtime_reason || '').trim(),
                     deduction_type: normalizePayrollImportDeductionType(row.deduction_type || ''),
                     deduction_value: String(row.deduction_value || '').trim(),
+                    deduction_days: String(row.deduction_days || '').trim(),
                     deduction_hours: String(row.deduction_hours || '').trim(),
                     deduction_minutes: String(row.deduction_minutes || '').trim(),
                     deduction_reason: String(row.deduction_reason || '').trim()

@@ -1,5 +1,9 @@
 <?php
     require_once __DIR__ . '/includes/session_check.php';
+    require_once __DIR__ . '/includes/special_access_helper.php';
+    $canAccessDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessJobTitlesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessRequestBlocksTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -232,6 +236,11 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const isFullSettingsAdmin = <?= $is_system_admin ? 'true' : 'false' ?>;
+        const canAccessDepartmentsTab = <?= $canAccessDepartmentsTab ? 'true' : 'false' ?>;
+        const canAccessJobTitlesTab = <?= $canAccessJobTitlesTab ? 'true' : 'false' ?>;
+        const canAccessRequestBlocksTab = <?= $canAccessRequestBlocksTab ? 'true' : 'false' ?>;
+        const requestTypeBlockLabels = <?= json_encode(get_blockable_request_type_labels(), JSON_UNESCAPED_UNICODE) ?>;
         let appSettings = [];
         let groupedSettings = {};
         let fullAccessCandidates = null;
@@ -239,6 +248,9 @@
         let reportPermissionEligibleUsers = [];
         let reportPermissionMap = {};
         let currentReportPermissionEmpId = '';
+        let specialAccessEligibleUsers = [];
+        let specialAccessMap = {};
+        let currentSpecialAccessEmpId = '';
         const settingsContainer = document.getElementById('settings-container');
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
@@ -286,6 +298,41 @@
                 { value: 'dept_comparison', label: '<?= __('dept_comparison_report') ?>' },
                 { value: 'custom', label: '<?= __('custom_report') ?>' }
             ];
+        }
+
+        function getSpecialAccessCatalog() {
+            return [
+                <?php foreach (get_special_access_labels() as $key => $label): ?>
+                { value: '<?= $key ?>', label: '<?= addslashes($label) ?>' },
+                <?php endforeach; ?>
+            ];
+        }
+
+        function parseSpecialAccessMap(rawValue) {
+            if (!rawValue) return {};
+
+            try {
+                const parsed = JSON.parse(rawValue);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    return {};
+                }
+                const normalized = {};
+                Object.keys(parsed).forEach(empId => {
+                    const key = String(empId || '').trim();
+                    if (!key) return;
+                    normalized[key] = normalizeSpecialAccessList(parsed[empId]);
+                });
+                return normalized;
+            } catch (e) {
+                console.warn('Invalid special access JSON, resetting:', e);
+                return {};
+            }
+        }
+
+        function normalizeSpecialAccessList(values) {
+            const allowed = new Set(getSpecialAccessCatalog().map(item => item.value));
+            if (!Array.isArray(values)) return [];
+            return [...new Set(values.map(v => String(v || '').trim()).filter(v => allowed.has(v)))];
         }
 
         function parseReportPermissionMap(rawValue) {
@@ -499,6 +546,18 @@
             // Special handling for report permissions configuration
             if (normalizedGroupName === 'report_permissions') {
                 renderReportPermissionsSettings();
+                return;
+            }
+
+            // Special handling for special access configuration
+            if (normalizedGroupName === 'special_access') {
+                renderSpecialAccessSettings();
+                return;
+            }
+
+            // Special handling for global request type blocks
+            if (normalizedGroupName === 'request_type_blocks') {
+                renderRequestTypeBlocksSettings();
                 return;
             }
 
@@ -941,6 +1000,340 @@
             }
         }
 
+        function updateSpecialAccessHiddenValue() {
+            const hidden = document.getElementById('setting-special_access_by_user');
+            if (hidden) {
+                hidden.value = JSON.stringify(specialAccessMap);
+            }
+        }
+
+        function renderAssignedSpecialAccessSummary(users) {
+            const container = document.getElementById('special-access-assigned-users-list');
+            if (!container) return;
+
+            const userMap = new Map((users || []).map(user => [String(user.emp_id || ''), user]));
+            const catalogMap = new Map(getSpecialAccessCatalog().map(item => [item.value, item.label]));
+            const assignedEmpIds = Object.keys(specialAccessMap || {}).filter(empId => (specialAccessMap[empId] || []).length > 0);
+
+            if (!assignedEmpIds.length) {
+                container.innerHTML = `<p class="text-muted mb-0"><?= __('no_assigned_users_yet') ?></p>`;
+                return;
+            }
+
+            let html = '<div class="table-responsive">';
+            html += '<table class="table table-sm table-bordered mb-0">';
+            html += '<thead class="thead-light"><tr>';
+            html += `<th><?= __('user') ?></th>`;
+            html += `<th><?= __('special_access') ?></th>`;
+            html += `<th style="width:140px;"><?= __('actions') ?></th>`;
+            html += '</tr></thead><tbody>';
+
+            assignedEmpIds.forEach(empId => {
+                const user = userMap.get(empId);
+                const name = user ? ((user.name || '').trim() || empId) : empId;
+                const role = user ? ((user.user_type || '').trim()) : '';
+                const grantedKeys = normalizeSpecialAccessList(specialAccessMap[empId]);
+
+                const accessHtml = grantedKeys.map(key => {
+                    const label = catalogMap.get(key) || key;
+                    return `<span class="badge badge-info mr-1 mb-1">${escapeHtml(label)}</span>`;
+                }).join('');
+
+                html += '<tr>';
+                html += `<td><strong>${escapeHtml(name)}</strong><br><small class="text-muted">${escapeHtml(empId)}${role ? ' - ' + escapeHtml(role) : ''}</small></td>`;
+                html += `<td>${accessHtml}</td>`;
+                html += `<td>
+                    <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-edit"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-special-access-user mt-1" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-trash-alt"></i></button>
+                </td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.edit-assigned-special-access-user').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const empId = String(this.dataset.empId || '');
+                    const select = document.getElementById('special-access-user-select');
+                    if (!select || !empId) return;
+                    select.value = empId;
+                    $(select).trigger('change');
+                });
+            });
+
+            container.querySelectorAll('.remove-assigned-special-access-user').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const empId = String(this.dataset.empId || '');
+                    if (!empId) return;
+                    Swal.fire({
+                        title: '<?= __('remove_user_assignment') ?>',
+                        text: '<?= __('this_will_remove_special_access_for_this_user') ?>',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: '<?= __('yes_remove_it') ?>',
+                        cancelButtonText: '<?= __('cancel') ?>'
+                    }).then((result) => {
+                        if (!result.isConfirmed) return;
+
+                        delete specialAccessMap[empId];
+                        updateSpecialAccessHiddenValue();
+                        renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+
+                        const select = document.getElementById('special-access-user-select');
+                        if (select && select.value === empId) {
+                            renderSpecialAccessCheckboxes(empId);
+                        }
+                    });
+                });
+            });
+        }
+
+        function renderSpecialAccessCheckboxes(empId) {
+            const container = document.getElementById('special-access-checkboxes');
+            if (!container) return;
+
+            currentSpecialAccessEmpId = String(empId || '').trim();
+
+            if (!currentSpecialAccessEmpId) {
+                container.innerHTML = '<p class="text-muted mb-0"><?= __('select_user_to_configure_special_access') ?></p>';
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+                return;
+            }
+
+            const catalog = getSpecialAccessCatalog();
+            const hasExplicit = Object.prototype.hasOwnProperty.call(specialAccessMap, currentSpecialAccessEmpId);
+            // Unlike report permissions, an employee with no explicit entry has NO special access by default.
+            const selectedTypes = hasExplicit ? normalizeSpecialAccessList(specialAccessMap[currentSpecialAccessEmpId]) : [];
+            const selectedSet = new Set(selectedTypes);
+            const safeEmpId = String(currentSpecialAccessEmpId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+            let html = '<div class="d-flex justify-content-between align-items-center mb-2">';
+            html += '<small class="text-muted"><?= __('check_the_special_abilities_this_user_should_have') ?></small>';
+            html += '<div>';
+            html += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="special-access-select-all-btn"><?= __('select_all') ?></button>';
+            html += '<button type="button" class="btn btn-sm btn-outline-secondary" id="special-access-clear-all-btn"><?= __('clear_all') ?></button>';
+            html += '</div></div>';
+            html += '<div class="row">';
+
+            catalog.forEach(item => {
+                const checkboxId = `special-access-${safeEmpId}-${item.value}`;
+                html += `
+                    <div class="col-md-6 mb-2">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input special-access-checkbox" id="${checkboxId}" value="${item.value}" data-access-key="${item.value}">
+                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(item.label)}</label>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
+                const accessKey = checkbox.getAttribute('data-access-key') || '';
+                checkbox.checked = selectedSet.has(accessKey);
+            });
+
+            function persistFromCheckboxes() {
+                const activeEmpId = String(currentSpecialAccessEmpId || '').trim();
+                if (!activeEmpId) return;
+                const checkedValues = Array.from(container.querySelectorAll('.special-access-checkbox:checked'))
+                    .map(el => el.value);
+                specialAccessMap[activeEmpId] = normalizeSpecialAccessList(checkedValues);
+                updateSpecialAccessHiddenValue();
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+            }
+
+            container.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', persistFromCheckboxes);
+            });
+
+            const selectAllBtn = document.getElementById('special-access-select-all-btn');
+            const clearAllBtn = document.getElementById('special-access-clear-all-btn');
+
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', function() {
+                    container.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = true; });
+                    persistFromCheckboxes();
+                });
+            }
+
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', function() {
+                    container.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = false; });
+                    persistFromCheckboxes();
+                });
+            }
+
+            renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+        }
+
+        function renderRequestTypeBlocksSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-request_type_blocks" role="tabpanel">
+                    <h5 class="mb-0"><?= __('manage_request_type_blocks', 'Manage Request Type Blocks') ?></h5>
+                    <p class="text-muted font-14 mt-2">
+                        <?= __('manage_request_type_blocks_hint', 'Blocking a request type here disables it for every employee at once. To exempt a specific employee from a global block (or to block just one employee for a type that isn\'t globally blocked), use the "Block Specific Request Types" section on that employee\'s Edit Employee page.') ?>
+                    </p>
+                    <div id="requestTypeBlockList" class="mt-4">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            <span class="ml-2"><?= __('loading') ?></span>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button type="button" id="saveRequestTypeBlocksBtn" class="btn btn-primary waves-effect waves-light">
+                            <i class="fa fa-save"></i> <?= __('save_changes') ?>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            const listContainer = document.getElementById('requestTypeBlockList');
+            const saveBtn = document.getElementById('saveRequestTypeBlocksBtn');
+
+            function renderCheckboxes(blockedTypes) {
+                const blockedSet = new Set(blockedTypes || []);
+                let html = '<div class="row">';
+                Object.keys(requestTypeBlockLabels).forEach((key) => {
+                    const label = requestTypeBlockLabels[key];
+                    const checked = blockedSet.has(key) ? 'checked' : '';
+                    html += `
+                        <div class="col-md-6 mb-3">
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input request-type-block-checkbox" id="blockType_${key}" value="${key}" ${checked}>
+                                <label class="custom-control-label" for="blockType_${key}">${label}</label>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                listContainer.innerHTML = html;
+            }
+
+            function loadBlockedTypes() {
+                fetch('./includes/ajaxFile/globalRequestBlockHandler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_global_blocked_types' })
+                })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (!data.success) {
+                        throw new Error(data.message || '<?= __('failed_to_load_current_blocks', 'Failed to load current blocks.') ?>');
+                    }
+                    renderCheckboxes(data.blocked_types);
+                })
+                .catch((error) => {
+                    listContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
+                });
+            }
+
+            saveBtn.addEventListener('click', () => {
+                const checked = Array.from(document.querySelectorAll('.request-type-block-checkbox:checked')).map((el) => el.value);
+
+                fetch('./includes/ajaxFile/globalRequestBlockHandler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'update_global_blocked_types', blocked_types: JSON.stringify(checked) })
+                })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (!data.success) {
+                        throw new Error(data.message || '<?= __('failed_to_save', 'Failed to save.') ?>');
+                    }
+                    Swal.fire('<?= __('success') ?>', '<?= __('settings_updated_successfully', 'Settings updated successfully.') ?>', 'success');
+                    renderCheckboxes(data.blocked_types);
+                })
+                .catch((error) => {
+                    Swal.fire('<?= __('Error!') ?>', error.message, 'error');
+                });
+            });
+
+            loadBlockedTypes();
+        }
+
+        async function renderSpecialAccessSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-special-access" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0"><?= __('special_access_by_user') ?></h5>
+                    </div>
+                    <p class="text-muted mb-3"><?= __('select_a_user_and_grant_them_specific_admin_hr_abilities') ?></p>
+                    <div class="form-group">
+                        <label for="special-access-user-select"><?= __('select_user') ?></label>
+                        <select id="special-access-user-select" class="form-control select2"></select>
+                    </div>
+                    <div id="special-access-checkboxes" class="border rounded p-3 bg-light">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            <span class="ml-2"><?= __('loading') ?></span>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h6 class="mb-2"><?= __('assigned_users') ?></h6>
+                        <div id="special-access-assigned-users-list" class="border rounded p-3 bg-white">
+                            <div class="text-center text-muted">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <span class="ml-2"><?= __('loading') ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="setting-special_access_by_user" name="special_access_by_user" value="{}">
+                </div>
+            `;
+
+            const setting = appSettings.find(s => s.setting_name === 'special_access_by_user');
+            specialAccessMap = parseSpecialAccessMap(setting ? setting.setting_value : '{}');
+            updateSpecialAccessHiddenValue();
+
+            const usersRaw = await fetchReportPermissionUsers();
+            const users = usersRaw.filter(user => {
+                const role = String(user.user_type || '').trim().toLowerCase();
+                return role !== 'employee';
+            });
+            specialAccessEligibleUsers = users;
+            const select = document.getElementById('special-access-user-select');
+            const checkboxContainer = document.getElementById('special-access-checkboxes');
+
+            if (!select || !checkboxContainer) return;
+
+            if (!users.length) {
+                select.innerHTML = '<option value=""><?= __('no_users_found') ?></option>';
+                checkboxContainer.innerHTML = '<p class="text-muted mb-0"><?= __('no_users_found') ?></p>';
+                return;
+            }
+
+            let options = `<option value=""><?= __('select_user') ?></option>`;
+            users.forEach(user => {
+                const empId = String(user.emp_id || '').trim();
+                if (!empId) return;
+                const displayName = (user.name || '').trim() || empId;
+                const role = (user.user_type || '').trim();
+                options += `<option value="${escapeHtml(empId)}">${escapeHtml(displayName)} (${escapeHtml(empId)})${role ? ' - ' + escapeHtml(role) : ''}</option>`;
+            });
+            select.innerHTML = options;
+
+            if ($(select).hasClass('select2-hidden-accessible')) {
+                $(select).trigger('change.select2');
+            } else {
+                $(select).select2({ width: '100%' });
+            }
+
+            const $select = $(select);
+            $select.off('change.specialAccess select2:select.specialAccess select2:clear.specialAccess');
+            $select.on('change.specialAccess select2:select.specialAccess select2:clear.specialAccess', function() {
+                const selectedEmpId = String($select.val() || '').trim();
+                currentSpecialAccessEmpId = selectedEmpId;
+                renderSpecialAccessCheckboxes(selectedEmpId);
+            });
+
+            currentSpecialAccessEmpId = '';
+            renderSpecialAccessCheckboxes('');
+        }
+
         function renderJobTitlesSettings() {
             let formHtml = `<div class="tab-pane active" id="group-job" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
@@ -1264,14 +1657,14 @@
         function renderDepartmentsSettings() {
             let formHtml = `<div class="tab-pane active" id="group-departments" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0"><?= __('department_management') ?></h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-department"><i class="mdi mdi-plus"></i> <?= __('add_new_department') ?></button>`;
+            formHtml += `<h5 class="mb-0"><?= __('department_management', 'Department Management') ?></h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-department"><i class="mdi mdi-plus"></i> <?= __('add_new_department', 'Add New Department') ?></button>`;
             formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4"><?= __('manage_departments_in_english_and_arabic') ?></p>`;
+            formHtml += `<p class="text-muted mb-4"><?= __('manage_departments_in_english_and_arabic', 'Manage departments in English and Arabic.') ?></p>`;
 
             formHtml += `<div class="form-group mb-3">`;
-            formHtml += `<input type="text" id="department-search-input" class="form-control" placeholder="<?= __('search_departments_english_or_arabic') ?>" style="max-width: 400px;">`;
-            formHtml += `<small class="form-text text-muted mt-1"><?= __('search_by_department_in_english_or_arabic') ?></small>`;
+            formHtml += `<input type="text" id="department-search-input" class="form-control" placeholder="<?= __('search_departments_english_or_arabic', 'Search departments (English or Arabic)...') ?>" style="max-width: 400px;">`;
+            formHtml += `<small class="form-text text-muted mt-1"><?= __('search_by_department_in_english_or_arabic', 'Search by department in English or Arabic') ?></small>`;
             formHtml += `</div>`;
 
             formHtml += `<div id="departments-container" class="border rounded p-3 bg-light">`;
@@ -1306,16 +1699,16 @@
                     body: new URLSearchParams({ action: 'get_departments' })
                 });
 
-                if (!response.ok) throw new Error('<?= __('failed_to_load_departments') ?>');
+                if (!response.ok) throw new Error('<?= __('failed_to_load_departments', 'Failed to load departments') ?>');
                 const data = await response.json();
 
                 const container = document.getElementById('departments-container');
                 if (!data.success || !data.departments || data.departments.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> <?= __('no_departments_configured_yet') ?></p>';
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> <?= __('no_departments_configured_yet', 'No departments configured yet') ?></p>';
                     return;
                 }
 
-                let departmentsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th><?= __('department_english') ?></th><th><?= __('department_arabic') ?></th><th><?= __('department_color') ?></th><th><?= __('actions') ?></th></tr></thead><tbody>';
+                let departmentsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th><?= __('department_english', 'Department (English)') ?></th><th><?= __('department_arabic', 'Department (Arabic)') ?></th><th><?= __('department_color', 'Color') ?></th><th><?= __('actions') ?></th></tr></thead><tbody>';
                 data.departments.forEach((department) => {
                     const rawColor = String(department.dept_clr || '').trim();
                     const allowedColors = ['custom', 'purple', 'primary', 'success'];
@@ -1363,18 +1756,18 @@
         function showAddDepartmentModal() {
             Swal.fire({
                 icon: 'info',
-                title: '<?= __('add_new_department') ?>',
+                title: '<?= __('add_new_department', 'Add New Department') ?>',
                 html: `
                     <div class="form-group text-left">
-                        <label for="department-title-en"><?= __('department_english') ?></label>
-                        <input type="text" id="department-title-en" class="form-control" placeholder="<?= __('enter_department_in_english') ?>">
+                        <label for="department-title-en"><?= __('department_english', 'Department (English)') ?></label>
+                        <input type="text" id="department-title-en" class="form-control" placeholder="<?= __('enter_department_in_english', 'Enter department in English') ?>">
                     </div>
                     <div class="form-group text-left">
-                        <label for="department-title-ar"><?= __('department_arabic') ?></label>
-                        <input type="text" id="department-title-ar" class="form-control" placeholder="<?= __('enter_department_in_arabic') ?>">
+                        <label for="department-title-ar"><?= __('department_arabic', 'Department (Arabic)') ?></label>
+                        <input type="text" id="department-title-ar" class="form-control" placeholder="<?= __('enter_department_in_arabic', 'Enter department in Arabic') ?>">
                     </div>
                     <div class="form-group text-left">
-                        <label for="department-color"><?= __('department_color') ?></label>
+                        <label for="department-color"><?= __('department_color', 'Color') ?></label>
                         <select id="department-color" class="form-control">
                             <option value="custom">custom</option>
                             <option value="purple">purple</option>
@@ -1393,15 +1786,15 @@
                     const color = (document.getElementById('department-color').value || '').trim().toLowerCase();
 
                     if (!titleEn) {
-                        Swal.showValidationMessage('<?= __('department_in_english_is_required') ?>');
+                        Swal.showValidationMessage('<?= __('department_in_english_is_required', 'Department name in English is required') ?>');
                         return false;
                     }
                     if (!titleAr) {
-                        Swal.showValidationMessage('<?= __('department_in_arabic_is_required') ?>');
+                        Swal.showValidationMessage('<?= __('department_in_arabic_is_required', 'Department name in Arabic is required') ?>');
                         return false;
                     }
                     if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
-                        Swal.showValidationMessage('<?= __('invalid_department_color') ?>');
+                        Swal.showValidationMessage('<?= __('invalid_department_color', 'Please select a valid department color') ?>');
                         return false;
                     }
                     return { titleEn, titleAr, color };
@@ -1426,14 +1819,14 @@
                     })
                 });
 
-                if (!response.ok) throw new Error('<?= __('failed_to_add_department') ?>');
+                if (!response.ok) throw new Error('<?= __('failed_to_add_department', 'Failed to add department') ?>');
                 const data = await response.json();
 
                 if (data.success) {
-                    Swal.fire('<?= __('added') ?>', '<?= __('department_added_successfully') ?>', 'success');
+                    Swal.fire('<?= __('added') ?>', '<?= __('department_added_successfully', 'Department added successfully') ?>', 'success');
                     loadDepartments();
                 } else {
-                    throw new Error(data.message || '<?= __('failed_to_add_department') ?>');
+                    throw new Error(data.message || '<?= __('failed_to_add_department', 'Failed to add department') ?>');
                 }
             } catch (error) {
                 Swal.fire('<?= __('error') ?>', error.message, 'error');
@@ -1451,29 +1844,29 @@
                     })
                 });
 
-                if (!response.ok) throw new Error('<?= __('failed_to_load_department') ?>');
+                if (!response.ok) throw new Error('<?= __('failed_to_load_department', 'Failed to load department') ?>');
                 const data = await response.json();
 
                 if (!data.success || !data.department) {
-                    Swal.fire('<?= __('error') ?>', '<?= __('department_not_found') ?>', 'error');
+                    Swal.fire('<?= __('error') ?>', '<?= __('department_not_found', 'Department not found') ?>', 'error');
                     return;
                 }
 
                 const department = data.department;
                 const result = await Swal.fire({
                     icon: 'info',
-                    title: '<?= __('edit_department') ?>',
+                    title: '<?= __('edit_department', 'Edit Department') ?>',
                     html: `
                         <div class="form-group text-left">
-                            <label for="edit-department-title-en"><?= __('department_english') ?></label>
-                            <input type="text" id="edit-department-title-en" class="form-control" value="${department.dep_nme || ''}" placeholder="<?= __('enter_department_in_english') ?>">
+                            <label for="edit-department-title-en"><?= __('department_english', 'Department (English)') ?></label>
+                            <input type="text" id="edit-department-title-en" class="form-control" value="${department.dep_nme || ''}" placeholder="<?= __('enter_department_in_english', 'Enter department in English') ?>">
                         </div>
                         <div class="form-group text-left">
-                            <label for="edit-department-title-ar"><?= __('department_arabic') ?></label>
-                            <input type="text" id="edit-department-title-ar" class="form-control" value="${department.dep_nme_ar || ''}" placeholder="<?= __('enter_department_in_arabic') ?>">
+                            <label for="edit-department-title-ar"><?= __('department_arabic', 'Department (Arabic)') ?></label>
+                            <input type="text" id="edit-department-title-ar" class="form-control" value="${department.dep_nme_ar || ''}" placeholder="<?= __('enter_department_in_arabic', 'Enter department in Arabic') ?>">
                         </div>
                         <div class="form-group text-left">
-                            <label for="edit-department-color"><?= __('department_color') ?></label>
+                            <label for="edit-department-color"><?= __('department_color', 'Color') ?></label>
                             <select id="edit-department-color" class="form-control">
                                 <option value="custom" ${(String(department.dept_clr || '').trim().toLowerCase() === 'custom' || !String(department.dept_clr || '').trim()) ? 'selected' : ''}>custom</option>
                                 <option value="purple" ${String(department.dept_clr || '').trim().toLowerCase() === 'purple' ? 'selected' : ''}>purple</option>
@@ -1492,15 +1885,15 @@
                         const color = (document.getElementById('edit-department-color').value || '').trim().toLowerCase();
 
                         if (!titleEn) {
-                            Swal.showValidationMessage('<?= __('department_in_english_is_required') ?>');
+                            Swal.showValidationMessage('<?= __('department_in_english_is_required', 'Department name in English is required') ?>');
                             return false;
                         }
                         if (!titleAr) {
-                            Swal.showValidationMessage('<?= __('department_in_arabic_is_required') ?>');
+                            Swal.showValidationMessage('<?= __('department_in_arabic_is_required', 'Department name in Arabic is required') ?>');
                             return false;
                         }
                         if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
-                            Swal.showValidationMessage('<?= __('invalid_department_color') ?>');
+                            Swal.showValidationMessage('<?= __('invalid_department_color', 'Please select a valid department color') ?>');
                             return false;
                         }
                         return { titleEn, titleAr, color };
@@ -1529,14 +1922,14 @@
                     })
                 });
 
-                if (!response.ok) throw new Error('<?= __('failed_to_update_department') ?>');
+                if (!response.ok) throw new Error('<?= __('failed_to_update_department', 'Failed to update department') ?>');
                 const data = await response.json();
 
                 if (data.success) {
-                    Swal.fire('<?= __('updated') ?>', '<?= __('department_updated_successfully') ?>', 'success');
+                    Swal.fire('<?= __('updated') ?>', '<?= __('department_updated_successfully', 'Department updated successfully') ?>', 'success');
                     loadDepartments();
                 } else {
-                    throw new Error(data.message || '<?= __('failed_to_update_department') ?>');
+                    throw new Error(data.message || '<?= __('failed_to_update_department', 'Failed to update department') ?>');
                 }
             } catch (error) {
                 Swal.fire('<?= __('error') ?>', error.message, 'error');
@@ -1545,7 +1938,7 @@
 
         async function deleteDepartment(departmentId) {
             const result = await Swal.fire({
-                title: '<?= __('delete_department') ?>',
+                title: '<?= __('delete_department', 'Delete Department') ?>',
                 text: '<?= __('this_action_cannot_be_undone') ?>',
                 icon: 'warning',
                 showCancelButton: true,
@@ -1565,14 +1958,14 @@
                     })
                 });
 
-                if (!response.ok) throw new Error('<?= __('failed_to_delete_department') ?>');
+                if (!response.ok) throw new Error('<?= __('failed_to_delete_department', 'Failed to delete department') ?>');
                 const data = await response.json();
 
                 if (data.success) {
-                    Swal.fire('<?= __('deleted') ?>', '<?= __('department_deleted_successfully') ?>', 'success');
+                    Swal.fire('<?= __('deleted') ?>', '<?= __('department_deleted_successfully', 'Department deleted successfully') ?>', 'success');
                     loadDepartments();
                 } else {
-                    throw new Error(data.message || '<?= __('failed_to_delete_department') ?>');
+                    throw new Error(data.message || '<?= __('failed_to_delete_department', 'Failed to delete department') ?>');
                 }
             } catch (error) {
                 Swal.fire('<?= __('error') ?>', error.message, 'error');
@@ -1604,7 +1997,7 @@
                 if (!noResultsMsg) {
                     noResultsMsg = document.createElement('div');
                     noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
-                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> <?= __('no_departments_match_your_search') ?>`;
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> <?= __('no_departments_match_your_search', 'No departments match your search') ?>`;
                     container.appendChild(noResultsMsg);
                 }
             } else if (noResultsMsg) {
@@ -2035,13 +2428,67 @@
 
         async function loadSettings() {
             try {
+                // Restricted (non-admin) special-access users only ever get Departments/Job
+                // Titles tabs, which are backed by their own handlers, not app_settings rows.
+                // Skip fetching the full settings payload entirely so sensitive settings
+                // (SMTP credentials, other employees' special-access grants, etc.) never
+                // reach a browser that only has partial access.
+                if (!isFullSettingsAdmin) {
+                    groupedSettings = {};
+                    if (canAccessDepartmentsTab) {
+                        groupedSettings['departments'] = [];
+                    }
+                    if (canAccessJobTitlesTab) {
+                        groupedSettings['job titles'] = [];
+                    }
+                    if (canAccessRequestBlocksTab) {
+                        groupedSettings['request type blocks'] = [];
+                    }
+
+                    const savedGroup = localStorage.getItem('app_settings_active_group');
+                    const groups = Object.keys(groupedSettings).sort();
+
+                    let restrictedNavHtml = '';
+                    groups.forEach((group) => {
+                        const isActive = (savedGroup === group);
+                        const translatedGroup = translateText(group);
+                        restrictedNavHtml += `
+                            <li class="nav-item">
+                                <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
+                                    <span class="text-capitalize">${translatedGroup}</span>
+                                </a>
+                            </li>
+                        `;
+                    });
+                    settingsNav.innerHTML = restrictedNavHtml;
+
+                    const restrictedInitialGroup = (savedGroup && groups.includes(savedGroup)) ? savedGroup : groups[0];
+                    if (restrictedInitialGroup) {
+                        renderSettingsGroup(restrictedInitialGroup);
+                    } else {
+                        settingsContainer.innerHTML = '<p class="text-center"><?= __('No settings found.') ?></p>';
+                    }
+
+                    settingsNav.querySelectorAll('a').forEach(link => {
+                        link.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            const group = link.dataset.group;
+                            renderSettingsGroup(group);
+                            localStorage.setItem('app_settings_active_group', group);
+                            settingsNav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+                            link.classList.add('active');
+                        });
+                    });
+                    return;
+                }
+
                 const response = await fetch('./includes/settings_handler.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ action: 'get_settings' })
                 });
                 if (!response.ok) throw new Error(`<?= __('Network response was not ok:') ?> ${response.statusText}`);
-                
+
                 const data = await response.json();
                 if (!data.success) throw new Error(data.message || '<?= __('Failed to retrieve settings.') ?>');
 
@@ -2062,6 +2509,9 @@
                 }
                 if (!groupedSettings['approval']) {
                     groupedSettings['approval'] = [];
+                }
+                if (!groupedSettings['request type blocks']) {
+                    groupedSettings['request type blocks'] = [];
                 }
 
                 // Restore last active group from localStorage if available

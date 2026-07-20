@@ -231,7 +231,19 @@ if ($ajaxType == 'apply_resignation') {
         // Get POST data
         $empId = isset($_POST['emp_id']) ? mysqli_real_escape_string($conDB, $_POST['emp_id']) : '';
         error_log("ajaxResignation: apply_resignation - empId = " . $empId);
-        
+
+        // Block-check: employee may be restricted from submitting resignation requests
+        require_once __DIR__ . '/../special_access_helper.php';
+        $block_status = is_employee_request_blocked($conDB, $empId, 'resignation_request');
+        if ($block_status['blocked']) {
+            echo json_encode([
+                'type' => 'error',
+                'title' => 'Request Blocked',
+                'message' => $block_status['reason']
+            ]);
+            exit;
+        }
+
         // Validate supervisor assignment FIRST
         if (function_exists('validate_employee_supervisor')) {
             $supervisor_check = validate_employee_supervisor($conDB, $empId);

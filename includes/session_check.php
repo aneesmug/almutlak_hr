@@ -236,6 +236,21 @@ $avatar = $emprow['eavatar'];
 $empid = $emprow['emp_id'];
 $user_company = $emprow['comp_no'] ?? 1;
 
+// --- Temporary role coverage (vacation replacement) ---
+// If this employee is currently covering someone's vacation (granted via the
+// "Transfer Role (Temp)" button on the employee master page), their effective
+// user_type becomes the covered employee's role for the duration of the vacation
+// window. This is read fresh every request from emp_temp_role_assignments and is
+// never written back to admin_login, so it disappears automatically once the
+// vacation's return_date passes - no restore step required.
+$actual_user_type = $user_type;
+$is_temp_role_active = false;
+$temp_role_assignment = getActiveTempRoleForEmployee($conDB, $empid);
+if ($temp_role_assignment) {
+    $user_type = $temp_role_assignment['granted_role'];
+    $is_temp_role_active = true;
+}
+
 // Store in session for consistency across all pages
 $_SESSION['auth_user']['dept'] = $user_dept;
 $_SESSION['auth_user']['comp_no'] = $user_company;
@@ -486,7 +501,7 @@ if (defined('SKIP_PAGE_ACCESS_CONTROL') && SKIP_PAGE_ACCESS_CONTROL === true) {
     $is_ajax_file = true;
 }
 
-if (!$is_ajax_file && ($emprow['user_type'] ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true)) {
+if (!$is_ajax_file && ($user_type ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true)) {
     header("Location: ./profile.php");
     exit();
 }

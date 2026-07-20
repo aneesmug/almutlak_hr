@@ -14,6 +14,13 @@ MODIFICATION SUMMARY (Previous Version):
 
  require_once __DIR__ . '/includes/db.php';
  require_once __DIR__ . '/includes/session_check.php';
+ require_once __DIR__ . '/includes/special_access_helper.php';
+
+ // Smart requests are globally blocked - hide this page entirely (matches sidebar link hiding).
+ if (is_employee_request_blocked($conDB, $empid ?? '', 'smart_request')['blocked']) {
+     header('Location: dashboard.php');
+     exit;
+ }
  $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
  if(mysqli_num_rows($query) == 1){
  include("./includes/avatar_select.php");

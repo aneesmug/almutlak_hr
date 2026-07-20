@@ -6,10 +6,15 @@
 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/session_check.php';
+require_once __DIR__ . '/special_access_helper.php';
 
 header('Content-Type: application/json');
 
-if (!isset($is_system_admin) || !$is_system_admin) {
+// Allow system admins, plus employees explicitly granted the Departments special-access key.
+$canManageDepartments = (isset($is_system_admin) && $is_system_admin)
+    || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+
+if (!$canManageDepartments) {
     http_response_code(403);
     die(json_encode(['success' => false, 'message' => 'Access denied. Admin privileges required.']));
 }
