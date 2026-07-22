@@ -90,7 +90,7 @@ try {
     }
 
     // 1. Fetch employee details
-    $stmtEmployee = $pdo->prepare("SELECT id, name, emp_id, salary, dept, country, gosi, payment_type, comp_no
+    $stmtEmployee = $pdo->prepare("SELECT id, name, emp_id, salary, dept, country, gosi, payment_type, comp_no, updated_at
         FROM employees
         WHERE emp_id = :emp_id
     ");
@@ -239,12 +239,37 @@ try {
             basic_salary, housing_allowance, transport_allowance, food_allowance,
             miscellaneous_allowance, cashier_allowance, fuel_allowance, telephone_allowance,
             other_allowance, guard_allowance, total_gross_salary, total_benefits,
-            total_deductions, net_salary, status
+            total_deductions, net_salary, status, generated_at
         FROM payrolls
         WHERE emp_id = :emp_id AND month_year = :month_year
     ");
     $stmtPayroll->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $payroll = $stmtPayroll->fetch(PDO::FETCH_ASSOC);
+
+    // Detect whether the employee master (main profile or active salary record) was
+    // edited after this payroll snapshot was generated, so the UI can prompt the admin
+    // to save/regenerate instead of silently showing stale amounts.
+    $masterDataChangedSinceGeneration = false;
+    if ($payroll && !empty($payroll['generated_at'])) {
+        $generatedAtTs = strtotime($payroll['generated_at']);
+        $employeeUpdatedAtTs = !empty($employee['updated_at']) ? strtotime($employee['updated_at']) : false;
+
+        $stmtActiveSalary = $pdo->prepare("SELECT created_at FROM emp_salary
+            WHERE emp_id = :emp_id AND status = 1
+            ORDER BY id DESC LIMIT 1");
+        $stmtActiveSalary->execute([':emp_id' => $empId]);
+        $activeSalaryUpdatedAt = $stmtActiveSalary->fetchColumn();
+        $activeSalaryUpdatedAtTs = $activeSalaryUpdatedAt ? strtotime($activeSalaryUpdatedAt) : false;
+
+        if ($generatedAtTs !== false) {
+            if ($employeeUpdatedAtTs !== false && $employeeUpdatedAtTs > $generatedAtTs) {
+                $masterDataChangedSinceGeneration = true;
+            }
+            if ($activeSalaryUpdatedAtTs !== false && $activeSalaryUpdatedAtTs > $generatedAtTs) {
+                $masterDataChangedSinceGeneration = true;
+            }
+        }
+    }
 
     $joiningDeductionPreviewAmount = 0.0;
     $joiningDeductionPreviewDays = 0;
@@ -324,14 +349,14 @@ try {
     }
 
     // 3. Fetch specific benefits for the month
-    $stmtBenefits = $pdo->prepare("SELECT id, benefit, note, hours, type_id FROM payroll_benefits
+    $stmtBenefits = $pdo->prepare("SELECT id, benefit, note, hours, minutes, type_id FROM payroll_benefits
         WHERE emp_id = :emp_id AND month = :month_year
     ");
     $stmtBenefits->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $benefits = $stmtBenefits->fetchAll(PDO::FETCH_ASSOC);
 
     // 4. Fetch specific deductions for the month
-    $stmtDeductions = $pdo->prepare("SELECT id, deduction, note, calculation_type, hours, days FROM payroll_deductions
+    $stmtDeductions = $pdo->prepare("SELECT id, deduction, note, calculation_type, hours, minutes, days FROM payroll_deductions
         WHERE emp_id = :emp_id AND month = :month_year
     ");
 
@@ -346,6 +371,7 @@ try {
                 'note' => number_format($joiningDeductionPreviewAmount, 2, '.', ''),
                 'calculation_type' => 'daily_deduction',
                 'hours' => null,
+                'minutes' => null,
                 'days' => $joiningDeductionPreviewDays
             ];
         }
@@ -386,6 +412,8 @@ try {
         'benefit_types' => $benefitTypes,
         'feedbacks' => $feedbacks,
         'skip_auto_gosi_due_to_vacation' => $skipAutoGosiDueToVacation,
+        'master_data_changed_since_generation' => $masterDataChangedSinceGeneration,
+        'payroll_generated_at' => $payroll['generated_at'] ?? null,
     ]);
 
 } catch (PDOException $e) {

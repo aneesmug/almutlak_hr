@@ -3,6 +3,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
 require_once __DIR__ . '/includes/payroll_approval_helpers.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
 if (file_exists(__DIR__ . '/includes/functions.php')) {
     require_once __DIR__ . '/includes/functions.php';
@@ -13,7 +14,12 @@ if (function_exists('load_language')) {
     load_language($current_lang);
 }
 
-if (isset($isEmployee) && $isEmployee === true) {
+// Restrict access: Employees cannot view this page, unless explicitly
+// granted via app_settings -> Special Access.
+if (
+    isset($isEmployee) && $isEmployee === true
+    && !user_has_special_access($conDB, $empid ?? '', 'access_payroll_checklist_report', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+) {
     header('Location: ./profile.php');
     exit();
 }
@@ -325,10 +331,17 @@ if (!$isMainFinanceManager && $assignedScopeOnly) {
     $assignedScopeOnly = false;
 }
 
-// Allow Finance Managers to access even without company assignment
+// Allow Finance Managers to access even without company assignment.
+// Also allow accounts whose user_type happens to be 'finance_officer' but who have an
+// independent legitimate reason to be on this page - e.g. emp_type = 'Manager' (can upload
+// the manager payroll excel for their own department) or an HR checklist approver. Without
+// this, a manager who was also given a finance_officer login gets hard-blocked from every
+// ability on this page just for lacking a finance company assignment he doesn't need.
 if (
     $isFinanceOfficerChecklistUser &&
-    !$isAssignedFinanceCompanyVerifier
+    !$isAssignedFinanceCompanyVerifier &&
+    !$isCompanyManagerChecklistUser &&
+    !$isHrChecklistApprover
 ) {
     die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">
         ERROR: You are not assigned to verify this payroll checklist request.
@@ -347,7 +360,8 @@ $applyAssignedScopeFilter = $isAssignedFinanceCompanyVerifier;
 $canExportChecklistExcel = $isHrPayrollApprover
     || $isHrSeniorBpApprover
     || ($is_system_admin ?? false)
-    || (($user_type ?? '') === 'administrator');
+    || (($user_type ?? '') === 'administrator')
+    || user_has_special_access($conDB, $empid ?? '', 'payroll_checklist_export_excel', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $canManageFeedbackActions = $isHrPayrollApprover;
 // Upload button shows for: a manager-flagged account, a Direct Supervisor who
 // actually received the "Send Payroll Report by Direct Supervisor" email for this
@@ -359,7 +373,11 @@ $canUploadManagerPayrollExcel = $requestInvNo !== ''
     && ($isCompanyManagerChecklistUser
         || $isHrChecklistApprover
         || payrollSupervisorHasReportAccess($pdo, $requestInvNo, $monthYear, $currentApproverId));
-$canReviewManagerUploadedPayrollExcel = $requestInvNo !== '' && $isHrChecklistApprover;
+$canUploadManagerPayrollExcel = $canUploadManagerPayrollExcel
+    || ($requestInvNo !== '' && user_has_special_access($conDB, $empid ?? '', 'payroll_checklist_upload_excel', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
+$canReviewManagerUploadedPayrollExcel = $requestInvNo !== ''
+    && ($isHrChecklistApprover
+        || user_has_special_access($conDB, $empid ?? '', 'payroll_checklist_review_import', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
 // HR Payroll / HR Senior BP can mark employees checked both during normal approval
 // (isPendingWithMe) and after final approval for follow-up feedback review.
 $canManageChecklistReview = $requestInvNo !== ''
@@ -2909,6 +2927,17 @@ foreach ($employees as $employee) {
         }
 
         function normalizeReviewedPayrollImportRow(row) {
+            // deduction_type used to be hardcoded to 'hourly_deduction' here, no matter what
+            // the row actually contained - so a pure deduction_days entry (no hours/minutes)
+            // always got submitted as hourly, and the server then nulled out the days value.
+            // Infer from which of days vs hours/minutes was actually filled in.
+            const rawDeductionDays = Number((row && row.deduction_days) || 0);
+            const rawDeductionHours = Number((row && row.deduction_hours) || 0);
+            const rawDeductionMinutes = Number((row && row.deduction_minutes) || 0);
+            const inferredDeductionType = (rawDeductionDays > 0 && rawDeductionHours <= 0 && rawDeductionMinutes <= 0)
+                ? 'daily_deduction'
+                : 'hourly_deduction';
+
             const normalizedRow = {
                 checkpoint_code: String((row && row.checkpoint_code) || '').trim(),
                 emp_id: String((row && row.emp_id) || '').trim(),
@@ -2918,7 +2947,7 @@ foreach ($employees as $employee) {
                 overtime_hours: String((row && row.overtime_hours) || (row && row.benefit_hours) || '').trim(),
                 overtime_minutes: String((row && row.overtime_minutes) || (row && row.benefit_minutes) || '').trim(),
                 overtime_reason: String((row && row.overtime_reason) || (row && row.benefit_reason) || '').trim(),
-                deduction_type: 'hourly_deduction',
+                deduction_type: inferredDeductionType,
                 deduction_value: String((row && row.deduction_value) || '').trim(),
                 deduction_days: String((row && row.deduction_days) || '').trim(),
                 deduction_hours: String((row && row.deduction_hours) || '').trim(),
@@ -3655,7 +3684,9 @@ foreach ($employees as $employee) {
                 Swal.close();
 
                 if (!response.ok || !result || (result.status !== 'success' && result.status !== 'warning')) {
-                    throw new Error((result && result.message) || 'Failed to import reviewed manager file.');
+                    const importError = new Error((result && result.message) || 'Failed to import reviewed manager file.');
+                    importError.details = (result && (result.errors || result.skipped_details)) || [];
+                    throw importError;
                 }
 
                 const markPayload = new URLSearchParams();
@@ -3677,11 +3708,35 @@ foreach ($employees as $employee) {
                     throw new Error((markResult && markResult.message) || 'Payroll imported, but failed to update review record.');
                 }
 
-                await Swal.fire('<?= addslashes(__('success', 'Success')) ?>', result.message || 'Payroll imported successfully from manager upload.', 'success');
+                const skippedDetails = Array.isArray(result.skipped_details) ? result.skipped_details : [];
+                const successHtml = skippedDetails.length > 0
+                    ? `<p>${escapePayrollImportHtml(result.message || 'Payroll imported successfully from manager upload.')}</p>
+                       <p><strong>Imported:</strong> ${Number(result.processed_rows || 0)} row(s) &nbsp; <strong>Skipped:</strong> ${Number(result.skipped_rows || 0)} row(s)</p>
+                       <div style="max-height:200px; overflow:auto; text-align:left; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">
+                           <ul style="margin:0; padding-left:18px;">${skippedDetails.map((detail) => `<li>${escapePayrollImportHtml(String(detail))}</li>`).join('')}</ul>
+                       </div>`
+                    : (result.message || 'Payroll imported successfully from manager upload.');
+
+                await Swal.fire({
+                    icon: 'success',
+                    title: '<?= addslashes(__('success', 'Success')) ?>',
+                    html: successHtml
+                });
                 window.location.reload();
             } catch (error) {
                 Swal.close();
-                Swal.fire('<?= addslashes(__('error', 'Error')) ?>', error.message || 'Failed to import manager uploaded file.', 'error');
+                const details = Array.isArray(error.details) ? error.details : [];
+                const errorHtml = details.length > 0
+                    ? `<p>${escapePayrollImportHtml(error.message || 'Failed to import manager uploaded file.')}</p>
+                       <div style="max-height:200px; overflow:auto; text-align:left; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">
+                           <ul style="margin:0; padding-left:18px;">${details.map((detail) => `<li>${escapePayrollImportHtml(String(detail))}</li>`).join('')}</ul>
+                       </div>`
+                    : (error.message || 'Failed to import manager uploaded file.');
+                Swal.fire({
+                    icon: 'error',
+                    title: '<?= addslashes(__('error', 'Error')) ?>',
+                    html: errorHtml
+                });
             }
         }
 

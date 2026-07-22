@@ -1,8 +1,13 @@
 <?php
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
-// Restrict access: Employees cannot view this detailed report page
-if (isset($isEmployee) && $isEmployee === true) {
+// Restrict access: Employees cannot view this detailed report page,
+// unless explicitly granted via app_settings -> Special Access.
+if (
+    isset($isEmployee) && $isEmployee === true
+    && !user_has_special_access($conDB, $empid ?? '', 'access_all_applied_business_trip', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+) {
     header("Location: ./profile.php");
     exit();
 }

@@ -83,11 +83,34 @@ function normalizeImportCheckpointCode($value): string
 
 function normalizeBenefitImportType($value): string
 {
+    // The import review grid lets the user explicitly pick Fixed vs By Hour(s) per row
+    // (data-field="benefit_type") - this used to be discarded and every row forced to
+    // 'by_hours', silently overriding a manually-chosen Fixed benefit.
+    $normalized = strtolower(trim((string)$value));
+
+    if (in_array($normalized, ['fixed', 'fixed_amount'], true)) {
+        return 'fixed';
+    }
+
+    if (in_array($normalized, ['by_hours', 'by_hours_and_minutes', 'hourly', 'hours'], true)) {
+        return 'by_hours';
+    }
+
     return 'by_hours';
 }
 
 function normalizeDeductionImportType($value): string
 {
+    $normalized = strtolower(trim((string)$value));
+
+    if (in_array($normalized, ['daily_deduction', 'daily', 'day', 'days', 'by_day', 'by_days'], true)) {
+        return 'daily_deduction';
+    }
+
+    if (in_array($normalized, ['fixed', 'fixed_amount', 'fixed_deduction'], true)) {
+        return 'fixed';
+    }
+
     return 'hourly_deduction';
 }
 
@@ -230,13 +253,18 @@ function reservePayrollImportCheckpoint(PDO $pdo, string $checkpointCode, ?strin
     }
 }
 
-function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string $benefitName, float $benefitAmount, int $status, string $benefitType = 'fixed', float $benefitHours = 0.0): bool
+function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string $benefitName, float $benefitAmount, int $status, string $benefitType = 'fixed', int $benefitHours = 0, int $benefitMinutes = 0): bool
 {
-    $normalizedHours = $benefitHours > 0 ? (int)round($benefitHours) : null;
+    // hours and minutes are stored as separate whole-number columns so a value like
+    // "1h 43m" is kept exact, instead of folding minutes into a fractional hours value
+    // and rounding it away.
     $calculationType = normalizeBenefitImportType($benefitType);
+    $normalizedHours = null;
+    $normalizedMinutes = null;
 
-    if ($calculationType === 'fixed') {
-        $normalizedHours = null;
+    if ($calculationType !== 'fixed' && ($benefitHours > 0 || $benefitMinutes > 0)) {
+        $normalizedHours = max(0, $benefitHours);
+        $normalizedMinutes = max(0, $benefitMinutes);
     }
 
     $lookup = $pdo->prepare("SELECT id FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year AND benefit = :benefit LIMIT 1");
@@ -248,23 +276,25 @@ function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string
     $existingId = $lookup->fetchColumn();
 
     if ($existingId) {
-        $update = $pdo->prepare("UPDATE payroll_benefits SET note = :amount, status = :status, calculation_type = :calculation_type, hours = :hours, days = NULL, type_id = NULL WHERE id = :id");
+        $update = $pdo->prepare("UPDATE payroll_benefits SET note = :amount, status = :status, calculation_type = :calculation_type, hours = :hours, minutes = :minutes, days = NULL, type_id = NULL WHERE id = :id");
         $update->execute([
             ':amount' => number_format($benefitAmount, 2, '.', ''),
             ':status' => $status,
             ':calculation_type' => $calculationType,
             ':hours' => $normalizedHours,
+            ':minutes' => $normalizedMinutes,
             ':id' => $existingId,
         ]);
         return true;
     }
 
-    $insert = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, days, calculation_type, month, status, type_id) VALUES (:emp_id, :benefit, :amount, :hours, NULL, :calculation_type, :month_year, :status, NULL)");
+    $insert = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, minutes, days, calculation_type, month, status, type_id) VALUES (:emp_id, :benefit, :amount, :hours, :minutes, NULL, :calculation_type, :month_year, :status, NULL)");
     $insert->execute([
         ':emp_id' => $empId,
         ':benefit' => $benefitName,
         ':amount' => number_format($benefitAmount, 2, '.', ''),
         ':hours' => $normalizedHours,
+        ':minutes' => $normalizedMinutes,
         ':calculation_type' => $calculationType,
         ':month_year' => $monthYear,
         ':status' => $status,
@@ -273,20 +303,29 @@ function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string
     return true;
 }
 
-function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, string $deductionName, float $deductionAmount, int $status, string $deductionType = 'fixed', float $deductionHours = 0.0, float $deductionDays = 0.0): bool
+function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, string $deductionName, float $deductionAmount, int $status, string $deductionType = 'fixed', int $deductionHours = 0, int $deductionMinutes = 0, int $deductionDays = 0): bool
 {
     $deductionName = normalizeDeductionName($deductionName);
-    $normalizedHours = $deductionHours > 0 ? (int)round($deductionHours) : null;
-    $normalizedDays = $deductionDays > 0 ? (int)round($deductionDays) : null;
+    // hours and minutes are stored as separate whole-number columns so a value like
+    // "1h 43m" is kept exact, instead of folding minutes into a fractional hours value
+    // and rounding it away.
+    $normalizedHours = null;
+    $normalizedMinutes = null;
+    $normalizedDays = $deductionDays > 0 ? $deductionDays : null;
     $calculationType = normalizeDeductionImportType($deductionType);
 
+    if ($calculationType === 'hourly_deduction' && ($deductionHours > 0 || $deductionMinutes > 0)) {
+        $normalizedHours = max(0, $deductionHours);
+        $normalizedMinutes = max(0, $deductionMinutes);
+    }
+
     if ($calculationType === 'fixed') {
+        $normalizedDays = null;
+    } elseif ($calculationType !== 'hourly_deduction') {
         $normalizedHours = null;
-        $normalizedDays = null;
-    } elseif ($calculationType === 'hourly_deduction') {
-        $normalizedDays = null;
+        $normalizedMinutes = null;
     } else {
-        $normalizedHours = null;
+        $normalizedDays = null;
     }
 
     if (isGosiDeductionName($deductionName)) {
@@ -301,7 +340,7 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
         $existingId = !empty($existingIds) ? (int)$existingIds[0] : 0;
 
         if ($existingId > 0) {
-            $update = $pdo->prepare("UPDATE payroll_deductions SET deduction = 'GOSI', note = :amount, status = :status, calculation_type = 'fixed', hours = NULL, days = NULL WHERE id = :id");
+            $update = $pdo->prepare("UPDATE payroll_deductions SET deduction = 'GOSI', note = :amount, status = :status, calculation_type = 'fixed', hours = NULL, minutes = NULL, days = NULL WHERE id = :id");
             $update->execute([
                 ':amount' => number_format($deductionAmount, 2, '.', ''),
                 ':status' => $status,
@@ -327,12 +366,13 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
         $existingId = $lookup->fetchColumn();
 
         if ($existingId) {
-            $update = $pdo->prepare("UPDATE payroll_deductions SET note = :amount, status = :status, calculation_type = :calculation_type, hours = :hours, days = :days WHERE id = :id");
+            $update = $pdo->prepare("UPDATE payroll_deductions SET note = :amount, status = :status, calculation_type = :calculation_type, hours = :hours, minutes = :minutes, days = :days WHERE id = :id");
             $update->execute([
                 ':amount' => number_format($deductionAmount, 2, '.', ''),
                 ':status' => $status,
                 ':calculation_type' => $calculationType,
                 ':hours' => $normalizedHours,
+                ':minutes' => $normalizedMinutes,
                 ':days' => $normalizedDays,
                 ':id' => $existingId,
             ]);
@@ -340,12 +380,13 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
         }
     }
 
-    $insert = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, hours, days, calculation_type, month, status) VALUES (:emp_id, :deduction, :amount, :hours, :days, :calculation_type, :month_year, :status)");
+    $insert = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, hours, minutes, days, calculation_type, month, status) VALUES (:emp_id, :deduction, :amount, :hours, :minutes, :days, :calculation_type, :month_year, :status)");
     $insert->execute([
         ':emp_id' => $empId,
         ':deduction' => $deductionName,
         ':amount' => number_format($deductionAmount, 2, '.', ''),
         ':hours' => $normalizedHours,
+        ':minutes' => $normalizedMinutes,
         ':days' => $normalizedDays,
         ':calculation_type' => $calculationType,
         ':month_year' => $monthYear,
@@ -422,6 +463,15 @@ try {
     reservePayrollImportCheckpoint($pdo, $checkpointCode, $defaultMonth, (string)($_SESSION['empid'] ?? $empid ?? '')); 
     $touchedPayrolls = [];
     $seenGosiDeductions = [];
+    // Multiple Excel rows for the same employee often share one generic deduction/benefit
+    // reason (e.g. several "Hourly deduction" lines with different days/hours/minutes).
+    // payroll_benefits/payroll_deductions only allow one row per (emp, month, name), and
+    // upsertPayrollBenefit()/upsertPayrollDeduction() UPDATE that single row - so calling
+    // them once per row let each later row silently overwrite the previous row's hours/
+    // amount instead of adding to it. Accumulate per (emp, month, name) here and upsert
+    // once after the loop so same-reason rows sum instead of clobbering each other.
+    $pendingBenefits = [];
+    $pendingDeductions = [];
 
     foreach ($rows as $index => $row) {
         $rowNumber = $index + 2;
@@ -441,19 +491,36 @@ try {
         $overtimeMinutes = parseImportAmount($row['benefit_minutes'] ?? $row['overtime_minutes'] ?? '');
         $overtimeReason = trim((string)($row['benefit_reason'] ?? $row['overtime_reason'] ?? ''));
         $deductionStatus = normalizeImportStatus($row['deduction_status'] ?? $row['deduction_record_status'] ?? $row['status'] ?? '1');
-        $deductionType = normalizeDeductionImportType($row['deduction_type'] ?? 'hourly_deduction');
         $deductionValue = parseImportAmount($row['deduction_value'] ?? '');
         $deductionHours = parseImportAmount($row['deduction_hours'] ?? '');
         $deductionMinutes = parseImportAmount($row['deduction_minutes'] ?? '');
         $deductionDays = parseImportAmount($row['deduction_day'] ?? $row['deduction_days'] ?? '');
         $deductionReason = trim((string)($row['deduction_reason'] ?? ''));
+        // The import template has no deduction_type column - only deduction_days vs
+        // deduction_hours/deduction_minutes. Infer the type from which of those the row
+        // actually filled in, instead of forcing every row to hourly_deduction (that used
+        // to silently drop day-based deductions: days got nulled out in upsertPayrollDeduction
+        // because the row was mislabeled as hourly with 0 hours).
+        $deductionTypeRaw = trim((string)($row['deduction_type'] ?? ''));
+        if ($deductionTypeRaw !== '') {
+            $deductionType = normalizeDeductionImportType($deductionTypeRaw);
+        } elseif ($deductionDays > 0 && $deductionHours <= 0 && $deductionMinutes <= 0) {
+            $deductionType = 'daily_deduction';
+        } else {
+            $deductionType = 'hourly_deduction';
+        }
         $gosiDeductionSkipped = false;
         $missingOvertimePair = false;
         $missingDeductionPair = false;
         $invalidDeductionPeriodPair = false;
 
         $overtimeDurationHours = $overtimeHours + ($overtimeMinutes / 60);
-        if ($overtimeDurationHours > 0) {
+        // Fixed benefits are a dollar value with a reason and no hours - gating them on
+        // duration > 0 (like hourly benefits) wiped overtimeValue back to 0 before it ever
+        // reached the insert, so a "Fixed" benefit_type row could never be imported.
+        $overtimeHasAmount = $benefitType === 'fixed' ? ($overtimeValue > 0) : ($overtimeDurationHours > 0);
+
+        if ($overtimeHasAmount) {
             if ($overtimeReason === '') {
                 $missingOvertimePair = true;
             }
@@ -461,7 +528,7 @@ try {
             $missingOvertimePair = true;
         }
 
-        if ($overtimeDurationHours <= 0 || $overtimeReason === '') {
+        if (!$overtimeHasAmount || $overtimeReason === '') {
             $overtimeValue = 0.0;
             $overtimeHours = 0.0;
             $overtimeMinutes = 0.0;
@@ -479,7 +546,13 @@ try {
         }
 
         $deductionDurationHours = $deductionHours + ($deductionMinutes / 60) + ($deductionDays * 8);
-        if ($deductionDurationHours > 0) {
+        // Fixed deductions are a dollar value with a reason and no hours/days - gating them
+        // on duration > 0 (like hourly/daily deductions) wiped deductionValue back to 0
+        // before it ever reached the insert, so a "Fixed" deduction_type row could never
+        // be imported.
+        $deductionHasAmount = $deductionType === 'fixed' ? ($deductionValue > 0) : ($deductionDurationHours > 0);
+
+        if ($deductionHasAmount) {
             if (!$gosiDeductionSkipped && $deductionReason === '') {
                 $missingDeductionPair = true;
             }
@@ -487,7 +560,7 @@ try {
             $missingDeductionPair = true;
         }
 
-        if ($deductionDurationHours <= 0 || $deductionReason === '') {
+        if (!$deductionHasAmount || $deductionReason === '') {
             $deductionValue = 0.0;
             $deductionHours = 0.0;
             $deductionMinutes = 0.0;
@@ -597,25 +670,47 @@ try {
         $rowImported = false;
 
         if ($hasBenefitEntry) {
+            // Duration in hours is only used for the money calculation below - minutes are
+            // never folded into the stored hours value, they get their own column.
             $benefitDurationHours = $overtimeHours + ($overtimeMinutes / 60);
             if ($benefitDurationHours > 0 && $overtimeValue <= 0) {
                 $overtimeValue = calculateImportedBenefitAmount($payrollRecord, $benefitDurationHours);
             }
 
             $benefitName = $overtimeReason !== '' ? $overtimeReason : 'Imported Overtime';
-            upsertPayrollBenefit($pdo, $empId, $monthYear, $benefitName, $overtimeValue, $overtimeStatus ?? 1, $benefitType, $benefitDurationHours);
+            $benefitKey = $empId . '|' . $monthYear . '|' . strtolower(trim($benefitName));
+            if (isset($pendingBenefits[$benefitKey])) {
+                $pendingBenefits[$benefitKey]['amount'] += $overtimeValue;
+                $pendingBenefits[$benefitKey]['hours'] += (int)round($overtimeHours);
+                $pendingBenefits[$benefitKey]['minutes'] += (int)round($overtimeMinutes);
+                $pendingBenefits[$benefitKey]['status'] = $overtimeStatus ?? 1;
+                $pendingBenefits[$benefitKey]['type'] = $benefitType;
+            } else {
+                $pendingBenefits[$benefitKey] = [
+                    'emp_id' => $empId,
+                    'month' => $monthYear,
+                    'name' => $benefitName,
+                    'amount' => $overtimeValue,
+                    'status' => $overtimeStatus ?? 1,
+                    'type' => $benefitType,
+                    'hours' => (int)round($overtimeHours),
+                    'minutes' => (int)round($overtimeMinutes),
+                ];
+            }
             $summary['imported_benefits']++;
             $rowImported = true;
         }
 
         if ($hasDeductionEntry) {
-            $deductionHours = $deductionDurationHours;
-            $deductionMinutes = 0.0;
+            // Duration in hours is only used for the money calculation below - minutes are
+            // never folded into the stored hours value, they get their own column.
+            $deductionDurationForCalc = $deductionDurationHours;
+            $rawDeductionHours = $deductionHours;
+            $rawDeductionMinutes = $deductionMinutes;
 
             if ($deductionValue <= 0) {
-                $calculatedDeduction = calculateImportedDeductionAmount($payrollRecord, $deductionHours);
+                $calculatedDeduction = calculateImportedDeductionAmount($payrollRecord, $deductionDurationForCalc);
                 $deductionValue = $calculatedDeduction['amount'];
-                $deductionHours = $calculatedDeduction['hours'];
             }
 
             $deductionName = normalizeDeductionName($deductionReason !== '' ? $deductionReason : 'Imported Deduction');
@@ -632,7 +727,27 @@ try {
                 $seenGosiDeductions[$gosiKey] = true;
             }
 
-            upsertPayrollDeduction($pdo, $empId, $monthYear, $deductionName, $deductionValue, $deductionStatus ?? 1, $deductionType, $deductionHours, $deductionDays);
+            $deductionKey = $empId . '|' . $monthYear . '|' . strtolower(trim($deductionName));
+            if (isset($pendingDeductions[$deductionKey])) {
+                $pendingDeductions[$deductionKey]['amount'] += $deductionValue;
+                $pendingDeductions[$deductionKey]['hours'] += (int)round($rawDeductionHours);
+                $pendingDeductions[$deductionKey]['minutes'] += (int)round($rawDeductionMinutes);
+                $pendingDeductions[$deductionKey]['days'] += $deductionDays;
+                $pendingDeductions[$deductionKey]['status'] = $deductionStatus ?? 1;
+                $pendingDeductions[$deductionKey]['type'] = $deductionType;
+            } else {
+                $pendingDeductions[$deductionKey] = [
+                    'emp_id' => $empId,
+                    'month' => $monthYear,
+                    'name' => $deductionName,
+                    'amount' => $deductionValue,
+                    'status' => $deductionStatus ?? 1,
+                    'type' => $deductionType,
+                    'hours' => (int)round($rawDeductionHours),
+                    'minutes' => (int)round($rawDeductionMinutes),
+                    'days' => $deductionDays,
+                ];
+            }
             $summary['imported_deductions']++;
             $rowImported = true;
         }
@@ -646,17 +761,51 @@ try {
         $touchedPayrolls[$empId . '|' . $monthYear] = [$empId, $monthYear];
     }
 
+    foreach ($pendingBenefits as $pendingBenefit) {
+        upsertPayrollBenefit(
+            $pdo,
+            $pendingBenefit['emp_id'],
+            $pendingBenefit['month'],
+            $pendingBenefit['name'],
+            $pendingBenefit['amount'],
+            $pendingBenefit['status'],
+            $pendingBenefit['type'],
+            (int)$pendingBenefit['hours'],
+            (int)$pendingBenefit['minutes']
+        );
+    }
+
+    foreach ($pendingDeductions as $pendingDeduction) {
+        upsertPayrollDeduction(
+            $pdo,
+            $pendingDeduction['emp_id'],
+            $pendingDeduction['month'],
+            $pendingDeduction['name'],
+            $pendingDeduction['amount'],
+            $pendingDeduction['status'],
+            $pendingDeduction['type'],
+            (int)$pendingDeduction['hours'],
+            (int)$pendingDeduction['minutes'],
+            (int)$pendingDeduction['days']
+        );
+    }
+
     foreach ($touchedPayrolls as $payrollKey => $parts) {
         recalculateImportedPayroll($pdo, $parts[0], $parts[1]);
         $summary['updated_payrolls']++;
     }
 
-    if ($summary['processed_rows'] === 0 && !empty($summary['errors'])) {
+    if ($summary['processed_rows'] === 0) {
+        // Every row was skipped - including "soft" skips (missing reason pairing, GOSI
+        // auto-managed lines, blank rows) that never populate $summary['errors']. Without this
+        // check the transaction would silently commit a no-op and report status "success",
+        // so the reviewer sees a green toast while payroll_benefits/payroll_deductions never
+        // actually changed.
         $pdo->rollBack();
         echo json_encode([
             'status' => 'error',
-            'message' => 'No payroll rows were imported. Review the row errors and make sure payroll is already generated for the same employee and month.',
-            'errors' => $summary['errors'],
+            'message' => 'No payroll rows were imported. Review the row details below and make sure payroll is already generated for the same employee and month.',
+            'errors' => !empty($summary['errors']) ? $summary['errors'] : $summary['skipped_details'],
             'processed_rows' => 0,
             'imported_benefits' => 0,
             'imported_deductions' => 0,

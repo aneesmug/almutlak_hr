@@ -3,6 +3,7 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
 require_once __DIR__ . '/includes/payroll_approval_helpers.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
 if (file_exists(__DIR__ . '/includes/functions.php')) {
     require_once __DIR__ . '/includes/functions.php';
@@ -13,7 +14,12 @@ if (function_exists('load_language')) {
     load_language($current_lang);
 }
 
-if (isset($isEmployee) && $isEmployee === true) {
+// Restrict access: Employees cannot view this page, unless explicitly
+// granted via app_settings -> Special Access.
+if (
+    isset($isEmployee) && $isEmployee === true
+    && !user_has_special_access($conDB, $empid ?? '', 'access_payroll_status_history', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+) {
     header('Location: ./profile.php');
     exit();
 }

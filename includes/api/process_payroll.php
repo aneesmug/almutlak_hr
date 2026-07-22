@@ -676,7 +676,8 @@ try {
                 total_benefits = VALUES(total_benefits),
                 total_deductions = VALUES(total_deductions),
                 net_salary = VALUES(net_salary),
-                status = VALUES(status)
+                status = VALUES(status),
+                generated_at = CURRENT_TIMESTAMP
         ");
         $stmt->execute([
             ':emp_id' => $empId,

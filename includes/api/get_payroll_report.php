@@ -131,7 +131,7 @@ try {
                 ORDER BY er.last_working_day DESC, er.id DESC
                 LIMIT 1
             )
-            WHERE gp.month_year = :month_year_param" . $dept_filter . $company_filter . "
+            WHERE gp.month_year = :month_year_param AND e.payment_type <> 3" . $dept_filter . $company_filter . "
             ORDER BY c.comp_name ASC, d.dep_nme ASC, e.name ASC";
 
     $stmt = $pdo->prepare($sql);

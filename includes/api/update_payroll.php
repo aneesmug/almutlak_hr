@@ -232,7 +232,11 @@ try {
         $benefitAmount = (float)($benefit['amount'] ?? 0);
         $benefitId = $benefit['id'] ?? null;
         $benefitTypeId = $benefit['type_id'] ?? null;
-        $benefitHours = isset($benefit['hours']) ? (float)$benefit['hours'] : null;
+        // hours keeps whatever decimal the user typed (e.g. 1.46); minutes is a separate
+        // whole-number field on top of it - both stored in their own columns.
+        $benefitHours = isset($benefit['hours']) && $benefit['hours'] !== '' ? (float)$benefit['hours'] : null;
+        $benefitMinutes = isset($benefit['minutes']) && $benefit['minutes'] !== '' ? (int)$benefit['minutes'] : null;
+        $benefitDurationHours = ($benefitHours ?? 0) + (($benefitMinutes ?? 0) / 60);
 
         if (empty($benefitName) && $benefitAmount <= 0) continue;
 
@@ -242,21 +246,21 @@ try {
             $stmtBenefitType->execute([':id' => $benefitTypeId]);
             $calculationType = $stmtBenefitType->fetchColumn();
 
-            if ($calculationType === 'overtime_basic' && $benefitHours !== null) {
+            if ($calculationType === 'overtime_basic' && $benefitDurationHours > 0) {
                 $basicSalary = (float)$salaryComponents['basic_salary'];
                 $hourlyRate = ($basicSalary / 240 / 2) + ($totalGrossSalary / 240);
-                $calculatedAmount = $hourlyRate * $benefitHours;
-            } elseif ($calculationType === 'overtime_total' && $benefitHours !== null) {
-                $calculatedAmount = ($totalGrossSalary / 240) * $benefitHours;
+                $calculatedAmount = $hourlyRate * $benefitDurationHours;
+            } elseif ($calculationType === 'overtime_total' && $benefitDurationHours > 0) {
+                $calculatedAmount = ($totalGrossSalary / 240) * $benefitDurationHours;
             }
         }
 
         if ($benefitId) {
-            $stmt = $pdo->prepare("UPDATE payroll_benefits SET benefit = :benefit_name, note = :benefit_amount, hours = :hours, type_id = :type_id WHERE id = :id");
-            $stmt->execute([':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':type_id' => $benefitTypeId, ':id' => $benefitId]);
+            $stmt = $pdo->prepare("UPDATE payroll_benefits SET benefit = :benefit_name, note = :benefit_amount, hours = :hours, minutes = :minutes, type_id = :type_id WHERE id = :id");
+            $stmt->execute([':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':minutes' => $benefitMinutes, ':type_id' => $benefitTypeId, ':id' => $benefitId]);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, month, status, type_id) VALUES (:emp_id, :benefit_name, :benefit_amount, :hours, :month_year, 1, :type_id)");
-            $stmt->execute([':emp_id' => $empId, ':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':month_year' => $monthYear, ':type_id' => $benefitTypeId]);
+            $stmt = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, minutes, month, status, type_id) VALUES (:emp_id, :benefit_name, :benefit_amount, :hours, :minutes, :month_year, 1, :type_id)");
+            $stmt->execute([':emp_id' => $empId, ':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':minutes' => $benefitMinutes, ':month_year' => $monthYear, ':type_id' => $benefitTypeId]);
         }
     }
     
@@ -288,16 +292,20 @@ try {
 
         if ($deductionId) {
             $calcType = $deduction['calculation_type'] ?? 'fixed';
-            $hours = isset($deduction['hours']) ? (float)$deduction['hours'] : null;
-            $days = isset($deduction['days']) ? (float)$deduction['days'] : null;
-            $stmt = $pdo->prepare("UPDATE payroll_deductions SET deduction = :deduction_name, note = :deduction_amount, calculation_type = :calc_type, hours = :hours, days = :days WHERE id = :id");
-            $stmt->execute([':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':calc_type' => $calcType, ':hours' => $hours, ':days' => $days, ':id' => $deductionId]);
+            // hours keeps whatever decimal the user typed (e.g. 1.46); minutes and days are
+            // separate whole-number fields on top of it - both stored in their own columns.
+            $hours = isset($deduction['hours']) && $deduction['hours'] !== '' ? (float)$deduction['hours'] : null;
+            $minutes = isset($deduction['minutes']) && $deduction['minutes'] !== '' ? (int)$deduction['minutes'] : null;
+            $days = isset($deduction['days']) && $deduction['days'] !== '' ? (int)$deduction['days'] : null;
+            $stmt = $pdo->prepare("UPDATE payroll_deductions SET deduction = :deduction_name, note = :deduction_amount, calculation_type = :calc_type, hours = :hours, minutes = :minutes, days = :days WHERE id = :id");
+            $stmt->execute([':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':calc_type' => $calcType, ':hours' => $hours, ':minutes' => $minutes, ':days' => $days, ':id' => $deductionId]);
         } else {
             $calcType = $deduction['calculation_type'] ?? 'fixed';
-            $hours = isset($deduction['hours']) ? (float)$deduction['hours'] : null;
-            $days = isset($deduction['days']) ? (float)$deduction['days'] : null;
-            $stmt = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status, calculation_type, hours, days) VALUES (:emp_id, :deduction_name, :deduction_amount, :month_year, 1, :calc_type, :hours, :days)");
-            $stmt->execute([':emp_id' => $empId, ':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':month_year' => $monthYear, ':calc_type' => $calcType, ':hours' => $hours, ':days' => $days]);
+            $hours = isset($deduction['hours']) && $deduction['hours'] !== '' ? (float)$deduction['hours'] : null;
+            $minutes = isset($deduction['minutes']) && $deduction['minutes'] !== '' ? (int)$deduction['minutes'] : null;
+            $days = isset($deduction['days']) && $deduction['days'] !== '' ? (int)$deduction['days'] : null;
+            $stmt = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status, calculation_type, hours, minutes, days) VALUES (:emp_id, :deduction_name, :deduction_amount, :month_year, 1, :calc_type, :hours, :minutes, :days)");
+            $stmt->execute([':emp_id' => $empId, ':deduction_name' => $deductionName, ':deduction_amount' => number_format($deductionAmount, 2, '.', ''), ':month_year' => $monthYear, ':calc_type' => $calcType, ':hours' => $hours, ':minutes' => $minutes, ':days' => $days]);
         }
         
         // --- NEW: SYNCHRONIZE LOAN PAYMENT UPDATE ---

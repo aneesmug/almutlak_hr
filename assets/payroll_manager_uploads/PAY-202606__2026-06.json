@@ -1,45 +1,5 @@
 {
     "request_inv_no": "PAY-202606",
     "month": "2026-06",
-    "uploads": [
-        {
-            "file_id": "b1de60c4b423c52c4059",
-            "checkpoint_code": "PAYIMP-202606-574F6880CF39",
-            "original_name": "payroll_2026-06_HAIFAA_SAEED_ALMALKI.xlsx",
-            "stored_name": "PAY-202606__2026-06__20260719_162228__933c856e.xlsx",
-            "uploaded_by": "4133",
-            "uploaded_by_name": "ISSA TAMOTOMA",
-            "uploaded_at": "2026-07-19 16:22:28",
-            "reviewed_by": "",
-            "reviewed_by_name": "",
-            "reviewed_at": "",
-            "review_note": ""
-        },
-        {
-            "file_id": "260a329e9ed754e2ed31",
-            "checkpoint_code": "PAYIMP-202606-2D888A4A26AB",
-            "original_name": "payroll_2026-06_ISSA_TAMOTOMA.xlsx",
-            "stored_name": "PAY-202606__2026-06__20260716_150507__2c17e9af.xlsx",
-            "uploaded_by": "4133",
-            "uploaded_by_name": "ISSA TAMOTOMA",
-            "uploaded_at": "2026-07-16 15:05:07",
-            "reviewed_by": "5455",
-            "reviewed_by_name": "HAIFAA SAEED ALMALKI",
-            "reviewed_at": "2026-07-16 15:06:07",
-            "review_note": "Reviewed by HR Payroll and imported to payroll."
-        },
-        {
-            "file_id": "b281d6ed3dba43d1c6a6",
-            "checkpoint_code": "",
-            "original_name": "payroll_2026-06_KILO_08.xlsx",
-            "stored_name": "PAY-202606__2026-06__20260610_122527__c9379978.xlsx",
-            "uploaded_by": "5430",
-            "uploaded_by_name": "ANEES AFZAL",
-            "uploaded_at": "2026-06-10 12:25:27",
-            "reviewed_by": "3431",
-            "reviewed_by_name": "LEANDRO BUNAG SANTIAGO",
-            "reviewed_at": "2026-06-10 12:46:53",
-            "review_note": "Reviewed by HR Payroll and imported to payroll."
-        }
-    ]
+    "uploads": []
 }

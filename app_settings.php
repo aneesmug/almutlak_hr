@@ -200,6 +200,10 @@
                                         </div>
                                     </div>
 
+                                    <!-- Persistent (not tab-content) so it survives switching to another
+                                         settings tab before Save - see loadSettings()/renderSpecialAccessSettings(). -->
+                                    <input type="hidden" id="setting-special_access_by_user" name="special_access_by_user" value="{}">
+
                                     <div class="form-group text-right m-t-20">
                                         <button type="submit" id="saveBtn" class="btn btn-primary waves-effect waves-light">
                                             <?= __("save_changes") ?>
@@ -245,6 +249,7 @@
         let groupedSettings = {};
         let fullAccessCandidates = null;
         let reportPermissionUsers = null;
+        let specialAccessUsersRaw = null;
         let reportPermissionEligibleUsers = [];
         let reportPermissionMap = {};
         let currentReportPermissionEmpId = '';
@@ -721,6 +726,38 @@
                 console.error('Failed loading report permission users:', error);
                 reportPermissionUsers = [];
                 return reportPermissionUsers;
+            }
+        }
+
+        // Same as fetchReportPermissionUsers(), but includes user_type='employee' accounts -
+        // Special Access is the mechanism for unlocking a normally-blocked page for one employee.
+        async function fetchSpecialAccessUsers() {
+            if (Array.isArray(specialAccessUsersRaw)) {
+                return specialAccessUsersRaw;
+            }
+
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_special_access_users' })
+                });
+
+                if (!response.ok) {
+                    throw new Error('<?= __('failed_to_load_users') ?>');
+                }
+
+                const data = await response.json();
+                if (!data.success || !Array.isArray(data.users)) {
+                    throw new Error(data.message || '<?= __('failed_to_load_users') ?>');
+                }
+
+                specialAccessUsersRaw = data.users;
+                return specialAccessUsersRaw;
+            } catch (error) {
+                console.error('Failed loading special access users:', error);
+                specialAccessUsersRaw = [];
+                return specialAccessUsersRaw;
             }
         }
 
@@ -1281,19 +1318,19 @@
                             </div>
                         </div>
                     </div>
-                    <input type="hidden" id="setting-special_access_by_user" name="special_access_by_user" value="{}">
                 </div>
             `;
 
-            const setting = appSettings.find(s => s.setting_name === 'special_access_by_user');
-            specialAccessMap = parseSpecialAccessMap(setting ? setting.setting_value : '{}');
-            updateSpecialAccessHiddenValue();
+            // NOTE: specialAccessMap is intentionally NOT re-initialized from appSettings here.
+            // It's seeded once in loadSettings() right after fetch, and the hidden input that
+            // carries it to Save now lives outside #settings-container (persists across tab
+            // switches). Re-parsing from appSettings on every render of this tab would silently
+            // discard any grant/removal the admin made before navigating to another tab and back.
 
-            const usersRaw = await fetchReportPermissionUsers();
-            const users = usersRaw.filter(user => {
-                const role = String(user.user_type || '').trim().toLowerCase();
-                return role !== 'employee';
-            });
+            // Plain employees are included here on purpose - the "Access Page: ..." special
+            // access keys exist specifically to grant a single employee access to a page that's
+            // normally blocked for their role (see get_special_access_page_labels()).
+            const users = await fetchSpecialAccessUsers();
             specialAccessEligibleUsers = users;
             const select = document.getElementById('special-access-user-select');
             const checkboxContainer = document.getElementById('special-access-checkboxes');
@@ -2499,6 +2536,16 @@
                     acc[group].push(setting);
                     return acc;
                 }, {});
+
+                // Seed specialAccessMap from the real DB value as soon as settings load - not
+                // only when the Special Access tab happens to be rendered. The hidden input
+                // that carries this to Save is now a persistent field outside #settings-container
+                // (see form skeleton), so it survives switching to other settings tabs. Without
+                // this early seed, saving before ever opening the Special Access tab would submit
+                // an empty "{}" and wipe out every existing grant.
+                const specialAccessSetting = appSettings.find(s => s.setting_name === 'special_access_by_user');
+                specialAccessMap = parseSpecialAccessMap(specialAccessSetting ? specialAccessSetting.setting_value : '{}');
+                updateSpecialAccessHiddenValue();
 
                 // Ensure custom management tabs always exist
                 if (!groupedSettings['job titles']) {

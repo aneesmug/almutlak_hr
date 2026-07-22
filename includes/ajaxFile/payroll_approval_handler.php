@@ -1517,7 +1517,7 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
         ensurePayrollSupervisorReportDispatchTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserRole !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can access this action.');
         }
 
@@ -1663,7 +1663,7 @@ function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId
 
     try {
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserRole !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can access this action.');
         }
 
@@ -1821,6 +1821,41 @@ function saveManagerPayrollUploadMeta(string $requestInvNo, string $monthYear, a
     $encoded = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
     if ($encoded === false || @file_put_contents($metaPath, $encoded, LOCK_EX) === false) {
         throw new Exception('Unable to save manager upload metadata.');
+    }
+}
+
+/**
+ * Acquire an exclusive lock spanning the whole load-modify-save cycle for a
+ * request/month's upload metadata. Without this, two near-simultaneous
+ * requests (double-click upload, or an upload racing a review/delete) can
+ * each load the same starting JSON, and the last one to save silently wipes
+ * out the other's change - including uploads whose .xlsx already landed on
+ * disk, leaving them orphaned and invisible to HR Payroll / HR Senior BP.
+ */
+function acquireManagerPayrollUploadLock(string $requestInvNo, string $monthYear)
+{
+    $storageDir = getManagerPayrollUploadStorageDir();
+    if (!is_dir($storageDir) && !@mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
+        throw new Exception('Unable to prepare upload storage directory.');
+    }
+
+    $lockPath = $storageDir . DIRECTORY_SEPARATOR . normalizeManagerPayrollUploadKey($requestInvNo, $monthYear) . '.lock';
+    $handle = @fopen($lockPath, 'c');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) {
+            fclose($handle);
+        }
+        throw new Exception('Unable to lock manager upload metadata. Please try again.');
+    }
+
+    return $handle;
+}
+
+function releaseManagerPayrollUploadLock($lockHandle): void
+{
+    if (is_resource($lockHandle)) {
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
     }
 }
 
@@ -2140,65 +2175,70 @@ function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): voi
             throw new Exception("This file is already uploaded, so you can't upload it again.");
         }
 
-        $existingMetaForCheckpoint = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
-        $existingUploadsForCheckpoint = isset($existingMetaForCheckpoint['uploads']) && is_array($existingMetaForCheckpoint['uploads'])
-            ? $existingMetaForCheckpoint['uploads']
-            : [];
-        foreach ($existingUploadsForCheckpoint as $existingUpload) {
-            if (!is_array($existingUpload)) {
-                continue;
-            }
-
-            $existingCheckpoint = strtoupper(trim((string)($existingUpload['checkpoint_code'] ?? '')));
-            if ($existingCheckpoint !== '' && $existingCheckpoint === $checkpointCode) {
-                throw new Exception("This file is already uploaded, so you can't upload it again.");
-            }
-        }
-
         $storageDir = getManagerPayrollUploadStorageDir();
         if (!is_dir($storageDir) && !@mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
             throw new Exception('Unable to prepare upload storage directory.');
         }
 
-        $safeKey = normalizeManagerPayrollUploadKey($requestInvNo, $monthYear);
-        $storedName = $safeKey . '__' . date('Ymd_His') . '__' . bin2hex(random_bytes(4)) . '.' . $extension;
-        $storedPath = $storageDir . DIRECTORY_SEPARATOR . $storedName;
+        $lockHandle = acquireManagerPayrollUploadLock($requestInvNo, $monthYear);
+        try {
+            $existingMetaForCheckpoint = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+            $existingUploadsForCheckpoint = isset($existingMetaForCheckpoint['uploads']) && is_array($existingMetaForCheckpoint['uploads'])
+                ? $existingMetaForCheckpoint['uploads']
+                : [];
+            foreach ($existingUploadsForCheckpoint as $existingUpload) {
+                if (!is_array($existingUpload)) {
+                    continue;
+                }
 
-        if (!@move_uploaded_file($tmpPath, $storedPath)) {
-            throw new Exception('Failed to save uploaded file on server.');
-        }
-
-        $uploaderNameStmt = $pdo->prepare('SELECT name FROM employees WHERE emp_id = :emp_id LIMIT 1');
-        $uploaderNameStmt->execute([':emp_id' => $currentUserId]);
-        $uploaderName = (string)($uploaderNameStmt->fetchColumn() ?: $currentUserId);
-        if ($uploaderName !== '' && function_exists('parseName')) {
-            $parsedUploaderName = trim((string)parseName($uploaderName, 'FIRST_LAST'));
-            if ($parsedUploaderName !== '') {
-                $uploaderName = $parsedUploaderName;
+                $existingCheckpoint = strtoupper(trim((string)($existingUpload['checkpoint_code'] ?? '')));
+                if ($existingCheckpoint !== '' && $existingCheckpoint === $checkpointCode) {
+                    throw new Exception("This file is already uploaded, so you can't upload it again.");
+                }
             }
+
+            $safeKey = normalizeManagerPayrollUploadKey($requestInvNo, $monthYear);
+            $storedName = $safeKey . '__' . date('Ymd_His') . '__' . bin2hex(random_bytes(4)) . '.' . $extension;
+            $storedPath = $storageDir . DIRECTORY_SEPARATOR . $storedName;
+
+            if (!@move_uploaded_file($tmpPath, $storedPath)) {
+                throw new Exception('Failed to save uploaded file on server.');
+            }
+
+            $uploaderNameStmt = $pdo->prepare('SELECT name FROM employees WHERE emp_id = :emp_id LIMIT 1');
+            $uploaderNameStmt->execute([':emp_id' => $currentUserId]);
+            $uploaderName = (string)($uploaderNameStmt->fetchColumn() ?: $currentUserId);
+            if ($uploaderName !== '' && function_exists('parseName')) {
+                $parsedUploaderName = trim((string)parseName($uploaderName, 'FIRST_LAST'));
+                if ($parsedUploaderName !== '') {
+                    $uploaderName = $parsedUploaderName;
+                }
+            }
+
+            $existingMeta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+            $fileId = buildManagerPayrollUploadFileId($storedName, date('Y-m-d H:i:s'));
+            $newUpload = [
+                'file_id' => $fileId,
+                'request_inv_no' => $requestInvNo,
+                'month' => $monthYear,
+                'checkpoint_code' => $checkpointCode,
+                'original_name' => $originalName,
+                'stored_name' => $storedName,
+                'uploaded_by' => $currentUserId,
+                'uploaded_by_name' => $uploaderName,
+                'uploaded_at' => date('Y-m-d H:i:s'),
+                'reviewed_by' => '',
+                'reviewed_by_name' => '',
+                'reviewed_at' => '',
+                'review_note' => ''
+            ];
+
+            $existingMeta['uploads'][] = $newUpload;
+            $meta = normalizeManagerPayrollUploadMeta($existingMeta, $requestInvNo, $monthYear);
+            saveManagerPayrollUploadMeta($requestInvNo, $monthYear, $meta);
+        } finally {
+            releaseManagerPayrollUploadLock($lockHandle);
         }
-
-        $existingMeta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
-        $fileId = buildManagerPayrollUploadFileId($storedName, date('Y-m-d H:i:s'));
-        $newUpload = [
-            'file_id' => $fileId,
-            'request_inv_no' => $requestInvNo,
-            'month' => $monthYear,
-            'checkpoint_code' => $checkpointCode,
-            'original_name' => $originalName,
-            'stored_name' => $storedName,
-            'uploaded_by' => $currentUserId,
-            'uploaded_by_name' => $uploaderName,
-            'uploaded_at' => date('Y-m-d H:i:s'),
-            'reviewed_by' => '',
-            'reviewed_by_name' => '',
-            'reviewed_at' => '',
-            'review_note' => ''
-        ];
-
-        $existingMeta['uploads'][] = $newUpload;
-        $meta = normalizeManagerPayrollUploadMeta($existingMeta, $requestInvNo, $monthYear);
-        saveManagerPayrollUploadMeta($requestInvNo, $monthYear, $meta);
 
         // Summary figures for the HR notification email (matches the level of detail
         // the "Send Payroll Report by Direct Supervisor" email already shows).
@@ -2326,7 +2366,7 @@ function getManagerUploadedPayrollExcelRows(PDO $pdo, string $currentUserId): vo
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserType !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can review manager uploaded payroll Excel.');
         }
 
@@ -2414,7 +2454,7 @@ function getPayrollCompensationForEmployees(PDO $pdo, string $currentUserId): vo
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserType !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can look up payroll compensation.');
         }
 
@@ -2469,7 +2509,7 @@ function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): 
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserType !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can review manager uploaded payroll Excel.');
         }
 
@@ -2539,7 +2579,7 @@ function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserType !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can update manager upload review records.');
         }
 
@@ -2547,22 +2587,27 @@ function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId
             throw new Exception('Missing file selection, request number, or valid month.');
         }
 
-        $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
-        $found = findManagerPayrollUploadByFileId($meta, $fileId);
-        if ($found['index'] < 0 || empty($found['upload'])) {
-            throw new Exception('Selected manager uploaded file was not found.');
+        $lockHandle = acquireManagerPayrollUploadLock($requestInvNo, $monthYear);
+        try {
+            $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+            $found = findManagerPayrollUploadByFileId($meta, $fileId);
+            if ($found['index'] < 0 || empty($found['upload'])) {
+                throw new Exception('Selected manager uploaded file was not found.');
+            }
+
+            $reviewerNameStmt = $pdo->prepare('SELECT name FROM employees WHERE emp_id = :emp_id LIMIT 1');
+            $reviewerNameStmt->execute([':emp_id' => $currentUserId]);
+            $reviewerName = (string)($reviewerNameStmt->fetchColumn() ?: $currentUserId);
+
+            $meta['uploads'][$found['index']]['reviewed_by'] = $currentUserId;
+            $meta['uploads'][$found['index']]['reviewed_by_name'] = $reviewerName;
+            $meta['uploads'][$found['index']]['reviewed_at'] = date('Y-m-d H:i:s');
+            $meta['uploads'][$found['index']]['review_note'] = $reviewNote !== '' ? $reviewNote : 'Reviewed by HR Payroll and imported into payroll.';
+
+            saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
+        } finally {
+            releaseManagerPayrollUploadLock($lockHandle);
         }
-
-        $reviewerNameStmt = $pdo->prepare('SELECT name FROM employees WHERE emp_id = :emp_id LIMIT 1');
-        $reviewerNameStmt->execute([':emp_id' => $currentUserId]);
-        $reviewerName = (string)($reviewerNameStmt->fetchColumn() ?: $currentUserId);
-
-        $meta['uploads'][$found['index']]['reviewed_by'] = $currentUserId;
-        $meta['uploads'][$found['index']]['reviewed_by_name'] = $reviewerName;
-        $meta['uploads'][$found['index']]['reviewed_at'] = date('Y-m-d H:i:s');
-        $meta['uploads'][$found['index']]['review_note'] = $reviewNote !== '' ? $reviewNote : 'Reviewed by HR Payroll and imported into payroll.';
-
-        saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
 
         echo json_encode([
             'status' => 'success',
@@ -2582,7 +2627,7 @@ function deleteManagerUploadedPayrollExcelFile(PDO $pdo, string $currentUserId):
 
     try {
         $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserType !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can delete manager uploaded payroll Excel.');
         }
 
@@ -2590,26 +2635,31 @@ function deleteManagerUploadedPayrollExcelFile(PDO $pdo, string $currentUserId):
             throw new Exception('Missing file selection, request number, or valid month.');
         }
 
-        $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
-        $found = findManagerPayrollUploadByFileId($meta, $fileId);
-        if ($found['index'] < 0 || empty($found['upload'])) {
-            throw new Exception('Selected manager uploaded file was not found.');
-        }
-
-        if (!empty($found['upload']['reviewed_at'])) {
-            throw new Exception('A reviewed file cannot be deleted.');
-        }
-
-        $storedName = trim((string)($found['upload']['stored_name'] ?? ''));
-        if ($storedName !== '') {
-            $filePath = getManagerPayrollUploadStorageDir() . DIRECTORY_SEPARATOR . basename($storedName);
-            if (is_file($filePath)) {
-                @unlink($filePath);
+        $lockHandle = acquireManagerPayrollUploadLock($requestInvNo, $monthYear);
+        try {
+            $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+            $found = findManagerPayrollUploadByFileId($meta, $fileId);
+            if ($found['index'] < 0 || empty($found['upload'])) {
+                throw new Exception('Selected manager uploaded file was not found.');
             }
-        }
 
-        array_splice($meta['uploads'], $found['index'], 1);
-        saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
+            if (!empty($found['upload']['reviewed_at'])) {
+                throw new Exception('A reviewed file cannot be deleted.');
+            }
+
+            $storedName = trim((string)($found['upload']['stored_name'] ?? ''));
+            if ($storedName !== '') {
+                $filePath = getManagerPayrollUploadStorageDir() . DIRECTORY_SEPARATOR . basename($storedName);
+                if (is_file($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+
+            array_splice($meta['uploads'], $found['index'], 1);
+            saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
+        } finally {
+            releaseManagerPayrollUploadLock($lockHandle);
+        }
 
         echo json_encode([
             'status' => 'success',
@@ -2682,7 +2732,7 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
         ensurePayrollSupervisorReportDispatchTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
-        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true)) {
+        if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserRole !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can send this report.');
         }
 

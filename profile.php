@@ -119,6 +119,46 @@ if ($emprow['status'] == 1) {
 // Add HR and Sign Out button
 $moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
 $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a>";
+
+// Build "My Pages" menu (same SweetAlert2 menu pattern as More Actions) - lists only the
+// pages this specific employee was granted via app_settings -> Special Access
+// (get_special_access_page_labels() in special_access_helper.php). Plain employees have no
+// main menu, so this is their only route to a page an admin unlocked for them individually.
+// NOTE: payroll_status_history.php, loan_report_details.php, settlement_status_history.php,
+// vacation_status_history.php and business_trip_status_history.php are intentionally NOT listed
+// here even though they're grantable in Special Access - they're record-detail pages that always
+// need a specific request_inv_no chosen from elsewhere and have no sensible standalone landing
+// state, so a bare link to them would only ever show a "not provided" error.
+$grantedPageLinks = [
+    'access_all_applied_vac' => ['file' => 'all_applied_vac.php', 'icon' => 'fa-plane', 'label' => __('all_applied_vacations', 'All Applied Vacations')],
+    'access_all_applied_loan' => ['file' => 'all_applied_loan.php', 'icon' => 'fa-money-bill-wave', 'label' => __('all_applied_loans', 'All Applied Loans')],
+    'access_all_applied_business_trip' => ['file' => 'all_applied_business_trip.php', 'icon' => 'fa-suitcase', 'label' => __('all_applied_business_trips', 'All Applied Business Trips')],
+    'access_all_resignations' => ['file' => 'all_resignations.php', 'icon' => 'fa-solid fa-portal-exit', 'label' => __('all_resignations', 'All Resignations')],
+    'access_all_settlements' => ['file' => 'all_settlements.php', 'icon' => 'fa-file-invoice-dollar', 'label' => __('all_settlements', 'All Settlements')],
+    'access_all_payroll_approvals' => ['file' => 'all_payroll_approvals.php', 'icon' => 'fa-tasks', 'label' => __('all_payroll_approvals', 'All Payroll Approvals')],
+];
+
+// payroll_checklist_report.php requires ?month=YYYY-MM or it dies with "Valid payroll month
+// not provided". The current calendar month usually has no payroll_approval_requests row yet
+// (payroll for month N is only requested near/after month-end), so defaulting to date('Y-m')
+// silently lands on an empty request - link to the latest month that actually has a request.
+$latestPayrollMonthStmt = mysqli_query($conDB, "SELECT payroll_month FROM payroll_approval_requests ORDER BY id DESC LIMIT 1");
+$latestPayrollMonthRow = $latestPayrollMonthStmt ? mysqli_fetch_assoc($latestPayrollMonthStmt) : null;
+$defaultPayrollChecklistMonth = ($latestPayrollMonthRow['payroll_month'] ?? '') ?: date('Y-m');
+$grantedPageLinks['access_payroll_checklist_report'] = [
+    'file' => 'payroll_checklist_report.php?month=' . urlencode($defaultPayrollChecklistMonth),
+    'icon' => 'fa-list-check',
+    'label' => __('payroll_checklist_report', 'Payroll Checklist Report'),
+];
+
+$grantedPagesHtml = '';
+$empIdForPageAccess = $emprow['empid'] ?? $emprow['emp_id'] ?? '';
+foreach ($grantedPageLinks as $accessKey => $pageInfo) {
+    if (user_has_special_access($conDB, $empIdForPageAccess, $accessKey, $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+        $grantedPagesHtml .= "<a href=\"./{$pageInfo['file']}\" class=\"menu-item text-primary\"><i class=\"fa {$pageInfo['icon']}\"></i><span>" . htmlspecialchars($pageInfo['label']) . "</span></a>";
+    }
+}
+$hasGrantedPages = ($grantedPagesHtml !== '');
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -2040,6 +2080,11 @@ RTL Support
                 <button class="more-actions-btn" id="moreActionsBtn">
                     <i class="fa fa-ellipsis-v"></i> <?= __('more') ?>
                 </button>
+            <?php if ($hasGrantedPages) : ?>
+                <button class="more-actions-btn" id="myPagesBtn">
+                    <i class="fa fa-th-large"></i> <?= __('my_pages', 'My Pages') ?>
+                </button>
+            <?php endif; ?>
             <?php if ($emprow["user_type"] <> 'employee') : ?>
                 <a href="dashboard.php" class="more-actions-btn" style="text-decoration: none;">
                     <i class="fa fa-airplay"></i> <?= __('dashboard') ?>
@@ -2644,6 +2689,22 @@ RTL Support
         $(document).ready(function() {
 
             var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
+            var grantedPagesHtml = <?= json_encode($grantedPagesHtml); ?>;
+            $('#myPagesBtn').click(function() {
+                Swal.fire({
+                    title: '<?= __('my_pages', 'My Pages') ?>',
+                    html: '<div class="menu-items-container">' + grantedPagesHtml + '</div>',
+                    showConfirmButton: false,
+                    showCloseButton: true,
+                    customClass: {
+                        container: 'more-actions-modal',
+                        popup: 'swal2-popup',
+                        closeButton: 'swal2-close'
+                    },
+                    width: '450px',
+                    padding: '0'
+                });
+            });
             $('#moreActionsBtn').click(function() {
                 Swal.fire({
                     title: '<?= __('more_actions') ?>',

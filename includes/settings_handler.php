@@ -30,6 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'get_report_permission_users':
             get_report_permission_users($conDB);
             break;
+        case 'get_special_access_users':
+            get_special_access_users($conDB);
+            break;
         default:
             echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);
             break;
@@ -290,6 +293,42 @@ function get_report_permission_users($conDB) {
                         WHERE al.emp_id IS NOT NULL
                             AND al.emp_id <> ''
                             AND LOWER(TRIM(COALESCE(al.user_type, ''))) <> 'employee'
+            ORDER BY e.name ASC, al.emp_id ASC";
+
+    $result = $conDB->query($sql);
+    if (!$result) {
+        echo json_encode(['success' => false, 'message' => 'Error fetching users: ' . $conDB->error]);
+        return;
+    }
+
+    while ($row = $result->fetch_assoc()) {
+        $rawName = trim((string)($row['name'] ?? ''));
+        $name = $rawName !== '' ? parseName($rawName) : (string)($row['id_iqama'] ?? '');
+
+        $users[] = [
+            'emp_id' => (string)($row['emp_id'] ?? ''),
+            'name' => $name,
+            'user_type' => (string)($row['user_type'] ?? ''),
+            'status' => (string)($row['status'] ?? ''),
+        ];
+    }
+
+    echo json_encode(['success' => true, 'users' => $users]);
+}
+
+/**
+ * Same shape as get_report_permission_users(), but WITHOUT excluding user_type='employee' -
+ * Special Access grants (e.g. access_all_applied_vac) are specifically meant to unlock a
+ * normally-blocked page for one plain employee, so they must be selectable here.
+ */
+function get_special_access_users($conDB) {
+    $users = [];
+
+    $sql = "SELECT al.emp_id, al.id_iqama, al.user_type, al.status, e.name
+            FROM admin_login al
+            LEFT JOIN employees e ON e.emp_id = al.emp_id
+                        WHERE al.emp_id IS NOT NULL
+                            AND al.emp_id <> ''
             ORDER BY e.name ASC, al.emp_id ASC";
 
     $result = $conDB->query($sql);

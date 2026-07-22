@@ -16,6 +16,34 @@ if (!function_exists('get_special_access_labels')) {
             'manage_global_request_blocks' => 'Manage Request Type Blocks (Global, All Employees)',
             'manage_department_settings' => 'Access App Settings - Departments Tab',
             'manage_job_title_settings' => 'Access App Settings - Job Titles Tab',
+            'payroll_checklist_upload_excel' => 'Payroll Checklist Report: Upload Payroll Excel Button',
+            'payroll_checklist_review_import' => 'Payroll Checklist Report: Review Manager File & Import Button',
+            'payroll_checklist_export_excel' => 'Payroll Checklist Report: Export Excel Button',
+        ] + get_special_access_page_labels();
+    }
+}
+
+if (!function_exists('get_special_access_page_labels')) {
+    /**
+     * Pages normally blocked for plain employees (emp_type/user_type = 'employee').
+     * Granting one of these keys via Special Access lets that page's own
+     * `$isEmployee` redirect-guard be bypassed for that specific employee only,
+     * without changing their role or giving them any other management ability.
+     */
+    function get_special_access_page_labels() {
+        return [
+            'access_all_applied_vac' => 'Access Page: All Applied Vacations',
+            'access_all_applied_loan' => 'Access Page: All Applied Loans',
+            'access_all_applied_business_trip' => 'Access Page: All Applied Business Trips',
+            'access_all_resignations' => 'Access Page: All Resignations',
+            'access_all_settlements' => 'Access Page: All Settlements',
+            'access_all_payroll_approvals' => 'Access Page: All Payroll Approvals',
+            'access_payroll_checklist_report' => 'Access Page: Payroll Checklist Report',
+            'access_payroll_status_history' => 'Access Page: Payroll Status History',
+            'access_loan_report_details' => 'Access Page: Loan Report Details',
+            'access_settlement_status_history' => 'Access Page: Settlement Status History',
+            'access_vacation_status_history' => 'Access Page: Vacation Status History',
+            'access_business_trip_status_history' => 'Access Page: Business Trip Status History',
         ];
     }
 }

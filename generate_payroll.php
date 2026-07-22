@@ -1321,9 +1321,10 @@ function collectPayrollModalData(employee) {
             benefit: benefitName,
             note: noteInput ? noteInput.value.trim() : '',
             amount: parseFloat(amountInput?.value || 0),
-            hours: hoursInput
-                ? ((parseFloat(hoursInput.value || 0) || 0) + (Math.max(parseFloat(minutesInput?.value || 0) || 0, 0) / 60))
-                : null
+            // Hours keeps whatever the user typed (decimal allowed, e.g. 1.46) - only
+            // minutes is a separate whole-number field on top of it.
+            hours: hoursInput ? (parseFloat(hoursInput.value || 0) || 0) : null,
+            minutes: minutesInput ? Math.max(parseInt(minutesInput.value || 0, 10) || 0, 0) : null
         };
     }).filter(b => b.benefit !== '' || b.amount > 0);
 
@@ -1340,6 +1341,7 @@ function collectPayrollModalData(employee) {
                 deduction: 'GOSI',
                 note: parseFloat(row.querySelector('.deduction-amount')?.value) || 0,
                 hours: 0,
+                minutes: 0,
                 days: 0,
             });
             return;
@@ -1348,15 +1350,22 @@ function collectPayrollModalData(employee) {
         const calcType = typeSelect ? typeSelect.value : 'fixed';
         const nameInput = row.querySelector('.deduction-name');
         const amountVal = parseFloat(row.querySelector('.deduction-amount')?.value) || 0;
+        // Sent as separate whole-number fields, never folded into one fractional hours
+        // value - the backend stores hours and minutes in their own columns.
         let hours = 0;
+        let minutes = 0;
         let days = 0;
         let name = '';
 
         if (calcType === 'hourly_deduction') {
-            const enteredHours = parseFloat(row.querySelector('.deduction-hours')?.value) || 0;
-            const enteredMinutes = parseFloat(row.querySelector('.deduction-minutes')?.value) || 0;
-            hours = enteredHours + (enteredMinutes / 60);
+            // Hours keeps whatever the user typed (decimal allowed, e.g. 1.46) - only
+            // minutes is a separate whole-number field on top of it.
+            hours = parseFloat(row.querySelector('.deduction-hours')?.value || 0) || 0;
+            minutes = Math.max(parseInt(row.querySelector('.deduction-minutes')?.value || 0, 10) || 0, 0);
             name = nameInput ? nameInput.value.trim() : __('hourly_deduction_default_name');
+        } else if (calcType === 'minute_deduction') {
+            minutes = Math.max(parseInt(row.querySelector('.deduction-minutes')?.value || 0, 10) || 0, 0);
+            name = nameInput ? nameInput.value.trim() : __('minute_deduction_default_name', __('hourly_deduction_default_name'));
         } else if (calcType === 'daily_deduction') {
             days = parseFloat(row.querySelector('.deduction-days')?.value) || 0;
             name = nameInput ? nameInput.value.trim() : __('daily_deduction_default_name');
@@ -1365,12 +1374,18 @@ function collectPayrollModalData(employee) {
         }
 
         if (name || amountVal > 0) {
+            const defaultName = calcType === 'hourly_deduction'
+                ? __('hourly_deduction_default_name')
+                : (calcType === 'minute_deduction'
+                    ? __('minute_deduction_default_name', __('hourly_deduction_default_name'))
+                    : (calcType === 'daily_deduction' ? __('daily_deduction_default_name') : ''));
             updatedDeductions.push({
                 id: deductionId,
                 calculation_type: calcType,
-                deduction: name || (calcType === 'hourly_deduction' ? __('hourly_deduction_default_name') : (calcType === 'daily_deduction' ? __('daily_deduction_default_name') : '')),
+                deduction: name || defaultName,
                 note: amountVal,
                 hours: hours,
+                minutes: minutes,
                 days: days,
             });
         }
@@ -1413,7 +1428,7 @@ async function navigatePayrollEmployee(targetEmployee, currentEmployee, month, i
 }
 
 // This function is correct as is, but ensure you are using the latest version from previous replies.
-const buildDeductionsHtml = (deductions, payrollData) => {
+const buildDeductionsHtml = (deductions, payrollData, gosiPercentage) => {
     if (!deductions || deductions.length === 0) {
         return `<div id="no-deductions-alert" class="alert alert-info py-2 mb-0 small">${__('no_deductions_recorded')}</div>`;
     }
@@ -1422,16 +1437,27 @@ const buildDeductionsHtml = (deductions, payrollData) => {
         const calcType = d.calculation_type || 'fixed';
         const deductionName = d.name || d.deduction || '';
         const noteAmount = parseFloat(d.amount || d.note || 0).toFixed(2);
-        const rawHours = parseFloat(d.hours || 0);
-        const normalizedHours = Number.isFinite(rawHours) ? Math.max(rawHours, 0) : 0;
-        let wholeHours = Math.floor(normalizedHours);
-        let minutes = Math.round((normalizedHours - wholeHours) * 60);
-        if (minutes >= 60) {
-            wholeHours += 1;
-            minutes = 0;
+        // hours/minutes come from the DB as separate columns now (hours keeps its decimal,
+        // e.g. 1.46). Rows saved before that migration have no minutes column value - for
+        // those, fall back to splitting the old fractional-hours value so old data still
+        // displays correctly.
+        let wholeHours;
+        let minutes;
+        if (d.minutes !== null && d.minutes !== undefined && d.minutes !== '') {
+            wholeHours = Math.max(parseFloat(d.hours || 0) || 0, 0);
+            minutes = Math.max(parseInt(d.minutes, 10) || 0, 0);
+        } else {
+            const rawHours = parseFloat(d.hours || 0);
+            const normalizedHours = Number.isFinite(rawHours) ? Math.max(rawHours, 0) : 0;
+            wholeHours = Math.floor(normalizedHours);
+            minutes = Math.round((normalizedHours - wholeHours) * 60);
+            if (minutes >= 60) {
+                wholeHours += 1;
+                minutes = 0;
+            }
         }
         const hours = calcType === 'hourly_deduction' ? wholeHours : '';
-        const deductionMinutes = calcType === 'hourly_deduction' ? minutes : '';
+        const deductionMinutes = (calcType === 'hourly_deduction' || calcType === 'minute_deduction') ? minutes : '';
         const days = d.days || '';
         const isGosi = deductionName.toUpperCase() === 'GOSI';
         const isCalculated = calcType !== 'fixed';
@@ -1443,12 +1469,19 @@ const buildDeductionsHtml = (deductions, payrollData) => {
         const options = `
             <option value="fixed" ${calcType === 'fixed' ? 'selected' : ''}>${__('fixed_amount_option')}</option>
             <option value="hourly_deduction" ${calcType === 'hourly_deduction' ? 'selected' : ''}>${deductionByTimeLabel}</option>
+            <option value="minute_deduction" ${calcType === 'minute_deduction' ? 'selected' : ''}>${__('deduction_by_minute_option', 'Deduction by Minutes')}</option>
             <option value="daily_deduction" ${calcType === 'daily_deduction' ? 'selected' : ''}>${__('deduction_by_day_option')}</option>
         `;
         let nameColumnHtml;
         if (isGosi) {
-            // For GOSI, just show a single readonly input.
-            nameColumnHtml = `<input type="text" class="form-control form-control-sm gosi-deduction-name" value="GOSI" readonly>`;
+            // For GOSI, show a readonly input plus a reference to the percentage set on the employee master,
+            // so the admin knows where to change it if the deducted amount looks wrong.
+            const gosiRate = parseFloat(gosiPercentage || 0);
+            const gosiRateLabel = __('gosi_rate_reference', 'Employee Master GOSI rate: {rate}%').replace('{rate}', gosiRate);
+            nameColumnHtml = `
+                <input type="text" class="form-control form-control-sm gosi-deduction-name" value="GOSI" readonly>
+                <small class="d-block text-muted mt-1"><i class="fas fa-info-circle"></i> ${gosiRateLabel}</small>
+            `;
         } else {
             // For other types, use an Input Group to put the select and text input on one line.
             // The "deduction-name" input is hidden with style when it's a calculated type.
@@ -1463,10 +1496,12 @@ const buildDeductionsHtml = (deductions, payrollData) => {
         }
         const periodSlotClass = isCalculated ? 'deduction-period-slot' : 'deduction-period-slot deduction-period-input-empty';
         const hoursStyle = calcType === 'hourly_deduction' ? '' : 'display: none;';
-        const minutesStyle = calcType === 'hourly_deduction' ? '' : 'display: none;';
+        const minutesStyle = (calcType === 'hourly_deduction' || calcType === 'minute_deduction') ? '' : 'display: none;';
         const daysStyle = calcType === 'daily_deduction' ? '' : 'display: none;';
         const unitStyle = isCalculated ? '' : 'display: none;';
-        const unitLabel = calcType === 'hourly_deduction' ? `${__('time')}` : `${__('days')}`;
+        const unitLabel = calcType === 'hourly_deduction'
+            ? `${__('time')}`
+            : (calcType === 'minute_deduction' ? __('minutes_placeholder', 'Minutes') : `${__('days')}`);
         return `
         <div class="deduction-row row mb-2 align-items-center g-3" data-deduction-id="${deductionId}">
             <div class="col-12 col-md-6">
@@ -1530,13 +1565,24 @@ function buildBenefitsHtml(benefits, benefitTypes) {
         
         // For vacation benefits, always show as readonly text
         // For regular benefits, use dropdown if benefit types are available
-        const savedHours = parseFloat(b.hours || 0);
-        const normalizedBenefitHours = Number.isFinite(savedHours) ? Math.max(savedHours, 0) : 0;
-        let wholeBenefitHours = Math.floor(normalizedBenefitHours);
-        let benefitMinutes = Math.round((normalizedBenefitHours - wholeBenefitHours) * 60);
-        if (benefitMinutes >= 60) {
-            wholeBenefitHours += 1;
-            benefitMinutes = 0;
+        // hours/minutes come from the DB as separate columns now (hours keeps its decimal,
+        // e.g. 1.46). Rows saved before that migration have no minutes column value - for
+        // those, fall back to splitting the old fractional-hours value so old data still
+        // displays correctly.
+        let wholeBenefitHours;
+        let benefitMinutes;
+        if (b.minutes !== null && b.minutes !== undefined && b.minutes !== '') {
+            wholeBenefitHours = Math.max(parseFloat(b.hours || 0) || 0, 0);
+            benefitMinutes = Math.max(parseInt(b.minutes, 10) || 0, 0);
+        } else {
+            const savedHours = parseFloat(b.hours || 0);
+            const normalizedBenefitHours = Number.isFinite(savedHours) ? Math.max(savedHours, 0) : 0;
+            wholeBenefitHours = Math.floor(normalizedBenefitHours);
+            benefitMinutes = Math.round((normalizedBenefitHours - wholeBenefitHours) * 60);
+            if (benefitMinutes >= 60) {
+                wholeBenefitHours += 1;
+                benefitMinutes = 0;
+            }
         }
         const savedTypeId = parseInt(b.type_id || 0, 10);
 
@@ -1563,7 +1609,7 @@ function buildBenefitsHtml(benefits, benefitTypes) {
                     ${benefitOptionsHtml}
                     ${benefitLabel}
                 </div>
-                <div class="col-6 col-md-3 benefit-hours-slot" data-hours="${savedHours}" data-minutes="${benefitMinutes}" data-whole-hours="${wholeBenefitHours}"></div>
+                <div class="col-6 col-md-3 benefit-hours-slot" data-hours="${wholeBenefitHours}" data-minutes="${benefitMinutes}" data-whole-hours="${wholeBenefitHours}"></div>
                 <div class="col-6 col-md-2">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
@@ -1603,7 +1649,7 @@ const calculateDeductionAmount = function() {
         + parseFloat(payroll.telephone_allowance || 0)
         + parseFloat(payroll.other_allowance || 0)
         + parseFloat(payroll.guard_allowance || 0);
-    if (deductionType === 'hourly_deduction' || deductionType === 'daily_deduction') {
+    if (deductionType === 'hourly_deduction' || deductionType === 'minute_deduction' || deductionType === 'daily_deduction') {
         const totalGross = totalGrossFromPayroll > 0 ? totalGrossFromPayroll : totalGrossFromComponents;
         const deductibleSalary = Math.max(totalGross - food, 0);
         const hourlyRate = deductibleSalary > 0 ? (deductibleSalary / 240) : 0;
@@ -1613,6 +1659,9 @@ const calculateDeductionAmount = function() {
             const enteredMinutes = parseFloat(minutesInput.val()) || 0;
             const normalizedMinutes = Math.max(enteredMinutes, 0);
             hoursToDeduct = enteredHours + (normalizedMinutes / 60);
+        } else if (deductionType === 'minute_deduction') {
+            const enteredMinutes = Math.max(parseFloat(minutesInput.val()) || 0, 0);
+            hoursToDeduct = enteredMinutes / 60;
         } else { // daily_deduction
             const daysToDeduct = parseFloat(daysInput.val()) || 0;
             hoursToDeduct = daysToDeduct * 8;
@@ -4497,6 +4546,8 @@ async function showPayrollDetails(empId, empName, month) {
             const feedbacks = Array.isArray(data.feedbacks) ? data.feedbacks : [];
             const gosiAmnt = (employee.gosi || 0) / 100;
             const skipAutoGosiDueToVacation = !!data.skip_auto_gosi_due_to_vacation;
+            const masterDataChangedSinceGeneration = !!data.master_data_changed_since_generation;
+            const payrollGeneratedAt = data.payroll_generated_at || null;
             const navigationState = getEmployeeNavigationState(empId);
             const currentPosition = navigationState.currentIndex >= 0 ? navigationState.currentIndex + 1 : null;
 
@@ -4527,7 +4578,7 @@ async function showPayrollDetails(empId, empName, month) {
 
             // --- Build Deductions HTML ---
             // --- MODIFIED: Use the new buildDeductionsHtml function ---
-            let deductionsHtml = buildDeductionsHtml(deductions, payroll);
+            let deductionsHtml = buildDeductionsHtml(deductions, payroll, employee.gosi);
 
             // Explain joining-date deduction clearly so employees understand the reason.
             const joiningDeductionEntry = deductions.find((item) => {
@@ -4569,6 +4620,20 @@ async function showPayrollDetails(empId, empName, month) {
                             = <strong>${formatCurrencyForInfo(deductionAmount)}</strong>
                         </div>
                         <div class="text-muted mt-1">${__('per_day_rate_label') || 'Per-day rate'}: ${formatCurrencyForInfo(perDayAmount)}</div>
+                    </div>
+                `;
+            }
+
+            let masterDataChangedInfoHtml = '';
+            if (masterDataChangedSinceGeneration) {
+                const generatedAtLabel = payrollGeneratedAt
+                    ? new Date(payrollGeneratedAt.replace(' ', 'T')).toLocaleString()
+                    : '-';
+                masterDataChangedInfoHtml = `
+                    <div class="alert alert-danger mb-3" role="alert" style="font-size: 0.92rem;">
+                        <div class="fw-semibold mb-1"><i class="fas fa-exclamation-triangle me-1"></i>${__('master_data_changed_title', 'Employee Master Data Changed')}</div>
+                        <div>${__('master_data_changed_message', 'This payroll was generated on {date}, but the employee\'s salary or GOSI rate was updated afterward. Amounts shown below may not reflect the current master data.').replace('{date}', generatedAtLabel)}</div>
+                        <div class="mt-1">${__('master_data_changed_action', 'Saving changes here refreshes salary components, but the GOSI deduction amount is only recalculated when payroll is regenerated for this employee/month.')}</div>
                     </div>
                 `;
             }
@@ -4776,6 +4841,7 @@ async function showPayrollDetails(empId, empName, month) {
 
             const modalHtml = `
                 <div class="payroll-details-container">
+                    ${masterDataChangedInfoHtml}
                     ${feedbackHtml}
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div>
@@ -5387,10 +5453,10 @@ async function showPayrollDetails(empId, empName, month) {
 
                         periodSlot.toggleClass('deduction-period-input-empty', isFixed);
                         row.find('.deduction-hours').toggle(deductionType === 'hourly_deduction');
-                        row.find('.deduction-minutes').toggle(deductionType === 'hourly_deduction');
+                        row.find('.deduction-minutes').toggle(deductionType === 'hourly_deduction' || deductionType === 'minute_deduction');
                         row.find('.deduction-days').toggle(deductionType === 'daily_deduction');
                         row.find('.deduction-period-unit')
-                            .text(deductionType === 'hourly_deduction' ? 'time' : 'days')
+                            .text(deductionType === 'hourly_deduction' ? 'time' : (deductionType === 'minute_deduction' ? 'minutes' : 'days'))
                             .toggle(!isFixed);
 
                         if (isFixed) {
@@ -5398,6 +5464,15 @@ async function showPayrollDetails(empId, empName, month) {
                             amountInput.prop('readonly', false);
                             nameInput.show();
                         } else {
+                            if (deductionType !== 'hourly_deduction') {
+                                row.find('.deduction-hours').val('');
+                            }
+                            if (deductionType !== 'hourly_deduction' && deductionType !== 'minute_deduction') {
+                                row.find('.deduction-minutes').val('');
+                            }
+                            if (deductionType !== 'daily_deduction') {
+                                row.find('.deduction-days').val('');
+                            }
                             amountInput.prop('readonly', true);
                             nameInput.hide();
                             calculateDeductionAmount.call(selectElement);
