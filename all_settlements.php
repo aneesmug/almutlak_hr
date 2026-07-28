@@ -318,6 +318,8 @@ if ($canSeeAllDepts) {
             border-top-right-radius: 15px;
         }
 
+        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
+
         .request-card .card-header .float-right {
             font-size: 0.85em;
             opacity: 0.9;
@@ -676,9 +678,11 @@ if ($canSeeAllDepts) {
                                             ?>
                                             <div class="col-lg-4 col-md-6 mb-4">
                                                 <div class="card request-card h-100">
-                                                    <div class="card-header">
-                                                        <?= htmlspecialchars(getDisplayName($settlement['emp_name']), ENT_QUOTES); ?>
-                                                        <span class="float-right"><?= __('emp_id') ?>: <?= htmlspecialchars($settlement['emp_id'], ENT_QUOTES); ?></span>
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <span><?= htmlspecialchars(getDisplayName($settlement['emp_name']), ENT_QUOTES); ?></span>
+                                                        <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
+                                                            <span><?= __('emp_id') ?>: <?= htmlspecialchars($settlement['emp_id'], ENT_QUOTES); ?></span>
+                                                        </div>
                                                     </div>
                                                     <div class="card-body">
                                                         <div class="detail-item"><i class="fad fa-file-invoice"></i><strong><?= __('settlement_id') ?>:</strong> <?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES); ?></div>
@@ -808,6 +812,27 @@ if ($canSeeAllDepts) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.js"></script>
 
     <script>
+        // Move each card's "Actions" dropdown from the footer into the header so the
+        // menu has room to open downward instead of getting clipped at the bottom of
+        // the page (was especially bad for the last row of cards on a page).
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.request-card').forEach(function(card) {
+                const footer = card.querySelector('.card-footer');
+                const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
+                const headerSlot = card.querySelector('.card-header-actions');
+                if (!actionsGroup || !headerSlot) {
+                    return;
+                }
+                actionsGroup.classList.remove('flex-fill');
+                const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
+                if (toggleBtn) {
+                    toggleBtn.classList.remove('btn-block', 'btn-secondary');
+                    toggleBtn.classList.add('btn-sm', 'btn-light');
+                }
+                headerSlot.appendChild(actionsGroup);
+            });
+        });
+
         // Configuration constants
         const MAX_FILE_SIZE_MB = 10;
         

@@ -61,6 +61,13 @@ if (mysqli_num_rows($query) == 1) {
         $url_params['fly'] = $_GET['fly']; // Add to URL for pagination links
     }
 
+    // Add filter for 'ter_year' (terminated in a specific year) if it exists in the URL
+    if (isset($_GET['ter_year']) && is_numeric($_GET['ter_year'])) {
+        $ter_year = (int)$_GET['ter_year'];
+        $where_conditions[] = "YEAR(`ter_date`) = '{$ter_year}'";
+        $url_params['ter_year'] = $ter_year; // Add to URL for pagination links
+    }
+
     // Add filter for 'local_vac' if requested (current local vacation employees)
     if (isset($_GET['local_vac'])) {
         $local_vac = strtolower(trim($_GET['local_vac']));

@@ -1,9 +1,11 @@
 <?php
     require_once __DIR__ . '/includes/db.php';
     require_once __DIR__ . '/includes/session_check.php';
+    require_once __DIR__ . '/includes/special_access_helper.php';
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
     if (mysqli_num_rows($query) == 1) {
         include("./includes/avatar_select.php");
+        $canUngeneratePayroll = user_has_special_access($conDB, $empid ?? '', 'ungenerate_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -408,6 +410,20 @@
             .payroll-actions-menu #actionGeneratePayrollBtn:focus::before {
                 background-color: #111827;
             }
+            .payroll-actions-menu #actionGeneratePayrollBtn:disabled {
+                color: #9ca3af !important;
+                opacity: 0.6;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:hover,
+            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:focus {
+                color: #9ca3af !important;
+            }
+            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:hover::before,
+            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:focus::before {
+                background-color: transparent;
+            }
             .payroll-actions-menu #actionImportPayrollExcelBtn {
                 color: #1d4ed8;
             }
@@ -429,6 +445,45 @@
             .payroll-actions-menu #actionRegeneratePayrollBtn:hover::before,
             .payroll-actions-menu #actionRegeneratePayrollBtn:focus::before {
                 background-color: #115e59;
+            }
+            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled {
+                color: #9ca3af !important;
+                opacity: 0.6;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:hover,
+            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:focus {
+                color: #9ca3af !important;
+            }
+            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:hover::before,
+            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:focus::before {
+                background-color: transparent;
+            }
+            .payroll-actions-menu #actionUngeneratePayrollBtn {
+                color: #dc2626;
+            }
+            .payroll-actions-menu #actionUngeneratePayrollBtn:hover,
+            .payroll-actions-menu #actionUngeneratePayrollBtn:focus {
+                color: #b91c1c;
+            }
+            .payroll-actions-menu #actionUngeneratePayrollBtn:hover::before,
+            .payroll-actions-menu #actionUngeneratePayrollBtn:focus::before {
+                background-color: #b91c1c;
+            }
+            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled {
+                color: #9ca3af !important;
+                opacity: 0.6;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:hover,
+            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:focus {
+                color: #9ca3af !important;
+            }
+            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:hover::before,
+            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:focus::before {
+                background-color: transparent;
             }
             .payroll-actions-menu #actionGenerateReportBtn {
                 color: #7c3aed;
@@ -661,6 +716,115 @@
                     grid-column: 1 / -1;
                 }
             }
+
+            /* Stats Card Design -- copied from dashboard.php so this page matches it */
+            .stats-card {
+                border-radius: 16px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+                padding: 32px 24px 24px 24px;
+                margin-bottom: 28px;
+                transition: box-shadow 0.2s, transform 0.2s;
+                border: none;
+                position: relative;
+                min-height: 180px;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                background: var(--card-gradient, linear-gradient(90deg,#2196f3 0%,#21cbf3 100%));
+                color: #fff;
+                overflow: hidden;
+            }
+            .stats-card:hover {
+                box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+                transform: translateY(-4px) scale(1.02);
+            }
+            .stats-card-icon {
+                background: rgba(255,255,255,0.18);
+                border-radius: 50%;
+                width: 72px;
+                height: 72px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 40px;
+                margin-right: 28px;
+                box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+                position: relative;
+                transition: transform 0.2s;
+                flex-direction: column;
+            }
+            .stats-card-count-circle {
+                background: #fff;
+                border-radius: 50%;
+                width: 38px;
+                height: 38px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 20px;
+                font-weight: 700;
+                margin-bottom: 6px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+            }
+            .stats-card-icon:hover {
+                transform: scale(1.10) rotate(-6deg);
+            }
+            .stats-card-content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                position: relative;
+            }
+            .stats-card-label {
+                font-size: 18px;
+                font-weight: 700;
+                color: #fff;
+                margin-bottom: 12px;
+                letter-spacing: 0.5px;
+            }
+
+            /* Payroll Summary Cards -- same visual language as the dashboard stats cards */
+            .payroll-summary-cards-row {
+                margin-bottom: 4px;
+            }
+            .payroll-stats-card.stats-card {
+                min-height: 110px;
+                padding: 16px 18px;
+                margin-bottom: 20px;
+                border-radius: 14px;
+            }
+            .payroll-stats-card .stats-card-icon {
+                width: 56px;
+                height: 56px;
+                margin-right: 18px;
+                font-size: 26px;
+            }
+            .payroll-stats-card .stats-card-icon i {
+                font-size: 22px;
+            }
+            .payroll-stats-card .stats-card-count-circle {
+                width: 32px;
+                height: 32px;
+                font-size: 16px;
+            }
+            .payroll-stats-card .stats-card-label {
+                font-size: 14px;
+                margin-bottom: 0;
+                white-space: nowrap;
+            }
+            @media (max-width: 767px) {
+                .payroll-stats-card.stats-card {
+                    flex-direction: row;
+                    align-items: center;
+                    padding: 14px;
+                    min-height: unset;
+                }
+                .payroll-stats-card .stats-card-icon {
+                    margin-bottom: 0;
+                    margin-right: 14px;
+                }
+            }
         </style>
         <?php if ($is_rtl ?? false): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -725,6 +889,65 @@
                                     <h4 class="m-t-0 header-title"><?=__('employee_payroll_management')?></h4>
 
                                     <div class="card-body">
+                                        <!-- Payroll Summary Cards -->
+                                        <div class="row text-center payroll-summary-cards-row">
+                                            <div class="col-sm-6 col-xl">
+                                                <div class="stats-card professional-theme payroll-stats-card" data-color="success">
+                                                    <div class="stats-card-icon professional-theme" data-color="success">
+                                                        <div class="stats-card-count-circle" id="statGeneratedCount">0</div>
+                                                        <i class="fa fa-solid fa-check"></i>
+                                                    </div>
+                                                    <div class="stats-card-content">
+                                                        <div class="stats-card-label"><?= __('generated_badge', 'Generated') ?></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6 col-xl">
+                                                <div class="stats-card professional-theme payroll-stats-card" data-color="secondary">
+                                                    <div class="stats-card-icon professional-theme" data-color="secondary">
+                                                        <div class="stats-card-count-circle" id="statNotGeneratedCount">0</div>
+                                                        <i class="fa fa-solid fa-hourglass-half"></i>
+                                                    </div>
+                                                    <div class="stats-card-content">
+                                                        <div class="stats-card-label"><?= __('not_generated', 'Un-Generated') ?></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6 col-xl">
+                                                <div class="stats-card professional-theme payroll-stats-card" data-color="danger">
+                                                    <div class="stats-card-icon professional-theme" data-color="danger">
+                                                        <div class="stats-card-count-circle" id="statHoldCount">0</div>
+                                                        <i class="fa fa-solid fa-pause"></i>
+                                                    </div>
+                                                    <div class="stats-card-content">
+                                                        <div class="stats-card-label"><?= __('payroll_on_hold', 'On Hold') ?></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6 col-xl">
+                                                <div class="stats-card professional-theme payroll-stats-card" data-color="info">
+                                                    <div class="stats-card-icon professional-theme" data-color="info">
+                                                        <div class="stats-card-count-circle" id="statBankCount">0</div>
+                                                        <i class="fa fa-solid fa-building-columns"></i>
+                                                    </div>
+                                                    <div class="stats-card-content">
+                                                        <div class="stats-card-label"><?= __('bank_option', 'Bank') ?></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6 col-xl">
+                                                <div class="stats-card professional-theme payroll-stats-card" data-color="purple">
+                                                    <div class="stats-card-icon professional-theme" data-color="purple">
+                                                        <div class="stats-card-count-circle" id="statCashCount">0</div>
+                                                        <i class="fa fa-solid fa-money-bill-wave"></i>
+                                                    </div>
+                                                    <div class="stats-card-content">
+                                                        <div class="stats-card-label"><?= __('cash_option', 'Cash') ?></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <!-- Controls Section -->
                                         <div class="payroll-toolbar">
                                             <div class="payroll-toolbar-grid">
@@ -802,8 +1025,16 @@
                                                             <button type="button" class="dropdown-item hidden" id="actionRegeneratePayrollBtn" style="display:none;" title="Re-generate payroll and skip hold employees">
                                                                 <i class="fa fa-solid fa-refresh"></i> <?= __('regenerate_payroll_button') ?? 'Re-generate Payroll' ?>
                                                             </button>
+                                                            <?php if ($canUngeneratePayroll): ?>
+                                                            <button type="button" class="dropdown-item hidden" id="actionUngeneratePayrollBtn" style="display:none;" title="Remove generated payroll for this month (not-yet-paid employees only)">
+                                                                <i class="fa fa-solid fa-trash-can"></i> <?= __('ungenerate_payroll_button', 'Un-Generate Payroll') ?>
+                                                            </button>
+                                                            <?php endif; ?>
                                                             <button type="button" class="dropdown-item" id="actionGenerateReportBtn">
                                                                 <i class="fa fa-solid fa-chart-mixed"></i> <?= __('generate_payroll_report_button') ?>
+                                                            </button>
+                                                            <button type="button" class="dropdown-item hidden" id="actionPayslipsBtn" style="display:none;">
+                                                                <i class="fa fa-solid fa-file-invoice"></i> <?= __('payslips', 'Payslips') ?>
                                                             </button>
                                                             <button type="button" class="dropdown-item hidden" id="actionToggleFeedbackFilterBtn" style="display:none;">
                                                                 <i class="fa fa-solid fa-comment-dots"></i>
@@ -960,6 +1191,19 @@
 let employeeTable; // DataTables instance
 let allEmployeesData = []; // Store raw employee data fetched from API
 let allBenefitTypesData = []; // Store raw benefit types data
+
+function isSelectedMonthFullyPaid() {
+    if (!Array.isArray(allEmployeesData) || allEmployeesData.length === 0) return false;
+    const selectedCompany = $('#companyFilter').val();
+    const scoped = allEmployeesData.filter(emp => {
+        if (!emp) return false;
+        if (parseInt(emp.payment_type || 1, 10) === 3) return false; // skip Hold employees
+        return selectedCompany ? emp.comp_name === selectedCompany : true;
+    });
+    const withPayroll = scoped.filter(emp => emp.payroll_status);
+    if (withPayroll.length === 0) return false;
+    return withPayroll.every(emp => emp.payroll_status === 'paid');
+}
 let currentEventListeners = []; // Array to store cleanup functions for event listeners
 let payroll; // Globally available payroll object for modal calculations
 let employeeStatusFilterRegistered = false;
@@ -1003,11 +1247,31 @@ async function updateStartApprovalButtonVisibility(monthValue = null) {
     const months = await getGeneratedPayrollMonths();
     generatedPayrollMonthsCache = months;
     const selectedMonth = monthValue || $('#payrollMonth').val() || getCurrentPayrollMonthValue();
+    const btn = $('#actionStartApprovalBtn');
 
-    if (hasGeneratedPayrollForMonth(selectedMonth, months)) {
-        $('#actionStartApprovalBtn').removeClass('hidden').show();
+    if (hasGeneratedPayrollForMonth(selectedMonth, months) && !isSelectedMonthFullyPaid()) {
+        btn.removeClass('hidden').show();
+        updateStartApprovalButtonLabel(selectedMonth);
     } else {
-        $('#actionStartApprovalBtn').addClass('hidden').hide();
+        btn.addClass('hidden').hide();
+    }
+}
+
+async function updateStartApprovalButtonLabel(monthValue) {
+    const btn = $('#actionStartApprovalBtn');
+    let approvalStatus = 'none';
+    try {
+        const response = await fetch(`./includes/api/get_payroll_approval_status.php?month=${monthValue}`);
+        const data = await response.json();
+        approvalStatus = data.status === 'success' ? (data.approval_status || 'none') : 'none';
+    } catch (error) {
+        console.error('Error checking payroll approval status:', error);
+    }
+
+    if (approvalStatus === 'pending_approval') {
+        btn.html(`<i class="fa fa-solid fa-hourglass-half"></i> ${__('approval_under_process', 'Approval Under Process')}`);
+    } else {
+        btn.html(`<i class="fa fa-solid fa-paper-plane"></i> ${__('start_approval', 'Start Approval')}`);
     }
 }
 
@@ -1707,6 +1971,7 @@ $(document).ready(function() {
     fetchEmployees();
     fetchBenefitTypes();
     $('#actionGenerateReportBtn').off('click').on('click', generatePayrollReport);
+    $('#actionPayslipsBtn').off('click').on('click', openPayslipsModal);
 
     const paymentQueryParams = new URLSearchParams(window.location.search);
     const paymentMonthFromUrl = (paymentQueryParams.get('payment_month') || '').trim();
@@ -1868,24 +2133,84 @@ async function fetchEmployees() {
     }
 }
 
+function updatePayrollSummaryCards() {
+    if (!Array.isArray(allEmployeesData)) {
+        return;
+    }
+    const selectedCompany = $('#companyFilter').val();
+    const scoped = selectedCompany
+        ? allEmployeesData.filter(emp => emp && emp.comp_name === selectedCompany)
+        : allEmployeesData;
+
+    let generatedCount = 0, notGeneratedCount = 0, holdCount = 0, bankCount = 0, cashCount = 0;
+    scoped.forEach(emp => {
+        if (!emp) return;
+        const paymentType = parseInt(emp.payment_type || 1, 10);
+        const payrollStatus = String(emp.payroll_status || '').toLowerCase();
+
+        if (paymentType === 3) {
+            holdCount++;
+        } else if (payrollStatus === 'generated' || payrollStatus === 'paid') {
+            generatedCount++;
+        } else {
+            notGeneratedCount++;
+        }
+
+        if (paymentType === 1) bankCount++;
+        else if (paymentType === 2) cashCount++;
+    });
+
+    $('#statGeneratedCount').text(generatedCount);
+    $('#statNotGeneratedCount').text(notGeneratedCount);
+    $('#statHoldCount').text(holdCount);
+    $('#statBankCount').text(bankCount);
+    $('#statCashCount').text(cashCount);
+}
+
 function updateRegenerateButtonVisibility() {
+    updatePayrollSummaryCards();
+
     // Check if any employee has a generated or paid payroll status
     const hasGeneratedPayroll = Array.isArray(allEmployeesData)
         ? allEmployeesData.some(emp => emp.payroll_status === 'generated' || emp.payroll_status === 'paid')
         : false;
-    
-    // Show payroll follow-up actions only when payroll already exists for the selected month.
-    if (hasGeneratedPayroll) {
+    const monthPaid = isSelectedMonthFullyPaid();
+
+    // Show payroll follow-up actions only when payroll already exists for the selected month
+    // and hasn't been marked as Paid yet.
+    if (hasGeneratedPayroll && !monthPaid) {
         $('#actionImportPayrollExcelBtn').removeClass('hidden').show();
     } else {
         $('#actionImportPayrollExcelBtn').addClass('hidden').hide();
     }
 
-    // Show the button only if payroll exists
-    if (hasGeneratedPayroll) {
-        $('#actionRegeneratePayrollBtn').removeClass('hidden').show();
+    // Re-generate Payroll: hidden until payroll actually exists for this month,
+    // and hidden again once the month is paid.
+    if (hasGeneratedPayroll && !monthPaid) {
+        $('#actionRegeneratePayrollBtn').removeClass('hidden').show().prop('disabled', false);
     } else {
         $('#actionRegeneratePayrollBtn').addClass('hidden').hide();
+    }
+
+    // Un-generate Payroll: same visibility rule as Re-generate.
+    if (hasGeneratedPayroll && !monthPaid) {
+        $('#actionUngeneratePayrollBtn').removeClass('hidden').show().prop('disabled', false);
+    } else {
+        $('#actionUngeneratePayrollBtn').addClass('hidden').hide();
+    }
+
+    // Generate Payroll for Selection is only relevant before the month is paid
+    if (monthPaid) {
+        $('#actionGeneratePayrollBtn').addClass('hidden').hide();
+    } else {
+        $('#actionGeneratePayrollBtn').removeClass('hidden').show();
+    }
+
+    // Payslips are only meaningful once payroll has actually been marked Paid
+    if (monthPaid) {
+        $('#actionPayslipsBtn').removeClass('hidden').show();
+    } else {
+        $('#actionPayslipsBtn').addClass('hidden').hide();
     }
 }
         
@@ -1947,6 +2272,9 @@ function populateCompanyFilter(employees) {
         employeeTable.column(3).search(selectedDept ? `^${selectedDept}$` : '', true, false).draw();
         // Update main select all checkbox for currently visible rows
         updateMainSelectAllCheckbox();
+        // Re-evaluate Actions menu visibility for the newly selected company's paid status
+        updateRegenerateButtonVisibility();
+        updateStartApprovalButtonVisibility();
     });
 }
 
@@ -2005,6 +2333,8 @@ function addEventListeners() {
     // New: Re-generate Payroll button
     $('#actionRegeneratePayrollBtn').off('click', regeneratePayroll).on('click', regeneratePayroll);
     currentEventListeners.push(() => $('#actionRegeneratePayrollBtn').off('click', regeneratePayroll));
+    $('#actionUngeneratePayrollBtn').off('click', ungeneratePayroll).on('click', ungeneratePayroll);
+    currentEventListeners.push(() => $('#actionUngeneratePayrollBtn').off('click', ungeneratePayroll));
 
     // New: Start Approval button
     $('#actionStartApprovalBtn').off('click', startPayrollApproval).on('click', startPayrollApproval);
@@ -2054,6 +2384,14 @@ function updateMainSelectAllCheckbox() {
     } else {
         selectAllMain.prop('checked', false).prop('indeterminate', false);
     }
+
+    updateGeneratePayrollButtonState();
+}
+
+function updateGeneratePayrollButtonState() {
+    // Generate Payroll for Selected only makes sense once at least one employee (any page) is checked.
+    const anySelected = employeeTable.rows().nodes().to$().find('.employee-checkbox:checked').length > 0;
+    $('#actionGeneratePayrollBtn').prop('disabled', !anySelected);
 }
 
 async function generatePayroll() {
@@ -4088,8 +4426,9 @@ async function regeneratePayroll() {
         console.warn('Could not check existing benefits/deductions:', e);
     }
 
-    // Build warning message if benefits/deductions exist
-    let warningHtml = `<div style="text-align:left;">${__('regenerate_payroll_confirmation_message') || 'This will update payroll for all non-hold employees and skip those on hold. Continue?'}</div>`;
+    // Build info message if benefits/deductions exist -- regenerate preserves manually added
+    // benefits/deductions and only refreshes base salary components + recalculated totals.
+    let warningHtml = `<div style="text-align:left;">${__('regenerate_payroll_confirmation_message') || 'This will refresh payroll for all non-hold employees using the latest salary master data, and skip those on hold. Continue?'}</div>`;
     if (existingBenefitsDeductions.has_benefits || existingBenefitsDeductions.has_deductions) {
         const items = [];
         if (existingBenefitsDeductions.has_benefits) {
@@ -4098,12 +4437,12 @@ async function regeneratePayroll() {
         if (existingBenefitsDeductions.has_deductions) {
             items.push(`<i class="fas fa-minus-circle text-danger"></i> ${__('deductions_section')}`);
         }
-        warningHtml += `<div style="margin-top:15px; padding:10px; background-color:#fff3cd; border-left:4px solid #ffc107; border-radius:4px;">
-            <strong style="color:#856404;">⚠️ ${__('warning_existing_benefits_deductions') || 'Warning: Existing Benefits/Deductions'}</strong>
-            <div style="margin-top:8px; color:#856404;">
+        warningHtml += `<div style="margin-top:15px; padding:10px; background-color:#e7f5ea; border-left:4px solid #28a745; border-radius:4px;">
+            <strong style="color:#1e7e34;"><i class="fas fa-check-circle"></i> ${__('existing_benefits_deductions_preserved_title') || 'Existing Benefits/Deductions Will Be Kept'}</strong>
+            <div style="margin-top:8px; color:#1e7e34;">
                 ${items.join('<br>')}
             </div>
-            <small style="display:block; margin-top:8px; color:#856404;">${__('these_will_be_replaced_with_freshly_calculated_values')}</small>
+            <small style="display:block; margin-top:8px; color:#1e7e34;">${__('regenerate_preserves_manual_items_note') || 'These manually added items stay as-is. Only base salary components and totals are recalculated from the latest employee master data.'}</small>
         </div>`;
     }
 
@@ -4190,6 +4529,66 @@ async function regeneratePayroll() {
         console.error('Error:', error);
         // The error message from the PHP script will be displayed here
         showError(__('error_regenerating_payroll_title') || 'Error Regenerating Payroll', error.message);
+    }
+}
+
+async function ungeneratePayroll() {
+    const payrollMonth = $('#payrollMonth').val();
+
+    if (!payrollMonth) {
+        showWarning(__('month_not_selected_warning_title'), __('please_select_payroll_month_warning'));
+        return;
+    }
+
+    const confirmation = await Swal.fire({
+        title: __('ungenerate_payroll_confirmation_title', 'Remove Generated Payroll?'),
+        html: `<div style="text-align:left;">
+            <p>${__('ungenerate_payroll_confirmation_message', 'This will permanently delete the generated payroll records for this month for every employee who is not yet Paid. Employees already marked Paid are not affected.')}</p>
+            <p style="margin-top:10px;"><strong>${__('this_cannot_be_undone', 'This cannot be undone.')}</strong></p>
+            <p style="margin-top:10px; color:#0f766e;">${__('ungenerate_payroll_keeps_benefits_note', 'Manually added benefits and deductions are kept, so re-generating later restores them automatically.')}</p>
+        </div>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: __('yes_remove_button', 'Yes, Remove'),
+        cancelButtonText: __('cancel'),
+        allowOutsideClick: false
+    });
+
+    if (!confirmation.isConfirmed) return;
+
+    Swal.fire({
+        title: __('ungenerating_payroll_title', 'Removing Generated Payroll'),
+        html: __('please_wait') || 'Please wait...',
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        allowEscapeKey: false
+    });
+
+    try {
+        const response = await fetch('./includes/api/ungenerate_payroll.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ month: payrollMonth }),
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            await Swal.fire({
+                icon: 'success',
+                title: __('payroll_ungenerated_success_title', 'Payroll Removed'),
+                text: result.message,
+                confirmButtonColor: '#6366f1',
+                confirmButtonText: __('ok'),
+            });
+            await fetchEmployees();
+        } else {
+            throw new Error(result.message || 'Failed to remove generated payroll.');
+        }
+    } catch (error) {
+        console.error('Error un-generating payroll:', error);
+        showError(__('error') || 'Error', error.message || 'Failed to remove generated payroll.');
     }
 }
 
@@ -5530,6 +5929,69 @@ async function showPayrollDetails(empId, empName, month) {
         showError('Network Error', error.message);
     }
 }
+function openPayslipsModal() {
+    const companyOptions = $('#companyFilter option')
+        .map(function() { return { value: $(this).val(), text: $(this).text() }; })
+        .get()
+        .filter(opt => opt.value !== '')
+        .map(opt => `<option value="${opt.value}">${opt.text}</option>`)
+        .join('');
+
+    Swal.fire({
+        title: __('generate_payslips_button', 'Generate Payslips'),
+        html: `
+            <div class="text-left">
+                <div class="form-group">
+                    <label for="swalPayslipMonth">${__('select_month_label', 'Month')}</label>
+                    <input type="month" id="swalPayslipMonth" class="form-control" value="${$('#payrollMonth').val() || ''}">
+                </div>
+                <div class="form-group">
+                    <label for="swalPayslipCompany">${__('filter_by_company_label', 'Company')}</label>
+                    <select id="swalPayslipCompany" class="form-control">
+                        <option value="">${__('all_companies_option', 'All Companies')}</option>
+                        ${companyOptions}
+                    </select>
+                </div>
+            </div>
+        `,
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: `<i class="fas fa-file-pdf"></i> ${__('payslips_pdf_button', 'Generate PDF')}`,
+        denyButtonText: `<i class="fas fa-file-excel"></i> ${__('payslips_excel_button', 'Generate Excel')}`,
+        cancelButtonText: __('cancel', 'Cancel'),
+        confirmButtonColor: '#dc3545',
+        denyButtonColor: '#28a745',
+        focusConfirm: false,
+        allowOutsideClick: false,
+        preConfirm: () => validatePayslipsForm(),
+        preDeny: () => validatePayslipsForm(),
+    }).then((result) => {
+        if (result.isConfirmed && result.value) {
+            openPayslipsFile('generate_bulk_payslips_pdf.php', result.value);
+        } else if (result.isDenied && result.value) {
+            openPayslipsFile('generate_bulk_payslips_excel.php', result.value);
+        }
+    });
+}
+
+function validatePayslipsForm() {
+    const month = document.getElementById('swalPayslipMonth').value;
+    const company = document.getElementById('swalPayslipCompany').value;
+    if (!month) {
+        Swal.showValidationMessage(__('please_select_month', 'Please select a month.'));
+        return false;
+    }
+    return { month, company };
+}
+
+function openPayslipsFile(base, data) {
+    let url = base + '?month=' + encodeURIComponent(data.month);
+    if (data.company) {
+        url += '&company=' + encodeURIComponent(data.company);
+    }
+    window.open(url, '_blank');
+}
+
 // NOTE: All your other functions are preserved but omitted here for brevity.
     // Temporary QA flag for Bank Excel button visibility.
     // Set to false after testing to restore approval-based visibility only.
@@ -5566,14 +6028,16 @@ async function showPayrollDetails(empId, empName, month) {
                     return;
                 }
                 let grandTotalNet = reportData.reduce((sum, p) => sum + parseFloat(p.net_salary || 0), 0);
+                const allAlreadyPaid = reportData.length > 0 && reportData.every(p => p.status === 'paid');
                 const reportHtml = `
                     <div id="payrollReportModal" class="text-left">
                         <h2 class="text-2xl font-bold mb-4 text-center">${__('payroll_report_for_month_title')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
                         <div class="mb-4 text-center">
-                            <button id="markAsPaidBtn" class="btn btn-custom"><i class="fas fa-check-circle"></i> ${__('mark_as_paid_button')}</button>
+                            <button id="markAsPaidBtn" class="btn btn-custom" style="display:${allAlreadyPaid ? 'none' : 'inline-block'};"><i class="fas fa-check-circle"></i> ${__('mark_as_paid_button')}</button>
                             <button id="exportPdfBtn" class="btn btn-danger"><i class="fas fa-file-pdf"></i> ${__('pdf_button')}</button>
                             <button id="exportExcelBtn" class="btn btn-success" style="display:${showBankExcelButton ? 'inline-block' : 'none'};"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
                             <button id="exportDetailedExcelBtn" class="btn btn-info"><i class="fas fa-file-excel"></i> Detailed Excel</button>
+                            <button id="printReportBtn" class="btn btn-secondary"><i class="fas fa-print"></i> Print</button>
                             <div id="bankExcelPendingNote" class="mt-2 text-muted" style="display:${showBankExcelButton ? 'none' : 'block'}; font-size: 13px; font-weight: 600;">
                                 Payroll approval is still pending. Bank EXCEL will be available immediately after final GM approval.
                             </div>
@@ -5584,7 +6048,7 @@ async function showPayrollDetails(empId, empName, month) {
                                     <th><input type="checkbox" id="reportSelectAll"/></th>
                                     <th>${__('emp_id')}</th>
                                     <th>${__('name')}</th>
-                                    <th class="text-right">${__('net_salary_label')}</th>
+                                    <th class="text-right">${__('net_salary_label') || 'Net Payable Salary'}</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -5642,7 +6106,15 @@ async function showPayrollDetails(empId, empName, month) {
                                 emptyTable: __('no_data_available_in_table'),
                                 zeroRecords: __('no_matching_records_found'),
                                 processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-                            }
+                            },
+                            buttons: [
+                                {
+                                    extend: 'print',
+                                    title: `${__('payroll_report_for_month_title')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}`,
+                                    exportOptions: { columns: [1, 2, 3] },
+                                    footer: true
+                                }
+                            ]
                         });
 
                         $('#markAsPaidBtn').on('click', async () => {
@@ -5664,6 +6136,7 @@ async function showPayrollDetails(empId, empName, month) {
                         $('#exportPdfBtn').on('click', () => exportPdfReport(reportData, selectedMonth));
                         $('#exportExcelBtn').on('click', () => exportExcelReport(reportData, selectedMonth));
                         $('#exportDetailedExcelBtn').on('click', () => exportDetailedExcelReport(reportData, selectedMonth, vacationEmployeesData));
+                        $('#printReportBtn').on('click', () => table.button(0).trigger());
                     }
                 });
             } else {
@@ -5719,11 +6192,11 @@ async function showPayrollDetails(empId, empName, month) {
                 ]
             ];
 
-            // Filter out cash and hold employees for detailed exports
+            // Filter out only hold employees for the PDF export; cash salary employees are included
             const filteredReportData = Array.isArray(reportData)
                 ? reportData.filter(p => {
                     const pt = parseInt(p.payment_type || 1, 10);
-                    return pt !== 2 && pt !== 3; // exclude cash (2) and hold (3)
+                    return pt !== 3; // exclude hold (3) only, cash (2) is included
                 })
                 : [];
 
@@ -5838,6 +6311,45 @@ async function showPayrollDetails(empId, empName, month) {
             });
 
 
+            // Compute grand totals across all included employees (bank + cash)
+            const totals = filteredReportData.reduce((acc, p) => {
+                acc.basic += parseFloat(p.basic_salary || 0);
+                acc.housing += parseFloat(p.housing_allowance || 0);
+                acc.transport += parseFloat(p.transport_allowance || 0);
+                acc.food += parseFloat(p.food_allowance || 0);
+                acc.misc += parseFloat(p.miscellaneous_allowance || 0);
+                acc.cashier += parseFloat(p.cashier_allowance || 0);
+                acc.fuel += parseFloat(p.fuel_allowance || 0);
+                acc.telephone += parseFloat(p.telephone_allowance || 0);
+                acc.other += parseFloat(p.other_allowance || 0);
+                acc.guard += parseFloat(p.guard_allowance || 0);
+                acc.gross += parseFloat(p.total_gross_salary || 0);
+                acc.benefits += parseFloat(p.total_benefits || 0);
+                acc.deductions += parseFloat(p.total_deductions || 0);
+                acc.net += parseFloat(p.net_salary || 0);
+                return acc;
+            }, { basic: 0, housing: 0, transport: 0, food: 0, misc: 0, cashier: 0, fuel: 0, telephone: 0, other: 0, guard: 0, gross: 0, benefits: 0, deductions: 0, net: 0 });
+
+            const foot = [[
+                { content: __('grand_total_label') || 'Grand Total', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+                totals.basic.toFixed(2),
+                totals.housing.toFixed(2),
+                totals.transport.toFixed(2),
+                totals.food.toFixed(2),
+                totals.misc.toFixed(2),
+                totals.cashier.toFixed(2),
+                totals.fuel.toFixed(2),
+                totals.telephone.toFixed(2),
+                totals.other.toFixed(2),
+                totals.guard.toFixed(2),
+                totals.gross.toFixed(2),
+                '',
+                totals.benefits.toFixed(2),
+                '',
+                totals.deductions.toFixed(2),
+                totals.net.toFixed(2)
+            ]];
+
             // Add report title
             doc.setFontSize(16);
             doc.text(reportTitle, doc.internal.pageSize.width / 2, 40, { align: 'center' });
@@ -5847,6 +6359,7 @@ async function showPayrollDetails(empId, empName, month) {
                 startY: 60,
                 head: head,
                 body: body,
+                foot: foot,
                 theme: 'grid',
                 headStyles: {
                     fillColor: [41, 128, 185],
@@ -5861,6 +6374,14 @@ async function showPayrollDetails(empId, empName, month) {
                     cellPadding: 3,
                     valign: 'middle',
                     font: arabicFontName || undefined
+                },
+                footStyles: {
+                    fillColor: [230, 230, 230],
+                    textColor: 20,
+                    fontStyle: 'bold',
+                    font: arabicFontName || undefined,
+                    halign: 'right',
+                    fontSize: 7
                 },
                 columnStyles: {
                     0: { halign: 'center' }, // #
@@ -6004,8 +6525,11 @@ async function showPayrollDetails(empId, empName, month) {
             // 2. Map reportData to the desired row format, converting strings to numbers
             // By processing the data first, we can separate logic from the sheet creation step.
             const dataRows = bankRows.map((p, index) => {
-                // Calculate the total for the 'OTHER' allowances column
-                // We ensure all values are parsed as numbers.
+                // Calculate the total for the 'OTHER' allowances column.
+                // This must include BOTH the fixed salary-structure allowances (emp_salary)
+                // AND the dynamic ad-hoc benefits (payroll_benefits, e.g. bonuses/incentives
+                // added via the Benefits UI, summed into total_benefits) - otherwise NET SALARY
+                // won't equal BASIC + HOUSE + OTHER whenever an employee has any dynamic benefit.
                 const totalAllowances =
                     parseFloat(p.transport_allowance || 0) +
                     parseFloat(p.food_allowance || 0) +
@@ -6014,7 +6538,8 @@ async function showPayrollDetails(empId, empName, month) {
                     parseFloat(p.fuel_allowance || 0) +
                     parseFloat(p.telephone_allowance || 0) +
                     parseFloat(p.other_allowance || 0) +
-                    parseFloat(p.guard_allowance || 0);
+                    parseFloat(p.guard_allowance || 0) +
+                    parseFloat(p.total_benefits || 0);
                 // Return an array representing the row.
                 // We use parseFloat to ensure all monetary values are treated as numbers.
                 // We DO NOT use .toFixed() here, because it converts numbers to strings,

@@ -788,8 +788,74 @@ function rejectResignation(resignationId, empName) {
     });
 }
 
+function cancelResignationAdmin(resignationId, empName) {
+    Swal.fire({
+        title: __('cancel_resignation') || 'Cancel Resignation',
+        html: `
+            <p class="mb-3">${__('confirm_cancel_resignation_for') || 'Are you sure you want to cancel the resignation request for'} <strong>${empName}</strong>?</p>
+            <div class="form-group text-left">
+                <label for="cancellation_note" class="font-weight-bold">${__('cancellation_reason') || 'Cancellation Reason'} <span class="text-danger">*</span></label>
+                <textarea id="cancellation_note" class="form-control" rows="4" placeholder="${__('enter_cancellation_reason') || 'Please provide a reason for cancellation...'}" required></textarea>
+            </div>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: __('yes_cancel') || 'Yes, Cancel',
+        cancelButtonText: __('cancel') || 'Cancel',
+        allowOutsideClick: false,
+        preConfirm: () => {
+            const reason = document.getElementById('cancellation_note').value.trim();
+            if (!reason) {
+                Swal.showValidationMessage(__('cancellation_reason_required_validation') || 'Please provide a reason for cancellation');
+                return false;
+            }
+            return { reason: reason };
+        }
+    ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')}).then((result) => {
+        if (result.isConfirmed && result.value) {
+            Swal.fire({
+                title: __('processing') || 'Processing...',
+                html: __('please_wait') || 'Please wait while we process your request',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            const formData = new FormData();
+            formData.append('ajaxType', 'cancelResignationAdmin');
+            formData.append('resignation_id', resignationId);
+            formData.append('cancellation_note', result.value.reason);
+
+            $.ajax({
+                url: './includes/ajaxFile/ajaxResignation.php',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: 'json',
+                success: function(response) {
+                    Swal.fire({
+                        title: response.title || __('cancelled') || 'Cancelled',
+                        text: response.message || '',
+                        icon: response.type || 'success',
+                        confirmButtonText: __('ok') || 'OK',
+                        allowOutsideClick: false
+                    }).then(() => { location.reload(); });
+                },
+                error: function() {
+                    Swal.fire({
+                        title: __('error_title') || 'Error',
+                        text: __('unknown_error_occurred') || 'An unexpected error occurred.',
+                        icon: 'error',
+                        allowOutsideClick: false
+                    });
+                }
+            });
+        }
+    });
+}
+
 $(document).ready(function() {
-    
+
     // View Resignation Details
     $(document).on('click', '.viewResignation', function() {
         const $btn = $(this);

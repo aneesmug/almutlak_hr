@@ -368,6 +368,59 @@ if(mysqli_num_rows($query) == 1){
                     }
                 });
             });
+
+            // Self-cancel handler (pending_approval / approved requests owned by the current user)
+            $(document).on('click', '.cancelGeneralRequestSelf', function() {
+                const inv_no = $(this).data('id');
+
+                Swal.fire({
+                    title: '<?=__('are_you_sure', 'Are you sure?')?>',
+                    text: '<?=__('are_you_sure_cancel_request', 'Are you sure you want to cancel this request?')?>',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: APP_COLORS.danger_dark,
+                    cancelButtonColor: APP_COLORS.primary,
+                    confirmButtonText: '<?=__('yes_cancel_request', 'Yes, Cancel It')?>',
+                    cancelButtonText: '<?=__('keep_request', 'No')?>'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $.ajax({
+                            url: './includes/ajaxFile/ajaxGeneralRequest.php',
+                            type: 'POST',
+                            data: {
+                                action: 'cancel_general_request_self',
+                                inv_no: inv_no
+                            },
+                            dataType: 'json',
+                            success: function(response) {
+                                if (response.success) {
+                                    Swal.fire({
+                                        icon: 'success',
+                                        title: '<?=__('cancelled', 'Cancelled')?>',
+                                        text: response.message,
+                                        timer: 2000,
+                                        showConfirmButton: false
+                                    });
+                                    table.draw();
+                                } else {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: '<?=__('error')?>',
+                                        text: response.message
+                                    });
+                                }
+                            },
+                            error: function() {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: '<?=__('error')?>',
+                                    text: '<?=__('error_occurred', 'An error occurred')?>'
+                                });
+                            }
+                        });
+                    }
+                });
+            });
         });
     </script>
 </body>

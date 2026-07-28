@@ -26,6 +26,12 @@ if (
     exit();
 }
 
+$can_cancel_loan_requests = (
+    !empty($is_system_admin)
+    || user_has_special_access($conDB, $empid ?? '', 'cancel_loan_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+$cancellable_loan_statuses = ['pending', 'awaiting', 'approved'];
+
 // --- Get Request Type ID for 'loan_request' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'loan_request' LIMIT 1");
 if (!$type_query || mysqli_num_rows($type_query) == 0) {
@@ -392,9 +398,62 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                             <?php foreach ($requests as $loan): ?>
                                                 <div class="col-lg-4 col-md-6 mb-4">
                                                     <div class="card request-card h-100">
-                                                        <div class="card-header">
-                                                            <?=getDisplayName(parseName($loan['employee_name'])); ?>
-                                                            <span class="float-right"><?=__('emp_id')?>: <?=htmlspecialchars($loan['emp_id']); ?></span>
+                                                        <div class="card-header d-flex justify-content-between align-items-center">
+                                                            <span><?=getDisplayName(parseName($loan['employee_name'])); ?></span>
+                                                            <div class="d-flex align-items-center" style="gap: 8px;">
+                                                                <span><?=__('emp_id')?>: <?=htmlspecialchars($loan['emp_id']); ?></span>
+                                                                <div class="btn-group" style="position: static;">
+                                                                    <button type="button" class="btn btn-sm btn-light dropdown-toggle waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                                                        <?=__('actions')?>
+                                                                    </button>
+                                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                                        <a class="dropdown-item" href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank" style="cursor: pointer;">
+                                                                            <i class="fa fa-history"></i> <?=__('history')?>
+                                                                        </a>
+                                                                        <?php
+                                                                            // Button visibility: Only show if pending with logged-in user
+                                                                            $can_take_action = false;
+                                                                            if ($loan['current_approver_id'] == $empid) {
+                                                                                $can_take_action = true;
+                                                                            }
+                                                                        ?>
+                                                                        <?php if($can_take_action): ?>
+                                                                            <div class="dropdown-divider"></div>
+                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['loan_amount']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['current_approval_level'] ?? 0?>, <?=(int)($loan['payer_emp_id'] ?? 0)?>, <?=(int)$_SESSION['empid']?>, <?=isset($loan['installments']) ? (int)$loan['installments'] : 1?>)">
+                                                                                <i class="fa fa-check text-success"></i> <?=__('approve')?>
+                                                                            </button>
+                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>')">
+                                                                                <i class="fa fa-times text-danger"></i> <?=__('reject')?>
+                                                                            </button>
+                                                                        <?php endif; ?>
+
+                                                                        <?php if ($can_cancel_loan_requests && in_array($loan['status'], $cancellable_loan_statuses, true)): ?>
+                                                                            <div class="dropdown-divider"></div>
+                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="cancelLoanRequestAdmin(<?=$loan['id']; ?>, '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES)?>', '<?=htmlspecialchars($loan['inv_no'], ENT_QUOTES)?>')">
+                                                                                <i class="fa fa-ban text-danger"></i> <?=__('cancel', 'Cancel')?>
+                                                                            </button>
+                                                                        <?php endif; ?>
+
+                                                                        <!-- Settlement Button - After Full Approval -->
+                                                                        <?php
+                                                                        // Check if settlement already exists for this request
+                                                                        $loanSettlementCheckQry = mysqli_query($conDB, "SELECT id FROM settlement_records WHERE request_inv_no LIKE 'SETTLEMENT-" . $loan['inv_no'] . "%' LIMIT 1");
+                                                                        $loanSettlementExists = $loanSettlementCheckQry && mysqli_num_rows($loanSettlementCheckQry) > 0;
+                                                                        ?>
+                                                                        <?php if ($loan['status'] === 'approved' && !$loanSettlementExists): ?>
+                                                                            <div class="dropdown-divider"></div>
+                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="createLoanSettlement(<?=$loan['id']; ?>, '<?=$loan['inv_no']; ?>', '<?=$loan['emp_id']; ?>', '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES); ?>', <?=(float)$loan['loan_amount']; ?>)">
+                                                                                <i class="fa fa-handshake text-success"></i> <?=__('create_settlement') ?: 'Create Settlement'?>
+                                                                            </button>
+                                                                        <?php elseif ($loan['status'] === 'approved' && $loanSettlementExists): ?>
+                                                                            <div class="dropdown-divider"></div>
+                                                                            <button type="button" class="dropdown-item disabled" style="cursor: not-allowed; background: none; border: none; width: 100%; text-align: left; color: #999;" disabled>
+                                                                                <i class="fa fa-check-circle text-success"></i> <?=__('settlement_created') ?: 'Settlement Created'?>
+                                                                            </button>
+                                                                        <?php endif; ?>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <div class="card-body">
                                                             <div class="detail-item">
@@ -449,54 +508,10 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                             </div>
                                                             <?php endif; ?>
                                                         </div>
-                                                        <?php
-                                                            // Button visibility: Only show if pending with logged-in user
-                                                            $can_take_action = false;
-                                                            if ($loan['current_approver_id'] == $empid) {
-                                                                $can_take_action = true;
-                                                            }
-                                                        ?>
-                                                        <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
+                                                        <div class="card-footer">
                                                             <a href="loan_report_details.php?id=<?=$loan['id']; ?>&emp_id=<?=$loan['emp_id']; ?>" target="_blank" class="btn btn-info btn-block waves-effect">
                                                                 <i class="fa fa-eye"></i> <?=__('view')?>
                                                             </a>
-                                                            <div class="btn-group flex-fill" style="position: relative; z-index: 1000;">
-                                                                <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                    <?=__('actions')?> <span class="caret"></span>
-                                                                </button>
-                                                                <div class="dropdown-menu dropdown-menu-right" style="z-index: 1050; position: absolute;">
-                                                                    <a class="dropdown-item" href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank" style="cursor: pointer;">
-                                                                        <i class="fa fa-history"></i> <?=__('history')?>
-                                                                    </a>
-                                                                    <?php if($can_take_action): ?>
-                                                                        <div class="dropdown-divider"></div>
-                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['loan_amount']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['current_approval_level'] ?? 0?>, <?=(int)($loan['payer_emp_id'] ?? 0)?>, <?=(int)$_SESSION['empid']?>, <?=isset($loan['installments']) ? (int)$loan['installments'] : 1?>)">
-                                                                            <i class="fa fa-check text-success"></i> <?=__('approve')?>
-                                                                        </button>
-                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>')">
-                                                                            <i class="fa fa-times text-danger"></i> <?=__('reject')?>
-                                                                        </button>
-                                                                    <?php endif; ?>
-
-                                                                    <!-- Settlement Button - After Full Approval -->
-                                                                    <?php 
-                                                                    // Check if settlement already exists for this request
-                                                                    $loanSettlementCheckQry = mysqli_query($conDB, "SELECT id FROM settlement_records WHERE request_inv_no LIKE 'SETTLEMENT-" . $loan['inv_no'] . "%' LIMIT 1");
-                                                                    $loanSettlementExists = $loanSettlementCheckQry && mysqli_num_rows($loanSettlementCheckQry) > 0;
-                                                                    ?>
-                                                                    <?php if ($loan['status'] === 'approved' && !$loanSettlementExists): ?>
-                                                                        <div class="dropdown-divider"></div>
-                                                                        <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="createLoanSettlement(<?=$loan['id']; ?>, '<?=$loan['inv_no']; ?>', '<?=$loan['emp_id']; ?>', '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES); ?>', <?=(float)$loan['loan_amount']; ?>)">
-                                                                            <i class="fa fa-handshake text-success"></i> <?=__('create_settlement') ?: 'Create Settlement'?>
-                                                                        </button>
-                                                                    <?php elseif ($loan['status'] === 'approved' && $loanSettlementExists): ?>
-                                                                        <div class="dropdown-divider"></div>
-                                                                        <button type="button" class="dropdown-item disabled" style="cursor: not-allowed; background: none; border: none; width: 100%; text-align: left; color: #999;" disabled>
-                                                                            <i class="fa fa-check-circle text-success"></i> <?=__('settlement_created') ?: 'Settlement Created'?>
-                                                                        </button>
-                                                                    <?php endif; ?>
-                                                                </div>
-                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

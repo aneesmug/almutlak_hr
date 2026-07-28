@@ -91,6 +91,14 @@ $status_badges = [
     'processed' => 'badge-primary'
 ];
 
+// Employee can self-cancel any time before the loan reaches a final state
+// (rejected/paid/partial/processed/cancelled) - matches vacation's cancel rule.
+$loan_cancellable_statuses = [
+    'pending', 'approved',
+    'dept_manager_pending', 'hr_assistant_pending', 'hr_manager_pending',
+    'finance_manager_pending', 'finance_assistant_pending', 'gm_pending'
+];
+
 function format_loan_status_label($status) {
     if (!$status) {
         return 'Pending';
@@ -314,6 +322,11 @@ function format_loan_status_label($status) {
                                                     <?php else: ?>
                                                         <span class="text-muted">N/A</span>
                                                     <?php endif; ?>
+                                                    <?php if (in_array($loan['status'] ?? '', $loan_cancellable_statuses, true)): ?>
+                                                        <button type="button" class="btn btn-sm btn-danger" title="Cancel Request" onclick="cancelLoanRequest(<?= (int)$loan['id'] ?>, '<?= htmlspecialchars($loan['inv_no'] ?? '', ENT_QUOTES) ?>')">
+                                                            <i class="fa fa-times"></i>
+                                                        </button>
+                                                    <?php endif; ?>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -337,8 +350,56 @@ function format_loan_status_label($status) {
     <script src="./assets/js/bootstrap.bundle.min.js"></script>
     <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/employee_profile.js"></script>
     <script>
+        function cancelLoanRequest(loanId, invNo) {
+            Swal.fire({
+                title: __('cancel_loan_request') || 'Cancel Loan Request',
+                html: `<p>${__('are_you_sure_cancel_request') || 'Are you sure you want to cancel this request?'}</p><strong>${invNo}</strong>`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: __('yes_cancel_request') || 'Yes, Cancel It',
+                cancelButtonText: __('keep_request') || 'No',
+                allowOutsideClick: false
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                Swal.fire({
+                    title: __('cancelling_request') || 'Cancelling...',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                $.ajax({
+                    url: './includes/ajaxFile/ajaxLoan.php',
+                    type: 'POST',
+                    dataType: 'JSON',
+                    data: { ajaxType: 'cancel_loan_self', loan_id: loanId },
+                    success: function(response) {
+                        Swal.fire({
+                            title: response.title || __('success'),
+                            text: response.message,
+                            icon: response.type || 'success',
+                            confirmButtonText: __('ok')
+                        }).then(() => location.reload());
+                    },
+                    error: function(xhr) {
+                        const response = xhr.responseJSON || {};
+                        Swal.fire({
+                            title: response.title || __('error'),
+                            text: response.message || 'Failed to cancel loan request.',
+                            icon: 'error',
+                            confirmButtonText: __('ok')
+                        });
+                    }
+                });
+            });
+        }
+
         $(document).ready(function() {
             $('.datatable').DataTable({
                 order: [[5, 'desc']],

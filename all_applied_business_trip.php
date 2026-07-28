@@ -12,6 +12,12 @@ if (
     exit();
 }
 
+$can_cancel_business_trip_requests = (
+    !empty($is_system_admin)
+    || user_has_special_access($conDB, $empid ?? '', 'cancel_business_trip_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+$cancellable_business_trip_statuses = ['pending_approval', 'approved'];
+
 // --- Get Request Type ID for 'business_trip' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'business_trip' LIMIT 1");
 if (!$type_query || mysqli_num_rows($type_query) == 0) {
@@ -414,6 +420,12 @@ if ($can_see_all_depts) {
                                                                         <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
                                                                     </button>
                                                                 <?php endif; ?>
+                                                                <?php if ($can_cancel_business_trip_requests && in_array($trip['current_status'] ?? '', $cancellable_business_trip_statuses, true)): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="cancelBusinessTripAdmin('<?= htmlspecialchars((string)$trip['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
+                                                                        <i class="fa fa-ban text-danger"></i> <?= __('cancel', 'Cancel') ?>
+                                                                    </button>
+                                                                <?php endif; ?>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -590,6 +602,64 @@ if ($can_see_all_depts) {
                     Swal.fire({
                         title: result.value.title || 'Rejected',
                         text: result.value.message || 'Business trip request rejected successfully.',
+                        icon: 'success',
+                        confirmButtonColor: APP_COLORS.success
+                    }).then(() => location.reload());
+                }
+            });
+        }
+
+        function cancelBusinessTripAdmin(tripId, employeeName) {
+            Swal.fire({
+                title: __('cancel_business_trip_request') || 'Cancel Business Trip Request',
+                html: `<p>${__('confirm_cancel_business_trip_for') || 'Are you sure you want to cancel the business trip request for'} <strong>${employeeName}</strong>?</p>`,
+                input: 'textarea',
+                inputLabel: __('cancellation_reason') || 'Cancellation reason',
+                inputPlaceholder: __('enter_cancellation_reason_placeholder') || 'Enter reason for cancelling this request',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: APP_COLORS.danger,
+                cancelButtonColor: APP_COLORS.secondary,
+                confirmButtonText: __('yes_cancel') || 'Yes, Cancel',
+                cancelButtonText: __('cancel') || 'Cancel',
+                showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                preConfirm: (cancellationNote) => {
+                    if (!cancellationNote || cancellationNote.trim() === '') {
+                        Swal.showValidationMessage(__('cancellation_reason_required_validation') || 'Cancellation reason is required');
+                        return false;
+                    }
+
+                    return new Promise((resolve, reject) => {
+                        $.ajax({
+                            url: './includes/ajaxFile/ajaxBusinessTrip.php',
+                            type: 'POST',
+                            dataType: 'JSON',
+                            data: {
+                                ajaxType: 'cancelBusinessTripAdmin',
+                                trip_id: tripId,
+                                cancellation_note: cancellationNote.trim()
+                            },
+                            success: function (response) {
+                                if (response.status === 'success') {
+                                    resolve(response);
+                                } else {
+                                    reject(response.message || 'Cancellation failed');
+                                }
+                            },
+                            error: function () {
+                                reject('Failed to process cancellation request.');
+                            }
+                        });
+                    }).catch(error => {
+                        Swal.showValidationMessage(error);
+                    });
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: result.value.title || 'Cancelled',
+                        text: result.value.message || 'Business trip request cancelled successfully.',
                         icon: 'success',
                         confirmButtonColor: APP_COLORS.success
                     }).then(() => location.reload());

@@ -94,6 +94,13 @@ $(document).on('click', '.applyLoan', async function(e) {
                         </div>
                     </div>
                 </div>
+                <div class="vacation-card" id="housing_months_group" style="display:none; margin-bottom: 20px;">
+                    <div class="vacation-card-header">
+                        <i class="fa fa-home"></i>
+                        ${__('number_of_months_label') || 'Number Of Months'} <span class="text-danger">*</span>
+                    </div>
+                    <select id="housing_months" name="housing_months" class="form-control form-control-modern" style="margin-top: 15px;"></select>
+                </div>
                 <div class="vacation-card" style="margin-bottom: 20px;">
                     <div class="vacation-card-header">
                         <i class="fa fa-money-bill-wave"></i>
@@ -108,6 +115,13 @@ $(document).on('click', '.applyLoan', async function(e) {
                         ${__('number_of_installments_label')} <span class="text-danger">*</span>
                     </div>
                     <select id="installments" name="installments" class="form-control form-control-modern" style="margin-top: 15px;"></select>
+                </div>
+                <div class="vacation-card" id="housing_amount_display_group" style="display:none; margin-bottom: 20px;">
+                    <div class="vacation-card-header">
+                        <i class="fa fa-money-bill-wave"></i>
+                        ${__('loan_amount_label')}
+                    </div>
+                    <input type="text" id="housing_amount_display" class="form-control form-control-modern" readonly style="font-weight:bold; margin-top: 15px; background-color: #f8f9fc;">
                 </div>
                 <div class="vacation-card" id="deduction_summary" style="display:none; margin-bottom: 20px;">
                     <div class="vacation-card-header">
@@ -139,6 +153,10 @@ $(document).on('click', '.applyLoan', async function(e) {
             const amountInput = $('#loan_amount');
             const installmentsSelect = $('#installments');
             const installmentsGroup = $('#installments_group');
+            const housingMonthsSelect = $('#housing_months');
+            const housingMonthsGroup = $('#housing_months_group');
+            const housingAmountDisplayGroup = $('#housing_amount_display_group');
+            const housingAmountDisplay = $('#housing_amount_display');
             const deductionGroup = $('#deduction_summary');
             const deductionDisplay = $('#monthly_deduction_display');
             const eligibilityInfo = $('#eligibility_info');
@@ -157,16 +175,34 @@ $(document).on('click', '.applyLoan', async function(e) {
                 installmentsSelect.html(opts);
             }
 
+            // Housing loans: repayment installments are always forced equal to the number
+            // of months' advance borrowed (backend derives installments = loan_amount /
+            // housing_allowance, ajaxLoan.php apply_for_loan()) - so "installments" here is
+            // just a locked confirmation of the months picked, not an independent choice.
+            function setHousingMonthsOptions(n) {
+                let opts = '';
+                for (let i = 1; i <= n; i++) {
+                    opts += `<option value="${i}">${i} ${i>1?(__('months')||'Months'):(__('month')||'Month')}</option>`;
+                }
+                housingMonthsSelect.html(opts);
+            }
+
+            function updateHousingAmountFromMonths() {
+                const months = Number(housingMonthsSelect.val()) || 0;
+                const amt = months * (Number(housingAllowance) || 0);
+                amountInput.val(amt.toFixed(2));
+                housingAmountDisplay.val(amt.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
+                validateAmount();
+            }
+
             function updateDeduction() {
                 const type = $('input[name="loan_type"]:checked').val();
                 const amt = Number(amountInput.val());
                 const inst = Number(installmentsSelect.val());
                 if (!amt || amt <= 0) { deductionGroup.hide(); return; }
                 let monthly = 0;
-                if (type === 'end_of_service') {
+                if (type === 'end_of_service' || type === 'housing') {
                     monthly = inst > 0 ? amt / inst : 0;
-                } else if (type === 'housing') {
-                    monthly = Number(housingAllowance) || 0;
                 } else if (type === 'advance_salary') {
                     monthly = amt; // full deduction next payroll
                 }
@@ -290,7 +326,10 @@ $(document).on('click', '.applyLoan', async function(e) {
 
                         // Configure installments visibility
                         if (type === 'end_of_service') {
+                            housingMonthsGroup.hide();
+                            housingAmountDisplayGroup.hide();
                             installmentsGroup.show();
+                            installmentsSelect.prop('disabled', false);
                             setInstallmentOptions(maxInstallments || 12);
                             amountInput.closest('.vacation-card').show();
                             amountInput.prop('readonly', false);
@@ -300,29 +339,46 @@ $(document).on('click', '.applyLoan', async function(e) {
                             const amountBlock = amountInput.closest('.vacation-card');
                             if (!resp.eligible) {
                                 amountBlock.hide();
+                                housingMonthsGroup.hide();
                                 installmentsGroup.hide();
+                                housingAmountDisplayGroup.hide();
                                 deductionGroup.hide();
                             } else {
-                                amountBlock.show();
+                                // No manual amount entry for housing - the raw input stays hidden
+                                // (still populated under the hood for form submission) and a
+                                // read-only computed total is shown instead, after installments.
+                                // Installments (repayment months) is the employee's own choice,
+                                // independent of how many months' advance they borrowed.
+                                amountBlock.hide();
+                                housingMonthsGroup.show();
+                                setHousingMonthsOptions(maxInstallments || 6);
                                 installmentsGroup.show();
-                                setInstallmentOptions(maxInstallments || 6);
+                                installmentsSelect.prop('disabled', false);
+                                setInstallmentOptions(12);
+                                housingAmountDisplayGroup.show();
+                                housingMonthsSelect.val(housingMonthsSelect.find('option').first().val());
+                                updateHousingAmountFromMonths();
                             }
-                            amountInput.prop('readonly', false);
-                            amountInput.val(''); // Clear value when switching loan type
                         } else if (type === 'advance_salary') {
                             // For Advance Salary: calculate 50% of salary and make field readonly
+                            housingMonthsGroup.hide();
+                            housingAmountDisplayGroup.hide();
                             installmentsGroup.hide();
+                            installmentsSelect.prop('disabled', false);
                             installmentsSelect.html('<option value="1">1 '+(__('month')||'Month')+'</option>');
                             amountInput.closest('.vacation-card').show();
-                            
+
                             // Calculate 50% of total salary (max_amount from server is already calculated as 50%)
                             const advanceSalary = Number(resp.max_amount) || 0;
-                            
+
                             amountInput.val(advanceSalary.toFixed(2));
                             amountInput.prop('readonly', true); // Make readonly
                             amountInput.prop('disabled', false); // Still send the value with form
                         } else {
+                            housingMonthsGroup.hide();
+                            housingAmountDisplayGroup.hide();
                             installmentsGroup.hide();
+                            installmentsSelect.prop('disabled', false);
                             installmentsSelect.html('<option value="1">1 '+(__('month')||'Month')+'</option>');
                             amountInput.closest('.vacation-card').show();
                             amountInput.prop('readonly', false);
@@ -364,6 +420,7 @@ $(document).on('click', '.applyLoan', async function(e) {
             loanTypeInputs.on('change', function(){ if ($(this).val() !== 'end_of_service') { $('#eos_info_card').hide(); } });
             amountInput.on('input', validateAmount);
             installmentsSelect.on('change', updateDeduction);
+            housingMonthsSelect.on('change', updateHousingAmountFromMonths);
 
             // Initial load
             fetchEligibility($('input[name="loan_type"]:checked').val());

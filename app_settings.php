@@ -1151,12 +1151,15 @@
             html += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="special-access-select-all-btn"><?= __('select_all') ?></button>';
             html += '<button type="button" class="btn btn-sm btn-outline-secondary" id="special-access-clear-all-btn"><?= __('clear_all') ?></button>';
             html += '</div></div>';
-            html += '<div class="row">';
+            html += `<div class="form-group mb-2">
+                <input type="text" class="form-control form-control-sm" id="special-access-search-input" placeholder="<?= __('search') ?>...">
+            </div>`;
+            html += '<div class="row" id="special-access-checkbox-grid">';
 
             catalog.forEach(item => {
                 const checkboxId = `special-access-${safeEmpId}-${item.value}`;
                 html += `
-                    <div class="col-md-6 mb-2">
+                    <div class="col-md-6 mb-2 special-access-item" data-search-label="${escapeHtml(item.label).toLowerCase()}">
                         <div class="custom-control custom-checkbox">
                             <input type="checkbox" class="custom-control-input special-access-checkbox" id="${checkboxId}" value="${item.value}" data-access-key="${item.value}">
                             <label class="custom-control-label" for="${checkboxId}">${escapeHtml(item.label)}</label>
@@ -1166,12 +1169,28 @@
             });
 
             html += '</div>';
+            html += '<p class="text-muted mb-0 mt-2" id="special-access-no-match" style="display:none;"><?= __('no_matching_records_found', 'No matching records found') ?></p>';
             container.innerHTML = html;
 
             container.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
                 const accessKey = checkbox.getAttribute('data-access-key') || '';
                 checkbox.checked = selectedSet.has(accessKey);
             });
+
+            const searchInput = document.getElementById('special-access-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const term = this.value.trim().toLowerCase();
+                    let visibleCount = 0;
+                    container.querySelectorAll('.special-access-item').forEach(item => {
+                        const matches = term === '' || (item.getAttribute('data-search-label') || '').includes(term);
+                        item.style.display = matches ? '' : 'none';
+                        if (matches) visibleCount++;
+                    });
+                    const noMatch = document.getElementById('special-access-no-match');
+                    if (noMatch) noMatch.style.display = visibleCount === 0 ? '' : 'none';
+                });
+            }
 
             function persistFromCheckboxes() {
                 const activeEmpId = String(currentSpecialAccessEmpId || '').trim();

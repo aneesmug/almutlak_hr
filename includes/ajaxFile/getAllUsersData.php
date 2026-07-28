@@ -44,7 +44,7 @@ try {
                 `admin_login`.`emp_id`,
                 `admin_login`.`status`,
                 `admin_login`.`user_type`,
-                `admin_login`.`dept`,
+                `employees`.`dept`,
                 `admin_login`.`email`,
                 `admin_login`.`allowed_companies`,
                 `admin_login`.`allowed_departments`,
@@ -52,9 +52,9 @@ try {
                 `employees`.`name` AS `efullname`,
                 `employees`.`mobile`,
                 `department`.`dep_nme` AS `deptnme`
-            FROM `admin_login` 
+            FROM `admin_login`
             LEFT JOIN `employees` ON `employees`.`emp_id` = `admin_login`.`emp_id`
-            LEFT JOIN `department` ON `department`.`id` = `admin_login`.`dept`
+            LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
             WHERE 1=1";
     // Employee filter - restrict by accessible employees
     $employee_filter = getEmployeeFilterSQL('admin_login.emp_id', true);
@@ -151,9 +151,9 @@ try {
     }
     
     // Count total records before filtering
-    $countSql = "SELECT COUNT(*) as total FROM `admin_login` 
+    $countSql = "SELECT COUNT(*) as total FROM `admin_login`
                  LEFT JOIN `employees` ON `employees`.`emp_id` = `admin_login`.`emp_id`
-                 LEFT JOIN `department` ON `department`.`id` = `admin_login`.`dept`
+                 LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
                  WHERE 1=1";
     $totalResult = mysqli_query($conDB, $countSql);
     $totalRow = mysqli_fetch_assoc($totalResult);

@@ -689,7 +689,79 @@ if ($ajaxType == 'apply_resignation') {
         ]);
     }
     exit;
-    
+
+} elseif ($ajaxType == 'cancelResignationAdmin') {
+    // ===== HR/ADMIN-INITIATED CANCELLATION OF ANY EMPLOYEE'S RESIGNATION =====
+    require_once __DIR__ . '/../special_access_helper.php';
+
+    $can_cancel_any = (
+        !empty($is_system_admin)
+        || user_has_special_access($conDB, $empid ?? '', 'cancel_resignation_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    );
+    if (!$can_cancel_any) {
+        echo json_encode(['type' => 'error', 'title' => 'Error', 'message' => __('access_denied', 'Access denied')]);
+        exit;
+    }
+
+    $resignationId = isset($_POST['resignation_id']) ? (int)$_POST['resignation_id'] : 0;
+    $cancellationNote = trim((string)($_POST['cancellation_note'] ?? ''));
+    if ($resignationId <= 0) {
+        echo json_encode(['type' => 'error', 'title' => 'Invalid Request', 'message' => 'Invalid resignation ID.']);
+        exit;
+    }
+
+    $checkQuery = "SELECT `id`, `emp_id`, `request_inv_no`, `status` FROM `emp_resignations` WHERE `id` = ?";
+    $checkStmt = mysqli_prepare($conDB, $checkQuery);
+    mysqli_stmt_bind_param($checkStmt, 'i', $resignationId);
+    mysqli_stmt_execute($checkStmt);
+    $checkResult = mysqli_stmt_get_result($checkStmt);
+    $resignation = $checkResult ? mysqli_fetch_assoc($checkResult) : null;
+    mysqli_stmt_close($checkStmt);
+
+    if (!$resignation) {
+        echo json_encode(['type' => 'error', 'title' => 'Invalid Request', 'message' => 'Resignation not found.']);
+        exit;
+    }
+
+    if (!in_array($resignation['status'], ['pending', 'approved'], true)) {
+        echo json_encode(['type' => 'error', 'title' => 'Invalid Request', 'message' => 'Resignation in status "' . $resignation['status'] . '" cannot be cancelled.']);
+        exit;
+    }
+
+    $reasonSuffix = $cancellationNote !== '' ? (' Reason: ' . $cancellationNote) : '';
+    $updateStmt = mysqli_prepare($conDB, "UPDATE `emp_resignations` SET `status` = 'cancelled', `rejection_reason` = CONCAT(COALESCE(`rejection_reason`, ''), ?), `updated_at` = NOW() WHERE `id` = ? AND `status` = ?");
+    $logNote = "\nCancelled by admin (emp_id {$empid}) on behalf of employee {$resignation['emp_id']}.{$reasonSuffix}";
+    mysqli_stmt_bind_param($updateStmt, 'sis', $logNote, $resignationId, $resignation['status']);
+    mysqli_stmt_execute($updateStmt);
+    $affected = mysqli_stmt_affected_rows($updateStmt);
+    mysqli_stmt_close($updateStmt);
+
+    if ($affected <= 0) {
+        echo json_encode(['type' => 'error', 'title' => 'Error', 'message' => 'Failed to cancel resignation - status may have changed.']);
+        exit;
+    }
+
+    try {
+        if (class_exists('ActivityLogger')) {
+            ActivityLogger::logSubmit('Resignation', 'ajaxResignation.php', $resignationId, "Resignation cancelled by admin/HR (emp_id {$empid}) on behalf of employee {$resignation['emp_id']}", 'emp_resignations');
+        }
+    } catch (Exception $e) {
+        error_log("WARNING: Failed to log admin resignation cancellation: " . $e->getMessage());
+    }
+
+    if (function_exists('create_browser_notification')) {
+        create_browser_notification(
+            $conDB,
+            $resignation['emp_id'],
+            'Resignation Request Cancelled',
+            'Your resignation request ' . htmlspecialchars($resignation['request_inv_no']) . ' was cancelled by an administrator.' . htmlspecialchars($reasonSuffix),
+            'view_employee.php?id=' . urlencode($resignation['emp_id'])
+        );
+    }
+
+    echo json_encode(['type' => 'success', 'title' => 'Cancelled', 'message' => 'Resignation request has been cancelled successfully.']);
+    exit;
+
 } elseif ($ajaxType == 'approve_resignation') {
     // ===== APPROVE RESIGNATION using ApprovalChainManager =====
     try {

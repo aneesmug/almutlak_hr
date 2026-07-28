@@ -171,7 +171,7 @@ if (!function_exists('ensurePayrollFinanceVerificationTable')) {
             officer_approved_at DATETIME DEFAULT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uniq_finance_verification (request_inv_no, payroll_month, finance_manager_emp_id),
+            UNIQUE KEY uniq_finance_verification (request_inv_no, payroll_month, finance_manager_emp_id, finance_officer_emp_id),
             INDEX idx_finance_verification_request (request_inv_no, payroll_month),
             INDEX idx_finance_verification_manager (finance_manager_emp_id),
             INDEX idx_finance_verification_officer (finance_officer_emp_id),
@@ -186,114 +186,22 @@ if (!function_exists('ensurePayrollFinanceVerificationTable')) {
                 ADD COLUMN officer_approved_at DATETIME DEFAULT NULL AFTER officer_approved");
         }
 
-        // Normalize any legacy duplicate rows to a single latest row per manager/request/month.
-        $duplicateGroupsStmt = $pdo->query("SELECT request_inv_no, payroll_month, finance_manager_emp_id, COUNT(*) AS row_count
-            FROM payroll_finance_verification
-            GROUP BY request_inv_no, payroll_month, finance_manager_emp_id
-            HAVING COUNT(*) > 1");
-        $duplicateGroups = $duplicateGroupsStmt ? $duplicateGroupsStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        // Migrate the unique key to include finance_officer_emp_id, so a manager can have
+        // several officers assigned concurrently to the same request - each keeps their own
+        // row/company scope instead of every reassignment overwriting the one shared row.
+        $uniqIndexStmt = $pdo->query("SHOW INDEX FROM payroll_finance_verification WHERE Key_name = 'uniq_finance_verification'");
+        $uniqIndexRows = $uniqIndexStmt ? $uniqIndexStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $uniqIndexColumns = array_map(static function ($row) {
+            return (string)($row['Column_name'] ?? '');
+        }, $uniqIndexRows);
 
-        foreach ($duplicateGroups as $group) {
-            $requestInvNo = (string)($group['request_inv_no'] ?? '');
-            $payrollMonth = (string)($group['payroll_month'] ?? '');
-            $managerEmpId = (string)($group['finance_manager_emp_id'] ?? '');
-
-            if ($requestInvNo === '' || $payrollMonth === '' || $managerEmpId === '') {
-                continue;
-            }
-
-            $rowsStmt = $pdo->prepare("SELECT id, finance_officer_emp_id, selected_company_ids, selected_employee_ids
-                FROM payroll_finance_verification
-                WHERE request_inv_no = :inv_no
-                  AND payroll_month = :month_year
-                  AND finance_manager_emp_id = :manager_id
-                ORDER BY id ASC");
-            $rowsStmt->execute([
-                ':inv_no' => $requestInvNo,
-                ':month_year' => $payrollMonth,
-                ':manager_id' => $managerEmpId
-            ]);
-            $rows = $rowsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-            if (count($rows) <= 1) {
-                continue;
-            }
-
-            $mergedCompanyIds = [];
-            $seenCompanyIds = [];
-            $mergedEmployeeIds = [];
-            $seenEmployeeIds = [];
-
-            foreach ($rows as $row) {
-                $companyIds = json_decode((string)($row['selected_company_ids'] ?? '[]'), true);
-                if (!is_array($companyIds)) {
-                    $companyIds = [];
-                }
-
-                foreach ($companyIds as $companyIdRaw) {
-                    $companyId = trim((string)$companyIdRaw);
-                    if ($companyId === '' || isset($seenCompanyIds[$companyId])) {
-                        continue;
-                    }
-                    $seenCompanyIds[$companyId] = true;
-                    $mergedCompanyIds[] = $companyId;
-                }
-
-                $employeeIds = json_decode((string)($row['selected_employee_ids'] ?? '[]'), true);
-                if (!is_array($employeeIds)) {
-                    $employeeIds = [];
-                }
-
-                foreach ($employeeIds as $employeeIdRaw) {
-                    $employeeId = trim((string)$employeeIdRaw);
-                    if ($employeeId === '' || isset($seenEmployeeIds[$employeeId])) {
-                        continue;
-                    }
-                    $seenEmployeeIds[$employeeId] = true;
-                    $mergedEmployeeIds[] = $employeeId;
-                }
-            }
-
-            $keeperRow = end($rows);
-            $keeperId = (int)($keeperRow['id'] ?? 0);
-            if ($keeperId <= 0) {
-                continue;
-            }
-
-            $updateKeeperStmt = $pdo->prepare("UPDATE payroll_finance_verification
-                SET selected_company_ids = :selected_company_ids,
-                    selected_employee_ids = :selected_employee_ids
-                WHERE id = :id");
-            $updateKeeperStmt->execute([
-                ':selected_company_ids' => json_encode($mergedCompanyIds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                ':selected_employee_ids' => json_encode($mergedEmployeeIds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                ':id' => $keeperId
-            ]);
-
-            $deleteDuplicateStmt = $pdo->prepare("DELETE FROM payroll_finance_verification
-                WHERE request_inv_no = :inv_no
-                  AND payroll_month = :month_year
-                  AND finance_manager_emp_id = :manager_id
-                  AND id <> :keeper_id");
-            $deleteDuplicateStmt->execute([
-                ':inv_no' => $requestInvNo,
-                ':month_year' => $payrollMonth,
-                ':manager_id' => $managerEmpId,
-                ':keeper_id' => $keeperId
-            ]);
-        }
-
-        // Ensure unique key is present for single-row assignment mode.
-        $uniqCheckStmt = $pdo->prepare("SELECT COUNT(*)
-            FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'payroll_finance_verification'
-              AND INDEX_NAME = 'uniq_finance_verification'
-              AND NON_UNIQUE = 0");
-        $uniqCheckStmt->execute();
-        $hasUniqueConstraint = ((int)$uniqCheckStmt->fetchColumn() > 0);
-        if (!$hasUniqueConstraint) {
+        if (empty($uniqIndexColumns)) {
             $pdo->exec("ALTER TABLE payroll_finance_verification
-                ADD UNIQUE KEY uniq_finance_verification (request_inv_no, payroll_month, finance_manager_emp_id)");
+                ADD UNIQUE KEY uniq_finance_verification (request_inv_no, payroll_month, finance_manager_emp_id, finance_officer_emp_id)");
+        } elseif (!in_array('finance_officer_emp_id', $uniqIndexColumns, true)) {
+            $pdo->exec("ALTER TABLE payroll_finance_verification DROP INDEX uniq_finance_verification");
+            $pdo->exec("ALTER TABLE payroll_finance_verification
+                ADD UNIQUE KEY uniq_finance_verification (request_inv_no, payroll_month, finance_manager_emp_id, finance_officer_emp_id)");
         }
     }
 }
@@ -530,9 +438,12 @@ if (!function_exists('notifyPayrollApprovalApprover')) {
             return false;
         }
 
-        $summaryStmt = $pdo->prepare("SELECT COUNT(*) AS employee_count, COALESCE(SUM(net_salary), 0) AS total_net_salary
-            FROM payrolls
-            WHERE month_year = :month_year AND status IN ('generated', 'paid')");
+        // Matches the Payroll Checklist Report scope: no status filter, excludes Hold employees (payment_type = 3).
+        $summaryStmt = $pdo->prepare("SELECT COUNT(*) AS employee_count, COALESCE(SUM(p.net_salary), 0) AS total_net_salary
+            FROM payrolls p
+            INNER JOIN employees e ON e.emp_id = p.emp_id
+            WHERE p.month_year = :month_year
+              AND COALESCE(e.payment_type, 1) <> 3");
         $summaryStmt->execute([':month_year' => $monthYear]);
         $summary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 

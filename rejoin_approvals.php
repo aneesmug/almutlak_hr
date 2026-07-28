@@ -1,6 +1,7 @@
 ﻿<?php
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
 // Verify user is logged in and is allowed to view rejoin approvals
 if (empty($_SESSION['empid'])) {
@@ -9,6 +10,16 @@ if (empty($_SESSION['empid'])) {
 }
 
 $supervisor_emp_id = $_SESSION['empid'];
+
+$can_cancel_rejoin_requests = (
+    !empty($is_system_admin)
+    || user_has_special_access($conDB, $supervisor_emp_id ?? '', 'cancel_rejoin_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+
+// HR Payroll, HR Senior BP, and Administrator can pick ANY rejoin adjustment date
+// (including back dates) - everyone else stays limited to the +/-3 day window.
+$rejoin_elevated_roles = ['hr_payroll', 'hr_senior_bp', 'administrator'];
+$is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $rejoin_elevated_roles, true);
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -263,6 +274,8 @@ $supervisor_emp_id = $_SESSION['empid'];
     </style>
     
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
+    <script> window.isRejoinElevated = <?= $is_rejoin_elevated ? 'true' : 'false' ?>;</script>
+    <script> window.canCancelRejoinRequests = <?= $can_cancel_rejoin_requests ? 'true' : 'false' ?>;</script>
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
@@ -475,9 +488,16 @@ $supervisor_emp_id = $_SESSION['empid'];
                     {
                         targets: 6,
                         render: function(data, type, row) {
-                            return `<button class="btn btn-sm btn-primary" onclick="viewAndApproveRequest(${row.rejoin_request_id}, ${row.emp_id}, '${row.requested_rejoin_date}', '${(row.emp_name || '').replace(/'/g, "\\'")}', '${row.vac_type || ''}')">
+                            const empNameJs = (row.emp_name || '').replace(/'/g, "\\'");
+                            let html = `<button class="btn btn-sm btn-primary" onclick="viewAndApproveRequest(${row.rejoin_request_id}, ${row.emp_id}, '${row.requested_rejoin_date}', '${empNameJs}', '${row.vac_type || ''}')">
                                 <i class="fa fa-check"></i> Review
                             </button>`;
+                            if (window.canCancelRejoinRequests) {
+                                html += ` <button class="btn btn-sm btn-danger" onclick="cancelRejoinRequestAdmin(${row.rejoin_request_id}, '${empNameJs}')">
+                                    <i class="fa fa-ban"></i> Cancel
+                                </button>`;
+                            }
+                            return html;
                         }
                     }
                 ],
@@ -726,16 +746,22 @@ $supervisor_emp_id = $_SESSION['empid'];
                     };
 
                     const range = calculateAdjustmentRange();
-                    const rangeText = `<?= __("adjustment_window", "Employee can select date between") ?> ${range.from} <?= __("and", "and") ?> ${range.to}`;
+                    const rangeText = window.isRejoinElevated
+                        ? '<?= __("adjustment_window_unrestricted", "You can select any date, including back dates") ?>'
+                        : `<?= __("adjustment_window", "Employee can select date between") ?> ${range.from} <?= __("and", "and") ?> ${range.to}`;
 
                     // Initialize datepicker for adjustment using bootstrap-datepicker
-                    $('#adjustmentDate').datepicker({
+                    // HR Payroll / HR Senior BP / Administrator get no date restriction (full back date allowed)
+                    const datepickerOptions = {
                         format: "yyyy-mm-dd",
                         todayHighlight: true,
-                        autoclose: true,
-                        startDate: range.fromObj,
-                        endDate: range.toObj
-                    });
+                        autoclose: true
+                    };
+                    if (!window.isRejoinElevated) {
+                        datepickerOptions.startDate = range.fromObj;
+                        datepickerOptions.endDate = range.toObj;
+                    }
+                    $('#adjustmentDate').datepicker(datepickerOptions);
 
                     // Handle radio button clicks to toggle card styles and show/hide fields
                     $('input[name="action"]').on('change', function() {
@@ -764,6 +790,61 @@ $supervisor_emp_id = $_SESSION['empid'];
                 if (result.isConfirmed) {
                     processRejoinApproval(rejoinRequestId, result.value);
                 }
+            });
+        }
+
+        function cancelRejoinRequestAdmin(rejoinRequestId, empName) {
+            Swal.fire({
+                title: 'Cancel Rejoin Request',
+                html: `Are you sure you want to cancel the rejoin request for <strong>${empName}</strong>?`,
+                input: 'textarea',
+                inputLabel: 'Cancellation reason',
+                inputPlaceholder: 'Enter reason for cancelling this request',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Cancel',
+                allowOutsideClick: false,
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'Cancellation reason is required.';
+                    }
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    return;
+                }
+
+                Swal.fire({
+                    title: 'Processing...',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+
+                $.ajax({
+                    url: './includes/ajaxFile/leaveHandler.php',
+                    type: 'POST',
+                    data: {
+                        ajaxType: 'cancelRejoinRequestAdmin',
+                        rejoin_request_id: rejoinRequestId,
+                        cancellation_note: result.value
+                    },
+                    dataType: 'JSON',
+                    success: function(response) {
+                        Swal.fire({
+                            icon: response.type === 'success' ? 'success' : 'error',
+                            title: response.title,
+                            text: response.message,
+                            allowOutsideClick: false
+                        }).then(() => {
+                            if (response.type === 'success') {
+                                location.reload();
+                            }
+                        });
+                    },
+                    error: function() {
+                        Swal.fire({ icon: 'error', title: 'Error', text: 'An unexpected error occurred.' });
+                    }
+                });
             });
         }
 

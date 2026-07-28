@@ -622,6 +622,133 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'approveBusinessTrip') {
 /**
  * Reject business trip request
  */
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'cancelBusinessTripAdmin') {
+    try {
+        require_once __DIR__ . '/../special_access_helper.php';
+
+        $can_cancel_any = (
+            !empty($is_system_admin)
+            || user_has_special_access($conDB, $current_user_id, 'cancel_business_trip_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+        );
+        if (!$can_cancel_any) {
+            echo json_encode(['status' => 'error', 'title' => 'Access Denied', 'message' => __('access_denied', 'Access denied'), 'type' => 'error']);
+            exit;
+        }
+
+        $trip_id = trim((string)($_POST['trip_id'] ?? ''));
+        $cancellation_note = trim((string)($_POST['cancellation_note'] ?? ''));
+        if ($trip_id === '') {
+            echo json_encode(['status' => 'error', 'title' => 'Invalid Request', 'message' => 'Invalid business trip request id.', 'type' => 'error']);
+            exit;
+        }
+
+        $trip_stmt = mysqli_prepare($conDB, "SELECT current_status, emp_id FROM emp_business_trip WHERE request_inv_no = ? LIMIT 1");
+        mysqli_stmt_bind_param($trip_stmt, 's', $trip_id);
+        mysqli_stmt_execute($trip_stmt);
+        $trip_res = mysqli_stmt_get_result($trip_stmt);
+        $trip_row = $trip_res ? mysqli_fetch_assoc($trip_res) : null;
+        mysqli_stmt_close($trip_stmt);
+
+        if (!$trip_row) {
+            echo json_encode(['status' => 'error', 'title' => 'Not Found', 'message' => 'Business trip request not found.', 'type' => 'error']);
+            exit;
+        }
+
+        if (in_array($trip_row['current_status'], ['rejected', 'completed', 'cancelled'], true)) {
+            echo json_encode(['status' => 'error', 'title' => 'Invalid Status', 'message' => 'This request in status "' . $trip_row['current_status'] . '" cannot be cancelled.', 'type' => 'warning']);
+            exit;
+        }
+
+        $update_stmt = mysqli_prepare($conDB, "UPDATE emp_business_trip SET current_status = 'cancelled', modified_by = ?, last_modified = NOW() WHERE request_inv_no = ? AND current_status = ?");
+        mysqli_stmt_bind_param($update_stmt, 'iss', $current_user_id, $trip_id, $trip_row['current_status']);
+        mysqli_stmt_execute($update_stmt);
+        $affected = mysqli_stmt_affected_rows($update_stmt);
+        mysqli_stmt_close($update_stmt);
+
+        if ($affected <= 0) {
+            echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Failed to cancel request - status may have changed.', 'type' => 'error']);
+            exit;
+        }
+
+        $ra_stmt = mysqli_prepare($conDB, "UPDATE request_approvers ra JOIN approval_request_types art ON art.id = ra.request_type_id AND art.type_name = 'business_trip' SET ra.status = 'cancelled' WHERE ra.request_inv_no = ? AND ra.status IN ('pending', 'awaiting')");
+        mysqli_stmt_bind_param($ra_stmt, 's', $trip_id);
+        mysqli_stmt_execute($ra_stmt);
+        mysqli_stmt_close($ra_stmt);
+
+        if (function_exists('create_browser_notification')) {
+            create_browser_notification(
+                $conDB,
+                $trip_row['emp_id'],
+                'Business Trip Request Cancelled',
+                'Your business trip request ' . htmlspecialchars($trip_id) . ' was cancelled by an administrator.' . ($cancellation_note !== '' ? ' Reason: ' . $cancellation_note : ''),
+                'business_trip_status_history.php?inv_no=' . urlencode($trip_id)
+            );
+        }
+
+        echo json_encode(['status' => 'success', 'title' => 'Cancelled', 'message' => 'Business trip request has been cancelled successfully.', 'type' => 'success']);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => $e->getMessage(), 'type' => 'error']);
+        exit;
+    }
+}
+
+// Purpose: Allow an employee to cancel their OWN business trip request while it's
+// still pending or approved (not yet completed/rejected/cancelled).
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'cancelBusinessTripSelf') {
+    try {
+        $trip_id = trim((string)($_POST['trip_id'] ?? ''));
+        if ($trip_id === '') {
+            echo json_encode(['status' => 'error', 'title' => 'Invalid Request', 'message' => 'Invalid business trip request id.', 'type' => 'error']);
+            exit;
+        }
+
+        $trip_stmt = mysqli_prepare($conDB, "SELECT current_status, emp_id FROM emp_business_trip WHERE request_inv_no = ? LIMIT 1");
+        mysqli_stmt_bind_param($trip_stmt, 's', $trip_id);
+        mysqli_stmt_execute($trip_stmt);
+        $trip_res = mysqli_stmt_get_result($trip_stmt);
+        $trip_row = $trip_res ? mysqli_fetch_assoc($trip_res) : null;
+        mysqli_stmt_close($trip_stmt);
+
+        if (!$trip_row) {
+            echo json_encode(['status' => 'error', 'title' => 'Not Found', 'message' => 'Business trip request not found.', 'type' => 'error']);
+            exit;
+        }
+
+        if ((string)$trip_row['emp_id'] !== (string)$current_user_id) {
+            echo json_encode(['status' => 'error', 'title' => 'Access Denied', 'message' => __('you_can_only_cancel_your_own_requests', 'You can only cancel your own requests'), 'type' => 'error']);
+            exit;
+        }
+
+        if (in_array($trip_row['current_status'], ['rejected', 'completed', 'cancelled'], true)) {
+            echo json_encode(['status' => 'error', 'title' => 'Invalid Status', 'message' => 'This request in status "' . $trip_row['current_status'] . '" cannot be cancelled.', 'type' => 'warning']);
+            exit;
+        }
+
+        $update_stmt = mysqli_prepare($conDB, "UPDATE emp_business_trip SET current_status = 'cancelled', modified_by = ?, last_modified = NOW() WHERE request_inv_no = ? AND current_status = ?");
+        mysqli_stmt_bind_param($update_stmt, 'iss', $current_user_id, $trip_id, $trip_row['current_status']);
+        mysqli_stmt_execute($update_stmt);
+        $affected = mysqli_stmt_affected_rows($update_stmt);
+        mysqli_stmt_close($update_stmt);
+
+        if ($affected <= 0) {
+            echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Failed to cancel request - status may have changed.', 'type' => 'error']);
+            exit;
+        }
+
+        $ra_stmt = mysqli_prepare($conDB, "UPDATE request_approvers ra JOIN approval_request_types art ON art.id = ra.request_type_id AND art.type_name = 'business_trip' SET ra.status = 'cancelled' WHERE ra.request_inv_no = ? AND ra.status IN ('pending', 'awaiting')");
+        mysqli_stmt_bind_param($ra_stmt, 's', $trip_id);
+        mysqli_stmt_execute($ra_stmt);
+        mysqli_stmt_close($ra_stmt);
+
+        echo json_encode(['status' => 'success', 'title' => 'Cancelled', 'message' => 'Your business trip request has been cancelled successfully.', 'type' => 'success']);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => $e->getMessage(), 'type' => 'error']);
+        exit;
+    }
+}
+
 if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'rejectBusinessTrip') {
     try {
         $request_type_id = getBusinessTripRequestTypeId($conDB);

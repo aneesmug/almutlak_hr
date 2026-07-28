@@ -1878,6 +1878,49 @@ $(document).on('click', '.deleteSmt', function (e) {
     })
 });
 
+// Self-service cancel (owner cancelling their own pending/approved smart request) -
+// soft cancel via smt_delete.php's self_cancel mode, keeps the record and its history.
+$(document).on('click', '.cancelSmartRequestSelf', function (e) {
+    e.preventDefault();
+    var itemId = $(this).data('id');
+    Swal.fire({
+        title: __('are_you_sure', 'Are you sure?'),
+        text: __('are_you_sure_cancel_request', 'Are you sure you want to cancel this request?'),
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: APP_COLORS.danger_dark,
+        cancelButtonColor: APP_COLORS.primary,
+        cancelButtonText: __('keep_request', 'No'),
+        confirmButtonText: __('yes_cancel_request', 'Yes, Cancel It'),
+        showLoaderOnConfirm: true,
+        preConfirm: function() {
+            return new Promise(function(resolve, reject) {
+                $.ajax({
+                    url: './includes/ajaxFile/smt_delete.php',
+                    type: 'POST',
+                    data: { id: itemId, mode: 'self_cancel' },
+                    cache: false,
+                    dataType: "json",
+                })
+                .done(function(response){
+                    resolve(response);
+                })
+                .fail(function(jqXHR, textStatus, errorThrown) {
+                    reject(handleAjaxFailure(jqXHR, textStatus).message);
+                });
+            });
+        },
+        allowOutsideClick: false
+    }).then(function(result) {
+        if (result.isConfirmed && result.value) {
+            Swal.fire({
+                title: result.value.title, text: result.value.message, icon: result.value.type,
+                allowOutsideClick: false, confirmButtonText: __("ok")
+            }).then(function(isConfirm) { (isConfirm) ? location.reload() : "" });
+        }
+    });
+});
+
 ////////////////////////////////////////////////////////////////////
 ////////////        End Smart Request Handling        //////////////
 ////////////////////////////////////////////////////////////////////

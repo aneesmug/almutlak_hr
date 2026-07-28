@@ -138,7 +138,7 @@ if (!function_exists('matchesLocalAnnualPayrollRemovalRule')) {
             return false;
         }
 
-        $meets_minimum_days = (float)$vacDays > (float)$rule['minimum_days_exclusive'];
+        $meets_minimum_days = (float)$vacDays >= (float)$rule['minimum_days_exclusive'];
 
         $vacationSalaryType = trim((string)$vacationSalaryType);
         if ($vacationSalaryType === 'payroll') {
@@ -5961,7 +5961,7 @@ if (!function_exists('notify_hr_gr_new_employee')) {
             // Prepare email data
             $base_url = get_base_url();
             $employee_id = intval($employee_data['emp_id']);
-            $view_profile_url = $base_url . '/view_employee.php?id=' . $employee_id;
+            $view_profile_url = $base_url . '/view_employee.php?emp_id=' . $employee_id;
             $all_employees_url = $base_url . '/reg_employee.php';
 
             // Format salary with thousands separator

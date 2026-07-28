@@ -20,10 +20,6 @@ $currentUserTypeForAccess = strtolower(trim((string)($user_type ?? '')));
 $currentEmpTypeForAccess = strtolower(trim((string)($emp_type ?? '')));
 $isFinanceOfficerUser = ($currentUserTypeForAccess === 'finance_officer')
     || ($currentUserTypeForAccess === 'finance' && $currentEmpTypeForAccess !== 'manager' && (int)($user_dept ?? 0) === 2);
-if ($isFinanceOfficerUser) {
-    header('Location: ./dashboard.php');
-    exit();
-}
 
 $pdo = getDbConnection();
 ensurePayrollApprovalTable($pdo);
@@ -116,9 +112,20 @@ $types .= 'i';
 $types .= 'i';
 
 if ($currentFilter === 'my_pending') {
-    $where[] = 'ra_pending.approver_id = ?';
+    // Match either the HR approval chain (ra_pending) or a finance verification
+    // assignment - a manager can have several officers assigned concurrently to the
+    // same request (one row each), so this checks all of them directly rather than
+    // through the fin_verify join, which only surfaces a single representative row
+    // per request for card display.
+    $where[] = '(ra_pending.approver_id = ? OR EXISTS (
+        SELECT 1 FROM payroll_finance_verification pfv_mine
+        WHERE pfv_mine.request_inv_no = pr.request_inv_no
+          AND pfv_mine.payroll_month = p_months.month_year
+          AND pfv_mine.finance_officer_emp_id = ?
+    ))';
     $params[] = (string)$empid;
-    $types .= 's';
+    $params[] = (string)$empid;
+    $types .= 'ss';
 } elseif ($currentFilter === 'my_dept') {
     $where[] = 'req_emp.dept = ?';
     $params[] = (int)$user_dept;
@@ -181,6 +188,8 @@ if ($totalItems > 0) {
             p_months.employee_count,
             p_months.total_net_salary,
             p_months.bank_total_net_salary,
+            p_months.checklist_employee_count,
+            p_months.checklist_total_net_salary,
             pr.id AS approval_id,
             pr.request_inv_no,
             pr.status AS approval_status,
@@ -204,7 +213,9 @@ if ($totalItems > 0) {
                 p.month_year,
                 COUNT(p.emp_id) AS employee_count,
                 SUM(p.net_salary) AS total_net_salary,
-                SUM(CASE WHEN COALESCE(e.payment_type, 1) = 1 THEN p.net_salary ELSE 0 END) AS bank_total_net_salary
+                SUM(CASE WHEN COALESCE(e.payment_type, 1) = 1 THEN p.net_salary ELSE 0 END) AS bank_total_net_salary,
+                COUNT(CASE WHEN COALESCE(e.payment_type, 1) <> 3 THEN p.emp_id END) AS checklist_employee_count,
+                SUM(CASE WHEN COALESCE(e.payment_type, 1) <> 3 THEN p.net_salary ELSE 0 END) AS checklist_total_net_salary
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
             GROUP BY p.month_year
@@ -352,20 +363,27 @@ function getFinanceVerifierChecklistCompletion(PDO $pdo, string $requestInvNo, s
         ];
     }
 
-    $scopeWhere = $isManagerVerifier ? 'finance_manager_emp_id = :verifier_id' : 'finance_officer_emp_id = :verifier_id';
+    // A manager can have several officers' rows under them - "manager verifier" must mean
+    // the manager's OWN self-assigned row (finance_officer_emp_id = the manager themself),
+    // not just any row where they happen to be the manager on record.
     $scopeStmt = $pdo->prepare("SELECT selected_company_ids
         FROM payroll_finance_verification
         WHERE request_inv_no = :inv_no
           AND payroll_month = :month_year
-          AND " . $scopeWhere . "
+          AND finance_officer_emp_id = :verifier_id"
+          . ($isManagerVerifier ? ' AND finance_manager_emp_id = :verifier_id_mgr' : '') . "
           AND is_confirmed = 1
         ORDER BY id DESC
         LIMIT 1");
-    $scopeStmt->execute([
+    $scopeExecParams = [
         ':inv_no' => $requestInvNo,
         ':month_year' => $monthValue,
         ':verifier_id' => $verifierEmpId
-    ]);
+    ];
+    if ($isManagerVerifier) {
+        $scopeExecParams[':verifier_id_mgr'] = $verifierEmpId;
+    }
+    $scopeStmt->execute($scopeExecParams);
     $scopeRaw = $scopeStmt->fetchColumn();
     $scopeCompanies = json_decode((string)($scopeRaw ?: '[]'), true);
     if (!is_array($scopeCompanies)) {
@@ -379,11 +397,13 @@ function getFinanceVerifierChecklistCompletion(PDO $pdo, string $requestInvNo, s
     })));
 
     if (empty($scopeCompanies)) {
+        // A manager who fully delegated (never self-assigned any companies) has nothing
+        // personally to verify - that's not "incomplete", it's not applicable to them.
         return [
             'total_employees' => 0,
             'checked_employees' => 0,
             'remaining_employees' => 0,
-            'is_completed' => false
+            'is_completed' => $isManagerVerifier
         ];
     }
 
@@ -464,6 +484,71 @@ function getFinanceVerifierChecklistCompletion(PDO $pdo, string $requestInvNo, s
         'remaining_employees' => $remainingEmployees,
         'is_completed' => $remainingEmployees === 0
     ];
+}
+
+// Sums checklist completion across EVERY officer assigned to this request (a manager can
+// have several concurrent officers, each with their own row/scope) - not just one of them.
+function getFinanceVerificationAggregateCompletion(PDO $pdo, string $requestInvNo, string $monthValue): array
+{
+    if ($requestInvNo === '' || $monthValue === '') {
+        return ['total_employees' => 0, 'checked_employees' => 0, 'remaining_employees' => 0, 'is_completed' => false];
+    }
+
+    $officersStmt = $pdo->prepare("SELECT DISTINCT finance_officer_emp_id
+        FROM payroll_finance_verification
+        WHERE request_inv_no = :inv_no AND payroll_month = :month_year AND is_confirmed = 1");
+    $officersStmt->execute([':inv_no' => $requestInvNo, ':month_year' => $monthValue]);
+    $officerIds = array_values(array_filter(array_map('trim', array_map('strval', $officersStmt->fetchAll(PDO::FETCH_COLUMN))), static function ($value) {
+        return $value !== '';
+    }));
+
+    if (empty($officerIds)) {
+        return ['total_employees' => 0, 'checked_employees' => 0, 'remaining_employees' => 0, 'is_completed' => false];
+    }
+
+    $totalEmployees = 0;
+    $checkedEmployees = 0;
+    foreach ($officerIds as $officerId) {
+        $completion = getFinanceVerifierChecklistCompletion($pdo, $requestInvNo, $monthValue, $officerId, false);
+        $totalEmployees += (int)$completion['total_employees'];
+        $checkedEmployees += (int)$completion['checked_employees'];
+    }
+
+    $remaining = max(0, $totalEmployees - $checkedEmployees);
+    return [
+        'total_employees' => $totalEmployees,
+        'checked_employees' => $checkedEmployees,
+        'remaining_employees' => $remaining,
+        'is_completed' => $totalEmployees > 0 && $remaining === 0
+    ];
+}
+
+// Union of companies assigned to ANY officer on this request - not just one representative
+// row - used for accurate "Assigned Companies: X / Y" display and setup-modal state.
+function getAllAssignedFinanceCompanyIdsForRequest(PDO $pdo, string $requestInvNo, string $monthValue): array
+{
+    if ($requestInvNo === '' || $monthValue === '') {
+        return [];
+    }
+
+    $stmt = $pdo->prepare("SELECT selected_company_ids
+        FROM payroll_finance_verification
+        WHERE request_inv_no = :inv_no AND payroll_month = :month_year AND is_confirmed = 1");
+    $stmt->execute([':inv_no' => $requestInvNo, ':month_year' => $monthValue]);
+
+    $companyIds = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $rowCompanyIdsJson) {
+        $decoded = json_decode((string)$rowCompanyIdsJson, true);
+        if (is_array($decoded)) {
+            $companyIds = array_merge($companyIds, $decoded);
+        }
+    }
+
+    return array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $companyIds), static function ($value) {
+        return $value !== '';
+    })));
 }
 
 function getPayrollMonthCompanyIds(PDO $pdo, string $monthValue): array
@@ -776,6 +861,7 @@ if (!empty($requests)) {
             border-top-left-radius: 15px;
             border-top-right-radius: 15px;
         }
+        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
         .request-card .card-body { padding: 1.5rem; }
         .detail-item { display: flex; align-items: center; font-size: 1.02em; margin-bottom: .75rem; }
         .detail-item i.fad { color: #4a90e2; margin-right: 12px; width: 20px; text-align: center; flex-shrink: 0; }
@@ -906,16 +992,13 @@ if (!empty($requests)) {
                                         <?php
                                         $approvalStatus = $request['approval_status'] ?? null;
                                         $isPendingWithMe = ($approvalStatus === 'pending_approval' && !empty($request['current_approver_id']) && (string)$request['current_approver_id'] === (string)$empid);
-                                        $financeVerificationConfirmed = !empty($request['finance_verification_confirmed']);
-                                        $financeOfficerApproved = !empty($request['finance_officer_approved']);
-                                        $assignedCompanyIdsRaw = json_decode((string)($request['finance_selected_company_ids'] ?? '[]'), true);
-                                        $assignedCompanyIds = is_array($assignedCompanyIdsRaw)
-                                            ? array_values(array_unique(array_filter(array_map(static function ($value) {
-                                                return trim((string)$value);
-                                            }, $assignedCompanyIdsRaw), static function ($value) {
-                                                return $value !== '';
-                                            })))
+                                        // Union across EVERY officer assigned to this request, not just the one
+                                        // representative row picked up by the fin_verify JOIN used for the main list query.
+                                        $assignedCompanyIds = !empty($request['request_inv_no'])
+                                            ? getAllAssignedFinanceCompanyIdsForRequest($pdo, (string)$request['request_inv_no'], (string)$request['payroll_month'])
                                             : [];
+                                        $financeVerificationConfirmed = !empty($assignedCompanyIds);
+                                        $financeOfficerApproved = !empty($request['finance_officer_approved']);
                                         $monthCompanyIds = getPayrollMonthCompanyIds($pdo, (string)($request['payroll_month'] ?? ''));
                                         $unassignedCompanyIds = array_values(array_diff($monthCompanyIds, $assignedCompanyIds));
                                         $allCompaniesAssigned = !empty($monthCompanyIds) && empty($unassignedCompanyIds);
@@ -927,13 +1010,11 @@ if (!empty($requests)) {
                                             'remaining_employees' => 0,
                                             'is_completed' => false
                                         ];
-                                        if ($financeVerificationConfirmed && !empty($request['finance_verification_officer']) && !empty($request['request_inv_no'])) {
-                                            $financeOfficerChecklistCompletion = getFinanceVerifierChecklistCompletion(
+                                        if ($financeVerificationConfirmed && !empty($request['request_inv_no'])) {
+                                            $financeOfficerChecklistCompletion = getFinanceVerificationAggregateCompletion(
                                                 $pdo,
                                                 (string)$request['request_inv_no'],
-                                                (string)$request['payroll_month'],
-                                                (string)$request['finance_verification_officer'],
-                                                false
+                                                (string)$request['payroll_month']
                                             );
                                         }
                                         $financeOfficerChecklistCompleted = $financeVerificationConfirmed
@@ -993,11 +1074,18 @@ if (!empty($requests)) {
                                             }
                                         }
                                         
-                                        $financeOfficerFinalApproved = $financeOfficerChecklistCompleted && $financeOfficerApproved && $financeManagerChecklistCompleted && $allAssignedCompaniesApproved;
+                                        // Gate purely on officer_approved (allAssignedCompaniesApproved already requires
+                                        // EVERY assigned officer's row to have it, not just one) - officer_approved can only
+                                        // be granted after that officer checked every employee in their scope (enforced
+                                        // server-side in confirmFinanceOfficerVerification), so it's already sufficient proof.
+                                        // $financeOfficerChecklistCompleted / $financeManagerChecklistCompleted stay as
+                                        // display-only stats - re-deriving completion independently here would incorrectly
+                                        // re-block approvals granted before that server-side check existed.
+                                        $financeOfficerFinalApproved = $allCompaniesAssigned && $allAssignedCompaniesApproved;
                                         $canApproveNow = $isPendingWithMe && (!$isHeadOfficeFinancePending || $financeOfficerFinalApproved);
                                         $showFinanceVerificationSetupAction = $isHeadOfficeFinancePending && !$allCompaniesAssigned;
                                         $hrCheckedCount = (int)($request['hr_checked_count'] ?? 0);
-                                        $monthEmployeeCount = (int)($request['employee_count'] ?? 0);
+                                        $monthEmployeeCount = (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0);
                                         $canSendCompanyPayrollReport = ($isHrPayrollUser || $isHrSeniorBpUser)
                                             && !empty($request['request_inv_no'])
                                             && $approvalStatus === 'pending_approval'
@@ -1044,17 +1132,19 @@ if (!empty($requests)) {
                                         ?>
                                         <div class="col-lg-4 col-md-6 mb-4">
                                             <div class="card request-card h-100">
-                                                <div class="card-header">
-                                                    <?= __('payroll_month') ?>: <?= htmlspecialchars($request['payroll_month']) ?>
-                                                    <?php if (!empty($request['request_inv_no'])): ?>
-                                                    <span class="float-right"><?= __('request_id') ?>: <?= htmlspecialchars($request['request_inv_no']) ?></span>
-                                                    <?php endif; ?>
+                                                <div class="card-header d-flex justify-content-between align-items-center">
+                                                    <span><?= __('payroll_month') ?>: <?= htmlspecialchars($request['payroll_month']) ?></span>
+                                                    <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
+                                                        <?php if (!empty($request['request_inv_no'])): ?>
+                                                        <span><?= __('request_id') ?>: <?= htmlspecialchars($request['request_inv_no']) ?></span>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </div>
                                                 <div class="card-body">
                                                     <div class="request-details-grid">
                                                         <div class="detail-item"><i class="fad fa-calendar"></i><strong><?= __('month') ?>:</strong> <?= htmlspecialchars($request['payroll_month']) ?></div>
-                                                        <div class="detail-item"><i class="fad fa-users"></i><strong><?= __('employees', 'Employees') ?>:</strong> <?= (int)($request['employee_count'] ?? 0) ?></div>
-                                                        <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <?= number_format((float)($request['bank_total_net_salary'] ?? $request['total_net_salary'] ?? 0), 2) ?> SAR</div>
+                                                        <div class="detail-item"><i class="fad fa-users"></i><strong><?= __('employees', 'Employees') ?>:</strong> <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?></div>
+                                                        <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <?= number_format((float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0), 2) ?> SAR</div>
                                                         <?php if ($isHrPayrollUser): ?>
                                                         <div class="detail-item"><i class="fad fa-user-check"></i><strong><?= __('checked_by_me', 'Checked By Me') ?>:</strong> <?= $hrCheckedCount ?> / <?= $monthEmployeeCount ?></div>
                                                         <?php endif; ?>
@@ -1109,10 +1199,10 @@ if (!empty($requests)) {
                                                             <?php endif; ?>
                                                             <?php if ($canApproveNow): ?>
                                                                 <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['employee_count'] ?? 0) ?>, <?= (float)($request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName(parseName($request['requester_name'] ?? '')), ENT_QUOTES) ?>')">
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName(parseName($request['requester_name'] ?? '')), ENT_QUOTES) ?>', <?= (float)($request['bank_total_net_salary'] ?? 0) ?>)">
                                                                     <i class="fa fa-check text-success"></i> <?= __('approve') ?>
                                                                 </a>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="rejectPayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['employee_count'] ?? 0) ?>, <?= (float)($request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>')">
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="rejectPayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>', <?= (float)($request['bank_total_net_salary'] ?? 0) ?>)">
                                                                     <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
                                                                 </a>
                                                             <?php endif; ?>
@@ -1163,18 +1253,34 @@ if (!empty($requests)) {
 <script src="assets/js/jquery.core.js"></script>
 <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 <script>
+// Move each card's "Actions" dropdown from the footer into the header so the
+// menu has room to open downward instead of getting clipped at the bottom of
+// the page (was especially bad for the last row of cards on a page).
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.request-card').forEach(function(card) {
+        const footer = card.querySelector('.card-footer');
+        const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
+        const headerSlot = card.querySelector('.card-header-actions');
+        if (!actionsGroup || !headerSlot) {
+            return;
+        }
+        actionsGroup.classList.remove('flex-fill');
+        const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
+        if (toggleBtn) {
+            toggleBtn.classList.remove('btn-block', 'btn-secondary');
+            toggleBtn.classList.add('btn-sm', 'btn-light');
+        }
+        headerSlot.appendChild(actionsGroup);
+    });
+});
+
 const payrollApprovalBankReports = <?= json_encode($approvalBankReportByRequest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 const payrollApprovalUseWideModal = <?= $approvalModalUseWideLayout ? 'true' : 'false' ?>;
 const payrollApprovalCanViewBankReport = payrollApprovalUseWideModal;
 
-function buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName) {
+function buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName, bankTotalNet) {
     const safeRequesterName = requesterName || '<?= __('not_available', 'N/A') ?>';
-    const report = payrollApprovalBankReports[String(requestInvNo || '').trim()] || null;
-    const reportRows = Array.isArray(report && report.rows) ? report.rows : [];
-    const totalsRow = reportRows.find((row) => String(row.branch || '').toUpperCase() === 'TOTAL') || null;
-    const totalNetValue = Number(totalNet || 0);
-    const cashSalaryValue = Number(totalsRow && totalsRow.cash_salary ? totalsRow.cash_salary : 0);
-    const bankWpsPaymentValue = Math.max(0, totalNetValue - cashSalaryValue);
+    const bankWpsPaymentValue = Number(bankTotalNet || 0);
     const formattedTotalNet = Number(totalNet || 0).toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
@@ -1297,12 +1403,12 @@ function resetFilters(defaultLimit) {
     window.location.href = `${baseUrl}?status=my_pending&limit=${defaultLimit}&page=1`;
 }
 
-async function approvePayrollRequest(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName) {
+async function approvePayrollRequest(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName, bankTotalNet) {
     const result = await Swal.fire({
         title: '<?= __('approve') ?> Payroll',
         ...(payrollApprovalUseWideModal ? { width: '95%' } : {width: '40%' }),
         html: `
-            ${buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName)}
+            ${buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName, bankTotalNet)}
             ${buildPayrollApprovalBankReportToggleHtml(requestInvNo, payrollMonth)}
             <div class="text-left">
                 <label for="payrollApprovalComment" class="font-weight-bold"><?= __('approval_comment', 'Approval Comment') ?> <span class="text-muted"><?= __('optional', 'Optional') ?></span></label>
@@ -1382,10 +1488,10 @@ async function approvePayrollRequest(requestInvNo, payrollMonth, employeeCount, 
     }
 }
 
-async function rejectPayrollRequest(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName) {
+async function rejectPayrollRequest(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName, bankTotalNet) {
     const result = await Swal.fire({
         title: '<?= __('confirm_rejection', 'Confirm Rejection') ?>',
-        html: buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName),
+        html: buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCount, totalNet, requesterName, bankTotalNet),
         input: 'textarea',
         inputLabel: '<?= __('provide_rejection_reason', 'Provide Rejection Reason') ?>',
         inputPlaceholder: '<?= __('enter_reason_here', 'Enter reason here') ?>',

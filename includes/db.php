@@ -201,13 +201,33 @@ if (DB_HOST === '' || DB_USER === '' || DB_NAME === '') {
 }
 
 mysqli_report(MYSQLI_REPORT_OFF);
-$conDB = mysqli_init();
-if (!$conDB) {
-    app_render_runtime_error('The system could not initialize a database connection.', 'mysqli_init returned false.', 503);
+
+// MySQL error 1040 = "Too many connections". This is almost always transient
+// (a burst of parallel requests briefly exhausts the connection quota), so a
+// couple of short backoff retries clear it without needing any server-side change.
+$dbConnectMaxAttempts = 3;
+$conDB = null;
+$connected = false;
+for ($dbConnectAttempt = 1; $dbConnectAttempt <= $dbConnectMaxAttempts; $dbConnectAttempt++) {
+    $conDB = mysqli_init();
+    if (!$conDB) {
+        app_render_runtime_error('The system could not initialize a database connection.', 'mysqli_init returned false.', 503);
+    }
+
+    mysqli_options($conDB, MYSQLI_OPT_CONNECT_TIMEOUT, 10);
+    if (@mysqli_real_connect($conDB, DB_HOST, DB_USER, DB_PASS, DB_NAME)) {
+        $connected = true;
+        break;
+    }
+
+    $isTooManyConnections = mysqli_connect_errno() === 1040;
+    if (!$isTooManyConnections || $dbConnectAttempt === $dbConnectMaxAttempts) {
+        break;
+    }
+    usleep(300000 * $dbConnectAttempt); // 300ms, then 600ms
 }
 
-mysqli_options($conDB, MYSQLI_OPT_CONNECT_TIMEOUT, 10);
-if (!@mysqli_real_connect($conDB, DB_HOST, DB_USER, DB_PASS, DB_NAME)) {
+if (!$connected) {
     app_render_runtime_error(
         'The live server cannot connect to the database right now.',
         mysqli_connect_error(),
@@ -241,13 +261,22 @@ function getDbConnection(): PDO {
         PDO::ATTR_TIMEOUT            => 10,
     ];
 
-    try {
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-        return $pdo;
-    } catch (PDOException $e) {
-        app_render_runtime_error('The live server cannot connect to the database right now.', $e->getMessage(), 503);
-        throw $e;
+    $maxAttempts = 3;
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        try {
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+            return $pdo;
+        } catch (PDOException $e) {
+            $isTooManyConnections = (int)$e->getCode() === 1040 || stripos($e->getMessage(), 'too many connections') !== false;
+            if (!$isTooManyConnections || $attempt === $maxAttempts) {
+                app_render_runtime_error('The live server cannot connect to the database right now.', $e->getMessage(), 503);
+                throw $e;
+            }
+            usleep(300000 * $attempt); // 300ms, then 600ms
+        }
     }
+
+    throw new PDOException('Unable to establish a database connection.');
 }
 
 if (!function_exists('db')) {

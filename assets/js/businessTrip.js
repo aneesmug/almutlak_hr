@@ -757,6 +757,53 @@ function openBusinessTripApplyModal(empid, deptId, country) {
     */
 }
 
+function cancelBusinessTripRequest(tripInvNo) {
+    Swal.fire({
+        title: __('cancel_business_trip_request') || 'Cancel Business Trip Request',
+        html: `<p>${__('are_you_sure_cancel_request') || 'Are you sure you want to cancel this request?'}</p><strong>${tripInvNo}</strong>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: __('yes_cancel_request') || 'Yes, Cancel It',
+        cancelButtonText: __('keep_request') || 'No',
+        allowOutsideClick: false
+    }).then((result) => {
+        if (!result.isConfirmed) return;
+
+        Swal.fire({
+            title: __('cancelling_request') || 'Cancelling...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        $.ajax({
+            url: './includes/ajaxFile/ajaxBusinessTrip.php',
+            type: 'POST',
+            dataType: 'JSON',
+            data: { ajaxType: 'cancelBusinessTripSelf', trip_id: tripInvNo },
+            success: function(response) {
+                Swal.fire({
+                    title: response.title || __('success'),
+                    text: response.message,
+                    icon: response.type || 'success',
+                    confirmButtonText: __('ok')
+                }).then(() => location.reload());
+            },
+            error: function(xhr) {
+                const response = xhr.responseJSON || {};
+                Swal.fire({
+                    title: response.title || __('error'),
+                    text: response.message || 'Failed to cancel business trip request.',
+                    icon: 'error',
+                    confirmButtonText: __('ok')
+                });
+            }
+        });
+    });
+}
+
 function openBusinessTripAllowanceModal(tripId, employeeName) {
     Swal.fire({
         title: __('loading') || 'Loading...',

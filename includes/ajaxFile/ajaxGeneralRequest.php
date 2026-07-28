@@ -20,7 +20,7 @@ $response = [
 ];
 
 // Restrict to non-employee users
-if ($user_type == 'employee' && isset($_POST['action']) && $_POST['action'] !== 'get_employees') {
+if ($user_type == 'employee' && isset($_POST['action']) && !in_array($_POST['action'], ['get_employees', 'cancel_general_request_self'], true)) {
     $response['message'] = __('access_denied', 'Access denied');
     echo json_encode($response);
     exit;
@@ -190,6 +190,63 @@ try {
         }
     }
     
+    // Cancel General Request (self-service) - soft cancel, keeps the record and its
+    // approval-chain history, unlike delete_general_request which hard-deletes drafts.
+    // Allowed while pending_approval or approved (not yet completed/rejected/cancelled),
+    // matching the vacation self-cancel rule (cancellable even after approval).
+    elseif (isset($_POST['action']) && $_POST['action'] == 'cancel_general_request_self') {
+        $inv_no = mysqli_real_escape_string($conDB, $_POST['inv_no']);
+
+        $check_query = mysqli_query($conDB, "SELECT emp_id, current_status FROM general_requests WHERE inv_no = '$inv_no'");
+        if (!$check_query || mysqli_num_rows($check_query) == 0) {
+            $response['message'] = __('request_not_found', 'Request not found');
+            echo json_encode($response);
+            exit;
+        }
+
+        $request_data = mysqli_fetch_assoc($check_query);
+        if ((string)$request_data['emp_id'] !== (string)$emp_id) {
+            $response['message'] = __('you_can_only_cancel_your_own_requests', 'You can only cancel your own requests');
+            echo json_encode($response);
+            exit;
+        }
+
+        $cancellable_statuses = ['draft', 'pending_approval', 'approved'];
+        if (!in_array($request_data['current_status'], $cancellable_statuses, true)) {
+            $response['message'] = 'Request in status "' . $request_data['current_status'] . '" cannot be cancelled.';
+            echo json_encode($response);
+            exit;
+        }
+
+        $update = mysqli_prepare($conDB, "UPDATE general_requests SET current_status = 'cancelled' WHERE inv_no = ? AND current_status = ?");
+        mysqli_stmt_bind_param($update, 'ss', $inv_no, $request_data['current_status']);
+        mysqli_stmt_execute($update);
+        $affected = mysqli_stmt_affected_rows($update);
+        mysqli_stmt_close($update);
+
+        if ($affected <= 0) {
+            $response['message'] = 'Failed to cancel request - status may have changed.';
+            echo json_encode($response);
+            exit;
+        }
+
+        $note = 'Cancelled by employee (emp_id ' . $emp_id . ').';
+        $hist = mysqli_prepare($conDB, "INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, 'cancelled')");
+        mysqli_stmt_bind_param($hist, 'sss', $inv_no, $emp_id, $note);
+        mysqli_stmt_execute($hist);
+        mysqli_stmt_close($hist);
+
+        $ra = mysqli_prepare($conDB, "UPDATE request_approvers ra JOIN approval_request_types art ON art.id = ra.request_type_id AND art.type_name = 'general_request' SET ra.status = 'cancelled' WHERE ra.request_inv_no = ? AND ra.status IN ('pending', 'awaiting')");
+        mysqli_stmt_bind_param($ra, 's', $inv_no);
+        mysqli_stmt_execute($ra);
+        mysqli_stmt_close($ra);
+
+        $response['success'] = true;
+        $response['message'] = 'Your request has been cancelled successfully.';
+        echo json_encode($response);
+        exit;
+    }
+
     // Delete General Request
     elseif (isset($_POST['action']) && $_POST['action'] == 'delete_general_request') {
         $inv_no = mysqli_real_escape_string($conDB, $_POST['inv_no']);
@@ -204,9 +261,15 @@ try {
         }
         
         $request_data = mysqli_fetch_assoc($check_query);
-        
-        // Only creator can delete draft requests, or administrator can delete any
-        if ($user_type != 'administrator' && ($request_data['emp_id'] != $emp_id || $request_data['current_status'] != 'draft')) {
+
+        require_once __DIR__ . '/../special_access_helper.php';
+        $canCancelAnyGeneralRequest = (
+            $user_type == 'administrator'
+            || user_has_special_access($conDB, $emp_id, 'cancel_general_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+        );
+
+        // Only creator can delete draft requests, or admin/special-access can delete any
+        if (!$canCancelAnyGeneralRequest && ($request_data['emp_id'] != $emp_id || $request_data['current_status'] != 'draft')) {
             $response['message'] = __('permission_denied', 'You do not have permission to delete this request');
             echo json_encode($response);
             exit;

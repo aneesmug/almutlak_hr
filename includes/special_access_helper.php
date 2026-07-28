@@ -9,6 +9,12 @@ if (!function_exists('get_special_access_labels')) {
     function get_special_access_labels() {
         return [
             'cancel_vacation_requests' => 'Cancel Submitted Vacation Requests',
+            'cancel_smart_requests' => 'Cancel Submitted Smart Requests',
+            'cancel_general_requests' => 'Cancel Submitted General Requests',
+            'cancel_loan_requests' => 'Cancel Submitted Loan Requests',
+            'cancel_resignation_requests' => 'Cancel Submitted Resignation Requests',
+            'cancel_rejoin_requests' => 'Cancel Submitted Rejoin Requests',
+            'cancel_business_trip_requests' => 'Cancel Submitted Business Trip Requests',
             'view_vacation_balance_history' => 'View Vacation Balance History',
             'view_remaining_balance_in_report' => 'Show Remaining Balance in Vacation Report',
             'manage_employee_request_block' => 'Block/Unblock Employee from All Requests',
@@ -19,6 +25,8 @@ if (!function_exists('get_special_access_labels')) {
             'payroll_checklist_upload_excel' => 'Payroll Checklist Report: Upload Payroll Excel Button',
             'payroll_checklist_review_import' => 'Payroll Checklist Report: Review Manager File & Import Button',
             'payroll_checklist_export_excel' => 'Payroll Checklist Report: Export Excel Button',
+            'direct_rejoin_bypass_approval' => 'Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)',
+            'ungenerate_payroll' => 'Payroll: Un-Generate Payroll Button',
         ] + get_special_access_page_labels();
     }
 }

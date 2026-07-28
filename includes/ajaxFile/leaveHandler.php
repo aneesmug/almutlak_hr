@@ -3579,6 +3579,11 @@ elseif ($ajaxType == 'cancelVacationRequest') {
             throw new Exception(__("failed_to_update_vacation_status"));
         }
 
+        $ra_stmt = mysqli_prepare($conDB, "UPDATE request_approvers ra JOIN approval_request_types art ON art.id = ra.request_type_id AND art.type_name = 'vacation_request' SET ra.status = 'cancelled' WHERE ra.request_inv_no = ? AND ra.status IN ('pending', 'awaiting')");
+        mysqli_stmt_bind_param($ra_stmt, 's', $vacation['request_inv_no']);
+        mysqli_stmt_execute($ra_stmt);
+        mysqli_stmt_close($ra_stmt);
+
         // Log the cancellation action
         $log_status = 'cancelled';
         $log_note = sprintf('Vacation request cancelled by employee. Type: %s, Dates: %s to %s',
@@ -3703,6 +3708,11 @@ elseif ($ajaxType == 'cancelVacationRequestAdmin') {
             throw new Exception(__("failed_to_update_vacation_status"));
         }
 
+        $ra_stmt = mysqli_prepare($conDB, "UPDATE request_approvers ra JOIN approval_request_types art ON art.id = ra.request_type_id AND art.type_name = 'vacation_request' SET ra.status = 'cancelled' WHERE ra.request_inv_no = ? AND ra.status IN ('pending', 'awaiting')");
+        mysqli_stmt_bind_param($ra_stmt, 's', $vacation['request_inv_no']);
+        mysqli_stmt_execute($ra_stmt);
+        mysqli_stmt_close($ra_stmt);
+
         // Log the cancellation action, noting who cancelled it on the employee's behalf.
         $log_status = 'cancelled';
         $log_note = sprintf(
@@ -3752,6 +3762,84 @@ elseif ($ajaxType == 'cancelVacationRequestAdmin') {
             sprintf(__("vacation_request_cancelled_successfully"), $vacation['request_inv_no']),
             "success"
         );
+
+    } catch (Exception $e) {
+        send_json_response("Error", $e->getMessage(), "error", 500);
+    }
+    exit;
+}
+
+
+// ================================================================
+// Purpose: Allow HR/approvers with the 'cancel_rejoin_requests' special
+// access grant (or admins) to cancel ANY employee's rejoin request.
+// ================================================================
+elseif ($ajaxType == 'cancelRejoinRequestAdmin') {
+    try {
+        require_once __DIR__ . '/../special_access_helper.php';
+
+        $can_cancel_any = (
+            !empty($is_system_admin)
+            || user_has_special_access($conDB, $current_user_id, 'cancel_rejoin_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+        );
+        if (!$can_cancel_any) {
+            throw new Exception(__('access_denied', 'Access denied'));
+        }
+
+        $rejoin_request_id = (int)($_POST['rejoin_request_id'] ?? 0);
+        $cancellation_note = trim((string)($_POST['cancellation_note'] ?? ''));
+
+        if (empty($rejoin_request_id)) {
+            throw new Exception(__("required_fields_missing"));
+        }
+
+        $pdo = getDbConnection();
+
+        $stmt = $pdo->prepare("SELECT id, emp_id, request_inv_no, status FROM rejoin_requests WHERE id = :id");
+        $stmt->execute([':id' => $rejoin_request_id]);
+        $rejoin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$rejoin) {
+            throw new Exception(__("rejoin_request_not_found"));
+        }
+
+        if ($rejoin['status'] !== 'pending') {
+            throw new Exception(sprintf('Rejoin request in status "%s" cannot be cancelled.', $rejoin['status']));
+        }
+
+        $update = $pdo->prepare("UPDATE rejoin_requests SET status = 'cancelled', updated_at = NOW() WHERE id = :id AND status = 'pending'");
+        $update->execute([':id' => $rejoin_request_id]);
+
+        if ($update->rowCount() === 0) {
+            throw new Exception(__("failed_to_update_vacation_status"));
+        }
+
+        $log_note = sprintf(
+            'Rejoin request cancelled by %s (emp_id %s) on behalf of employee %s.%s',
+            $userwel,
+            $current_user_id,
+            $rejoin['emp_id'],
+            $cancellation_note !== '' ? ' Reason: ' . $cancellation_note : ''
+        );
+        $log_stmt = $pdo->prepare("INSERT INTO smt_request_status (emp_id, inv_no, emp_name, status, note, created_at) VALUES (:emp_id, :inv_no, :emp_name, 'cancelled', :note, NOW())");
+        $log_stmt->execute([
+            ':emp_id' => $rejoin['emp_id'],
+            ':inv_no' => $rejoin['request_inv_no'],
+            ':emp_name' => $userwel,
+            ':note' => $log_note,
+        ]);
+
+        if (function_exists('create_browser_notification')) {
+            create_browser_notification(
+                $conDB,
+                $rejoin['emp_id'],
+                'Rejoin Request Cancelled',
+                'Your rejoin request has been cancelled by an administrator.' . ($cancellation_note !== '' ? ' Reason: ' . $cancellation_note : ''),
+                'rejoin_approvals.php'
+            );
+        }
+
+        send_json_response(__("success"), 'Rejoin request has been cancelled successfully.', "success");
 
     } catch (Exception $e) {
         send_json_response("Error", $e->getMessage(), "error", 500);
@@ -6768,22 +6856,32 @@ elseif ($ajaxType == 'processRejoinApproval') {
         // ====================================================================
         require_once __DIR__ . '/../ApprovalChainManager.php';
         $chainManager = new ApprovalChainManager($conDB, $pdo);
-        
-        $verification = $chainManager->verifyApprover($request['request_inv_no'], $current_user_id);
-        if (!$verification['authorized']) {
-            throw new Exception($verification['message']);
-        }
-        
-        $current_level = $verification['level'];
-        
-        // Check if current user is Finance Manager
+
+        // Check current user's role first: HR Payroll, HR Senior BP, and Administrator
+        // are allowed to process ANY rejoin request regardless of the assigned approval
+        // chain (i.e. even if they are not the employee's direct manager/supervisor).
         $user_type_stmt = $pdo->prepare("
             SELECT user_type FROM admin_login WHERE emp_id = :emp_id LIMIT 1
         ");
         $user_type_stmt->execute([':emp_id' => $current_user_id]);
         $user_type_row = $user_type_stmt->fetch(PDO::FETCH_ASSOC);
         $is_finance_manager = ($user_type_row && $user_type_row['user_type'] == 'finance');
-        
+        $current_user_role = strtolower(trim((string)($user_type_row['user_type'] ?? '')));
+        $rejoin_elevated_roles = ['hr_payroll', 'hr_senior_bp', 'administrator'];
+        $is_rejoin_elevated_override = in_array($current_user_role, $rejoin_elevated_roles, true);
+
+        if ($is_rejoin_elevated_override) {
+            // Bypass normal chain-membership check for elevated HR/admin roles
+            $verification = ['authorized' => true, 'level' => null, 'message' => 'Authorized via elevated override'];
+        } else {
+            $verification = $chainManager->verifyApprover($request['request_inv_no'], $current_user_id);
+            if (!$verification['authorized']) {
+                throw new Exception($verification['message']);
+            }
+        }
+
+        $current_level = $verification['level'];
+
         if ($action === 'approve') {
             // Check if Finance Manager is selecting a payer
             if ($is_finance_manager && isset($_POST['payer_emp_id']) && !empty($_POST['payer_emp_id'])) {
@@ -6855,13 +6953,27 @@ elseif ($ajaxType == 'processRejoinApproval') {
                 }
             } else {
                 // Normal approval without payer selection
-                $approvalResult = $chainManager->processApproval(
-                    $request['request_inv_no'],
-                    $current_user_id,
-                    'approve',
-                    $approval_note
-                );
-                
+                if ($is_rejoin_elevated_override) {
+                    // Elevated override: finalize immediately, bypassing normal chain sequencing
+                    $stmt = $pdo->prepare("
+                        UPDATE request_approvers
+                        SET status = 'approved', note = :note, action_date = NOW()
+                        WHERE request_inv_no = :inv_no AND status IN ('pending', 'awaiting')
+                    ");
+                    $stmt->execute([
+                        ':note' => 'Approved via elevated override (' . $current_user_role . '): ' . $approval_note,
+                        ':inv_no' => $request['request_inv_no']
+                    ]);
+                    $approvalResult = ['is_final' => true, 'next_approver' => null];
+                } else {
+                    $approvalResult = $chainManager->processApproval(
+                        $request['request_inv_no'],
+                        $current_user_id,
+                        'approve',
+                        $approval_note
+                    );
+                }
+
                 if ($approvalResult['is_final']) {
                     // Final approval - complete the request
                     $stmt = $pdo->prepare("
@@ -6943,8 +7055,9 @@ elseif ($ajaxType == 'processRejoinApproval') {
             // If supervisor selected an adjustment date, use it directly and mark as approved
             if (!empty($adjustment_date)) {
                 $adjustDate = new DateTime($adjustment_date);
-                // Validate the date is within range
-                if ($adjustDate < $from_date || $adjustDate > $to_date) {
+                // Validate the date is within range - elevated HR/admin roles may pick any
+                // date (including back dates beyond the normal 3-day window)
+                if (!$is_rejoin_elevated_override && ($adjustDate < $from_date || $adjustDate > $to_date)) {
                     throw new Exception(__("adjustment_date_out_of_range", "Adjustment date is outside the allowed range"));
                 }
 
@@ -7103,14 +7216,27 @@ elseif ($ajaxType == 'processRejoinApproval') {
                 throw new Exception(__("rejection_reason_required"));
             }
 
-            // Process rejection using chain manager
-            $approvalResult = $chainManager->processApproval(
-                $request['request_inv_no'],
-                $current_user_id,
-                'reject',
-                'Rejected: ' . $rejection_reason
-            );
-            
+            if ($is_rejoin_elevated_override) {
+                // Elevated override: reject immediately, bypassing normal chain sequencing
+                $stmt = $pdo->prepare("
+                    UPDATE request_approvers
+                    SET status = 'rejected', note = :note, action_date = NOW()
+                    WHERE request_inv_no = :inv_no AND status IN ('pending', 'awaiting')
+                ");
+                $stmt->execute([
+                    ':note' => 'Rejected via elevated override (' . $current_user_role . '): ' . $rejection_reason,
+                    ':inv_no' => $request['request_inv_no']
+                ]);
+            } else {
+                // Process rejection using chain manager
+                $approvalResult = $chainManager->processApproval(
+                    $request['request_inv_no'],
+                    $current_user_id,
+                    'reject',
+                    'Rejected: ' . $rejection_reason
+                );
+            }
+
             $stmt = $pdo->prepare("
                 UPDATE rejoin_requests 
                 SET 
@@ -7156,6 +7282,150 @@ elseif ($ajaxType == 'processRejoinApproval') {
             __("error"),
             $e->getMessage(),
             "error",
+            400
+        );
+    }
+}
+
+// ================================================================
+// Purpose: Let a user granted the 'direct_rejoin_bypass_approval' special
+// access (or a system admin) mark an employee's currently active vacation
+// as complete directly, entirely bypassing the rejoin_requests approval
+// chain. Triggered from the "More Actions" modal on view_employee.php.
+// ================================================================
+elseif ($ajaxType == 'directRejoinBypass') {
+    try {
+        require_once __DIR__ . '/../special_access_helper.php';
+
+        $can_direct_rejoin = (
+            !empty($is_system_admin)
+            || user_has_special_access($conDB, $current_user_id, 'direct_rejoin_bypass_approval', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+        );
+        if (!$can_direct_rejoin) {
+            throw new Exception(__('access_denied', 'Access denied'));
+        }
+
+        $emp_id = (int)($_POST['emp_id'] ?? 0);
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $rejoin_date = trim((string)($_POST['rejoin_date'] ?? ''));
+
+        if (empty($emp_id) || empty($vacation_id) || $rejoin_date === '') {
+            throw new Exception(__('required_fields_missing', 'Required fields are missing'));
+        }
+        if (strtotime($rejoin_date) === false) {
+            throw new Exception(__('invalid_date_format', 'Invalid rejoin date'));
+        }
+
+        $pdo = getDbConnection();
+        $pdo->beginTransaction();
+
+        // Close EVERY still-open (review='A') vacation record for this employee, not
+        // just the single most-recent one. Employees can end up with more than one
+        // dangling review='A' row (e.g. back-to-back Fly vacations where an earlier
+        // one was never properly closed) - Direct Rejoin means "employee is fully
+        // back", so all of them need to be resolved together, otherwise fly=1 would
+        // never be allowed to reset even after this action.
+        $stmt = $pdo->prepare("
+            SELECT id, vac_type, fly_type, start_date, return_date, current_status, review
+            FROM emp_vacation
+            WHERE emp_id = :emp_id AND review = 'A'
+            FOR UPDATE
+        ");
+        $stmt->execute([':emp_id' => $emp_id]);
+        $openVacations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($openVacations)) {
+            throw new Exception(__('vacation_not_active', 'This employee has no active/approved vacation to close'));
+        }
+
+        // The vacation actually selected in the modal - its return_date/vacdays get
+        // recalculated against the chosen rejoin date. Any OTHER dangling rows found
+        // above are historical leftovers; only their status/review gets closed, their
+        // dates are left untouched.
+        $primaryVacation = null;
+        foreach ($openVacations as $vac) {
+            if ((int)$vac['id'] === $vacation_id) {
+                $primaryVacation = $vac;
+                break;
+            }
+        }
+        if (!$primaryVacation) {
+            throw new Exception(__('vacation_request_not_found', 'Vacation request not found'));
+        }
+
+        $stmtEmp = $pdo->prepare("SELECT fly FROM employees WHERE emp_id = :emp_id LIMIT 1");
+        $stmtEmp->execute([':emp_id' => $emp_id]);
+        $employee = $stmtEmp->fetch(PDO::FETCH_ASSOC);
+        if (!$employee || (int)$employee['fly'] !== 1) {
+            throw new Exception(__('employee_not_on_active_vacation', 'Employee is not currently marked as away'));
+        }
+
+        $startDate = new DateTime($primaryVacation['start_date']);
+        $rejoinDateObj = new DateTime($rejoin_date);
+        if ($rejoinDateObj < $startDate) {
+            throw new Exception(__('rejoin_date_before_start', 'Rejoin date cannot be before the vacation start date'));
+        }
+        $newVacDays = $startDate->diff($rejoinDateObj)->days + 1;
+
+        // Finalize the selected vacation: apply the chosen rejoin date and recalculate
+        // its day count, same as a normal recorded return.
+        $stmt = $pdo->prepare("
+            UPDATE emp_vacation
+            SET current_status = 'completed', review = 'C', return_date = :return_date, vacdays = :vacdays
+            WHERE id = :vacation_id
+        ");
+        $stmt->execute([
+            ':return_date' => $rejoinDateObj->format('Y-m-d'),
+            ':vacdays' => $newVacDays,
+            ':vacation_id' => $vacation_id
+        ]);
+
+        // Close any OTHER dangling open rows without touching their dates - they're
+        // already-ended historical records, just never had review flipped to 'C'.
+        $stmt = $pdo->prepare("
+            UPDATE emp_vacation
+            SET current_status = 'completed', review = 'C'
+            WHERE emp_id = :emp_id AND review = 'A' AND id != :vacation_id
+        ");
+        $stmt->execute([':emp_id' => $emp_id, ':vacation_id' => $vacation_id]);
+
+        foreach ($openVacations as $vac) {
+            $closeResult = closeTemporaryRoleAssignment($conDB, (int)$vac['id'], $current_user_id, 'expired');
+            if (!$closeResult['success']) {
+                error_log('Direct rejoin bypass vacation #' . $vac['id'] . ': temporary role close failed - ' . $closeResult['message']);
+            }
+        }
+
+        // All open vacations are now closed - always safe to clear the away status.
+        $stmt = $pdo->prepare("UPDATE employees SET fly = 0 WHERE emp_id = :emp_id");
+        $stmt->execute([':emp_id' => $emp_id]);
+
+        $closedVacIds = implode(',', array_column($openVacations, 'id'));
+        ActivityLogger::logUpdate(
+            'view_employee.php',
+            $emp_id,
+            "Direct rejoin bypass: emp {$emp_id} rejoined on {$rejoinDateObj->format('Y-m-d')} (primary vacation #{$vacation_id}), closed record(s) #{$closedVacIds}, and cleared fly status, without going through the approval chain.",
+            'current_status=approved/completed, review=A',
+            'current_status=completed, review=C, fly=0',
+            $current_user_id
+        );
+
+        $pdo->commit();
+
+        send_json_response(
+            __('success'),
+            __('employee_rejoined_directly_text', 'Employee has been rejoined directly'),
+            'success',
+            200
+        );
+    } catch (Exception $e) {
+        if (isset($pdo)) {
+            $pdo->rollBack();
+        }
+        send_json_response(
+            __('error'),
+            $e->getMessage(),
+            'error',
             400
         );
     }

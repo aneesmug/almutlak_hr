@@ -35,24 +35,30 @@ $requestTypeId = ensurePayrollApprovalRequestType($pdo);
 
 $payrollRequest = null;
 $requestSql = "SELECT
-        pr.*, 
+        pr.*,
         req_emp.name AS requester_name,
         req_emp.dept AS requester_dept,
         req_emp.avatar AS requester_avatar,
         req_emp.sex AS requester_sex,
+        req_al.user_type AS requester_user_type,
         d.dep_nme AS department_name,
         d.dep_nme_ar AS department_name_ar,
         approved_emp.name AS approved_by_name,
+        approved_al.user_type AS approved_by_user_type,
         processed_emp.name AS processed_by_name,
+        processed_al.user_type AS processed_by_user_type,
         payroll_summary.employee_count,
         payroll_summary.total_net_salary,
         payroll_summary.generated_count,
         payroll_summary.paid_count
     FROM payroll_approval_requests pr
     LEFT JOIN employees req_emp ON req_emp.emp_id = pr.requested_by
+    LEFT JOIN admin_login req_al ON req_al.emp_id = pr.requested_by
     LEFT JOIN department d ON d.id = req_emp.dept
     LEFT JOIN employees approved_emp ON approved_emp.emp_id = pr.approved_by
+    LEFT JOIN admin_login approved_al ON approved_al.emp_id = pr.approved_by
     LEFT JOIN employees processed_emp ON processed_emp.emp_id = pr.processed_by
+    LEFT JOIN admin_login processed_al ON processed_al.emp_id = pr.processed_by
     LEFT JOIN (
         SELECT
             month_year,
@@ -111,8 +117,21 @@ if (!$canSeeAll) {
     }
 }
 
+// Any account whose role is hr_payroll shows just "HR Payroll" instead of their name.
+function payrollStatusHistoryIsHrPayrollRole($userType): bool
+{
+    return strtolower(trim((string)$userType)) === 'hr_payroll';
+}
+function payrollStatusHistoryDisplayName($name, $userType)
+{
+    return payrollStatusHistoryIsHrPayrollRole($userType) ? __('hr_payroll', 'HR Payroll') : getDisplayName($name);
+}
+
 $history = [];
-$historyStmt = $conDB->prepare('SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = ? ORDER BY created_at ASC');
+$historyStmt = $conDB->prepare('SELECT s.status, s.note, s.emp_name, s.created_at, al.user_type
+    FROM smt_request_status s
+    LEFT JOIN admin_login al ON al.emp_id = s.emp_id
+    WHERE s.inv_no = ? ORDER BY s.created_at ASC');
 if ($historyStmt) {
     $historyStmt->bind_param('s', $requestInvNo);
     $historyStmt->execute();
@@ -124,6 +143,9 @@ if ($historyStmt) {
 }
 
 $chain = [];
+// Some requests have duplicate request_approvers rows per (level, approver) from a past
+// double-insert bug - collapse to the latest row per (level, approver) so each approver
+// shows once instead of twice.
 $chainStmt = $conDB->prepare("SELECT
         ra.approval_level,
         ra.status,
@@ -132,12 +154,18 @@ $chainStmt = $conDB->prepare("SELECT
         COALESCE(e.name, al.fullname, al.username) AS approver_name,
         COALESCE(al.user_type, '') AS user_type
     FROM request_approvers ra
+    INNER JOIN (
+        SELECT approval_level, approver_id, MAX(id) AS max_id
+        FROM request_approvers
+        WHERE request_inv_no = ? AND request_type_id = ?
+        GROUP BY approval_level, approver_id
+    ) latest ON latest.max_id = ra.id
     LEFT JOIN employees e ON e.emp_id = ra.approver_id
     LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
     WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
     ORDER BY ra.approval_level ASC");
 if ($chainStmt) {
-    $chainStmt->bind_param('si', $requestInvNo, $requestTypeId);
+    $chainStmt->bind_param('sisi', $requestInvNo, $requestTypeId, $requestInvNo, $requestTypeId);
     $chainStmt->execute();
     $chainResult = $chainStmt->get_result();
     while ($row = $chainResult->fetch_assoc()) {
@@ -146,11 +174,58 @@ if ($chainStmt) {
     $chainStmt->close();
 }
 
+$financeVerification = [];
+$financeVerificationStmt = $conDB->prepare("SELECT
+        v.finance_manager_emp_id,
+        v.finance_officer_emp_id,
+        v.selected_company_ids,
+        v.is_confirmed,
+        v.confirmed_at,
+        v.officer_approved,
+        v.officer_approved_at,
+        COALESCE(mgr.name, mgr_al.fullname, mgr_al.username) AS manager_name,
+        COALESCE(officer.name, officer_al.fullname, officer_al.username) AS officer_name
+    FROM payroll_finance_verification v
+    LEFT JOIN employees mgr ON mgr.emp_id = v.finance_manager_emp_id
+    LEFT JOIN admin_login mgr_al ON mgr_al.emp_id = v.finance_manager_emp_id
+    LEFT JOIN employees officer ON officer.emp_id = v.finance_officer_emp_id
+    LEFT JOIN admin_login officer_al ON officer_al.emp_id = v.finance_officer_emp_id
+    WHERE v.request_inv_no = ? AND v.payroll_month = ?
+    ORDER BY v.finance_manager_emp_id ASC, v.id ASC");
+if ($financeVerificationStmt) {
+    $financeVerificationMonth = (string)($payrollRequest['payroll_month'] ?? '');
+    $financeVerificationStmt->bind_param('ss', $requestInvNo, $financeVerificationMonth);
+    $financeVerificationStmt->execute();
+    $financeVerificationResult = $financeVerificationStmt->get_result();
+
+    $allCompanyNamesById = [];
+    $companyLookupResult = mysqli_query($conDB, "SELECT comp_id, comp_name FROM companies");
+    if ($companyLookupResult) {
+        while ($companyRow = mysqli_fetch_assoc($companyLookupResult)) {
+            $allCompanyNamesById[(string)$companyRow['comp_id']] = (string)$companyRow['comp_name'];
+        }
+    }
+
+    while ($row = $financeVerificationResult->fetch_assoc()) {
+        $companyIds = json_decode((string)($row['selected_company_ids'] ?? '[]'), true);
+        if (!is_array($companyIds)) {
+            $companyIds = [];
+        }
+        $row['company_names'] = array_map(static function ($companyId) use ($allCompanyNamesById) {
+            $companyId = trim((string)$companyId);
+            return $allCompanyNamesById[$companyId] ?? $companyId;
+        }, $companyIds);
+        $financeVerification[] = $row;
+    }
+    $financeVerificationStmt->close();
+}
+
 if (empty($history)) {
     $history[] = [
         'status' => 'pending_approval',
         'note' => 'Payroll approval started for month ' . ($payrollRequest['payroll_month'] ?? ''),
         'emp_name' => $payrollRequest['requester_name'] ?: 'System',
+        'user_type' => $payrollRequest['requester_user_type'] ?? '',
         'created_at' => $payrollRequest['created_at']
     ];
 }
@@ -164,6 +239,7 @@ if (($payrollRequest['status'] ?? '') === 'completed' && !empty($payrollRequest[
         'status' => 'completed',
         'note' => 'Payroll processing completed for month ' . ($payrollRequest['payroll_month'] ?? ''),
         'emp_name' => $payrollRequest['processed_by_name'] ?: 'System',
+        'user_type' => $payrollRequest['processed_by_user_type'] ?? '',
         'created_at' => $payrollRequest['processed_at']
     ];
 }
@@ -390,7 +466,7 @@ $departmentName = ($is_rtl ?? false)
                 <div class="requester-summary">
                     <img src="<?= htmlspecialchars($avatarPath) ?>" class="requester-avatar" alt="requester avatar">
                     <div>
-                        <h4 style="margin:0;"><?= htmlspecialchars(getDisplayName($payrollRequest['requester_name'] ?: __('system', 'System'))) ?></h4>
+                        <h4 style="margin:0;"><?= htmlspecialchars(payrollStatusHistoryDisplayName($payrollRequest['requester_name'] ?: __('system', 'System'), $payrollRequest['requester_user_type'] ?? '')) ?></h4>
                         <div class="text-muted" style="margin-top:6px;">
                             <strong><?= __('request_id', 'Request ID') ?>:</strong> <?= htmlspecialchars($payrollRequest['request_inv_no']) ?>
                             &nbsp; | &nbsp;
@@ -450,11 +526,11 @@ $departmentName = ($is_rtl ?? false)
                         </div>
                         <div class="stat-box">
                             <div class="stat-label"><?= __('approved_by', 'Approved By') ?></div>
-                            <div class="stat-value" style="font-size:15px;"><?= htmlspecialchars(getDisplayName($payrollRequest['approved_by_name'] ?: __('not_available', 'N/A'))) ?></div>
+                            <div class="stat-value" style="font-size:15px;"><?= htmlspecialchars(payrollStatusHistoryDisplayName($payrollRequest['approved_by_name'] ?: __('not_available', 'N/A'), $payrollRequest['approved_by_user_type'] ?? '')) ?></div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-label"><?= __('processed_by', 'Processed By') ?></div>
-                            <div class="stat-value" style="font-size:15px;"><?= htmlspecialchars(getDisplayName($payrollRequest['processed_by_name'] ?: __('not_available', 'N/A'))) ?></div>
+                            <div class="stat-value" style="font-size:15px;"><?= htmlspecialchars(payrollStatusHistoryDisplayName($payrollRequest['processed_by_name'] ?: __('not_available', 'N/A'), $payrollRequest['processed_by_user_type'] ?? '')) ?></div>
                         </div>
                     </div>
                 </div>
@@ -494,12 +570,17 @@ $departmentName = ($is_rtl ?? false)
                                 $chainIcon = 'fa-clock';
                             }
                             ?>
+                            <?php $isHrPayrollApproverRow = strtolower(trim((string)($link['user_type'] ?? ''))) === 'hr_payroll'; ?>
                             <tr>
                                 <td class="text-center"><span class="level-badge"><?= (int)($link['approval_level'] ?? 0) ?></span></td>
                                 <td>
-                                    <strong><?= htmlspecialchars(getDisplayName(parseName($link['approver_name']) ?? ($link['approver_name'] ?? __('not_available', 'N/A')))) ?></strong>
-                                    <?php if (!empty($link['user_type'])): ?>
-                                        <br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= htmlspecialchars(getDisplayName($link['user_type'])) ?></small>
+                                    <?php if ($isHrPayrollApproverRow): ?>
+                                        <strong><?= __('hr_payroll', 'HR Payroll') ?></strong>
+                                    <?php else: ?>
+                                        <strong><?= htmlspecialchars(getDisplayName(parseName($link['approver_name']) ?? ($link['approver_name'] ?? __('not_available', 'N/A')))) ?></strong>
+                                        <?php if (!empty($link['user_type'])): ?>
+                                            <br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= htmlspecialchars(getDisplayName(str_replace("_", " ", $link['user_type']))) ?></small>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -518,6 +599,64 @@ $departmentName = ($is_rtl ?? false)
                 </table>
             </div>
         </div>
+
+        <?php if (!empty($financeVerification)): ?>
+        <div class="info-card">
+            <h5><i class="fas fa-user-check"></i> <?= __('finance_verification_status', 'Finance Verification Status') ?></h5>
+            <div class="table-responsive">
+                <table class="table table-sm chain-table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th><?= __('finance_manager', 'Finance Manager') ?></th>
+                            <th><?= __('finance_officer', 'Finance Officer') ?></th>
+                            <th><?= __('assigned_companies', 'Assigned Companies') ?></th>
+                            <th><?= __('status') ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($financeVerification as $verificationRow): ?>
+                            <?php
+                            $isApproved = !empty($verificationRow['officer_approved']);
+                            $isConfirmed = !empty($verificationRow['is_confirmed']);
+                            if ($isApproved) {
+                                $verificationBadgeClass = 'success';
+                                $verificationIcon = 'fa-check-circle';
+                                $verificationLabel = __('approved', 'Approved');
+                            } elseif ($isConfirmed) {
+                                $verificationBadgeClass = 'warning';
+                                $verificationIcon = 'fa-clock';
+                                $verificationLabel = __('pending_officer_approval', 'Pending Officer Approval');
+                            } else {
+                                $verificationBadgeClass = 'secondary';
+                                $verificationIcon = 'fa-circle';
+                                $verificationLabel = __('not_confirmed', 'Not Confirmed');
+                            }
+                            ?>
+                            <tr>
+                                <td><?= htmlspecialchars(getDisplayName($verificationRow['manager_name'] ?: ($verificationRow['finance_manager_emp_id'] ?? __('not_available', 'N/A')))) ?></td>
+                                <td><?= htmlspecialchars(getDisplayName($verificationRow['officer_name'] ?: ($verificationRow['finance_officer_emp_id'] ?? __('not_available', 'N/A')))) ?></td>
+                                <td>
+                                    <?php if (!empty($verificationRow['company_names'])): ?>
+                                        <?php foreach ($verificationRow['company_names'] as $companyName): ?>
+                                            <span class="status-badge badge-soft-secondary" style="margin:2px;"><?= htmlspecialchars($companyName) ?></span>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <span class="text-muted"><?= __('not_available', 'N/A') ?></span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <span class="badge badge-<?= htmlspecialchars($verificationBadgeClass) ?>"><i class="fas <?= htmlspecialchars($verificationIcon) ?>"></i> <?= htmlspecialchars($verificationLabel) ?></span>
+                                    <?php if ($isApproved && !empty($verificationRow['officer_approved_at'])): ?>
+                                        <br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= htmlspecialchars(date('d M Y, H:i', strtotime($verificationRow['officer_approved_at']))) ?></small>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <div class="info-card">
             <h5><i class="fas fa-history"></i> <?= __('status_history_timeline', 'Status History Timeline') ?></h5>
@@ -560,7 +699,7 @@ $departmentName = ($is_rtl ?? false)
                                     <small class="text-muted"><i class="far fa-clock"></i> <?= !empty($item['created_at']) ? htmlspecialchars(date('d M Y, H:i', strtotime($item['created_at']))) : __('not_available', 'N/A') ?></small>
                                 </div>
                                 <p class="mb-1"><strong><?= nl2br(htmlspecialchars(getDisplayName($item['note'] ?? __('no_notes', 'No notes')))) ?></strong></p>
-                                <small class="text-muted"><i class="far fa-user"></i> <?= htmlspecialchars(getDisplayName($item['emp_name'] ?? __('system', 'System'))) ?></small>
+                                <small class="text-muted"><i class="far fa-user"></i> <?= htmlspecialchars(payrollStatusHistoryDisplayName($item['emp_name'] ?? __('system', 'System'), $item['user_type'] ?? '')) ?></small>
                             </div>
                         </div>
                     <?php endforeach; ?>

@@ -2320,7 +2320,7 @@ if (mysqli_num_rows($query) == 1) {
 
 		<script src="./plugins/summernote/summernote.min.js"></script>
 		<!-- <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-bs4.min.js"></script> -->
-		<script src="assets/js/loanHandling.js"></script>
+		<script src="assets/js/loanHandling.js?t=<?= time() ?>"></script>
 		<script src="assets/js/resignationWizard.js"></script>
 
 		<script type="text/javascript">
@@ -3004,6 +3004,18 @@ if (mysqli_num_rows($query) == 1) {
 								}, 100);
 							});
 
+							// Direct Rejoin (bypass approval chain) - special access only
+							modalContainer.find('.directRejoinBypass').on('click', function(e) {
+								e.preventDefault();
+								var empid = $(this).data('empid');
+								var vacid = $(this).data('vacid');
+								var empname = $(this).data('empname');
+								Swal.close();
+								setTimeout(function() {
+									openDirectRejoinModal(empid, vacid, empname);
+								}, 100);
+							});
+
 						}
 					});
 				});
@@ -3599,6 +3611,89 @@ if (mysqli_num_rows($query) == 1) {
 			function returnVacationRequest(vacationId, returndate, empId, empName) {
 				// Changed to use new rejoin approval system
 				submitRejoinRequest(vacationId, returndate, empId, empName);
+			}
+
+			// Direct Rejoin: mark the employee's active vacation as completed
+			// immediately, bypassing the rejoin_requests approval chain entirely.
+			// Only shown to users granted the 'direct_rejoin_bypass_approval'
+			// special access (or system admins) - see includes/emp_top_info.php.
+			function openDirectRejoinModal(empId, vacationId, empName) {
+				Swal.fire({
+					title: '<?= __("direct_rejoin", "Direct Rejoin") ?>',
+					html: `
+						<p style="text-align:left;">
+							<?= __("direct_rejoin_warning", "This immediately marks the employee's active vacation as completed and clears their away status - without going through the normal rejoin approval chain.") ?>
+						</p>
+						<p style="text-align:left;"><strong>${empName}</strong> (ID: ${empId})</p>
+						<div class="form-group text-left" style="margin-top:15px;">
+							<label for="directRejoinDate"><?= __("rejoin_date", "Rejoin Date") ?> <span class="text-danger">*</span></label>
+							<input type="text" class="form-control" id="directRejoinDate" placeholder="<?= __("select_date", "Select date...") ?>" readonly>
+						</div>
+					`,
+					icon: 'warning',
+					showCancelButton: true,
+					confirmButtonText: '<?= __("confirm_rejoin", "Yes, rejoin now") ?>',
+					cancelButtonText: '<?= __("cancel", "Cancel") ?>',
+					confirmButtonColor: APP_COLORS.warning,
+					cancelButtonColor: APP_COLORS.secondary,
+					allowOutsideClick: false,
+					didOpen: () => {
+						$('#directRejoinDate').datepicker({
+							format: "yyyy-mm-dd",
+							todayHighlight: true,
+							autoclose: true
+						}).datepicker('setDate', new Date());
+					},
+					preConfirm: () => {
+						const rejoinDate = $('#directRejoinDate').val();
+						if (!rejoinDate) {
+							Swal.showValidationMessage('<?= __("rejoin_date_required", "Please select a rejoin date") ?>');
+							return false;
+						}
+						return rejoinDate;
+					}
+				}).then((result) => {
+					if (!result.isConfirmed) {
+						return;
+					}
+					const rejoinDate = result.value;
+
+					Swal.fire({
+						title: '<?= __("processing", "Processing...") ?>',
+						allowOutsideClick: false,
+						allowEscapeKey: false,
+						didOpen: () => {
+							Swal.showLoading();
+						}
+					});
+
+					$.ajax({
+						url: './includes/ajaxFile/leaveHandler.php',
+						type: 'POST',
+						data: {
+							ajaxType: 'directRejoinBypass',
+							emp_id: empId,
+							vacation_id: vacationId,
+							rejoin_date: rejoinDate
+						},
+						dataType: 'JSON',
+						success: function(response) {
+							Swal.fire({
+								icon: response.type === 'success' ? 'success' : 'error',
+								title: response.title || response.type,
+								text: response.message,
+								confirmButtonText: '<?= __("ok", "OK") ?>'
+							}).then(() => {
+								if (response.type === 'success') {
+									location.reload();
+								}
+							});
+						},
+						error: function() {
+							Swal.fire('<?= __("error", "Error") ?>', '<?= __("request_failed", "Request failed") ?>', 'error');
+						}
+					});
+				});
 			}
 
 

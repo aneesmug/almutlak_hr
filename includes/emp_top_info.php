@@ -87,15 +87,19 @@ if ($emprow['status'] == 1) {
 			
 			// Vacation arrival/departure
 			if ($emprow["fly"] == 1) {
-				if ($isHR || $is_system_admin || $isDeptHr) {
-					$lastVac = lastVacIdGet($emprow['empid']);
-					$lastVacType = strtolower(trim((string)($lastVac['vac_type'] ?? '')));
-					$lastFlyType = strtolower(trim((string)($lastVac['fly_type'] ?? '')));
-					$isFlyRejoinEligible = ($lastVacType === 'fly' && in_array($lastFlyType, ['annual', 'emergency'], true));
-					// Updated rejoin function to use new approval system with emp_id and emp_name parameters
-					if ($lastVac && is_array($lastVac) && !empty($lastVac['vacid']) && !empty($lastVac['returndate']) && $isFlyRejoinEligible) {
-						$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"returnVacationRequest(" . htmlspecialchars($lastVac['vacid']) . ", '" . htmlspecialchars($lastVac['returndate']) . "', '" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['name']) . "')\" role=\"button\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoining') . "</span></div>";
-					}
+				$lastVac = lastVacIdGet($emprow['empid']);
+
+				// Direct Rejoin (bypass approval chain entirely) - gated by the
+				// 'direct_rejoin_bypass_approval' special access grant, independent
+				// of role, so it can be granted to any specific employee.
+				if (
+					$lastVac && is_array($lastVac) && !empty($lastVac['vacid'])
+					&& (
+						!empty($is_system_admin)
+						|| user_has_special_access($conDB, $empid ?? '', 'direct_rejoin_bypass_approval', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+					)
+				) {
+					$moreActionsHtml .= "<div class=\"menu-item text-dark directRejoinBypass\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-vacid=\"" . htmlspecialchars($lastVac['vacid']) . "\" data-empname=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-bolt\"></i><span>" . __('direct_rejoin', 'Direct Rejoin') . "</span></div>";
 				}
 			} else {
 				if ($emprow['apd_status'] == 'approve' && $user_type != "dept_user") {

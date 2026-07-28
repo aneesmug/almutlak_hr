@@ -2,6 +2,14 @@
 
 
 include './../../includes/session_check.php';
+require_once __DIR__ . '/../special_access_helper.php';
+
+// Real, session-derived permission for the delete/cancel action button - captured BEFORE
+// $user_type below is overwritten with the client-supplied POST value used for row filtering.
+$canCancelSmartRequests = (
+    strtolower(trim((string)($user_type ?? ''))) === 'administrator'
+    || user_has_special_access($conDB, $empid ?? '', 'cancel_smart_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
 
 // Parameters sent by DataTables
 $draw = $_POST['draw'];
@@ -107,6 +115,7 @@ else {
 $sql = "SELECT
             `sr`.`id`,
             `sr`.`inv_no`,
+            `sr`.`emp_id`,
             `sr`.`sub_title`,
             `sr`.`sub_type`,
             `dept`.`dep_nme` AS `department`,
@@ -141,13 +150,24 @@ if ($query) { // Check if query was successful before fetching
                 "current_approval_level" => $row["current_approval_level"],
                 "user_approval_level"    => $row['user_approval_level'] ?? null,
                 "is_current_approver"    => (int)($row['is_current_approver'] ?? 0),
-                "action"          =>($user_type == 'administrator')?"<div class='btn-group dropdown'>
+                "action"          =>(function() use ($canCancelSmartRequests, $row, $emp_id) {
+                                $canSelfCancel = in_array($row['status'], ['draft', 'pending_approval', 'approved'], true)
+                                    && (int)$row['emp_id'] === (int)$emp_id;
+                                if (!$canCancelSmartRequests && !$canSelfCancel) {
+                                    return "<a href='open_request.php?id=$row[inv_no]' class='btn btn-dark btn-sm' ><i class='mdi mdi-eye-outline'></i></i> Open</a>";
+                                }
+                                $html = "<div class='btn-group dropdown'>
                                 <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                 <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end' >
-                                    <a href='open_request.php?id=$row[inv_no]' class='dropdown-item text-dark' ><i class='mdi mdi-eye-outline'></i></i> ". __('open') ."</a>
-                                    <a href='javascript:void(0);' class='dropdown-item  text-danger deleteSmt' data-id='$row[inv_no]' ><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>". __('delete') ."</a>
-                                </div>
-                                </div>":"<a href='open_request.php?id=$row[inv_no]' class='btn btn-dark btn-sm' ><i class='mdi mdi-eye-outline'></i></i> Open</a>",
+                                    <a href='open_request.php?id=$row[inv_no]' class='dropdown-item text-dark' ><i class='mdi mdi-eye-outline'></i></i> ". __('open') ."</a>";
+                                if ($canCancelSmartRequests) {
+                                    $html .= "<a href='javascript:void(0);' class='dropdown-item  text-danger deleteSmt' data-id='$row[inv_no]' ><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>". __('cancel', 'Cancel') ."</a>";
+                                } elseif ($canSelfCancel) {
+                                    $html .= "<a href='javascript:void(0);' class='dropdown-item  text-danger cancelSmartRequestSelf' data-id='$row[inv_no]' ><i class='fa fa-ban mr-2 font-18 vertical-middle'></i>". __('cancel_request', 'Cancel Request') ."</a>";
+                                }
+                                $html .= "</div></div>";
+                                return $html;
+                            })(),
             );
     }
 } else {

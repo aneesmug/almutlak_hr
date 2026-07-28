@@ -119,6 +119,12 @@ if (isset($_POST['ajaxType'])) {
         case 'reject_loan':
             reject_loan();
             break;
+        case 'cancel_loan_admin':
+            cancel_loan_admin();
+            break;
+        case 'cancel_loan_self':
+            cancel_loan_self();
+            break;
         case 'finalize_loan':
             finalize_loan();
             break;
@@ -1342,8 +1348,6 @@ function apply_for_loan() {
         // Housing Loan Rules:
         // - Employee must have housing allowance
         // - Maximum 6 months housing in advance
-        // - Max 20k
-        // - Must not exceed EOS benefit
         // - Cannot apply if has housing loan within last year (debit free)
         
         if ($housing_allowance <= 0) {
@@ -1375,21 +1379,20 @@ function apply_for_loan() {
             return;
         }
 
-        if ($loan_amount > 20000) {
-            echo json_encode(['status' => 'error', 'title' => 'Amount Exceeded', 'message' => 'Maximum housing loan amount is SAR 20,000.', 'type' => 'error']);
+        // Repayment installments are the employee's own choice (independent of how many
+        // months' advance they borrowed), same as End of Service loans.
+        if (!isset($_POST['installments'])) {
+            echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Number of installments is required for Housing loan.', 'type' => 'error']);
             return;
         }
 
-        $endOfServiceBenefit = calculateEndOfService($joining_date, $total_salary);
-        if ($loan_amount > $endOfServiceBenefit) {
-            echo json_encode(['status' => 'error', 'title' => 'Exceeds EOS Benefit', 'message' => 'Loan amount cannot exceed your End of Service benefit of SAR ' . round($endOfServiceBenefit, 2), 'type' => 'error']);
+        $installments = filter_var($_POST['installments'], FILTER_VALIDATE_INT);
+        if ($installments === false || $installments <= 0 || $installments > 12) {
+            echo json_encode(['status' => 'error', 'title' => 'Invalid Installments', 'message' => 'Installments must be between 1 and 12 months.', 'type' => 'error']);
             return;
         }
 
-        // Calculate installments based on housing allowance
-        $installments = ceil($loan_amount / $housing_allowance);
-        if ($installments > 6) $installments = 6;
-        $monthly_deduction = $housing_allowance; // Deduct full housing each month
+        $monthly_deduction = $loan_amount / $installments;
 
     } elseif ($loan_type === 'advance_salary') {
         // Advance Salary Rules:
@@ -1577,6 +1580,152 @@ function calculateEndOfService($joining_date, $total_salary) {
         $benefit = $firstFiveYearsBenefit + $subsequentYearsBenefit;
     }
     return $benefit;
+}
+
+function cancel_loan_admin() {
+    global $conDB;
+    if (session_status() == PHP_SESSION_NONE) session_start();
+    $current_user_id = $_SESSION['empid'] ?? '';
+    $session_user_type = $_SESSION['type'] ?? '';
+    $is_admin = (strtolower(trim((string)$session_user_type)) === 'administrator');
+
+    require_once __DIR__ . '/../special_access_helper.php';
+    $can_cancel_any = (
+        $is_admin
+        || user_has_special_access($conDB, $current_user_id, 'cancel_loan_requests', '', $session_user_type, $is_admin)
+    );
+    if (!$can_cancel_any) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => __('access_denied', 'Access denied'), 'type' => 'error']);
+        return;
+    }
+
+    $loan_id = filter_var($_POST['loan_id'] ?? null, FILTER_VALIDATE_INT);
+    $cancellation_note = trim((string)($_POST['cancellation_note'] ?? ''));
+    if ($loan_id === false || $loan_id === null) {
+        echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Invalid Loan ID.', 'type' => 'error']);
+        return;
+    }
+    if ($cancellation_note === '') {
+        echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Cancellation reason is required.', 'type' => 'error']);
+        return;
+    }
+
+    $stmt = $conDB->prepare("SELECT id, emp_id, inv_no, status FROM emp_loan WHERE id = ? LIMIT 1");
+    $stmt->bind_param('i', $loan_id);
+    $stmt->execute();
+    $loan = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$loan) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Loan request not found.', 'type' => 'error']);
+        return;
+    }
+
+    $cancellable_statuses = ['pending', 'awaiting', 'approved'];
+    if (!in_array($loan['status'], $cancellable_statuses, true)) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Loan request in status "' . $loan['status'] . '" cannot be cancelled.', 'type' => 'error']);
+        return;
+    }
+
+    $update = $conDB->prepare("UPDATE emp_loan SET status = 'cancelled', rejected_by = ?, rejection_reason = ?, rejection_date = NOW() WHERE id = ? AND status = ?");
+    $note = 'Cancelled by admin (emp_id ' . $current_user_id . '): ' . $cancellation_note;
+    $update->bind_param('ssis', $current_user_id, $note, $loan_id, $loan['status']);
+    $update->execute();
+    $affected = $update->affected_rows;
+    $update->close();
+
+    if ($affected <= 0) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Failed to cancel loan request - status may have changed.', 'type' => 'error']);
+        return;
+    }
+
+    $hist = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, 'cancelled')");
+    $hist->bind_param('sss', $loan['inv_no'], $current_user_id, $note);
+    $hist->execute();
+    $hist->close();
+
+    if (function_exists('getEmployeeDetails') && function_exists('create_browser_notification')) {
+        $creator_details = getEmployeeDetails($conDB, $loan['emp_id']);
+        if ($creator_details && $creator_details['name'] !== 'N/A') {
+            create_browser_notification(
+                $conDB,
+                $loan['emp_id'],
+                'Loan Request Cancelled',
+                'Your loan request ' . htmlspecialchars($loan['inv_no']) . ' was cancelled by an administrator. Reason: ' . htmlspecialchars($cancellation_note),
+                'loan_status_history.php?inv_no=' . urlencode($loan['inv_no'])
+            );
+        }
+    }
+
+    echo json_encode(['status' => 'success', 'title' => 'Success', 'message' => 'Loan request ' . $loan['inv_no'] . ' has been cancelled.', 'type' => 'success']);
+}
+
+// Purpose: Allow an employee to cancel their OWN loan request while it's still
+// pending or approved (not yet paid/partial/processed/rejected/cancelled).
+function cancel_loan_self() {
+    global $conDB;
+    if (session_status() == PHP_SESSION_NONE) session_start();
+    $current_user_id = $_SESSION['empid'] ?? '';
+    if ($current_user_id === '') {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => __('access_denied', 'Access denied'), 'type' => 'error']);
+        return;
+    }
+
+    $loan_id = filter_var($_POST['loan_id'] ?? null, FILTER_VALIDATE_INT);
+    if ($loan_id === false || $loan_id === null) {
+        echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Invalid Loan ID.', 'type' => 'error']);
+        return;
+    }
+
+    $stmt = $conDB->prepare("SELECT id, emp_id, inv_no, status FROM emp_loan WHERE id = ? LIMIT 1");
+    $stmt->bind_param('i', $loan_id);
+    $stmt->execute();
+    $loan = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$loan) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Loan request not found.', 'type' => 'error']);
+        return;
+    }
+
+    if ((string)$loan['emp_id'] !== (string)$current_user_id) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => __('you_can_only_cancel_your_own_requests', 'You can only cancel your own requests'), 'type' => 'error']);
+        return;
+    }
+
+    $cancellable_statuses = [
+        'pending', 'awaiting', 'approved',
+        'dept_manager_pending', 'hr_assistant_pending', 'hr_manager_pending',
+        'finance_manager_pending', 'finance_assistant_pending', 'gm_pending'
+    ];
+    if (!in_array($loan['status'], $cancellable_statuses, true)) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Loan request in status "' . $loan['status'] . '" cannot be cancelled.', 'type' => 'error']);
+        return;
+    }
+
+    $note = 'Cancelled by employee (emp_id ' . $current_user_id . ').';
+    $update = $conDB->prepare("UPDATE emp_loan SET status = 'cancelled', rejected_by = ?, rejection_reason = ?, rejection_date = NOW() WHERE id = ? AND status = ?");
+    $update->bind_param('ssis', $current_user_id, $note, $loan_id, $loan['status']);
+    $update->execute();
+    $affected = $update->affected_rows;
+    $update->close();
+
+    if ($affected <= 0) {
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => 'Failed to cancel loan request - status may have changed.', 'type' => 'error']);
+        return;
+    }
+
+    $hist = $conDB->prepare("INSERT INTO smt_request_status (inv_no, emp_id, emp_name, note, status) VALUES (?, ?, 'System', ?, 'cancelled')");
+    $hist->bind_param('sss', $loan['inv_no'], $current_user_id, $note);
+    $hist->execute();
+    $hist->close();
+
+    $ra = $conDB->prepare("UPDATE request_approvers ra JOIN approval_request_types art ON art.id = ra.request_type_id AND art.type_name = 'loan_request' SET ra.status = 'cancelled' WHERE ra.request_inv_no = ? AND ra.status IN ('pending', 'awaiting')");
+    $ra->bind_param('s', $loan['inv_no']);
+    $ra->execute();
+    $ra->close();
+
+    echo json_encode(['status' => 'success', 'title' => 'Success', 'message' => 'Your loan request ' . $loan['inv_no'] . ' has been cancelled.', 'type' => 'success']);
 }
 
 function reject_loan() {
@@ -2876,7 +3025,7 @@ function check_loan_eligibility() {
             }
 
             if ($eligibility['eligible']) {
-                $max_housing = min($housing_allowance * 6, 20000, $endOfServiceBenefit);
+                $max_housing = $housing_allowance * 6;
                 $eligibility['max_amount'] = $max_housing;
                 $eligibility['min_amount'] = 0;
                 $eligibility['max_installments'] = 6;

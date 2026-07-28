@@ -13,6 +13,12 @@
  * - ADDED: The flatpickr library for a user-friendly date picker in the
  * SweetAlert2 verification step.
  ********************************************************************************/
+// Drop malformed/spoofed session cookies before starting: an illegal session ID
+// makes PHP fail to read the session file and log a warning every time it's sent.
+$sessionCookieName = session_name();
+if (isset($_COOKIE[$sessionCookieName]) && !preg_match('/^[A-Za-z0-9,\-]{1,128}$/', $_COOKIE[$sessionCookieName])) {
+    unset($_COOKIE[$sessionCookieName]);
+}
 session_start();
 // Security headers
 header("X-Frame-Options: DENY");

@@ -78,6 +78,10 @@ while($rec = mysqli_fetch_assoc($sql_count_active)){$status_cont_active = $rec["
 $sql_count_ter = mysqli_query($conDB, "SELECT COUNT(*) AS `ter` FROM `employees` WHERE `status`=0 ".$company_filter.$department_filter.$employee_filter);
 while($rec = mysqli_fetch_assoc($sql_count_ter)){$status_cont_ter = $rec["ter"];}
 
+// Count Terminated Employees (Current Year)
+$sql_count_ter_year = mysqli_query($conDB, "SELECT COUNT(*) AS `ter_year` FROM `employees` WHERE `status`=0 AND YEAR(`ter_date`)=YEAR(CURDATE()) ".$company_filter.$department_filter.$employee_filter);
+while($rec = mysqli_fetch_assoc($sql_count_ter_year)){$status_cont_ter_year = $rec["ter_year"];}
+
 // Count Employees on Departed Vacation (approved, latest vacation vac_type='Fly', employee fly=1)
 $sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flying` FROM `employees` e INNER JOIN (SELECT emp_id, MAX(id) latest_id FROM emp_vacation WHERE current_status='approved' GROUP BY emp_id) AS lv ON lv.emp_id = e.emp_id INNER JOIN emp_vacation ev ON ev.id = lv.latest_id WHERE e.fly=1 AND ev.vac_type='Fly' ".$company_filter_alias.$department_filter_alias.$employee_filter_alias);
 while($rec = mysqli_fetch_assoc($sql_count_fly)){$status_cont_fly = $rec["flying"];}
@@ -103,6 +107,7 @@ $pct_on_job      = round(((($status_cont_man_power ?? 0) + ($status_cont_active 
 $pct_fly         = round((($status_cont_fly ?? 0) / $totalEmployees) * 100, 1);
 $pct_local_vac   = round((($status_cont_local_vac ?? 0) / $totalEmployees) * 100, 1);
 $pct_terminated  = round((($status_cont_ter ?? 0) / $totalEmployees) * 100, 1);
+$pct_terminated_year = round((($status_cont_ter_year ?? 0) / $totalEmployees) * 100, 1);
 $pct_total       = 100.0;
 
 // Access scope labels for dashboard card
@@ -594,7 +599,7 @@ if(isset($_POST['submit'])){
 							}
 						?>
 						<div class="row text-center">
-							<div class="col-sm-4 col-xl-4" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">
+							<div class="col-sm-3 col-xl-3" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">
 							<div class="stats-card professional-theme theme-custom" data-color="custom">
 								<div class="stats-card-icon professional-theme theme-custom" data-color="custom">
 									<div class="stats-card-count-circle"><?=$status_cont_active ?></div>
@@ -619,7 +624,7 @@ if(isset($_POST['submit'])){
 								</div>
 							</div>
 							</div>
-							<div class="col-sm-4 col-xl-4" onclick="window.location.href='filter_employee.php?page=1&status=1&fly=no&emp_sup_type=man_power'" style="cursor: pointer;">
+							<div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=1&fly=no&emp_sup_type=man_power'" style="cursor: pointer;">
 							<div class="stats-card professional-theme theme-purple" data-color="purple">
 								<div class="stats-card-icon professional-theme theme-purple" data-color="purple">
 									<div class="stats-card-count-circle"><?php if($status_cont_man_power > 0){ echo $status_cont_man_power;}else{echo "0";} ?></div>
@@ -644,7 +649,7 @@ if(isset($_POST['submit'])){
 								</div>
 							</div>
 							</div>
-							<div class="col-sm-4 col-xl-4" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;" <?php } ?> >
+							<div class="col-sm-3 col-xl-3" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;" <?php } ?> >
 							<div class="stats-card professional-theme theme-primary" data-color="primary">
 								<div class="stats-card-icon professional-theme theme-primary" data-color="primary">
 									<div class="stats-card-count-circle"><?=$status_cont_man_power + $status_cont_active ?></div>
@@ -739,6 +744,31 @@ if(isset($_POST['submit'])){
 										</div>
 										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
 											<?=$pct_terminated ?>% <?=__('of_total_employees') ?>
+										</div>
+									</div>
+								</div>
+							</div>
+							</div>
+							<div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0&ter_year=<?=date('Y')?>'" style="cursor: pointer;">
+							<div class="stats-card professional-theme" data-color="danger">
+								<div class="stats-card-icon professional-theme" data-color="danger">
+									<div class="stats-card-count-circle"><?=$status_cont_ter_year ?></div>
+									<span class="stats-card-tooltip">Terminated Employees (Current Year)</span>
+									<i class="fa fa-user-slash"></i>
+								</div>
+								<div class="stats-card-content">
+									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('terminated_employees_current_year', 'Terminated Employees (Current Year)') ?></div>
+									<div class="stats-card-footer">
+										<span class="stats-card-percentage positive">
+											<i class="mdi mdi-trending-up"></i>
+										</span>
+									</div>
+									<div style="width:100%;margin-top:18px;">
+										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
+											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_terminated_year ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
+										</div>
+										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
+											<?=$pct_terminated_year ?>% <?=__('of_total_employees') ?>
 										</div>
 									</div>
 								</div>

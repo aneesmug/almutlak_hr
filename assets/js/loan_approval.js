@@ -364,6 +364,55 @@ function rejectLoanRequest(loanId, role) {
     });
 }
 
+function cancelLoanRequestAdmin(loanId, employeeName, invNo) {
+    Swal.fire({
+        title: __('confirm_cancellation_title') || 'Cancel this loan request?',
+        html: `${__('cancel_loan_admin_confirm_text') || 'This will cancel the loan request for'} <strong>${employeeName}</strong> (${invNo}).`,
+        input: 'textarea',
+        inputLabel: __('cancellation_reason_label') || 'Cancellation reason',
+        inputPlaceholder: __('enter_cancellation_reason_placeholder') || 'Enter reason for cancelling this request',
+        showCancelButton: true,
+        confirmButtonText: __('submit_cancellation_button') || 'Cancel Request',
+        confirmButtonColor: APP_COLORS.danger,
+        showLoaderOnConfirm: true,
+        allowOutsideClick: false,
+        inputValidator: (value) => {
+            if (!value) {
+                return __('cancellation_reason_required_validation') || 'Cancellation reason is required.';
+            }
+        },
+        preConfirm: (reason) => {
+            return $.ajax({
+                url: './includes/ajaxFile/ajaxLoan.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: {
+                    ajaxType: 'cancel_loan_admin',
+                    loan_id: loanId,
+                    cancellation_note: reason
+                },
+            }).fail(function(jqXHR, textStatus) {
+                const error = handleAjaxFailure(jqXHR, textStatus);
+                Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
+            });
+        }
+    ,cancelButtonColor:APP_COLORS.danger_dark,cancelButtonText:__('cancel')}).then((result) => {
+        if (result.isConfirmed) {
+            const response = result.value;
+            Swal.fire({
+                title: response.title,
+                text: response.message,
+                icon: response.type,
+                allowOutsideClick: false
+            }).then(() => {
+                if (response.status === 'success') {
+                    location.reload();
+                }
+            });
+        }
+    });
+}
+
 function finalizeLoan(loanId) {
     Swal.fire({
         title: __('finalize_and_disburse_loan_title'),

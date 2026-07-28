@@ -529,9 +529,11 @@ include(__DIR__ . "/menu_active_class.php");
  * 
  * How it works:
  * 1. Sets fly=1 when employee is currently on Fly vacation (annual/emergency)
- * 2. Also sets fly=1 for Local Vacation (annual/emergency) ONLY when vacdays >= 5
- * 3. Local Vacation with days < 5 does NOT trigger fly=1
- * 4. Only affects regular vacation (VAC-*), NOT leave requests (LV-*)
+ * 2. Also sets fly=1 for Local Vacation (annual/emergency) ONLY when vacdays > 5
+ * 3. Local Vacation with days <= 5 does NOT trigger fly=1
+ * 4. Auto-resets fly=0 once a Local-Vacation-only fly flag no longer qualifies
+ *    (employees with real Fly-type history are left to the manual return workflow)
+ * 5. Only affects regular vacation (VAC-*), NOT leave requests (LV-*)
  * 
  * @param mysqli $conDB Database connection
  * @return void
@@ -541,7 +543,7 @@ function update_employee_fly_status_on_session($conDB) {
         $today = date('Y-m-d');
         
         // STEP 1: Set fly=1 for active Fly vacations (annual/emergency)
-        // Also set fly=1 for Local Vacation (annual/emergency) ONLY when vacdays >= 5
+        // Also set fly=1 for Local Vacation (annual/emergency) ONLY when vacdays > 5
         // (Only for regular vacation VAC-*, not leave requests LV-*)
         $sql_find_employees = "
             SELECT DISTINCT v.emp_id
@@ -554,7 +556,7 @@ function update_employee_fly_status_on_session($conDB) {
                 AND v.review = 'A'
                 AND (
                     LOWER(v.vac_type) = 'fly'
-                    OR (LOWER(v.vac_type) = 'local vacation' AND v.vacdays >= 5)
+                    OR (LOWER(v.vac_type) = 'local vacation' AND v.vacdays > 5)
                 )
         ";
         
@@ -580,9 +582,43 @@ function update_employee_fly_status_on_session($conDB) {
             mysqli_stmt_close($stmt_find);
         }
         
-        // STEP 2: DISABLED - fly=0 should only be reset via returnVacationRequest() function in emp_top_info.php
-        // This ensures proper workflow control and prevents automatic resets
-        
+        // STEP 2: Auto-reset fly=0 for employees whose fly=1 is stuck due to a Local Vacation
+        // that no longer qualifies (window ended, or was always < 5 days).
+        // Scope is intentionally narrow: employees who have EVER had a real 'Fly' type vacation
+        // are excluded here and continue to rely on the manual returnVacationRequest() workflow
+        // in emp_top_info.php. Only employees whose fly=1 can ONLY be explained by a Local
+        // Vacation get auto-corrected, since Local Vacation has no manual return-confirmation step.
+        $sql_reset_local = "
+            UPDATE employees e
+            SET e.fly = 0
+            WHERE e.fly = 1
+              AND NOT EXISTS (
+                  SELECT 1 FROM emp_vacation v
+                  WHERE v.emp_id = e.emp_id
+                    AND v.request_inv_no LIKE 'VAC-%'
+                    AND LOWER(v.vac_type) = 'fly'
+                    AND v.review = 'A'
+                    AND v.current_status IN ('approved', 'completed')
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM emp_vacation v
+                  WHERE v.emp_id = e.emp_id
+                    AND v.request_inv_no LIKE 'VAC-%'
+                    AND LOWER(v.vac_type) = 'local vacation'
+                    AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
+                    AND v.vacdays > 5
+                    AND v.review = 'A'
+                    AND v.current_status IN ('approved', 'completed')
+                    AND v.start_date <= ?
+                    AND v.return_date >= ?
+              )
+        ";
+        if ($stmt_reset_local = mysqli_prepare($conDB, $sql_reset_local)) {
+            mysqli_stmt_bind_param($stmt_reset_local, 'ss', $today, $today);
+            mysqli_stmt_execute($stmt_reset_local);
+            mysqli_stmt_close($stmt_reset_local);
+        }
+
         // STEP 3: Auto-complete LV-* (Excuse Leave) requests after return date has passed
         // At the end of the return_date day, mark review = 'C' (Completed)
         // We run this when current date > return_date by checking return_date < CURDATE()

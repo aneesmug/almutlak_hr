@@ -14,6 +14,12 @@ if (
     exit();
 }
 
+$can_cancel_resignation_requests = (
+    !empty($is_system_admin)
+    || user_has_special_access($conDB, $empid ?? '', 'cancel_resignation_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+$cancellable_resignation_statuses = ['pending', 'approved'];
+
 // --- Get Request Type ID for 'resignation_request' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'resignation_request' LIMIT 1");
 if (!$type_query || mysqli_num_rows($type_query) == 0) {
@@ -418,16 +424,48 @@ if ($can_see_all_depts) {
                                                 
                                                 // Only show action buttons if current user has pending approval
                                                 $can_take_action = $user_has_pending_approval;
-                                                
+                                                $can_cancel_this_resignation = $can_cancel_resignation_requests && in_array($resignation['status'], $cancellable_resignation_statuses, true);
+
                                                 // Prepare JS-safe variables - remove line breaks and escape quotes
                                                 $employee_name_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['employee_name'])), ENT_QUOTES);
                                                 $employee_id_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', $resignation['employee_id']), ENT_QUOTES);
                                             ?>
                                                 <div class="col-lg-4 col-md-6 mb-4">
                                                     <div class="card request-card h-100">
-                                                        <div class="card-header">
-                                                            <?= htmlspecialchars($resignation['employee_name']) ?>
-                                                            <span class="float-right"><?=__('emp_id')?>: <?= htmlspecialchars($resignation['employee_id']) ?></span>
+                                                        <div class="card-header d-flex justify-content-between align-items-center">
+                                                            <span><?= htmlspecialchars($resignation['employee_name']) ?></span>
+                                                            <div class="d-flex align-items-center" style="gap: 8px;">
+                                                                <span><?=__('emp_id')?>: <?= htmlspecialchars($resignation['employee_id']) ?></span>
+                                                                <?php if ($can_take_action || $can_cancel_this_resignation): ?>
+                                                                <div class="btn-group" role="group">
+                                                                    <button type="button" class="btn btn-sm btn-light dropdown-toggle waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="<?=__('actions')?>">
+                                                                        <?=__('actions')?>
+                                                                    </button>
+                                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                                        <?php
+                                                                        // Escape all parameters for JavaScript onclick - remove line breaks
+                                                                        $iqama_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['iqama'])), ENT_QUOTES);
+                                                                        $designation_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['designation'] ?? 'N/A')), ENT_QUOTES);
+                                                                        $department_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['department'] ?? 'N/A')), ENT_QUOTES);
+                                                                        ?>
+                                                                        <?php if ($can_take_action): ?>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="approveResignation(<?=$resignation['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$iqama_js; ?>', '<?=$designation_js; ?>', '<?=$department_js; ?>', '<?=$resignation['last_working_day']; ?>')">
+                                                                            <i class="fa fa-check text-success"></i> <?=__('approve')?>
+                                                                        </a>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="rejectResignation(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')">
+                                                                            <i class="fa fa-times text-danger"></i> <?=__('reject')?>
+                                                                        </a>
+                                                                        <?php endif; ?>
+                                                                        <?php if ($can_cancel_this_resignation): ?>
+                                                                        <?php if ($can_take_action): ?><div class="dropdown-divider"></div><?php endif; ?>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="cancelResignationAdmin(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')">
+                                                                            <i class="fa fa-ban text-danger"></i> <?=__('cancel', 'Cancel')?>
+                                                                        </a>
+                                                                        <?php endif; ?>
+                                                                    </div>
+                                                                </div>
+                                                                <?php endif; ?>
+                                                            </div>
                                                         </div>
                                                         <div class="card-body">
                                                             <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?=__('submitted')?>:</strong> <?= htmlspecialchars(format_safe_date($resignation['created_at'] ?? null, 'd M Y')) ?></div>
@@ -501,7 +539,7 @@ if ($can_see_all_depts) {
                                                                 <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=$status_icon." ".htmlspecialchars($status_text); ?></span>
                                                             </div>
                                                         </div>
-                                                        <div class="card-footer" style="<?= $can_take_action ? 'display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem;' : 'display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;' ?> padding: 1rem;">
+                                                        <div class="card-footer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 1rem;">
                                                             <button type="button" class="btn btn-info waves-effect viewResignation"
                                                                     data-id="<?= $resignation['id'] ?>"
                                                                     data-emp-id="<?= $resignation['employee_id'] ?>"
@@ -516,28 +554,6 @@ if ($can_see_all_depts) {
                                                             <a href="resignation_report_details.php?id=<?= $resignation['id'] ?>&emp_id=<?= $resignation['employee_id'] ?>" class="btn btn-primary waves-effect">
                                                                 <i class="fa fa-file-pdf"></i> <?= __('report') ?>
                                                             </a>
-                                                            
-                                                            <?php if ($can_take_action): ?>
-                                                            <div class="btn-group" role="group">
-                                                                <button type="button" class="btn btn-secondary dropdown-toggle waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="<?=__('actions')?>">
-                                                                    <?=__('actions')?> <span class="caret"></span>
-                                                                </button>
-                                                                <div class="dropdown-menu dropdown-menu-right">
-                                                                    <?php
-                                                                    // Escape all parameters for JavaScript onclick - remove line breaks
-                                                                    $iqama_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['iqama'])), ENT_QUOTES);
-                                                                    $designation_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['designation'] ?? 'N/A')), ENT_QUOTES);
-                                                                    $department_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['department'] ?? 'N/A')), ENT_QUOTES);
-                                                                    ?>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveResignation(<?=$resignation['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$iqama_js; ?>', '<?=$designation_js; ?>', '<?=$department_js; ?>', '<?=$resignation['last_working_day']; ?>')">
-                                                                        <i class="fa fa-check text-success"></i> <?=__('approve')?>
-                                                                    </a>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="rejectResignation(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')">
-                                                                        <i class="fa fa-times text-danger"></i> <?=__('reject')?>
-                                                                    </a>
-                                                                </div>
-                                                            </div>
-                                                            <?php endif; ?>
                                                         </div>
                                                     </div>
                                                 </div>

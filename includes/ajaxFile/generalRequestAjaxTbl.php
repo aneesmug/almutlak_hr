@@ -1,6 +1,14 @@
 <?php
 
 include './../../includes/session_check.php';
+require_once __DIR__ . '/../special_access_helper.php';
+
+// Real, session-derived permission for the delete/cancel action button - captured BEFORE
+// $user_type below is overwritten with the client-supplied POST value used for row filtering.
+$canCancelAnyGeneralRequest = (
+    strtolower(trim((string)($user_type ?? ''))) === 'administrator'
+    || user_has_special_access($conDB, $empid ?? '', 'cancel_general_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
 
 // Parameters sent by DataTables
 $draw = $_POST['draw'];
@@ -130,10 +138,15 @@ if ($query) {
         if ($row['current_status'] == 'draft' && $row['emp_id'] == $emp_id) {
             $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$row['inv_no']."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('delete')."</a>";
         }
-        
-        // Administrator can delete any request
-        if ($user_type == 'administrator') {
-            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$row['inv_no']."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('delete')."</a>";
+
+        // Creator can self-cancel while pending/approved (soft cancel, keeps history)
+        if (in_array($row['current_status'], ['pending_approval', 'approved'], true) && $row['emp_id'] == $emp_id) {
+            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger cancelGeneralRequestSelf' data-id='".$row['inv_no']."'><i class='fa fa-ban mr-2 font-18 vertical-middle'></i>".__('cancel_request', 'Cancel Request')."</a>";
+        }
+
+        // Administrator or special-access grantee can cancel/delete any request
+        if ($canCancelAnyGeneralRequest && !($row['current_status'] == 'draft' && $row['emp_id'] == $emp_id)) {
+            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$row['inv_no']."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('cancel', 'Cancel')."</a>";
         }
         
         $actionButtons .= "</div></div>";

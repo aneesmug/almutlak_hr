@@ -107,7 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 		$sql = "UPDATE `employees` SET " . implode(', ', $setParts) . " WHERE `emp_id` = :emp_id";
 		$stmt = $pdo->prepare($sql);
 		$stmt->execute($params);
-		
+
+		// Keep admin_login.dept in sync with employees.dept (all_users.php reads admin_login's own copy).
+		if (isset($params[':dept'])) {
+			$syncDeptStmt = $pdo->prepare("UPDATE `admin_login` SET `dept` = :dept WHERE `emp_id` = :emp_id");
+			$syncDeptStmt->execute([':dept' => $params[':dept'], ':emp_id' => $employee_id_from_form]);
+		}
+
 		// LOG EMPLOYEE UPDATE ACTION
 		if ($stmt->rowCount() > 0) {
 			$new_values = [];

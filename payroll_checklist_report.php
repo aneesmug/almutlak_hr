@@ -46,8 +46,9 @@ foreach ($rawPaymentTypeFilter as $rawPaymentTypeValue) {
 }
 $hasPaymentTypeInRequest = array_key_exists('payment_type', $_GET);
 if (!$hasPaymentTypeInRequest && empty($selectedPaymentTypes)) {
-    // Default checklist view to Bank employees only unless user chooses other payment types.
-    $selectedPaymentTypes[1] = 1;
+    // Default to Bank + Cash to match the payroll report (get_payroll_report.php),
+    // which excludes Hold (payment_type = 3) employees but includes everything else.
+    $selectedPaymentTypes = [1 => 1, 2 => 2];
 }
 $selectedPaymentTypes = array_values($selectedPaymentTypes);
 $rawAssignedScopeParam = trim((string)($_GET['assigned_scope'] ?? '0'));
@@ -231,37 +232,45 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
     }
 
     // Always use latest assignment from verification table (most authoritative source).
+    // Scoped to finance_officer_emp_id = finance_manager_emp_id too - a manager can now
+    // have several officers' rows under their own manager id, and this branch is only
+    // for the manager's OWN self-assigned scope, not whichever officer's row has the
+    // highest id.
     if ($assignedScopeRaw === false || $assignedScopeRaw === null || trim((string)$assignedScopeRaw) === '') {
-        // Check manager assignment first (confirmed only).
+        // Check manager's own (self-assigned) scope first (confirmed only).
         $assignedScopeManagerStmt = $pdo->prepare("SELECT selected_company_ids
             FROM payroll_finance_verification
             WHERE request_inv_no = :inv_no
               AND payroll_month = :month_year
-              AND finance_manager_emp_id = :finance_user
+              AND finance_manager_emp_id = :finance_user_mgr
+              AND finance_officer_emp_id = :finance_user_officer
               AND is_confirmed = 1
             ORDER BY id DESC
             LIMIT 1");
         $assignedScopeManagerStmt->execute([
             ':inv_no' => $requestInvNo,
             ':month_year' => $monthYear,
-            ':finance_user' => $currentApproverId
+            ':finance_user_mgr' => $currentApproverId,
+            ':finance_user_officer' => $currentApproverId
         ]);
         $assignedScopeRaw = $assignedScopeManagerStmt->fetchColumn();
     }
 
-    // If not found as manager (confirmed), try unconfirmed manager assignment.
+    // If not found as manager (confirmed), try unconfirmed manager self-assigned scope.
     if ($assignedScopeRaw === false || $assignedScopeRaw === null || trim((string)$assignedScopeRaw) === '') {
         $assignedScopeManagerUnconfirmedStmt = $pdo->prepare("SELECT selected_company_ids
             FROM payroll_finance_verification
             WHERE request_inv_no = :inv_no
               AND payroll_month = :month_year
-              AND finance_manager_emp_id = :finance_user
+              AND finance_manager_emp_id = :finance_user_mgr
+              AND finance_officer_emp_id = :finance_user_officer
             ORDER BY id DESC
             LIMIT 1");
         $assignedScopeManagerUnconfirmedStmt->execute([
             ':inv_no' => $requestInvNo,
             ':month_year' => $monthYear,
-            ':finance_user' => $currentApproverId
+            ':finance_user_mgr' => $currentApproverId,
+            ':finance_user_officer' => $currentApproverId
         ]);
         $unconfirmedResult = $assignedScopeManagerUnconfirmedStmt->fetchColumn();
         if ($unconfirmedResult !== false && $unconfirmedResult !== null && trim((string)$unconfirmedResult) !== '') {
@@ -357,8 +366,16 @@ if (($isFinanceOfficerChecklistUser || $isFinanceManagerChecklistUser) && $isAss
 // Finance users ALWAYS apply company filter (regardless of toggle state).
 $applyAssignedScopeFilter = $isAssignedFinanceCompanyVerifier;
 
+// A finance officer (or a manager acting as their own officer) can check off employees
+// in their assigned scope one by one, same as HR - required before they can approve.
+$canFinanceOfficerCheckEmployees = $isAssignedFinanceCompanyVerifier
+    && $requestInvNo !== ''
+    && $requestStatus === 'pending_approval';
+
 $canExportChecklistExcel = $isHrPayrollApprover
     || $isHrSeniorBpApprover
+    || $isFinanceManagerChecklistUser
+    || $isFinanceOfficerChecklistUser
     || ($is_system_admin ?? false)
     || (($user_type ?? '') === 'administrator')
     || user_has_special_access($conDB, $empid ?? '', 'payroll_checklist_export_excel', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
@@ -383,6 +400,9 @@ $canReviewManagerUploadedPayrollExcel = $requestInvNo !== ''
 $canManageChecklistReview = $requestInvNo !== ''
     && $isHrChecklistApprover
     && ($isPendingWithMe || $requestStatus === 'approved');
+// Shared gate for the checklist checkbox/mark-checked UI - HR's own review flow
+// (modified-employees-only) or a finance officer's own scope (checks everyone visible).
+$canCheckPayrollChecklistEmployees = $canManageChecklistReview || $canFinanceOfficerCheckEmployees;
 $canSendFeedbackFollowup = $requestInvNo !== '' && $canManageFeedbackActions;
 $employeesRequiringChecklistReviewByEmp = ($canManageChecklistReview && $requestCreatedAt !== '')
     ? getPayrollModifiedEmployeesForChecklist($pdo, $monthYear, $requestCreatedAt)
@@ -456,8 +476,10 @@ if ($isFinanceChecklistUser) {
     $selectedDepartment = '';
     $selectedSponsor = '';
 
-    // Apply assigned company filter ONLY when toggle is ON
-    if ($assignedScopeOnly && !empty($assignedFinanceCompanyIds)) {
+    // Finance Manager: only scoped when the toggle is ON (can otherwise see everyone).
+    // Finance Officer: has no toggle and must always be scoped to their assigned companies.
+    $applyFinanceCompanyFilterNow = $assignedScopeOnly || !$isFinanceManagerChecklistUser;
+    if ($applyFinanceCompanyFilterNow && !empty($assignedFinanceCompanyIds)) {
         $companyPlaceholders = [];
         foreach ($assignedFinanceCompanyIds as $index => $companyId) {
             $paramKey = ':assigned_company_' . $index;
@@ -667,7 +689,7 @@ if ($isAssignedFinanceCompanyVerifier && $requestInvNo !== '') {
 }
 
 $employeeReviewStatusByEmp = [];
-if ($canManageChecklistReview && $currentApproverId !== '') {
+if ($canCheckPayrollChecklistEmployees && $currentApproverId !== '') {
     $reviewStmt = $pdo->prepare("SELECT emp_id, is_checked, checked_at
         FROM payroll_checklist_employee_checks
         WHERE request_inv_no = :request_inv_no
@@ -783,7 +805,15 @@ foreach ($employees as $index => $employee) {
     $employees[$index]['net_difference'] = $difference;
     $employees[$index]['is_balanced'] = $isBalanced;
 
-    $requiresChecklistReview = $canManageChecklistReview && !empty($employeesRequiringChecklistReviewByEmp[(string)$empId]);
+    if ($canManageChecklistReview) {
+        $requiresChecklistReview = !empty($employeesRequiringChecklistReviewByEmp[(string)$empId]);
+    } elseif ($canFinanceOfficerCheckEmployees) {
+        // Finance officer must check every employee visible in their assigned scope,
+        // not just the ones modified since the request was created (that's HR's rule).
+        $requiresChecklistReview = true;
+    } else {
+        $requiresChecklistReview = false;
+    }
     $isExplicitlyChecked = !empty($employeeReviewStatusByEmp[(string)$empId]['is_checked']);
     $isChecklistChecked = !$requiresChecklistReview || $isExplicitlyChecked;
 
@@ -816,7 +846,10 @@ foreach ($employees as $index => $employee) {
 $canFinanceOfficerApproveHere = $isAssignedFinanceCompanyVerifier
     && $requestInvNo !== ''
     && $requestStatus === 'pending_approval'
-    && $assignedScopeOnly; // Only allow approval when toggle is ON (assigned scope mode)
+    // The assigned-scope toggle only exists for the Main Finance Manager (who can also
+    // browse in "see everyone" mode); a plain Finance Officer has no toggle and only
+    // ever has one view - their own assigned companies - so they don't need it ON.
+    && (!$isFinanceManagerChecklistUser || $assignedScopeOnly);
 $financeOfficerAlreadyApproved = !empty($financeOfficerVerificationRow['officer_approved']);
 $financeOfficerCanApproveNow = $canFinanceOfficerApproveHere
     && !$financeOfficerAlreadyApproved
@@ -1377,7 +1410,7 @@ foreach ($employees as $employee) {
             <div class="summary-card"><div class="summary-label"><?= __('deductions_total', 'Deductions Total') ?></div><div class="summary-value" id="summaryDeductionsValue"><?= number_format($summary['deductions'], 2) ?></div></div>
             <div class="summary-card"><div class="summary-label"><?= __('net_salary_label', 'Net Total') ?></div><div class="summary-value" id="summaryNetValue"><?= number_format($summary['net'], 2) ?></div></div>
             <div class="summary-card"><div class="summary-label"><?= __('calculation_conflicts', 'Calculation Conflicts') ?><i class="fas fa-info-circle text-muted ml-1" data-toggle="tooltip" data-placement="top" title="<?= htmlspecialchars(__('calculation_conflicts_tooltip', 'Employees where Net Salary does not match (Gross + Benefits - Deductions).'), ENT_QUOTES) ?>" style="cursor: help;"></i></div><div class="summary-value" id="summaryMismatchValue" style="color: <?= $summary['mismatch_count'] > 0 ? '#c43636' : '#1f8b3c' ?>;"><?= (int)$summary['mismatch_count'] ?></div></div>
-            <?php if ($canManageChecklistReview): ?>
+            <?php if ($canCheckPayrollChecklistEmployees): ?>
                 <div class="summary-card"><div class="summary-label"><?= __('checked_by_me', 'Checked By Me') ?></div><div class="summary-value" id="checkedEmployeesValue"><?= (int)$checkedEmployeesCount ?> / <?= (int)$summary['employees'] ?></div></div>
                 <div class="summary-card"><div class="summary-label"><?= __('remaining_to_check', 'Remaining To Check') ?></div><div class="summary-value" id="remainingEmployeesValue" style="color: <?= ((int)$summary['employees'] - (int)$checkedEmployeesCount) > 0 ? '#ad7b00' : '#1f8b3c' ?>;"><?= max(0, (int)$summary['employees'] - (int)$checkedEmployeesCount) ?></div></div>
             <?php endif; ?>
@@ -1390,13 +1423,21 @@ foreach ($employees as $employee) {
             </div>
         <?php else: ?>
             <div class="list-card">
-                <div class="list-card-header">
-                    <h5 class="list-card-title"><i class="fas fa-users"></i> <?= __('employee_payroll_list', 'Employee Payroll Check List') ?></h5>
+                <div class="list-card-header d-flex align-items-center justify-content-between flex-wrap">
+                    <h5 class="list-card-title mb-0"><i class="fas fa-users"></i> <?= __('employee_payroll_list', 'Employee Payroll Check List') ?></h5>
+                    <?php if ($canCheckPayrollChecklistEmployees): ?>
+                        <button type="button" id="bulkCheckSelectedBtn" class="btn btn-success btn-sm" disabled onclick="bulkCheckSelectedEmployees()">
+                            <i class="fas fa-check-double mr-1"></i> <?= __('check_selected', 'Check Selected') ?> (<span id="bulkCheckSelectedCount">0</span>)
+                        </button>
+                    <?php endif; ?>
                 </div>
                 <div class="table-responsive p-3">
                     <table class="table table-bordered table-hover table-compact" id="checklistTable" style="width:100%;">
                         <thead>
                             <tr>
+                                <?php if ($canCheckPayrollChecklistEmployees): ?>
+                                    <th class="print-hide-status text-center"><input type="checkbox" id="selectAllUncheckedBox" title="<?= htmlspecialchars(__('select_all_unchecked', 'Select all unchecked'), ENT_QUOTES) ?>"></th>
+                                <?php endif; ?>
                                 <th><?= __('emp_id') ?></th>
                                 <th><?= __('name') ?></th>
                                 <th><?= __('department') ?></th>
@@ -1445,6 +1486,13 @@ foreach ($employees as $employee) {
                                 }
                                 ?>
                                 <tr class="<?= $isEmployeeChecked ? 'checklist-row-checked' : '' ?>" data-employee-row-id="<?= htmlspecialchars((string)$employee['emp_id'], ENT_QUOTES) ?>" data-requires-review="<?= $requiresChecklistReview ? '1' : '0' ?>">
+                                    <?php if ($canCheckPayrollChecklistEmployees): ?>
+                                        <td class="print-hide-status text-center">
+                                            <?php if ($requiresChecklistReview && !$isEmployeeChecked && $empFeedback['open_count'] === 0): ?>
+                                                <input type="checkbox" class="checklist-row-select" data-emp-id="<?= htmlspecialchars((string)$employee['emp_id'], ENT_QUOTES) ?>">
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endif; ?>
                                     <td><?= htmlspecialchars((string)$employee['emp_id']) ?></td>
                                     <td><?= htmlspecialchars(getDisplayName((string)($employee['employee_name'] ?? ''))) ?></td>
                                     <td><?= htmlspecialchars(getDisplayName((string)(($is_rtl ?? false) ? ($employee['department_name_ar'] ?? $employee['department_name'] ?? 'N/A') : ($employee['department_name'] ?? $employee['department_name_ar'] ?? 'N/A')))) ?></td>
@@ -1463,7 +1511,7 @@ foreach ($employees as $employee) {
                                                 <a class="dropdown-item text-dark" href="javascript:void(0);" onclick="openEmployeeDetail('<?= htmlspecialchars((string)$employee['emp_id'], ENT_QUOTES) ?>')">
                                                     <i class="fa fa-eye mr-2 font-18 vertical-middle"></i><?= __('view', 'View') ?>
                                                 </a>
-                                                <?php if ($canManageChecklistReview && $requiresChecklistReview && $empFeedback['open_count'] === 0): ?>
+                                                <?php if ($canCheckPayrollChecklistEmployees && $requiresChecklistReview && $empFeedback['open_count'] === 0): ?>
                                                     <a class="dropdown-item text-dark" href="javascript:void(0);"
                                                         data-review-emp-id="<?= htmlspecialchars((string)$employee['emp_id'], ENT_QUOTES) ?>"
                                                         data-requires-check="1"
@@ -1513,8 +1561,9 @@ foreach ($employees as $employee) {
             openCount: <?= (int)$feedbackTotals['open_count'] ?>,
             pendingCount: <?= (int)$feedbackTotals['pending_followup_count'] ?>
         };
+        const checklistEmpIdColIndex = <?= $canCheckPayrollChecklistEmployees ? 1 : 0 ?>;
         const checklistReviewState = {
-            canManage: <?= $canManageChecklistReview ? 'true' : 'false' ?>,
+            canManage: <?= $canCheckPayrollChecklistEmployees ? 'true' : 'false' ?>,
             requestInvNo: <?= json_encode($requestInvNo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
             month: <?= json_encode($monthYear, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
             checkedCount: <?= (int)$checkedEmployeesCount ?>,
@@ -1900,6 +1949,158 @@ foreach ($employees as $employee) {
                 modalBtn.innerHTML = buttonHtml;
                 applyModalReviewButtonStyle(modalBtn, !!isChecked);
             }
+
+            if (checklistEmpIdColIndex === 1) {
+                const row = document.querySelector('[data-employee-row-id="' + selectorEmpId + '"]');
+                const checkboxCell = row ? row.cells[0] : null;
+                if (checkboxCell) {
+                    const empData = employeeMap[empId] || {};
+                    const requiresReview = !!empData.requires_checklist_review;
+                    const hasOpenFeedback = Number(empData.open_feedback_count || 0) > 0;
+                    const shouldShowCheckbox = requiresReview && !isChecked && !hasOpenFeedback;
+                    const existingBox = checkboxCell.querySelector('.checklist-row-select');
+                    if (shouldShowCheckbox && !existingBox) {
+                        checkboxCell.innerHTML = '<input type="checkbox" class="checklist-row-select" data-emp-id="' + esc(empId) + '">';
+                    } else if (!shouldShowCheckbox && existingBox) {
+                        checkboxCell.innerHTML = '';
+                    }
+                }
+                updateBulkCheckButtonState();
+            }
+        }
+
+        function getSelectableChecklistCheckboxes() {
+            if (checklistDataTable) {
+                return checklistDataTable.rows({ search: 'applied' }).nodes().to$().find('.checklist-row-select');
+            }
+            return $('.checklist-row-select');
+        }
+
+        function updateBulkCheckButtonState() {
+            const boxes = getSelectableChecklistCheckboxes();
+            const checkedBoxes = boxes.filter(':checked');
+            const btn = document.getElementById('bulkCheckSelectedBtn');
+            const countEl = document.getElementById('bulkCheckSelectedCount');
+            if (countEl) {
+                countEl.textContent = String(checkedBoxes.length);
+            }
+            if (btn) {
+                btn.disabled = checkedBoxes.length === 0;
+            }
+
+            const headerBox = document.getElementById('selectAllUncheckedBox');
+            if (headerBox) {
+                if (boxes.length === 0) {
+                    headerBox.checked = false;
+                    headerBox.indeterminate = false;
+                    headerBox.disabled = true;
+                } else {
+                    headerBox.disabled = false;
+                    headerBox.checked = checkedBoxes.length === boxes.length;
+                    headerBox.indeterminate = checkedBoxes.length > 0 && checkedBoxes.length < boxes.length;
+                }
+            }
+        }
+
+        async function bulkCheckSelectedEmployees() {
+            if (!checklistReviewState.canManage) {
+                return;
+            }
+
+            const empIds = getSelectableChecklistCheckboxes().filter(':checked').map(function() {
+                return $(this).attr('data-emp-id') || '';
+            }).get().filter(Boolean);
+
+            if (empIds.length === 0) {
+                return;
+            }
+
+            const confirmResult = await Swal.fire({
+                title: '<?= addslashes(__('confirm', 'Confirm')) ?>',
+                text: '<?= addslashes(__('confirm_bulk_check_employees', 'Mark the selected employees as checked?')) ?>' + ' (' + empIds.length + ')',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<?= addslashes(__('confirm', 'Confirm')) ?>',
+                cancelButtonText: '<?= addslashes(__('cancel', 'Cancel')) ?>'
+            });
+
+            if (!confirmResult.isConfirmed) {
+                return;
+            }
+
+            const btn = document.getElementById('bulkCheckSelectedBtn');
+            if (btn) {
+                btn.disabled = true;
+            }
+
+            const total = empIds.length;
+            let successCount = 0;
+            let failCount = 0;
+
+            const progressLabel = '<?= addslashes(__('checking_employees', 'Checking Employees')) ?>';
+            const remainingLabel = '<?= addslashes(__('remaining', 'Remaining')) ?>';
+            const doneLabel = '<?= addslashes(__('done', 'Done')) ?>';
+
+            const buildProgressHtml = (doneCount) => `
+                <div style="text-align:center;">
+                    <div style="font-size:15px; color:#475569; margin-bottom:10px;">${progressLabel} ${doneCount} / ${total}</div>
+                    <div style="font-size:42px; font-weight:700; color:#0f172a; line-height:1;">${total - doneCount}</div>
+                    <div style="font-size:13px; color:#94a3b8; margin-top:4px;">${remainingLabel}</div>
+                </div>`;
+
+            Swal.fire({
+                title: progressLabel,
+                html: buildProgressHtml(0),
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            for (const empId of empIds) {
+                try {
+                    const payload = new URLSearchParams();
+                    payload.append('action', 'toggle_employee_check');
+                    payload.append('request_inv_no', checklistReviewState.requestInvNo);
+                    payload.append('month', checklistReviewState.month);
+                    payload.append('emp_id', empId);
+                    payload.append('checked', '1');
+
+                    const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                        body: payload.toString()
+                    });
+                    const data = await response.json();
+                    if (!response.ok || data.status !== 'success') {
+                        throw new Error(data.message || 'Failed to update employee checklist status.');
+                    }
+
+                    checklistReviewState.checkedCount += data.is_checked ? 1 : 0;
+                    updateEmployeeReviewButton(empId, !!data.is_checked, data.checked_at || '');
+                    successCount++;
+                } catch (error) {
+                    failCount++;
+                }
+
+                Swal.update({ html: buildProgressHtml(successCount + failCount) });
+            }
+
+            syncChecklistReviewSummary();
+            syncSummaryCardsFromVisibleRows();
+            updateBulkCheckButtonState();
+
+            if (btn) {
+                btn.disabled = false;
+            }
+
+            Swal.fire({
+                icon: failCount === 0 ? 'success' : 'warning',
+                title: failCount === 0 ? '<?= addslashes(__('success', 'Success')) ?>' : '<?= addslashes(__('warning', 'Warning')) ?>',
+                text: successCount + ' <?= addslashes(__('employees_checked_count_label', 'employee(s) checked')) ?>' + (failCount ? ', ' + failCount + ' <?= addslashes(__('failed', 'failed')) ?>' : '') + ` (${doneLabel})`
+            });
         }
 
         async function toggleEmployeeReviewCheck(empId, triggerButton = null) {
@@ -1977,7 +2178,7 @@ foreach ($employees as $employee) {
         function getChecklistVisibleEmployees() {
             if (checklistDataTable) {
                 const orderedIds = checklistDataTable.rows({ search: 'applied', order: 'applied' }).nodes().to$().map(function() {
-                    return $(this).find('td').eq(0).text().trim();
+                    return $(this).find('td').eq(checklistEmpIdColIndex).text().trim();
                 }).get();
 
                 return orderedIds.map(empId => employeeMap[String(empId)]).filter(Boolean);
@@ -3749,7 +3950,8 @@ foreach ($employees as $employee) {
             checklistDataTable = $('#checklistTable').DataTable({
                 pageLength: 25,
                 lengthMenu: [[-1, 5, 10, 25, 50, 100], ['All', 5, 10, 25, 50, 100]],
-                order: [[0, 'asc']],
+                order: [[checklistEmpIdColIndex, 'asc']],
+                columnDefs: checklistEmpIdColIndex === 1 ? [{ targets: 0, orderable: false, searchable: false }] : [],
                 language: {
                     search: '<?= addslashes(__('search', 'Search')) ?>:',
                     lengthMenu: '<?= addslashes(__('show', 'Show')) ?> _MENU_ <?= addslashes(__('entries', 'entries')) ?>',
@@ -3761,7 +3963,19 @@ foreach ($employees as $employee) {
 
             $('#checklistTable').on('draw.dt search.dt order.dt page.dt', function() {
                 syncSummaryCardsFromVisibleRows();
+                updateBulkCheckButtonState();
             });
+
+            $('#checklistTable').on('change', '.checklist-row-select', function() {
+                updateBulkCheckButtonState();
+            });
+
+            $(document).on('change', '#selectAllUncheckedBox', function() {
+                getSelectableChecklistCheckboxes().prop('checked', this.checked);
+                updateBulkCheckButtonState();
+            });
+
+            updateBulkCheckButtonState();
 
             syncFollowupButton();
             syncChecklistReviewSummary();

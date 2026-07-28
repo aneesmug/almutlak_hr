@@ -36,7 +36,7 @@ function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
                 (
                     LOWER(COALESCE(v.vac_type, '')) = 'local vacation'
                     AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
-                    AND COALESCE(v.vacdays, 0) > 20
+                    AND COALESCE(v.vacdays, 0) >= 20
                     AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
                 )
           )

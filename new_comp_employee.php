@@ -188,7 +188,7 @@ if(isset($_POST['submit'])){
 						'new_employee',
 						$supervisor_template_data
 					);
-					
+
 					if ($supervisor_email_sent) {
 						error_log("SUPERVISOR_EMAIL: Successfully sent to " . $supervisor_row['email']);
 					} else {

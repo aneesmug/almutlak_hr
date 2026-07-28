@@ -131,9 +131,14 @@ try {
         }
         
         // Add search filter if provided
+        // NOTE: db uses real prepared statements (EMULATE_PREPARES = false), so the
+        // same named placeholder cannot be reused multiple times in one query - each
+        // occurrence needs its own bound parameter.
         if (!empty($search)) {
-            $query .= " AND (e.name LIKE :search OR e.emp_id LIKE :search OR rr.requested_reason LIKE :search)";
-            $params[':search'] = '%' . $search . '%';
+            $query .= " AND (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR rr.requested_reason LIKE :search3)";
+            $params[':search1'] = '%' . $search . '%';
+            $params[':search2'] = '%' . $search . '%';
+            $params[':search3'] = '%' . $search . '%';
         }
         
         // Get total records without search using explicit count queries.
@@ -186,7 +191,7 @@ try {
                     WHERE $supervisor_where
                     AND rr.status = 'pending'
                     AND (ra.status = 'pending' OR ra.status IS NULL)
-                    AND (e.name LIKE :search OR e.emp_id LIKE :search OR rr.requested_reason LIKE :search)
+                    AND (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR rr.requested_reason LIKE :search3)
                 ";
             } elseif ($status === 'approved') {
                 $filtered_count_query = "
@@ -197,7 +202,7 @@ try {
                     LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
                     WHERE $supervisor_where
                     AND rr.status IN ('approved', 'adjusted')
-                    AND (e.name LIKE :search OR e.emp_id LIKE :search OR rr.requested_reason LIKE :search)
+                    AND (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR rr.requested_reason LIKE :search3)
                 ";
             } else {
                 $filtered_count_query = "
@@ -208,12 +213,14 @@ try {
                     LEFT JOIN request_approvers ra ON ra.request_inv_no = rr.id AND ra.request_type_id = 5
                     WHERE $supervisor_where
                     AND rr.status = 'rejected'
-                    AND (e.name LIKE :search OR e.emp_id LIKE :search OR rr.requested_reason LIKE :search)
+                    AND (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR rr.requested_reason LIKE :search3)
                 ";
             }
 
             $filtered_params = $count_params;
-            $filtered_params[':search'] = '%' . $search . '%';
+            $filtered_params[':search1'] = '%' . $search . '%';
+            $filtered_params[':search2'] = '%' . $search . '%';
+            $filtered_params[':search3'] = '%' . $search . '%';
             $filtered_stmt = $pdo->prepare($filtered_count_query);
             $filtered_stmt->execute($filtered_params);
             $filtered_records = (int)($filtered_stmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);

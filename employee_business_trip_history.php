@@ -232,6 +232,12 @@ $status_badges = [
                                                                     <i class="fa fa-money-bill-wave text-success"></i> <?= __('add_ticket_amount', 'Add Ticket Amount') ?>
                                                                 </button>
                                                             <?php endif; ?>
+                                                            <?php if (!in_array($trip['current_status'] ?? '', ['rejected', 'completed', 'cancelled'], true)): ?>
+                                                                <div class="dropdown-divider"></div>
+                                                                <button type="button" class="dropdown-item text-danger" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="cancelBusinessTripRequest('<?= htmlspecialchars((string)$trip['request_inv_no'], ENT_QUOTES) ?>')">
+                                                                    <i class="fa fa-times"></i> <?= __('cancel_request', 'Cancel Request') ?>
+                                                                </button>
+                                                            <?php endif; ?>
                                                         </div>
                                                     </div>
                                                 </td>

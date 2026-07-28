@@ -14,6 +14,12 @@
 
 // Start session if not already started
 if (session_status() == PHP_SESSION_NONE) {
+    // Drop malformed/spoofed session cookies before starting: an illegal session ID
+    // makes PHP fail to read the session file and log a warning every time it's sent.
+    $sessionCookieName = session_name();
+    if (isset($_COOKIE[$sessionCookieName]) && !preg_match('/^[A-Za-z0-9,\-]{1,128}$/', $_COOKIE[$sessionCookieName])) {
+        unset($_COOKIE[$sessionCookieName]);
+    }
     session_start();
 }
 
@@ -469,7 +475,7 @@ public static function log($action_type, $module, $description, $options = []) {
      */
     private static function shouldLogAction($action_type, $module, $record_id, $user_id, $old_values, $new_values, $minutes = 5) {
         // Initialize session cache for activity logger if not exists
-        if (!isset($_SESSION['activity_log_cache'])) {
+        if (!isset($_SESSION['activity_log_cache']) || !is_array($_SESSION['activity_log_cache'])) {
             $_SESSION['activity_log_cache'] = [];
         }
         
@@ -503,7 +509,7 @@ public static function log($action_type, $module, $description, $options = []) {
      */
     private static function updateLogCache($action_type, $module, $record_id, $user_id, $new_values = null) {
         // Initialize session cache for activity logger if not exists
-        if (!isset($_SESSION['activity_log_cache'])) {
+        if (!isset($_SESSION['activity_log_cache']) || !is_array($_SESSION['activity_log_cache'])) {
             $_SESSION['activity_log_cache'] = [];
         }
         
