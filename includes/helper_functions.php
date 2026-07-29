@@ -3702,6 +3702,25 @@ if (!function_exists('get_setting')) {
     }
 }
 
+/**
+ * Numeric-safe settings reader. The live `get_setting($conDB, $name)` in db.php
+ * only takes two arguments (no default), so a missing/blank row would otherwise
+ * silently become 0 here (e.g. a 0% loan cap or a 0 divisor). This always falls
+ * back to $default unless the stored value is a real number.
+ *
+ * @param mysqli $conDB
+ * @param string $setting_name
+ * @param float|int $default
+ * @return float
+ */
+if (!function_exists('get_setting_num')) {
+    function get_setting_num($conDB, $setting_name, $default)
+    {
+        $value = function_exists('get_setting') ? get_setting($conDB, $setting_name) : null;
+        return ($value !== null && $value !== '' && is_numeric($value)) ? (float)$value : (float)$default;
+    }
+}
+
 
 /**
  * =================================================================

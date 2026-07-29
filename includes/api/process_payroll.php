@@ -77,8 +77,10 @@ function normalizeDateToPayrollMonth($dateValue) {
  * Returns true when GOSI is already deducted via vacation payout in the payroll month.
  */
 function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
+    global $conDB;
     $monthStart = $monthYear . '-01';
     $monthEnd = date('Y-m-t', strtotime($monthStart));
+    $localVacationMinDays = (int) get_setting_num($conDB, 'vacation_gosi_local_min_days', 20);
 
     $stmt = $pdo->prepare("SELECT v.id
         FROM emp_vacation v
@@ -100,7 +102,7 @@ function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
                 (
                     LOWER(COALESCE(v.vac_type, '')) = 'local vacation'
                     AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
-                    AND COALESCE(v.vacdays, 0) >= 20
+                    AND COALESCE(v.vacdays, 0) >= :local_min_days
                     AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
                 )
           )
@@ -108,7 +110,8 @@ function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
     $stmt->execute([
         ':emp_id' => $empId,
         ':month_start' => $monthStart,
-        ':month_end' => $monthEnd
+        ':month_end' => $monthEnd,
+        ':local_min_days' => $localVacationMinDays
     ]);
 
     return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
@@ -137,6 +140,18 @@ if (!preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
 
 // Get the database connection object
 $pdo = getDbConnection();
+
+// Self-heal the deduction_types lookup table used below to decide whether a given
+// deduction name (GOSI, Loan Installment, etc.) counts toward net-pay deductions.
+// Safe no-op once sql/add_payroll_params_settings.sql has been run.
+$pdo->exec("CREATE TABLE IF NOT EXISTS `deduction_types` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `name` varchar(100) NOT NULL,
+    `counts_in_net` tinyint(1) NOT NULL DEFAULT 1,
+    `status` tinyint(4) NOT NULL DEFAULT 1,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
 try {
     $requestedBy = $_SESSION['empid'] ?? ($empid ?? null);
@@ -330,6 +345,40 @@ try {
             continue;
         }
         // --- CHECK END ---
+
+        // --- VACATION PAYROLL DROPOUT CHECK ---
+        // Any active/approved vacation (regardless of type) whose day count exceeds the
+        // configured threshold drops the employee out of this month's payroll entirely.
+        $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+        if ($vacationDropoutDays > 0) {
+            $stmtVacationDropout = $pdo->prepare(
+                "SELECT v.id
+                 FROM emp_vacation v
+                 WHERE v.emp_id = :emp_id
+                     AND v.review = 'A'
+                     AND v.current_status IN ('approved', 'completed')
+                     AND v.start_date <= :month_start_upper
+                     AND COALESCE(v.return_date, v.start_date) >= :month_start_lower
+                     AND COALESCE(v.vacdays, 0) >= :dropout_days
+                 LIMIT 1"
+            );
+            $stmtVacationDropout->execute([
+                ':emp_id' => $empId,
+                ':month_start_upper' => $payrollMonthStart,
+                ':month_start_lower' => $payrollMonthStart,
+                ':dropout_days' => $vacationDropoutDays
+            ]);
+            $vacationDropout = $stmtVacationDropout->fetch(PDO::FETCH_ASSOC);
+
+            if ($vacationDropout) {
+                $skippedEmployees[] = [
+                    'emp_id' => $empId,
+                    'reason' => "Employee's vacation is {$vacationDropoutDays}+ days at the start of this payroll month"
+                ];
+                continue;
+            }
+        }
+        // --- VACATION PAYROLL DROPOUT CHECK END ---
 
         // Get employee's salary components and country for GOSI calculation
         $stmtEmployeeData = $pdo->prepare("SELECT es.basic as basic_salary, es.housing as housing_allowance, es.transport as transport_allowance, es.food as food_allowance, es.misc as miscellaneous_allowance, es.cashier as cashier_allowance, es.fuel as fuel_allowance, es.tel as telephone_allowance, es.other as other_allowance, es.guard as guard_allowance, e.country, e.gosi
@@ -549,8 +598,17 @@ try {
                     WHERE emp_id = :emp_id AND deduction = 'GOSI' AND month = :month_year");
                 $stmtDeleteGosi->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
             } else {
-                $basicPlusHousing = floatval($salaryComponents['basic_salary']) + floatval($salaryComponents['housing_allowance']);
-                $gosiAmount = round($basicPlusHousing * ($employeeData['gosi'] / 100) , 2); // 0.0975
+                $deductionBaseComponents = json_decode((string) get_setting($conDB, 'deduction_base_components'), true);
+                if (!is_array($deductionBaseComponents) || empty($deductionBaseComponents)) {
+                    $deductionBaseComponents = ['basic_salary', 'housing_allowance'];
+                }
+                $deductionBase = 0.0;
+                foreach ($deductionBaseComponents as $componentKey) {
+                    if (array_key_exists($componentKey, $salaryComponents)) {
+                        $deductionBase += floatval($salaryComponents[$componentKey]);
+                    }
+                }
+                $gosiAmount = round($deductionBase * ($employeeData['gosi'] / 100) , 2); // 0.0975
                 $stmtCheckGosi = $pdo->prepare("SELECT id, note FROM payroll_deductions
                     WHERE emp_id = :emp_id AND deduction = 'GOSI' AND month = :month_year LIMIT 1
                 ");
@@ -597,11 +655,14 @@ try {
                 if ($benefit['calculation_type'] === 'overtime_basic') {
                     $hours = floatval($benefit['hours'] ?? 0);
                     $basicSalary = floatval($salaryComponents['basic_salary']);
-                    $hourlyRate = ($basicSalary / 240 / 2) + ($totalGrossSalary / 240);
+                    $overtimeMonthlyHours = get_setting_num($conDB, 'overtime_monthly_hours', 240) ?: 240;
+                    $overtimeExtraMultiplier = get_setting_num($conDB, 'overtime_extra_multiplier', 0.5);
+                    $hourlyRate = ($basicSalary / $overtimeMonthlyHours * $overtimeExtraMultiplier) + ($totalGrossSalary / $overtimeMonthlyHours);
                     $amount = $hourlyRate * $hours;
                 } elseif ($benefit['calculation_type'] === 'overtime_total') {
                     $hours = floatval($benefit['hours'] ?? 0);
-                    $amount = ($totalGrossSalary / 240) * $hours;
+                    $overtimeMonthlyHours = get_setting_num($conDB, 'overtime_monthly_hours', 240) ?: 240;
+                    $amount = ($totalGrossSalary / $overtimeMonthlyHours) * $hours;
                 } else {
                     $amount = floatval($benefit['note']);
                 }
@@ -611,9 +672,11 @@ try {
             // Calculate total deductions
             $stmtDeductionsSum = $pdo->prepare("SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0)
                     FROM payroll_deductions pd
+                    LEFT JOIN deduction_types dt ON LOWER(TRIM(dt.name)) = LOWER(TRIM(pd.deduction))
                     WHERE pd.emp_id = :emp_id
                         AND pd.month = :month_year
                         AND pd.status = 1
+                        AND COALESCE(dt.counts_in_net, 1) = 1
                         AND NOT EXISTS (
                                 SELECT 1 FROM emp_loan el
                                 WHERE el.emp_id = pd.emp_id

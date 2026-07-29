@@ -61,13 +61,14 @@ $requestSql = "SELECT
     LEFT JOIN admin_login processed_al ON processed_al.emp_id = pr.processed_by
     LEFT JOIN (
         SELECT
-            month_year,
-            COUNT(emp_id) AS employee_count,
-            SUM(net_salary) AS total_net_salary,
-            SUM(CASE WHEN status = 'generated' THEN 1 ELSE 0 END) AS generated_count,
-            SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_count
-        FROM payrolls
-        GROUP BY month_year
+            p.month_year,
+            COUNT(CASE WHEN COALESCE(e.payment_type, 1) <> 3 THEN p.emp_id END) AS employee_count,
+            SUM(CASE WHEN COALESCE(e.payment_type, 1) <> 3 THEN p.net_salary ELSE 0 END) AS total_net_salary,
+            SUM(CASE WHEN p.status = 'generated' THEN 1 ELSE 0 END) AS generated_count,
+            SUM(CASE WHEN p.status = 'paid' THEN 1 ELSE 0 END) AS paid_count
+        FROM payrolls p
+        INNER JOIN employees e ON e.emp_id = p.emp_id
+        GROUP BY p.month_year
     ) payroll_summary ON payroll_summary.month_year = pr.payroll_month
     WHERE pr.request_inv_no = ?
     LIMIT 1";

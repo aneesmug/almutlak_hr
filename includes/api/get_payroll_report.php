@@ -200,17 +200,23 @@ try {
             END AS benefit, 
             pb.note,
             pb.hours,
+            pb.minutes,
             pb.days,
             pb.calculation_type
         FROM payroll_benefits pb
         LEFT JOIN benefit_types bt ON pb.type_id = bt.id
         WHERE pb.emp_id = :emp_id AND pb.month = :month_year AND pb.status = 1
     ");
-    // Query now includes calculation_type, hours, and days from payroll_deductions
+    // Query now includes calculation_type, hours, and days from payroll_deductions.
+    // NOTE: status is intentionally NOT filtered here. Once a payroll month is marked
+    // "Paid", update_payroll_status.php flips these rows to status = 0 to mark them as
+    // consumed - they are still the deductions that were actually applied to that
+    // month's net salary, so this report (which only covers months already generated)
+    // must keep showing them.
     $stmtDeductions = $pdo->prepare("
-        SELECT deduction, note, hours, days, calculation_type 
-        FROM payroll_deductions 
-        WHERE emp_id = :emp_id AND month = :month_year AND status = 1
+        SELECT deduction, note, hours, minutes, days, calculation_type
+        FROM payroll_deductions
+        WHERE emp_id = :emp_id AND month = :month_year
     ");
 
     // Loop through each main payroll record to fetch and attach the detailed checklist items

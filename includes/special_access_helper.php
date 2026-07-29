@@ -27,6 +27,10 @@ if (!function_exists('get_special_access_labels')) {
             'payroll_checklist_export_excel' => 'Payroll Checklist Report: Export Excel Button',
             'direct_rejoin_bypass_approval' => 'Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)',
             'ungenerate_payroll' => 'Payroll: Un-Generate Payroll Button',
+            'manage_loan_settings' => 'Access App Settings - Loan Settings Tab',
+            'manage_vacation_payroll_settings' => 'Access App Settings - Vacation Payroll Settings Tab',
+            'manage_overtime_settings' => 'Access App Settings - Overtime Settings Tab',
+            'manage_deduction_settings' => 'Access App Settings - Deduction Settings Tab',
         ] + get_special_access_page_labels();
     }
 }

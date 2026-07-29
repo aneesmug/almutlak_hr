@@ -1101,16 +1101,19 @@ function get_loan_details() {
         $total_salary = $row['total_salary'];
         $housing_allowance = $row['housing'];
         
+        $loanMaxPctEos = get_setting_num($conDB, 'loan_max_pct_eos', 40) / 100;
+        $loanMaxPctAdvance = get_setting_num($conDB, 'loan_max_pct_advance', 50) / 100;
+
         echo json_encode([
             'status' => 'success',
             'end_of_service' => round($endOfServiceBenefit, 2),
             'total_salary' => round($total_salary, 2),
             'housing_allowance' => round($housing_allowance, 2),
-            // Backward-compatible field (retain key) now reflects dynamic 40% EOS cap
-            'max_loan_amount' => round($endOfServiceBenefit * 0.40, 2),
-            'max_advance_salary' => round($total_salary * 0.5, 2),
+            // Backward-compatible field (retain key) now reflects the configurable EOS cap %
+            'max_loan_amount' => round($endOfServiceBenefit * $loanMaxPctEos, 2),
+            'max_advance_salary' => round($total_salary * $loanMaxPctAdvance, 2),
             'max_housing_loan' => round(min($housing_allowance * 6, 20000, $endOfServiceBenefit), 2),
-            'max_eos_loan' => round($endOfServiceBenefit * 0.40, 2),
+            'max_eos_loan' => round($endOfServiceBenefit * $loanMaxPctEos, 2),
             'has_housing' => ($housing_allowance > 0),
             'show_full_details' => $show_full_details
         ]);
@@ -1311,34 +1314,37 @@ function apply_for_loan() {
 
     // Validate based on loan type
     if ($loan_type === 'end_of_service') {
-        // Revised End of Service Loan Rules:
-        // - Maximum 40% of calculated End of Service benefit
-        // - No fixed 20k cap (business requested EOS * 40%)
-        // - Installments up to 12 months
+        // End of Service Loan Rules (configurable via App Settings - Loan Settings tab):
+        // - Maximum loan_max_pct_eos% of calculated End of Service benefit
+        // - No fixed 20k cap (business requested EOS * pct)
+        // - Installments up to loan_max_installments months
         // - Optional: minimum amount removed (can set if needed)
 
+        $loanMaxPctEos = get_setting_num($conDB, 'loan_max_pct_eos', 40) / 100;
+        $loanMaxInstallments = (int) get_setting_num($conDB, 'loan_max_installments', 12);
+
         $endOfServiceBenefit = calculateEndOfService($joining_date, $total_salary);
-        $maxAllowedEOS = $endOfServiceBenefit * 0.40; // 40%
+        $maxAllowedEOS = $endOfServiceBenefit * $loanMaxPctEos;
 
         if ($loan_amount > $maxAllowedEOS) {
             echo json_encode([
                 'status' => 'error',
                 'title' => 'Amount Exceeded',
-                'message' => 'Maximum allowed is 40% of your End of Service benefit: SAR ' . round($maxAllowedEOS, 2),
+                'message' => 'Maximum allowed is ' . round($loanMaxPctEos * 100, 2) . '% of your End of Service benefit: SAR ' . round($maxAllowedEOS, 2),
                 'type' => 'error'
             ]);
             return;
         }
 
-        // Get installments (must be provided and <= 12)
+        // Get installments (must be provided and <= loan_max_installments)
         if (!isset($_POST['installments'])) {
             echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Number of installments is required for End of Service loan.', 'type' => 'error']);
             return;
         }
-        
+
         $installments = filter_var($_POST['installments'], FILTER_VALIDATE_INT);
-        if ($installments === false || $installments <= 0 || $installments > 12) {
-            echo json_encode(['status' => 'error', 'title' => 'Invalid Installments', 'message' => 'Installments must be between 1 and 12 months.', 'type' => 'error']);
+        if ($installments === false || $installments <= 0 || $installments > $loanMaxInstallments) {
+            echo json_encode(['status' => 'error', 'title' => 'Invalid Installments', 'message' => "Installments must be between 1 and {$loanMaxInstallments} months.", 'type' => 'error']);
             return;
         }
 
@@ -1386,23 +1392,25 @@ function apply_for_loan() {
             return;
         }
 
+        $loanMaxInstallments = (int) get_setting_num($conDB, 'loan_max_installments', 12);
         $installments = filter_var($_POST['installments'], FILTER_VALIDATE_INT);
-        if ($installments === false || $installments <= 0 || $installments > 12) {
-            echo json_encode(['status' => 'error', 'title' => 'Invalid Installments', 'message' => 'Installments must be between 1 and 12 months.', 'type' => 'error']);
+        if ($installments === false || $installments <= 0 || $installments > $loanMaxInstallments) {
+            echo json_encode(['status' => 'error', 'title' => 'Invalid Installments', 'message' => "Installments must be between 1 and {$loanMaxInstallments} months.", 'type' => 'error']);
             return;
         }
 
         $monthly_deduction = $loan_amount / $installments;
 
     } elseif ($loan_type === 'advance_salary') {
-        // Advance Salary Rules:
-        // - Maximum 50% of monthly salary
+        // Advance Salary Rules (configurable via App Settings - Loan Settings tab):
+        // - Maximum loan_max_pct_advance% of monthly salary
         // - Deducted in full in next payroll (1 installment)
-        
-        $max_advance = $total_salary * 0.5;
-        
+
+        $loanMaxPctAdvance = get_setting_num($conDB, 'loan_max_pct_advance', 50) / 100;
+        $max_advance = $total_salary * $loanMaxPctAdvance;
+
         if ($loan_amount > $max_advance) {
-            echo json_encode(['status' => 'error', 'title' => 'Amount Exceeded', 'message' => 'Maximum advance salary is 50% of your monthly salary: SAR ' . round($max_advance, 2), 'type' => 'error']);
+            echo json_encode(['status' => 'error', 'title' => 'Amount Exceeded', 'message' => 'Maximum advance salary is ' . round($loanMaxPctAdvance * 100, 2) . '% of your monthly salary: SAR ' . round($max_advance, 2), 'type' => 'error']);
             return;
         }
 
@@ -2981,11 +2989,12 @@ function check_loan_eligibility() {
     ];
 
     if ($loan_type === 'end_of_service') {
-        $maxAllowedEOS = $endOfServiceBenefit * 0.40;
+        $loanMaxPctEos = get_setting_num($conDB, 'loan_max_pct_eos', 40) / 100;
+        $maxAllowedEOS = $endOfServiceBenefit * $loanMaxPctEos;
         $eligibility['eligible'] = true;
         $eligibility['min_amount'] = 0; // No minimum specified in new requirement
         $eligibility['max_amount'] = round($maxAllowedEOS, 2);
-        $eligibility['max_installments'] = 12;
+        $eligibility['max_installments'] = (int) get_setting_num($conDB, 'loan_max_installments', 12);
         if ($show_full_details) {
             $eligibility['message_key'] = 'loan_eos_eligible_message_40pct';
             $eligibility['message_data'] = [
@@ -3037,7 +3046,8 @@ function check_loan_eligibility() {
         }
 
     } elseif ($loan_type === 'advance_salary') {
-        $max_advance = $total_salary * 0.5;
+        $loanMaxPctAdvance = get_setting_num($conDB, 'loan_max_pct_advance', 50) / 100;
+        $max_advance = $total_salary * $loanMaxPctAdvance;
         $eligibility['eligible'] = true;
         $eligibility['max_amount'] = $max_advance;
         $eligibility['min_amount'] = 0;
@@ -3568,11 +3578,12 @@ function updateLoanInstallments() {
         return;
     }
     
-    // Validate installments: must be between 1 and 60
-    if ($installments === false || $installments < 1 || $installments > 60) {
+    // Validate installments: must be between 1 and the configurable edit-plan max
+    $loanInstallmentEditMax = (int) get_setting_num($conDB, 'loan_installment_edit_max', 60);
+    if ($installments === false || $installments < 1 || $installments > $loanInstallmentEditMax) {
         echo json_encode([
             'status' => 400,
-            'message' => 'Installments must be between 1 and 60'
+            'message' => "Installments must be between 1 and {$loanInstallmentEditMax}"
         ]);
         return;
     }

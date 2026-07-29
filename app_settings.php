@@ -4,6 +4,10 @@
     $canAccessDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessJobTitlesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessRequestBlocksTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessLoanSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_loan_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessVacationPayrollTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_vacation_payroll_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessOvertimeSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_overtime_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessDeductionSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_deduction_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -244,6 +248,10 @@
         const canAccessDepartmentsTab = <?= $canAccessDepartmentsTab ? 'true' : 'false' ?>;
         const canAccessJobTitlesTab = <?= $canAccessJobTitlesTab ? 'true' : 'false' ?>;
         const canAccessRequestBlocksTab = <?= $canAccessRequestBlocksTab ? 'true' : 'false' ?>;
+        const canAccessLoanSettingsTab = <?= $canAccessLoanSettingsTab ? 'true' : 'false' ?>;
+        const canAccessVacationPayrollTab = <?= $canAccessVacationPayrollTab ? 'true' : 'false' ?>;
+        const canAccessOvertimeSettingsTab = <?= $canAccessOvertimeSettingsTab ? 'true' : 'false' ?>;
+        const canAccessDeductionSettingsTab = <?= $canAccessDeductionSettingsTab ? 'true' : 'false' ?>;
         const requestTypeBlockLabels = <?= json_encode(get_blockable_request_type_labels(), JSON_UNESCAPED_UNICODE) ?>;
         let appSettings = [];
         let groupedSettings = {};
@@ -566,6 +574,14 @@
                 return;
             }
 
+            // Special handling for the Payroll Settings hub (loan / vacation / overtime /
+            // deduction all live as sub-tabs INSIDE this one entry, so they never get
+            // interleaved alphabetically with unrelated tabs like Departments or Email).
+            if (normalizedGroupName === 'payroll_settings') {
+                renderPayrollSettingsHub();
+                return;
+            }
+
             formHtml += `<div class="tab-pane active" id="group-${groupName}" role="tabpanel">`;
             settings.forEach(setting => {
                 const id = `setting-${setting.setting_name}`;
@@ -666,6 +682,483 @@
             attachPreviewListeners();
             attachEmailListListeners();
             attachSessionTimeoutListeners();
+        }
+
+        // --- Payroll Settings Hub ---
+        // A single top-level "Payroll Settings" tab holds Loan / Vacation Payroll /
+        // Overtime / Deduction as inner sub-tabs, so these parameters stay grouped
+        // together and never get interleaved alphabetically with unrelated tabs
+        // (Departments, Email, Security, ...) in the outer nav.
+        const PAYROLL_SETTINGS_SUB_TABS = [
+            { key: 'loan_settings', label: '<?= __('loan_settings', 'Loan Settings') ?>', canAccess: () => canAccessLoanSettingsTab },
+            { key: 'vacation_payroll', label: '<?= __('vacation_payroll_settings', 'Vacation Payroll Settings') ?>', canAccess: () => canAccessVacationPayrollTab },
+            { key: 'overtime_settings', label: '<?= __('overtime_settings', 'Overtime Settings') ?>', canAccess: () => canAccessOvertimeSettingsTab },
+            { key: 'deduction_settings', label: '<?= __('deduction_settings', 'Deduction Settings') ?>', canAccess: () => canAccessDeductionSettingsTab },
+        ];
+
+        function renderPayrollSettingsHub() {
+            const visibleTabs = PAYROLL_SETTINGS_SUB_TABS.filter(tab => tab.canAccess());
+
+            let navHtml = '<ul class="nav nav-pills mb-3" id="payroll-settings-sub-nav">';
+            visibleTabs.forEach((tab, idx) => {
+                navHtml += `
+                    <li class="nav-item">
+                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
+                    </li>
+                `;
+            });
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-payroll_settings" role="tabpanel">
+                    ${navHtml}
+                    <div id="payroll-settings-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('payroll-settings-sub-content');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#payroll-settings-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                if (key === 'deduction_settings') {
+                    renderDeductionSettingsGroup(subContent);
+                } else {
+                    const tab = PAYROLL_SETTINGS_SUB_TABS.find(t => t.key === key);
+                    renderPayrollParamGroup(key, tab.label, subContent);
+                }
+            }
+
+            document.querySelectorAll('#payroll-settings-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            if (visibleTabs.length > 0) {
+                renderSubTab(visibleTabs[0].key);
+            } else {
+                subContent.innerHTML = '<p class="text-center text-danger"><?= __('access_denied', 'Access denied') ?></p>';
+            }
+        }
+
+        // These render independently of the main settings form/save button: each posts
+        // straight to includes/payroll_settings_handler.php, which is permission-checked
+        // per group (admin OR the matching Special Access key), so a restricted grantee
+        // only ever sees and edits the one group they were given.
+        async function renderPayrollParamGroup(group, title, hostEl) {
+            hostEl.innerHTML = `
+                <h5 class="mb-3">${title}</h5>
+                <div id="payroll-param-fields-${group}">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2"><?= __('loading') ?></span>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_payroll_settings', group })
+                });
+                const data = await response.json();
+                const container = document.getElementById(`payroll-param-fields-${group}`);
+
+                if (!data.success) {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '<?= __('access_denied', 'Access denied') ?>'}</p>`;
+                    return;
+                }
+
+                let formHtml = '';
+                data.settings.forEach(setting => {
+                    const id = `payroll-param-${setting.setting_name}`;
+                    formHtml += `
+                        <div class="form-group row">
+                            <label for="${id}" class="col-sm-4 col-form-label">${translateText(setting.description)}</label>
+                            <div class="col-sm-8">
+                                <input type="text" inputmode="decimal" id="${id}" data-setting-name="${setting.setting_name}" class="form-control payroll-param-input" value="${setting.setting_value ?? ''}">
+                            </div>
+                        </div>
+                    `;
+                });
+                formHtml += `<button type="button" class="btn btn-primary mt-2" id="btn-save-${group}"><?= __('save', 'Save') ?></button>`;
+                container.innerHTML = formHtml;
+
+                document.getElementById(`btn-save-${group}`).addEventListener('click', async function() {
+                    const payload = new URLSearchParams({ action: 'update_payroll_settings', group });
+                    container.querySelectorAll('.payroll-param-input').forEach(input => {
+                        payload.append(input.dataset.settingName, input.value.trim());
+                    });
+
+                    try {
+                        const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: payload
+                        });
+                        const saveResult = await saveResponse.json();
+                        if (saveResult.success) {
+                            Swal.fire('<?= __('saved', 'Saved') ?>', '<?= __('your_settings_have_been_updated_successfully') ?>', 'success');
+                        } else {
+                            Swal.fire('<?= __('error') ?>', saveResult.message || '<?= __('could_not_save_settings') ?>', 'error');
+                        }
+                    } catch (error) {
+                        Swal.fire('<?= __('request_failed') ?>', error.message, 'error');
+                    }
+                });
+            } catch (error) {
+                document.getElementById(`payroll-param-fields-${group}`).innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        // Salary components an admin can pick from for the deduction base (e.g. GOSI base).
+        const DEDUCTION_BASE_COMPONENT_LABELS = {
+            basic_salary: '<?= __('basic_salary', 'Basic Salary') ?>',
+            housing_allowance: '<?= __('housing_allowance', 'Housing Allowance') ?>',
+            transport_allowance: '<?= __('transport_allowance', 'Transportation Allowance') ?>',
+            food_allowance: '<?= __('food_allowance', 'Food Allowance') ?>',
+            miscellaneous_allowance: '<?= __('miscellaneous_allowance', 'Miscellaneous Allowance') ?>',
+            cashier_allowance: '<?= __('cashier_allowance', 'Cashier Allowance') ?>',
+            fuel_allowance: '<?= __('fuel_allowance', 'Fuel Allowance') ?>',
+            telephone_allowance: '<?= __('telephone_allowance', 'Telephone Allowance') ?>',
+            other_allowance: '<?= __('other_allowance', 'Other Allowance') ?>',
+            guard_allowance: '<?= __('guard_allowance', 'Guard Allowance') ?>',
+        };
+
+        async function renderDeductionSettingsGroup(hostEl) {
+            hostEl.innerHTML = `
+                <h5 class="mb-3"><?= __('deduction_base_components', 'Deduction Base Components') ?></h5>
+                <p class="text-muted"><?= __('deduction_base_components_hint', 'Select which salary components are summed as the base for percentage-based deductions (e.g. GOSI).') ?></p>
+                <div id="deduction-base-components-fields">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2"><?= __('loading') ?></span>
+                    </div>
+                </div>
+                <hr class="my-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><?= __('deduction_types', 'Deduction Types') ?></h5>
+                    <button type="button" class="btn btn-sm btn-success" id="btn-add-deduction-type"><i class="mdi mdi-plus"></i> <?= __('add_new', 'Add New') ?></button>
+                </div>
+                <div id="deduction-types-container" class="border rounded p-3 bg-light">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2"><?= __('loading') ?></span>
+                    </div>
+                </div>
+            `;
+
+            loadDeductionBaseComponents();
+            loadDeductionTypes();
+
+            document.getElementById('btn-add-deduction-type').addEventListener('click', showAddDeductionTypeModal);
+        }
+
+        async function loadDeductionBaseComponents() {
+            const container = document.getElementById('deduction-base-components-fields');
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_payroll_settings', group: 'deduction_settings' })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '<?= __('access_denied', 'Access denied') ?>'}</p>`;
+                    return;
+                }
+
+                const setting = data.settings.find(s => s.setting_name === 'deduction_base_components');
+                let selected = [];
+                try {
+                    const parsed = JSON.parse(setting ? setting.setting_value : '[]');
+                    selected = Array.isArray(parsed) ? parsed : [];
+                } catch (e) {
+                    selected = [];
+                }
+
+                let checkboxesHtml = '<div class="row">';
+                Object.entries(DEDUCTION_BASE_COMPONENT_LABELS).forEach(([key, label]) => {
+                    const checked = selected.includes(key) ? 'checked' : '';
+                    checkboxesHtml += `
+                        <div class="col-sm-6 col-md-4 mb-2">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input deduction-base-component-checkbox" id="dbc-${key}" value="${key}" ${checked}>
+                                <label class="custom-control-label" for="dbc-${key}">${label}</label>
+                            </div>
+                        </div>
+                    `;
+                });
+                checkboxesHtml += '</div>';
+                checkboxesHtml += `<button type="button" class="btn btn-primary mt-2" id="btn-save-deduction-base"><?= __('save', 'Save') ?></button>`;
+                container.innerHTML = checkboxesHtml;
+
+                document.getElementById('btn-save-deduction-base').addEventListener('click', async function() {
+                    const chosen = Array.from(container.querySelectorAll('.deduction-base-component-checkbox:checked')).map(cb => cb.value);
+                    try {
+                        const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({
+                                action: 'update_payroll_settings',
+                                group: 'deduction_settings',
+                                deduction_base_components: JSON.stringify(chosen)
+                            })
+                        });
+                        const saveResult = await saveResponse.json();
+                        if (saveResult.success) {
+                            Swal.fire('<?= __('saved', 'Saved') ?>', '<?= __('your_settings_have_been_updated_successfully') ?>', 'success');
+                        } else {
+                            Swal.fire('<?= __('error') ?>', saveResult.message || '<?= __('could_not_save_settings') ?>', 'error');
+                        }
+                    } catch (error) {
+                        Swal.fire('<?= __('request_failed') ?>', error.message, 'error');
+                    }
+                });
+            } catch (error) {
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        async function loadDeductionTypes() {
+            const container = document.getElementById('deduction-types-container');
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_deduction_types' })
+                });
+                const data = await response.json();
+
+                if (!data.success) {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '<?= __('access_denied', 'Access denied') ?>'}</p>`;
+                    return;
+                }
+
+                if (!data.deduction_types || data.deduction_types.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><?= __('no_deduction_types_configured_yet', 'No deduction types configured yet') ?></p>';
+                    return;
+                }
+
+                let tableHtml = `<div class="table-responsive"><table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th><?= __('name') ?></th>
+                            <th><?= __('counts_in_net_pay', 'Counts in Net Pay') ?></th>
+                            <th><?= __('active') ?></th>
+                            <th><?= __('actions') ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                data.deduction_types.forEach(type => {
+                    tableHtml += `
+                        <tr data-id="${type.id}">
+                            <td><strong>${type.name}</strong></td>
+                            <td>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input deduction-type-counts-toggle" id="dt-counts-${type.id}" data-id="${type.id}" ${Number(type.counts_in_net) === 1 ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="dt-counts-${type.id}"></label>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input deduction-type-status-toggle" id="dt-status-${type.id}" data-id="${type.id}" ${Number(type.status) === 1 ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="dt-status-${type.id}"></label>
+                                </div>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary edit-deduction-type-btn" data-id="${type.id}" data-name="${type.name}" title="<?= __('edit') ?>">
+                                    <i class="mdi mdi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-deduction-type-btn" data-id="${type.id}" title="<?= __('delete') ?>">
+                                    <i class="mdi mdi-delete"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                tableHtml += '</tbody></table></div>';
+                container.innerHTML = tableHtml;
+
+                container.querySelectorAll('.deduction-type-counts-toggle, .deduction-type-status-toggle').forEach(toggle => {
+                    toggle.addEventListener('change', function() {
+                        saveDeductionTypeToggle(this.dataset.id);
+                    });
+                });
+                container.querySelectorAll('.edit-deduction-type-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        showEditDeductionTypeModal(this.dataset.id, this.dataset.name);
+                    });
+                });
+                container.querySelectorAll('.delete-deduction-type-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        deleteDeductionType(this.dataset.id);
+                    });
+                });
+            } catch (error) {
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        async function saveDeductionTypeToggle(id) {
+            const row = document.querySelector(`#deduction-types-container tr[data-id="${id}"]`);
+            const name = row.querySelector('td strong').textContent;
+            const countsInNet = row.querySelector('.deduction-type-counts-toggle').checked;
+            const status = row.querySelector('.deduction-type-status-toggle').checked;
+
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'update_deduction_type',
+                        id, name,
+                        counts_in_net: countsInNet ? '1' : '0',
+                        status: status ? '1' : '0'
+                    })
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    Swal.fire('<?= __('error') ?>', result.message || '<?= __('could_not_save_settings') ?>', 'error');
+                    loadDeductionTypes();
+                }
+            } catch (error) {
+                Swal.fire('<?= __('request_failed') ?>', error.message, 'error');
+                loadDeductionTypes();
+            }
+        }
+
+        function showAddDeductionTypeModal() {
+            Swal.fire({
+                icon: 'info',
+                title: '<?= __('add_new_deduction_type', 'Add New Deduction Type') ?>',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="deduction-type-name"><?= __('name') ?></label>
+                        <input type="text" id="deduction-type-name" class="form-control" placeholder="<?= __('e.g. Late Deduction') ?>">
+                    </div>
+                    <div class="form-group text-left custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="deduction-type-counts" checked>
+                        <label class="custom-control-label" for="deduction-type-counts"><?= __('counts_in_net_pay', 'Counts in Net Pay') ?></label>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '<?= __('add', 'Add') ?>',
+                preConfirm: () => {
+                    const name = document.getElementById('deduction-type-name').value.trim();
+                    if (!name) {
+                        Swal.showValidationMessage('<?= __('name_is_required', 'Name is required') ?>');
+                        return false;
+                    }
+                    return {
+                        name,
+                        counts_in_net: document.getElementById('deduction-type-counts').checked
+                    };
+                }
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                try {
+                    const response = await fetch('./includes/payroll_settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            action: 'add_deduction_type',
+                            name: result.value.name,
+                            counts_in_net: result.value.counts_in_net ? '1' : '0'
+                        })
+                    });
+                    const addResult = await response.json();
+                    if (addResult.success) {
+                        loadDeductionTypes();
+                    } else {
+                        Swal.fire('<?= __('error') ?>', addResult.message || '<?= __('could_not_save_settings') ?>', 'error');
+                    }
+                } catch (error) {
+                    Swal.fire('<?= __('request_failed') ?>', error.message, 'error');
+                }
+            });
+        }
+
+        function showEditDeductionTypeModal(id, currentName) {
+            Swal.fire({
+                icon: 'info',
+                title: '<?= __('edit_deduction_type', 'Edit Deduction Type') ?>',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="deduction-type-edit-name"><?= __('name') ?></label>
+                        <input type="text" id="deduction-type-edit-name" class="form-control" value="${currentName}">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '<?= __('save', 'Save') ?>',
+                preConfirm: () => {
+                    const name = document.getElementById('deduction-type-edit-name').value.trim();
+                    if (!name) {
+                        Swal.showValidationMessage('<?= __('name_is_required', 'Name is required') ?>');
+                        return false;
+                    }
+                    return name;
+                }
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                const row = document.querySelector(`#deduction-types-container tr[data-id="${id}"]`);
+                const countsInNet = row.querySelector('.deduction-type-counts-toggle').checked;
+                const status = row.querySelector('.deduction-type-status-toggle').checked;
+                try {
+                    const response = await fetch('./includes/payroll_settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            action: 'update_deduction_type',
+                            id,
+                            name: result.value,
+                            counts_in_net: countsInNet ? '1' : '0',
+                            status: status ? '1' : '0'
+                        })
+                    });
+                    const updateResult = await response.json();
+                    if (updateResult.success) {
+                        loadDeductionTypes();
+                    } else {
+                        Swal.fire('<?= __('error') ?>', updateResult.message || '<?= __('could_not_save_settings') ?>', 'error');
+                    }
+                } catch (error) {
+                    Swal.fire('<?= __('request_failed') ?>', error.message, 'error');
+                }
+            });
+        }
+
+        function deleteDeductionType(id) {
+            Swal.fire({
+                icon: 'warning',
+                title: '<?= __('are_you_sure', 'Are you sure?') ?>',
+                text: '<?= __('this_action_cannot_be_undone', 'This action cannot be undone.') ?>',
+                showCancelButton: true,
+                confirmButtonText: '<?= __('delete') ?>',
+                confirmButtonColor: '#dc3545'
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                try {
+                    const response = await fetch('./includes/payroll_settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'delete_deduction_type', id })
+                    });
+                    const deleteResult = await response.json();
+                    if (deleteResult.success) {
+                        loadDeductionTypes();
+                    } else {
+                        Swal.fire('<?= __('error') ?>', deleteResult.message || '<?= __('could_not_save_settings') ?>', 'error');
+                    }
+                } catch (error) {
+                    Swal.fire('<?= __('request_failed') ?>', error.message, 'error');
+                }
+            });
         }
 
         function attachSessionTimeoutListeners() {
@@ -2500,6 +2993,9 @@
                     if (canAccessRequestBlocksTab) {
                         groupedSettings['request type blocks'] = [];
                     }
+                    if (canAccessLoanSettingsTab || canAccessVacationPayrollTab || canAccessOvertimeSettingsTab || canAccessDeductionSettingsTab) {
+                        groupedSettings['payroll_settings'] = [];
+                    }
 
                     const savedGroup = localStorage.getItem('app_settings_active_group');
                     const groups = Object.keys(groupedSettings).sort();
@@ -2507,7 +3003,7 @@
                     let restrictedNavHtml = '';
                     groups.forEach((group) => {
                         const isActive = (savedGroup === group);
-                        const translatedGroup = translateText(group);
+                        const translatedGroup = translateText(group.replace(/_/g, ' '));
                         restrictedNavHtml += `
                             <li class="nav-item">
                                 <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
@@ -2548,7 +3044,12 @@
                 const data = await response.json();
                 if (!data.success) throw new Error(data.message || '<?= __('Failed to retrieve settings.') ?>');
 
-                appSettings = data.settings;
+                // These 4 groups are rendered only as sub-tabs inside the single "Payroll
+                // Settings" hub (see renderPayrollSettingsHub / PAYROLL_SETTINGS_SUB_TABS),
+                // never as their own top-level nav entries - drop their raw rows here so
+                // they don't also show up mixed in alphabetically with unrelated tabs.
+                const payrollSubGroupKeys = PAYROLL_SETTINGS_SUB_TABS.map(t => t.key);
+                appSettings = data.settings.filter(s => !payrollSubGroupKeys.includes(s.setting_group));
                 groupedSettings = appSettings.reduce((acc, setting) => {
                     const group = setting.setting_group;
                     if (!acc[group]) acc[group] = [];
@@ -2579,6 +3080,9 @@
                 if (!groupedSettings['request type blocks']) {
                     groupedSettings['request type blocks'] = [];
                 }
+                if (!groupedSettings['payroll_settings']) {
+                    groupedSettings['payroll_settings'] = [];
+                }
 
                 // Restore last active group from localStorage if available
                 const savedGroup = localStorage.getItem('app_settings_active_group');
@@ -2588,7 +3092,7 @@
                 groups.forEach((group) => {
                     const isActive = (savedGroup === group);
                     const displayGroup = group.replace(/_/g, ' '); // Display with spaces instead of underscores
-                    const translatedGroup = translateText(group); // Translate the group name
+                    const translatedGroup = translateText(displayGroup); // Translate the group name
                     navHtml += `
                         <li class="nav-item">
                             <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">

@@ -1036,6 +1036,9 @@
                                                             <button type="button" class="dropdown-item hidden" id="actionPayslipsBtn" style="display:none;">
                                                                 <i class="fa fa-solid fa-file-invoice"></i> <?= __('payslips', 'Payslips') ?>
                                                             </button>
+                                                            <button type="button" class="dropdown-item hidden" id="actionPayrollSummaryReportBtn" style="display:none;">
+                                                                <i class="fa fa-solid fa-file-invoice-dollar"></i> <?= __('payroll_summary_report', 'Payroll Summary Report') ?>
+                                                            </button>
                                                             <button type="button" class="dropdown-item hidden" id="actionToggleFeedbackFilterBtn" style="display:none;">
                                                                 <i class="fa fa-solid fa-comment-dots"></i>
                                                                 <span class="feedback-filter-btn-label"><?= __('show_feedback_employees', 'Show Feedback Employees') ?></span>
@@ -1972,6 +1975,7 @@ $(document).ready(function() {
     fetchBenefitTypes();
     $('#actionGenerateReportBtn').off('click').on('click', generatePayrollReport);
     $('#actionPayslipsBtn').off('click').on('click', openPayslipsModal);
+    $('#actionPayrollSummaryReportBtn').off('click').on('click', generatePayrollSummaryReportPdf);
 
     const paymentQueryParams = new URLSearchParams(window.location.search);
     const paymentMonthFromUrl = (paymentQueryParams.get('payment_month') || '').trim();
@@ -2211,6 +2215,13 @@ function updateRegenerateButtonVisibility() {
         $('#actionPayslipsBtn').removeClass('hidden').show();
     } else {
         $('#actionPayslipsBtn').addClass('hidden').hide();
+    }
+
+    // Payroll Summary Report (by company) is only available once the month is fully Paid
+    if (monthPaid) {
+        $('#actionPayrollSummaryReportBtn').removeClass('hidden').show();
+    } else {
+        $('#actionPayrollSummaryReportBtn').addClass('hidden').hide();
     }
 }
         
@@ -6156,6 +6167,224 @@ function openPayslipsFile(base, data) {
             return false;
         }
 
+        // --- Payroll Summary Report (by company), available once the month is Paid ---
+        async function generatePayrollSummaryReportPdf() {
+            const selectedMonth = $('#payrollMonth').val();
+            if (!selectedMonth) {
+                showWarning(__('please_select_month', 'Please select a month.'), '');
+                return;
+            }
+
+            const monthLabel = new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' });
+
+            Swal.fire({
+                title: __('generating_report_title'),
+                html: `${__('fetching_payroll_data_for_month')} ${monthLabel}. ${__('please_wait_fetching_data')}`,
+                didOpen: () => Swal.showLoading(),
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
+
+            try {
+                const response = await fetch(`./includes/api/get_payroll_report.php?month=${selectedMonth}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server responded with status ${response.status}: ${errorText}`);
+                }
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    Swal.close();
+                    showError('Error', data.message || 'Failed to load payroll data.');
+                    return;
+                }
+
+                const reportData = Array.isArray(data.report) ? data.report : [];
+                // Exclude Hold (payment_type = 3) employees, matching the Total Net figure
+                // used elsewhere in the app (checklist report / approvals list).
+                const filteredReportData = reportData.filter(p => parseInt(p.payment_type || 1, 10) !== 3);
+
+                if (filteredReportData.length === 0) {
+                    Swal.close();
+                    showWarning(__('no_data_available_in_table'), __('no_records_to_export'));
+                    return;
+                }
+
+                // Group by company
+                const byCompany = {};
+                filteredReportData.forEach(p => {
+                    const company = p.comp_name || __('unassigned_company', 'Unassigned');
+                    if (!byCompany[company]) {
+                        byCompany[company] = { employees: 0, bank: 0, cash: 0, net: 0 };
+                    }
+                    const netSalary = parseFloat(p.net_salary || 0);
+                    const pt = parseInt(p.payment_type || 1, 10);
+                    byCompany[company].employees += 1;
+                    if (pt === 2) {
+                        byCompany[company].cash += netSalary;
+                    } else {
+                        byCompany[company].bank += netSalary;
+                    }
+                    byCompany[company].net += netSalary;
+                });
+
+                const formatAmount = (value) => Number(value || 0).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+                const formatCount = (value) => Number(value || 0).toLocaleString();
+
+                const companies = Object.keys(byCompany).sort();
+                const body = companies.map((company, index) => [
+                    formatCount(index + 1),
+                    formatCount(byCompany[company].employees),
+                    company,
+                    formatAmount(byCompany[company].bank),
+                    formatAmount(byCompany[company].cash),
+                    formatAmount(byCompany[company].net)
+                ]);
+
+                const grandEmployees = companies.reduce((sum, c) => sum + byCompany[c].employees, 0);
+                const grandBank = companies.reduce((sum, c) => sum + byCompany[c].bank, 0);
+                const grandCash = companies.reduce((sum, c) => sum + byCompany[c].cash, 0);
+                const grandNet = companies.reduce((sum, c) => sum + byCompany[c].net, 0);
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+                const pageWidth = doc.internal.pageSize.width;
+                const pageHeight = doc.internal.pageSize.height;
+                const margin = 40;
+                const brandColor = [26, 61, 107];   // dark blue
+                const accentBlue = [41, 128, 185];
+                const accentGreen = [39, 174, 96];
+                const accentAmber = [230, 126, 34];
+                const nowStamp = new Date();
+
+                // --- Header banner ---
+                doc.setFillColor(...brandColor);
+                doc.rect(0, 0, pageWidth, 64, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(18);
+                doc.setFont(undefined, 'bold');
+                doc.text(__('payroll_summary_report', 'Payroll Summary Report'), margin, 32);
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'normal');
+                doc.text(monthLabel, margin, 50);
+                doc.setFontSize(8);
+                doc.text(
+                    `${__('generated_on', 'Generated on')}: ${nowStamp.toLocaleString()}`,
+                    pageWidth - margin,
+                    50,
+                    { align: 'right' }
+                );
+
+                // --- KPI stat cards ---
+                const cardY = 82;
+                const cardH = 46;
+                const cardGap = 16;
+                const cardW = (pageWidth - margin * 2 - cardGap * 2) / 3;
+                const cards = [
+                    { label: __('total_companies', 'Total Companies'), value: formatCount(companies.length), color: accentBlue },
+                    { label: __('employees', 'Total Employees'), value: formatCount(grandEmployees), color: accentAmber },
+                    { label: __('grand_total_label', 'Grand Total') + ' (SAR)', value: formatAmount(grandNet), color: accentGreen }
+                ];
+                cards.forEach((card, i) => {
+                    const cardX = margin + i * (cardW + cardGap);
+                    doc.setFillColor(...card.color);
+                    doc.roundedRect(cardX, cardY, cardW, cardH, 4, 4, 'F');
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFontSize(9);
+                    doc.setFont(undefined, 'normal');
+                    doc.text(card.label, cardX + 12, cardY + 17);
+                    doc.setFontSize(15);
+                    doc.setFont(undefined, 'bold');
+                    doc.text(card.value, cardX + 12, cardY + 36);
+                });
+
+                doc.autoTable({
+                    startY: cardY + cardH + 20,
+                    margin: { top: 40, bottom: 36, left: margin, right: margin },
+                    head: [[
+                        '#',
+                        __('employees', 'Total Employees'),
+                        __('all_companies_option', 'All Companies'),
+                        __('total_bank', 'Total Bank'),
+                        __('total_cash', 'Total Cash'),
+                        __('total_net', 'Total Net Salary')
+                    ]],
+                    body: body,
+                    foot: [[
+                        '',
+                        formatCount(grandEmployees),
+                        { content: __('all_companies_option', 'All Companies'), styles: { halign: 'left', fontStyle: 'bold' } },
+                        formatAmount(grandBank),
+                        formatAmount(grandCash),
+                        formatAmount(grandNet)
+                    ]],
+                    theme: 'striped',
+                    headStyles: {
+                        fillColor: brandColor,
+                        textColor: 255,
+                        fontStyle: 'bold',
+                        halign: 'center',
+                        fontSize: 10.5
+                    },
+                    alternateRowStyles: {
+                        fillColor: [237, 242, 247]
+                    },
+                    styles: {
+                        fontSize: 10,
+                        cellPadding: 7,
+                        valign: 'middle',
+                        lineColor: [220, 224, 229],
+                        lineWidth: 0.5
+                    },
+                    footStyles: {
+                        fillColor: accentGreen,
+                        textColor: 255,
+                        fontStyle: 'bold',
+                        halign: 'right',
+                        fontSize: 10.5
+                    },
+                    columnStyles: {
+                        0: { halign: 'center', cellWidth: 40 },
+                        1: { halign: 'right', cellWidth: 110 },
+                        3: { halign: 'right', cellWidth: 120 },
+                        4: { halign: 'right', cellWidth: 120 },
+                        5: { halign: 'right', cellWidth: 130 }
+                    },
+                    didDrawPage: function (data) {
+                        // Footer bar
+                        doc.setFillColor(...brandColor);
+                        doc.rect(0, pageHeight - 26, pageWidth, 26, 'F');
+                        doc.setTextColor(255, 255, 255);
+                        doc.setFontSize(8);
+                        doc.text(
+                            `${__('page_footer')} ${doc.internal.getCurrentPageInfo().pageNumber} / ${doc.internal.getNumberOfPages()}`,
+                            pageWidth - margin,
+                            pageHeight - 10,
+                            { align: 'right' }
+                        );
+                        doc.text('Al-Mutlak', margin, pageHeight - 10);
+                    }
+                });
+
+                Swal.close();
+
+                const now = new Date();
+                const mm = String(now.getMonth() + 1).padStart(2, '0');
+                const dd = String(now.getDate()).padStart(2, '0');
+                const yy = String(now.getFullYear()).slice(-2);
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mins = String(now.getMinutes()).padStart(2, '0');
+                const ss = String(now.getSeconds()).padStart(2, '0');
+                doc.save(`Payroll_Summary_Report_${selectedMonth}_${dd}${mm}${yy}_${hh}${mins}${ss}.pdf`);
+            } catch (error) {
+                console.error('Error generating payroll summary report:', error);
+                Swal.close();
+                showError('Network Error', `Error connecting to the server or parsing data: ${error.message}.`);
+            }
+        }
+
         // --- PDF Export Function (MODIFIED FOR DETAILED REPORT) ---
         async function exportPdfReport(reportData, selectedMonth) {
             const { jsPDF } = window.jspdf;
@@ -6637,6 +6866,25 @@ function openPayslipsFile(base, data) {
                 return String(value);
             };
 
+            // Builds a "4 Days 2 Hours 23 Minutes" style label from whichever quantity
+            // columns are actually populated on the row - independent of calculation_type,
+            // so any combination (days + hours + minutes together) is shown in full instead
+            // of only the one dimension the row's type implies. Returns null when nothing
+            // is recorded, so callers can fall back to a plain name: amount line.
+            const formatDurationLabel = (hoursVal, minutesVal, daysVal) => {
+                const parts = [];
+                if (daysVal > 0) {
+                    parts.push(`${daysVal} ${daysVal === 1 ? 'Day' : 'Days'}`);
+                }
+                if (hoursVal > 0) {
+                    parts.push(`${hoursVal} ${hoursVal === 1 ? 'Hour' : 'Hours'}`);
+                }
+                if (minutesVal > 0) {
+                    parts.push(`${minutesVal} ${minutesVal === 1 ? 'Minute' : 'Minutes'}`);
+                }
+                return parts.length > 0 ? parts.join(' ') : null;
+            };
+
             // 1. Create header rows (current sheet unchanged)
             const headerRow1 = [
                 '#', 'Emp ID', 'Employee Name', 'Company', 'Department', 'Payment Type',
@@ -6651,18 +6899,10 @@ function openPayslipsFile(base, data) {
                     ? p.benefits_list.map(b => {
                         const amount = getNumeric(b.note || 0).toFixed(2);
                         const hoursVal = getNumeric(b.hours || 0);
+                        const minutesVal = getNumeric(b.minutes || 0);
                         const daysVal = getNumeric(b.days || 0);
-                        let detailsText = '';
-
-                        if (b.calculation_type === 'by_days') {
-                            detailsText = daysVal > 0 ? `${daysVal} Days: ${amount}` : `${b.benefit || 'Benefit'}: ${amount}`;
-                        } else if (b.calculation_type === 'by_hours' || b.calculation_type === 'overtime_basic' || b.calculation_type === 'overtime_total') {
-                            detailsText = hoursVal > 0 ? `${hoursVal} Hours: ${amount}` : `${b.benefit || 'Benefit'}: ${amount}`;
-                        } else {
-                            detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
-                        }
-
-                        return detailsText;
+                        const durationLabel = formatDurationLabel(hoursVal, minutesVal, daysVal);
+                        return durationLabel ? `${durationLabel}: ${amount}` : `${b.benefit || 'Benefit'}: ${amount}`;
                     }).join(' | ')
                     : '';
 
@@ -6670,18 +6910,10 @@ function openPayslipsFile(base, data) {
                     ? p.deductions_list.map(d => {
                         const amount = getNumeric(d.note || 0).toFixed(2);
                         const hoursVal = getNumeric(d.hours || 0);
+                        const minutesVal = getNumeric(d.minutes || 0);
                         const daysVal = getNumeric(d.days || 0);
-                        let detailsText = '';
-
-                        if (d.calculation_type === 'daily_deduction') {
-                            detailsText = daysVal > 0 ? `${daysVal} Days: ${amount}` : `${d.deduction || 'Deduction'}: ${amount}`;
-                        } else if (d.calculation_type === 'hourly_deduction' || d.calculation_type === 'hourly') {
-                            detailsText = hoursVal > 0 ? `${hoursVal} Hours: ${amount}` : `${d.deduction || 'Deduction'}: ${amount}`;
-                        } else {
-                            detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
-                        }
-
-                        return detailsText;
+                        const durationLabel = formatDurationLabel(hoursVal, minutesVal, daysVal);
+                        return durationLabel ? `${durationLabel}: ${amount}` : `${d.deduction || 'Deduction'}: ${amount}`;
                     }).join(' | ')
                     : '';
 

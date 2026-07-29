@@ -49,6 +49,19 @@ if (!$can_see_all_employees && isset($user_dept)) {
     $params[':user_dept'] = $user_dept;
 }
 
+// Once a month has been marked "Paid", its employee list must stay frozen to whoever
+// was actually part of that paid run. Without this, an employee added afterwards
+// (no payrolls row for this month) would show up as "not generated" inside an already
+// closed month - they belong in the next payroll instead.
+$newHireFilter = "";
+if (!empty($monthYear)) {
+    $paidCheckStmt = $pdo->prepare("SELECT 1 FROM payrolls WHERE month_year = :month_year AND status = 'paid' LIMIT 1");
+    $paidCheckStmt->execute([':month_year' => $monthYear]);
+    if ($paidCheckStmt->fetchColumn()) {
+        $newHireFilter = " AND gp.id IS NOT NULL";
+    }
+}
+
 try {
     // Include only non-Fly active vacations overlapping the payroll month.
     // This keeps Local Annual / Emergency requests visible in payroll until rejoining closes them,
@@ -122,7 +135,7 @@ try {
             e.fly = 0 
             OR (e.fly = 1 AND v.id IS NOT NULL)
             OR (v.is_deductible = 0)
-        )" . $dept_filter . "
+        )" . $dept_filter . $newHireFilter . "
         ORDER BY e.dept, e.name
     ";
 
